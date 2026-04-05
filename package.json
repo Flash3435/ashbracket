@@ -3,6 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
+    "postinstall": "node scripts/sync-middleware-env.mjs",
     "predev": "node scripts/sync-middleware-env.mjs",
     "prebuild": "node scripts/sync-middleware-env.mjs",
     "sync:middleware-env": "node scripts/sync-middleware-env.mjs",
