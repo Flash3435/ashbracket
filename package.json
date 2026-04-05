@@ -6,9 +6,13 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "test:scoring": "tsx src/lib/scoring/computePoolScores.selftest.ts",
+    "seed:wc2026": "tsx scripts/seed-official-wc2026.ts"
   },
   "dependencies": {
+    "@supabase/ssr": "^0.10.0",
+    "@supabase/supabase-js": "^2.101.1",
     "next": "16.2.2",
     "react": "19.2.4",
     "react-dom": "19.2.4"
@@ -21,6 +25,7 @@
     "eslint": "^9",
     "eslint-config-next": "16.2.2",
     "tailwindcss": "^4",
+    "tsx": "^4.21.0",
     "typescript": "^5"
   }
 }
