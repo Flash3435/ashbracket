@@ -36,6 +36,10 @@ export type KnockoutPicksWizardProps = {
   lockedMessage?: string | null;
   savePicks: SaveKnockoutPicksFn;
   successMessage?: string;
+  /** Optional secondary line under the success banner (e.g. when standings update separately). */
+  successDetail?: string | null;
+  /** Helper text under the save button; defaults to copy that mentions standings updates. */
+  saveHelpText?: string;
 };
 
 const STEPS = [
@@ -163,6 +167,8 @@ export function KnockoutPicksWizard({
   lockedMessage = null,
   savePicks,
   successMessage = "Saved. Standings and public participant pages are updated.",
+  successDetail = null,
+  saveHelpText = "Saving writes every slot (including empty ones you cleared) and updates standings.",
 }: KnockoutPicksWizardProps) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
@@ -311,12 +317,17 @@ export function KnockoutPicksWizard({
         </p>
       ) : null}
       {success ? (
-        <p
+        <div
           className="rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-900"
           role="status"
         >
-          {successMessage}
-        </p>
+          <p className={successDetail ? "font-medium" : undefined}>{successMessage}</p>
+          {successDetail ? (
+            <p className="mt-1.5 text-xs font-normal leading-relaxed text-emerald-800/95">
+              {successDetail}
+            </p>
+          ) : null}
+        </div>
       ) : null}
       {quickHint ? (
         <p
@@ -556,14 +567,16 @@ export function KnockoutPicksWizard({
             >
               Back
             </button>
-            <button
-              type="button"
-              disabled={formDisabled || !canGoNext}
-              onClick={goNext}
-              className="rounded-md bg-zinc-900 px-3 py-2 text-sm font-medium text-white shadow-sm hover:bg-zinc-800 disabled:cursor-not-allowed disabled:opacity-40"
-            >
-              Next step
-            </button>
+            {step < STEPS.length - 1 ? (
+              <button
+                type="button"
+                disabled={formDisabled || !canGoNext}
+                onClick={goNext}
+                className="rounded-md bg-zinc-900 px-3 py-2 text-sm font-medium text-white shadow-sm hover:bg-zinc-800 disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                Next step
+              </button>
+            ) : null}
           </div>
         </section>
       ) : null}
@@ -577,10 +590,7 @@ export function KnockoutPicksWizard({
           >
             {isPending ? "Saving…" : "Save picks"}
           </button>
-          <p className="mt-2 text-xs text-zinc-500">
-            Saving writes every slot (including empty ones you cleared) and
-            updates standings.
-          </p>
+          <p className="mt-2 text-xs text-zinc-500">{saveHelpText}</p>
         </div>
       ) : null}
     </form>

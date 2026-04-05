@@ -348,7 +348,9 @@ export default async function AccountPicksPage({ searchParams }: PageProps) {
                 readOnly={locked}
                 lockedMessage={lockHint}
                 savePicks={saveMyKnockoutPicksAction}
-                successMessage="Saved. Your picks, leaderboard, and public profile are updated."
+                successMessage="Your picks were saved."
+                successDetail="Standings and the public leaderboard refresh when match results are updated or an organizer recomputes scores."
+                saveHelpText="Saving writes every slot (including empty ones you cleared). Your bracket is stored right away; the scoreboard catches up after the next standings update."
               />
 
               {teams.length === 0 ? (

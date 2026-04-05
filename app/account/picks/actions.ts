@@ -3,8 +3,6 @@
 import { createClient } from "@/lib/supabase/server";
 import { applyKnockoutPickSlots } from "../../../lib/predictions/applyKnockoutPickSlots";
 import { validateKnockoutPickSaveInput } from "../../../lib/predictions/validateKnockoutPickPayload";
-import { recomputePoolLedgerWithClient } from "@/lib/scoring/recomputePoolLedger";
-import { createServiceRoleClient } from "@/lib/supabase/service";
 import { revalidatePath } from "next/cache";
 import type {
   KnockoutPickSlotPayload,
@@ -23,8 +21,9 @@ function poolIsLocked(lockAt: string | null): boolean {
 }
 
 /**
- * Saves knockout picks for the signed-in user's participant row only (RLS on predictions).
- * Verifies ownership and pool lock server-side, then recomputes ledger via service role.
+ * Saves knockout picks for the signed-in user's participant row only (RLS on `predictions`).
+ * Verifies ownership and pool lock server-side. Does not call `replace_points_ledger_for_pool`
+ * (admin-only); standings refresh when an organizer recomputes or results sync runs.
  */
 export async function saveMyKnockoutPicksAction(input: {
   participantId: string;
@@ -79,15 +78,6 @@ export async function saveMyKnockoutPicksAction(input: {
       slots: input.slots,
     });
     if (!applied.ok) return applied;
-
-    const service = createServiceRoleClient();
-    const ledger = await recomputePoolLedgerWithClient(service, row.pool_id);
-    if (ledger.error) {
-      return {
-        ok: false,
-        error: `Picks saved, but standings could not be recomputed: ${ledger.error}`,
-      };
-    }
 
     revalidatePath("/account/picks");
     revalidatePath("/account");
