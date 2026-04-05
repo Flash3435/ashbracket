@@ -34,9 +34,6 @@ yarn-error.log*
 .env*
 !.env.local.example
 
-# Generated from .env.local by scripts/sync-middleware-env.mjs (may contain secrets)
-lib/supabase/middleware-keys.json
-
 # vercel
 .vercel
 

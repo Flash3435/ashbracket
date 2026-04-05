@@ -9,24 +9,55 @@ function copyAuthCookies(from: NextResponse, to: NextResponse) {
   });
 }
 
+function missingConfigResponse(): NextResponse {
+  return new NextResponse(
+    [
+      "AshBracket: Supabase env is not configured.",
+      "",
+      "On Vercel: Project Settings → Environment Variables → add",
+      "NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY (or NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY),",
+      "then redeploy.",
+      "",
+      "Locally: add ashbracket/.env.local and run npm run dev (predev syncs middleware-keys.json).",
+    ].join("\n"),
+    {
+      status: 503,
+      headers: { "content-type": "text/plain; charset=utf-8" },
+    },
+  );
+}
+
 export async function updateSession(request: NextRequest) {
+  try {
+    return await runSession(request);
+  } catch (e) {
+    console.error("[middleware]", e);
+    return new NextResponse(
+      "Middleware error. Check Vercel logs and Supabase configuration.",
+      {
+        status: 503,
+        headers: { "content-type": "text/plain; charset=utf-8" },
+      },
+    );
+  }
+}
+
+async function runSession(request: NextRequest): Promise<NextResponse> {
   let supabaseResponse = NextResponse.next({ request });
 
-  // Bundled JSON from `scripts/sync-middleware-env.mjs` (npm predev/prebuild). Turbopack Edge
-  // middleware often receives empty `process.env` in dev even when `.env.local` exists.
+  // Vercel inlines NEXT_PUBLIC_* at build — use env first. Local Turbopack dev often has
+  // empty process.env in middleware; `middleware-keys.json` (predev sync) fills the gap.
   const supabaseUrl =
-    mwKeys.supabaseUrl.trim() ||
     process.env.NEXT_PUBLIC_SUPABASE_URL?.trim() ||
+    mwKeys.supabaseUrl.trim() ||
     "";
   const supabaseAnonKey =
-    mwKeys.supabaseAnonKey.trim() ||
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY?.trim() ||
     process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY?.trim() ||
+    mwKeys.supabaseAnonKey.trim() ||
     "";
   if (!supabaseUrl || !supabaseAnonKey) {
-    throw new Error(
-      "Missing Supabase URL or anon key. From ashbracket run `node scripts/sync-middleware-env.mjs` then `npm run dev`, and ensure .env.local has NEXT_PUBLIC_SUPABASE_URL and a key.",
-    );
+    return missingConfigResponse();
   }
 
   const supabase = createServerClient(supabaseUrl, supabaseAnonKey, {
