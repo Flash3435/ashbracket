@@ -5,8 +5,15 @@ import {
 import type { Prediction, TournamentStage } from "../../src/types/domain";
 import type { KnockoutPickSlotDraft } from "../../types/adminKnockoutPicks";
 
-function slotLabel(slotKey: string | null): string {
-  if (slotKey === null) return "Champion";
+function slotLabel(
+  kind: string,
+  slotKey: string | null,
+): string {
+  if (kind === "champion") return "Champion";
+  if (slotKey === null) return "Pick";
+  if (kind === "quarterfinalist") return `Quarter-final pick ${slotKey}`;
+  if (kind === "semifinalist") return `Semi-final pick ${slotKey}`;
+  if (kind === "finalist") return `Final pick ${slotKey}`;
   return `Slot ${slotKey}`;
 }
 
@@ -53,7 +60,7 @@ export function buildKnockoutPickSlotDrafts(
       drafts.push({
         rowKey: resultRowKey(section.kind, slotKey),
         sectionLabel: section.label,
-        slotLabel: slotLabel(slotKey),
+        slotLabel: slotLabel(section.kind, slotKey),
         predictionKind: section.kind as KnockoutPickSlotDraft["predictionKind"],
         tournamentStageId: stage.id,
         slotKey,

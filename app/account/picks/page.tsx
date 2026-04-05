@@ -255,7 +255,7 @@ export default async function AccountPicksPage({ searchParams }: PageProps) {
 
       <PageTitle
         title="Your picks"
-        description="Knockout bracket predictions (quarterfinalists through champion) for your pool profile. Edits apply until the pool lock time."
+        description="Walk through quarter-finals, semis, the final, and your champion — with quick starter options if you want a nudge. Edits apply until the pool lock time."
       />
 
       {loadError ? (

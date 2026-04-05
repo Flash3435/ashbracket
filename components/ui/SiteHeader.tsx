@@ -20,6 +20,9 @@ export function SiteHeader() {
           <Link href="/" className={navLinkClass}>
             Home
           </Link>
+          <Link href="/tournament" className={navLinkClass}>
+            Tournament
+          </Link>
           <Link href="/rules" className={navLinkClass}>
             Rules
           </Link>
