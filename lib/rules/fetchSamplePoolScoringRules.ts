@@ -95,16 +95,6 @@ function scoringViewMissingNewColumns(message: string): boolean {
   );
 }
 
-/** Missing view / not in schema cache — safe to ignore and use scoring view only. */
-function ignorablePoolRulesViewError(message: string): boolean {
-  const m = message.toLowerCase();
-  return (
-    m.includes("pool_rules_public") ||
-    m.includes("42p01") ||
-    (m.includes("could not find") && m.includes("schema cache"))
-  );
-}
-
 function hasExtendedPoolColumnsOnRow(
   row: ScoringRulesPublicRowDb | undefined,
 ): boolean {
@@ -193,14 +183,16 @@ export async function fetchSamplePoolScoringRules(): Promise<FetchSamplePoolScor
         .eq("pool_id", SAMPLE_POOL_ID)
         .maybeSingle();
 
-      if (poolErr && !ignorablePoolRulesViewError(poolErr.message)) {
-        return { ok: false, kind: "error", message: poolErr.message };
-      }
+      // `pool_rules_public` is optional (some production DBs only expose
+      // `scoring_rules_public`). Never fail the rules page because metadata
+      // enrichment failed — scoring rows alone are enough to render the table.
       if (!poolErr && poolRow) {
         poolOnly = poolRow as PoolRulesPublicRowDb;
       }
     }
 
+    // Empty state only when there are no public scoring rows for this pool id.
+    // Missing `pool_rules_public` does not imply "no rules" if scoring rows exist.
     if (rulesRaw.length === 0) {
       if (!poolOnly) {
         return { ok: false, kind: "empty" };
