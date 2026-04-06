@@ -4,15 +4,14 @@ import { PageContainer } from "@/components/ui/PageContainer";
 import { PageTitle } from "@/components/ui/PageTitle";
 import { fetchSamplePoolScoringRules } from "../../lib/rules/fetchSamplePoolScoringRules";
 import { partitionPublicRulesForDisplay } from "../../lib/rules/partitionPublicRulesForDisplay";
-import type {
-  PoolPrizeTier,
-  PublicScoringRuleRow,
-} from "../../types/publicScoringRules";
+import {
+  PUBLIC_RULES_DEFAULT_TIE_BREAK,
+  PUBLIC_RULES_PAGE_COPY,
+  describePrizeTier,
+} from "../../lib/rules/publicRulesDisplayDefaults";
+import type { PublicScoringRuleRow } from "../../types/publicScoringRules";
 
 export const dynamic = "force-dynamic";
-
-const DEFAULT_TIE_BREAK_COPY =
-  "If total points are tied, the organizer decides the tie-break rule.";
 
 function formatLockAt(iso: string | null): string | null {
   if (iso == null) return null;
@@ -32,23 +31,6 @@ function formatEntryFee(cents: number | null): string | null {
     currency: "USD",
     maximumFractionDigits: 0,
   }).format(cents / 100);
-}
-
-function describePrizeTier(tier: PoolPrizeTier): string {
-  const name = tier.label;
-  if (tier.remainder && typeof tier.percent === "number") {
-    return `${name} — remaining ${tier.percent}% of the prize pool`;
-  }
-  if (tier.remainder) {
-    return `${name} — the rest of the prize pool after the places above`;
-  }
-  if (typeof tier.percent === "number") {
-    if (tier.place === 1) {
-      return `${name} — ${tier.percent}% of the prize pool`;
-    }
-    return `${name} — ${tier.percent}%`;
-  }
-  return name;
 }
 
 function RulesPointsTable({ rows }: { rows: PublicScoringRuleRow[] }) {
@@ -129,7 +111,7 @@ export default async function RulesPage() {
   const feeLabel = formatEntryFee(data.entryFeeCents);
   const { groupKindRules, knockoutRules, bonusRules } =
     partitionPublicRulesForDisplay(data.rules);
-  const tieCopy = data.tieBreakNote?.trim() || DEFAULT_TIE_BREAK_COPY;
+  const tieCopy = data.tieBreakNote?.trim() || PUBLIC_RULES_DEFAULT_TIE_BREAK;
 
   const pageTitle = data.poolName.trim() || "Pool rules";
   const pageDescription = lockLabel
@@ -146,14 +128,10 @@ export default async function RulesPage() {
             How you score points
           </h2>
           <p className="mt-2 text-sm leading-relaxed text-ash-text">
-            You earn points when your picks match what actually happens in the
-            tournament. After each stage, official results are compared to your
-            bracket — you do not need to do anything once your picks are in.
+            {PUBLIC_RULES_PAGE_COPY.howYouScoreP1}
           </p>
           <p className="mt-2 text-sm leading-relaxed text-ash-muted">
-            Points from the group stage, knockout rounds, and bonus questions
-            all add up to your total. The standings page shows everyone ranked
-            by that total.
+            {PUBLIC_RULES_PAGE_COPY.howYouScoreP2}
           </p>
         </section>
 
@@ -167,13 +145,12 @@ export default async function RulesPage() {
                 {feeLabel} per entry
               </p>
               <p className="mt-1 text-sm text-ash-muted">
-                One entry per person unless the organizer says otherwise.
+                {PUBLIC_RULES_PAGE_COPY.entryPerPersonNote}
               </p>
             </>
           ) : (
             <p className="mt-2 text-sm leading-relaxed text-ash-muted">
-              No entry fee is listed on this page. Ask the organizer if you are
-              unsure what to pay or how to pay.
+              {PUBLIC_RULES_PAGE_COPY.entryUnknownFee}
             </p>
           )}
         </section>
@@ -185,10 +162,7 @@ export default async function RulesPage() {
           {data.prizeTiers.length > 0 ? (
             <>
               <p className="mt-2 text-sm text-ash-muted">
-                Payouts are a percentage of the prize pool (usually the total
-                collected entry fees, unless the organizer keeps a portion for
-                costs and says so). The exact dollar amounts depend on how many
-                paid entries there are.
+                {PUBLIC_RULES_PAGE_COPY.prizeIntro}
               </p>
               <ul className="mt-3 list-inside list-disc space-y-1.5 text-sm text-ash-text">
                 {data.prizeTiers.map((tier) => (
@@ -198,8 +172,7 @@ export default async function RulesPage() {
             </>
           ) : (
             <p className="mt-2 text-sm leading-relaxed text-ash-muted">
-              The prize breakdown is not published here yet. Ask the host how
-              the pot is split.
+              {PUBLIC_RULES_PAGE_COPY.prizeNotPublished}
             </p>
           )}
         </section>
@@ -247,14 +220,13 @@ export default async function RulesPage() {
           ) : groupKindRules.length > 0 ? (
             <>
               <p className="mt-2 text-sm text-ash-muted">
-                Points per correct group finishing position for this pool:
+                {PUBLIC_RULES_PAGE_COPY.groupPerKindIntro}
               </p>
               <RulesPointsTable rows={groupKindRules} />
             </>
           ) : (
             <p className="mt-2 text-sm leading-relaxed text-ash-muted">
-              This pool does not list separate group-stage points on this page.
-              Knockout and bonus scoring below still apply.
+              {PUBLIC_RULES_PAGE_COPY.groupNoTableCopy}
             </p>
           )}
         </section>
@@ -264,15 +236,13 @@ export default async function RulesPage() {
             Knockout picks
           </h2>
           <p className="mt-2 text-sm text-ash-muted">
-            Each row is a one-time score when that team reaches the round — for
-            example you get quarter-finalist points once when they make the
-            quarter-finals, not again in later rounds.
+            {PUBLIC_RULES_PAGE_COPY.knockoutIntro}
           </p>
           {knockoutRules.length > 0 ? (
             <RulesPointsTable rows={knockoutRules} />
           ) : (
             <p className="mt-3 text-sm text-ash-muted">
-              Knockout point values are not published here yet.
+              {PUBLIC_RULES_PAGE_COPY.knockoutUnpublished}
             </p>
           )}
         </section>
@@ -282,15 +252,13 @@ export default async function RulesPage() {
             Bonus picks
           </h2>
           <p className="mt-2 text-sm text-ash-muted">
-            Separate questions tied to the whole tournament (for example most
-            goals). You pick one team per bonus; points apply if your team wins
-            that stat when the organizer locks the result.
+            {PUBLIC_RULES_PAGE_COPY.bonusIntro}
           </p>
           {bonusRules.length > 0 ? (
             <RulesPointsTable rows={bonusRules} />
           ) : (
             <p className="mt-3 text-sm text-ash-muted">
-              No bonus questions are published for this pool yet.
+              {PUBLIC_RULES_PAGE_COPY.bonusUnpublished}
             </p>
           )}
         </section>

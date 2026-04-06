@@ -1,4 +1,4 @@
-/** One prize tier from `pools.prize_distribution_json`. */
+/** Prize tier for /rules (from `pools.prize_distribution_json` or app defaults). */
 export type PoolPrizeTier = {
   place: number;
   label: string;
@@ -26,7 +26,7 @@ export type SamplePoolScoringRulesPayload = {
     exactPoints: number;
     wrongSlotPoints: number;
   } | null;
-  /** Organizer tie-break copy; null uses app default wording on /rules. */
+  /** Organizer tie-break copy; null uses `PUBLIC_RULES_DEFAULT_TIE_BREAK` on /rules. */
   tieBreakNote: string | null;
   rules: PublicScoringRuleRow[];
 };

@@ -4,6 +4,7 @@ import { solePublicPoolIdFromScoringView } from "../pools/solePublicPoolIdFromSc
 import { SAMPLE_POOL_ID } from "../config/sample-pool";
 import { comparePublicScoringRuleRows } from "./comparePublicScoringRules";
 import { labelPublicScoringRule } from "./scoringRulePublicLabels";
+import { applyPublicRulesDisplayDefaults } from "./publicRulesDisplayDefaults";
 import type {
   PoolPrizeTier,
   PublicScoringRuleRow,
@@ -96,46 +97,6 @@ function parsePrizeTiers(raw: unknown): PoolPrizeTier[] {
     out.push(tier);
   }
   return out.sort((a, b) => a.place - b.place);
-}
-
-function mergeRulesPagePoolMeta(
-  scoring: Pick<
-    SamplePoolScoringRulesPayload,
-    | "poolName"
-    | "lockAt"
-    | "entryFeeCents"
-    | "prizeTiers"
-    | "groupAdvance"
-    | "tieBreakNote"
-  >,
-  pool: Pick<
-    SamplePoolScoringRulesPayload,
-    | "poolName"
-    | "lockAt"
-    | "entryFeeCents"
-    | "prizeTiers"
-    | "groupAdvance"
-    | "tieBreakNote"
-  > | null,
-): Pick<
-  SamplePoolScoringRulesPayload,
-  | "poolName"
-  | "lockAt"
-  | "entryFeeCents"
-  | "prizeTiers"
-  | "groupAdvance"
-  | "tieBreakNote"
-> {
-  if (!pool) return scoring;
-  return {
-    poolName: pool.poolName.trim() || scoring.poolName.trim() || scoring.poolName,
-    lockAt: pool.lockAt ?? scoring.lockAt,
-    entryFeeCents: pool.entryFeeCents ?? scoring.entryFeeCents,
-    prizeTiers:
-      pool.prizeTiers.length > 0 ? pool.prizeTiers : scoring.prizeTiers,
-    groupAdvance: pool.groupAdvance ?? scoring.groupAdvance,
-    tieBreakNote: pool.tieBreakNote ?? scoring.tieBreakNote,
-  };
 }
 
 function poolMetaFromRow(row: PoolRulesPublicRowDb): Pick<
@@ -292,9 +253,14 @@ export type FetchSamplePoolScoringRulesResult =
   | { ok: false; kind: "error"; message: string };
 
 /**
- * Loads public pool rules for the configured sample pool (anon-safe views).
- * Supports DBs that have not applied the extended `scoring_rules_public` migration yet
- * by falling back to the legacy view columns, then optionally enriching from `pool_rules_public`.
+ * Loads public pool rules (anon-safe `scoring_rules_public`).
+ *
+ * **Scoring values** (knockout / bonus points, etc.) always come from `scoring_rules` rows.
+ * **Display-only fields** (prize copy, tie-break wording, default entry fee, group-stage
+ * summary for the sample pool) are filled from `publicRulesDisplayDefaults.ts` when the DB
+ * omits them — see `applyPublicRulesDisplayDefaults`.
+ *
+ * `pool_rules_public` is queried only when there are no scoring rows yet (edge case).
  */
 export async function fetchSamplePoolScoringRules(): Promise<FetchSamplePoolScoringRulesResult> {
   try {
@@ -319,47 +285,49 @@ export async function fetchSamplePoolScoringRules(): Promise<FetchSamplePoolScor
       }
     }
 
-    let poolOnly: PoolRulesPublicRowDb | null = null;
-    let poolRes = await supabase
-      .from("pool_rules_public")
-      .select(POOL_RULES_META_SELECT)
-      .eq("pool_id", effectivePoolId)
-      .maybeSingle();
-
-    if (
-      poolRes.error &&
-      poolRes.error.message.toLowerCase().includes("tie_break_note")
-    ) {
-      poolRes = await supabase
+    if (rulesRaw.length === 0) {
+      let poolOnly: PoolRulesPublicRowDb | null = null;
+      let poolRes = await supabase
         .from("pool_rules_public")
-        .select(POOL_RULES_META_SELECT_WITHOUT_TIE)
+        .select(POOL_RULES_META_SELECT)
         .eq("pool_id", effectivePoolId)
         .maybeSingle();
-    }
 
-    // Canonical pool-level fields for /rules; optional if the view is missing.
-    if (!poolRes.error && poolRes.data) {
-      poolOnly = poolRes.data as PoolRulesPublicRowDb;
-    }
+      if (
+        poolRes.error &&
+        poolRes.error.message.toLowerCase().includes("tie_break_note")
+      ) {
+        poolRes = await supabase
+          .from("pool_rules_public")
+          .select(POOL_RULES_META_SELECT_WITHOUT_TIE)
+          .eq("pool_id", effectivePoolId)
+          .maybeSingle();
+      }
 
-    // Empty state only when there are no public scoring rows for this pool id.
-    // Missing `pool_rules_public` does not imply "no rules" if scoring rows exist.
-    if (rulesRaw.length === 0) {
+      if (!poolRes.error && poolRes.data) {
+        poolOnly = poolRes.data as PoolRulesPublicRowDb;
+      }
+
       if (!poolOnly) {
         return { ok: false, kind: "empty" };
       }
+      const meta = applyPublicRulesDisplayDefaults(
+        effectivePoolId,
+        poolMetaFromRow(poolOnly),
+      );
       return {
         ok: true,
         data: {
-          ...poolMetaFromRow(poolOnly),
+          ...meta,
           rules: [],
         },
       };
     }
 
-    const metaFromScoring = metaFromFirstScoringRow(rulesRaw[0]);
-    const metaFromPool = poolOnly ? poolMetaFromRow(poolOnly) : null;
-    const meta = mergeRulesPagePoolMeta(metaFromScoring, metaFromPool);
+    const meta = applyPublicRulesDisplayDefaults(
+      effectivePoolId,
+      metaFromFirstScoringRow(rulesRaw[0]),
+    );
 
     const rules: PublicScoringRuleRow[] = rulesRaw
       .map((row) => ({
