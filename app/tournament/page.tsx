@@ -2,19 +2,59 @@ import Link from "next/link";
 import { TournamentProgressView } from "@/components/tournament/TournamentProgressView";
 import { PageContainer } from "@/components/ui/PageContainer";
 import { PageTitle } from "@/components/ui/PageTitle";
+import { loadAccountKnockoutSelection } from "../../lib/account/loadAccountKnockoutSelection";
+import { resolveAccountParticipantId } from "../../lib/account/resolveAccountParticipantId";
 import { fetchPublicTournamentProgress } from "../../lib/tournament/fetchPublicTournamentProgress";
 import { OFFICIAL_EDITION_CODE } from "../../lib/config/officialTournament";
+import { createClient } from "@/lib/supabase/server";
+import type { KnockoutPickSlotDraft } from "../../types/adminKnockoutPicks";
+import type { Team } from "../../src/types/domain";
 
 export const dynamic = "force-dynamic";
 
 export default async function TournamentProgressPage() {
   const { data, error } = await fetchPublicTournamentProgress();
 
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  let schedulePickContext: {
+    slots: KnockoutPickSlotDraft[];
+    teams: Team[];
+  } | null = null;
+
+  if (user) {
+    const { data: partRows } = await supabase
+      .from("participants")
+      .select("id, pool_id")
+      .eq("user_id", user.id)
+      .order("created_at", { ascending: true });
+
+    const profiles = partRows ?? [];
+    const participantId = resolveAccountParticipantId(profiles, undefined);
+
+    if (participantId) {
+      const ctx = await loadAccountKnockoutSelection(user.id, participantId);
+      if (!ctx.loadError && ctx.initialSlots.length > 0) {
+        schedulePickContext = {
+          slots: ctx.initialSlots,
+          teams: ctx.teams,
+        };
+      }
+    }
+  }
+
   return (
     <PageContainer>
       <PageTitle
         title="Tournament progress"
-        description="Official schedule and scores from the database. This page is public and does not include pool picks or admin tools."
+        description={
+          schedulePickContext
+            ? "Official schedule and scores. When you are signed in, teams from your saved bracket are highlighted — no one else can see your picks."
+            : "Official schedule and scores from the database. Sign in to highlight teams from your bracket on this page."
+        }
       />
 
       {error ? (
@@ -48,7 +88,10 @@ export default async function TournamentProgressPage() {
       ) : null}
 
       {!error && data && (data.edition || data.matches.length > 0) ? (
-        <TournamentProgressView payload={data} />
+        <TournamentProgressView
+          payload={data}
+          schedulePickContext={schedulePickContext}
+        />
       ) : null}
 
       <p className="mt-8 text-sm text-ash-muted">

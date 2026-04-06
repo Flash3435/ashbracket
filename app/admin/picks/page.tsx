@@ -5,7 +5,11 @@ import { PageTitle } from "@/components/ui/PageTitle";
 import { createClient } from "@/lib/supabase/server";
 import { saveParticipantKnockoutPicksAction } from "./actions";
 import { SAMPLE_POOL_ID } from "../../../lib/config/sample-pool";
-import { buildKnockoutPickSlotDrafts } from "../../../lib/predictions/knockoutPickSlots";
+import { ACCOUNT_TOURNAMENT_STAGE_CODES } from "../../../lib/account/loadAccountKnockoutSelection";
+import {
+  buildAllParticipantPickDrafts,
+  DEFAULT_PARTICIPANT_BONUS_KEYS,
+} from "../../../lib/predictions/buildParticipantPickDrafts";
 import {
   mapParticipantRow,
   type ParticipantRow,
@@ -21,7 +25,7 @@ import type { Participant } from "../../../types/participant";
 
 export const dynamic = "force-dynamic";
 
-const STAGE_CODES_NEEDED = ["quarterfinal", "semifinal", "final"] as const;
+const STAGE_CODES_NEEDED = [...ACCOUNT_TOURNAMENT_STAGE_CODES];
 
 const UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -42,6 +46,7 @@ export default async function AdminPicksPage({ searchParams }: PageProps) {
   let teams: Team[] = [];
   let stages: TournamentStage[] = [];
   let predictions: Prediction[] = [];
+  let bonusKeysOrdered: string[] = [...DEFAULT_PARTICIPANT_BONUS_KEYS];
   let loadError: string | null = null;
   let selectedParticipant: Participant | null = null;
 
@@ -63,7 +68,7 @@ export default async function AdminPicksPage({ searchParams }: PageProps) {
         .select(
           "id, code, label, sort_order, starts_at, ends_at, created_at, updated_at",
         )
-        .in("code", [...STAGE_CODES_NEEDED])
+        .in("code", STAGE_CODES_NEEDED)
         .order("sort_order", { ascending: true }),
     ]);
 
@@ -95,26 +100,34 @@ export default async function AdminPicksPage({ searchParams }: PageProps) {
         loadError =
           "That person is not in this pool, or the link you used is invalid.";
       } else {
-        const { data: predData, error: predErr } = await supabase
-          .from("predictions")
-          .select(
-            "id, pool_id, participant_id, prediction_kind, team_id, tournament_stage_id, group_code, slot_key, bonus_key, value_text, created_at, updated_at",
-          )
-          .eq("pool_id", SAMPLE_POOL_ID)
-          .eq("participant_id", selectedId)
-          .in("prediction_kind", [
-            "quarterfinalist",
-            "semifinalist",
-            "finalist",
-            "champion",
+        const [{ data: predData, error: predErr }, { data: ruleRows, error: ruleErr }] =
+          await Promise.all([
+            supabase
+              .from("predictions")
+              .select(
+                "id, pool_id, participant_id, prediction_kind, team_id, tournament_stage_id, group_code, slot_key, bonus_key, value_text, created_at, updated_at",
+              )
+              .eq("pool_id", SAMPLE_POOL_ID)
+              .eq("participant_id", selectedId),
+            supabase
+              .from("scoring_rules")
+              .select("bonus_key")
+              .eq("pool_id", SAMPLE_POOL_ID)
+              .eq("prediction_kind", "bonus_pick")
+              .order("bonus_key", { ascending: true }),
           ]);
 
         if (predErr) loadError = predErr.message;
+        else if (ruleErr) loadError = ruleErr.message;
         else {
           type PredRow = Parameters<typeof mapPredictionRow>[0];
           predictions = (predData ?? []).map((row) =>
             mapPredictionRow(row as PredRow),
           );
+          const fromDb = (ruleRows ?? [])
+            .map((r) => r.bonus_key as string | null)
+            .filter((k): k is string => Boolean(k && k.trim()));
+          if (fromDb.length > 0) bonusKeysOrdered = fromDb;
         }
       }
     }
@@ -129,11 +142,12 @@ export default async function AdminPicksPage({ searchParams }: PageProps) {
 
   const initialSlots =
     selectedParticipant && !loadError
-      ? buildKnockoutPickSlotDrafts(
+      ? buildAllParticipantPickDrafts({
           stageByCode,
           predictions,
-          selectedParticipant.id,
-        )
+          participantId: selectedParticipant.id,
+          bonusKeys: bonusKeysOrdered,
+        })
       : [];
 
   const invalidQuery =
@@ -148,7 +162,7 @@ export default async function AdminPicksPage({ searchParams }: PageProps) {
     <PageContainer>
       <PageTitle
         title="Participant picks"
-        description="Open anyone’s knockout bracket (quarterfinals through champion) and save changes. Scores and the public leaderboard update automatically."
+        description="Edit the full tournament path for anyone in this pool — groups, third-place qualifiers, every knockout round, champion, and bonus picks."
       />
 
       {loadError ? (
@@ -192,8 +206,7 @@ export default async function AdminPicksPage({ searchParams }: PageProps) {
 
           {!selectedId ? (
             <p className="text-sm text-ash-muted">
-              Select a participant to load their current predictions and edit
-              knockout picks.
+              Select a participant to load their picks.
             </p>
           ) : null}
 
@@ -201,8 +214,8 @@ export default async function AdminPicksPage({ searchParams }: PageProps) {
             <>
               {predictions.length === 0 ? (
                 <p className="mb-6 rounded-md border border-ash-border bg-ash-surface px-3 py-2 text-sm text-ash-muted">
-                  No saved knockout picks yet for this participant — all slots
-                  start empty.
+                  No saved picks yet for this participant — all slots start
+                  empty.
                 </p>
               ) : null}
               <ParticipantKnockoutPicksForm

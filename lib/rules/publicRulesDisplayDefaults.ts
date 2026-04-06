@@ -4,11 +4,13 @@
  * the configured id has no scoring rows — see fetcher `solePublicPoolFallback`).
  *
  * ## Workflow for future edits
- * - **Wording** (tie-break text, prize intro, section blurbs): edit `PUBLIC_RULES_PAGE_COPY` below.
+ * - **Wording** (ties / prize split text, prize intro, section blurbs): edit `PUBLIC_RULES_PAGE_COPY` below
+ *   (includes third-place and knockout intros).
  * - **Default prize tiers / entry fee / group-stage point story** (when the DB omits them for
  *   the sample pool): edit `DEFAULT_*` constants. No migration or seed change required.
- * - **Point values in tables** (knockout, bonus, etc.): still come from `scoring_rules` via
- *   `scoring_rules_public` — change those in the DB or seed when scoring should change.
+ * - **Knockout / third-place / bonus point values on /rules**: canonical copy in
+ *   `PUBLIC_RULES_KNOCKOUT_ROWS`, `PUBLIC_RULES_BONUS_ROWS` (must stay aligned with
+ *   `scoring_rules` for the sample pool).
  * - **Optional DB overrides** for the sample pool: `pools` columns (`entry_fee_cents`,
  *   `prize_distribution_json`, group advance columns, `tie_break_note`) still win when set;
  *   defaults fill only missing pieces.
@@ -20,9 +22,12 @@ import type {
   SamplePoolScoringRulesPayload,
 } from "../../types/publicScoringRules";
 
-/** Shown when the payload has no tie-break note (non-sample pools or empty DB). */
-export const PUBLIC_RULES_DEFAULT_TIE_BREAK =
-  "If total points are tied, the organizer decides the tie-break rule.";
+/** Shown when the payload has no `tie_break_note` (non-sample pools or empty DB). */
+export const PUBLIC_RULES_DEFAULT_TIE_BREAK = `If two or more users finish with the same total score, the prize money for the tied positions is combined and split equally among those tied users.
+
+Examples:
+• If two users tie for 1st, they split 1st and 2nd prize money evenly.
+• If three users tie across 2nd to 4th, they split the combined 2nd, 3rd, and 4th prize money evenly.`;
 
 export const DEFAULT_PUBLIC_RULES_ENTRY_FEE_CENTS = 2500;
 
@@ -30,12 +35,7 @@ export const DEFAULT_PUBLIC_RULES_PRIZE_TIERS: readonly PoolPrizeTier[] = [
   { place: 1, label: "1st place", percent: 50 },
   { place: 2, label: "2nd place", percent: 25 },
   { place: 3, label: "3rd place", percent: 15 },
-  {
-    place: 4,
-    label: "4th place",
-    percent: 10,
-    remainder: true,
-  },
+  { place: 4, label: "4th place", percent: 10 },
 ];
 
 export const DEFAULT_PUBLIC_RULES_GROUP_ADVANCE = {
@@ -43,17 +43,37 @@ export const DEFAULT_PUBLIC_RULES_GROUP_ADVANCE = {
   wrongSlotPoints: 2.5,
 } as const;
 
+/** Knockout progression rows shown on /rules (Round of 32 is a pick step but not listed here). */
+export const PUBLIC_RULES_KNOCKOUT_ROWS: readonly {
+  label: string;
+  points: number;
+}[] = [
+  { label: "Round of 16", points: 5 },
+  { label: "Quarterfinalist", points: 10 },
+  { label: "Semifinalist", points: 20 },
+  { label: "Finalist", points: 50 },
+  { label: "Champion", points: 100 },
+];
+
+export const PUBLIC_RULES_BONUS_ROWS: readonly {
+  label: string;
+  points: number;
+}[] = [
+  { label: "Team with the most goals", points: 50 },
+  { label: "Team with the most yellow cards", points: 10 },
+  { label: "Team with the most red cards", points: 10 },
+];
+
 export const PUBLIC_RULES_PAGE_COPY = {
   howYouScoreP1:
-    "You earn points when your picks match what actually happens in the tournament. After each stage, official results are compared to your bracket — you do not need to do anything once your picks are in.",
+    "You earn points when your picks match actual tournament results. Points are awarded across the Group Stage, Third Place Qualification, Knockout Rounds, and Bonus Picks.",
   howYouScoreP2:
-    "Points from the group stage, knockout rounds, and bonus questions all add up to your total. The standings page shows everyone ranked by that total.",
+    "All points combine into one total score, and standings are based on that total.",
   entryPerPersonNote:
     "One entry per person unless the organizer says otherwise.",
   entryUnknownFee:
     "No entry fee is listed on this page. Ask the organizer if you are unsure what to pay or how to pay.",
-  prizeIntro:
-    "Payouts are a percentage of the prize pool (usually the total collected entry fees, unless the organizer keeps a portion for costs and says so). The exact dollar amounts depend on how many paid entries there are.",
+  prizeIntro: "Payouts are a percentage of the total prize pool.",
   prizeNotPublished:
     "The prize breakdown is not published here yet. Ask the host how the pot is split.",
   groupPerKindIntro:
@@ -61,13 +81,13 @@ export const PUBLIC_RULES_PAGE_COPY = {
   groupNoTableCopy:
     "This pool does not list separate group-stage points on this page. Knockout and bonus scoring below still apply.",
   knockoutIntro:
-    "Each row is a one-time score when that team reaches the round — for example you get quarter-finalist points once when they make the quarter-finals, not again in later rounds.",
-  knockoutUnpublished:
-    "Knockout point values are not published here yet.",
+    "Each row is a one-time score when that team reaches the round. Points are awarded once and do not carry forward.",
+  thirdPlaceIntro:
+    "Pick the 8 third-place teams that will advance to the Round of 32.",
+  thirdPlacePointsLine:
+    "3 points for each correct team; 0 points if the team does not advance.",
   bonusIntro:
-    "Separate questions tied to the whole tournament (for example most goals). You pick one team per bonus; points apply if your team wins that stat when the organizer locks the result.",
-  bonusUnpublished:
-    "No bonus questions are published for this pool yet.",
+    "Separate questions tied to the whole tournament. You pick one team per category.",
 } as const;
 
 export type PublicRulesDisplayDefaultsOptions = {
@@ -99,7 +119,7 @@ type RulesPageMeta = Pick<
 
 /**
  * For the configured sample pool only: fills entry fee, prize tiers, group-stage summary,
- * and tie-break copy when the database left them empty. Other pools are unchanged.
+ * and ties copy when the database left them empty. Other pools are unchanged.
  */
 export function applyPublicRulesDisplayDefaults(
   poolId: string,
@@ -129,16 +149,13 @@ export function applyPublicRulesDisplayDefaults(
 export function describePrizeTier(tier: PoolPrizeTier): string {
   const name = tier.label;
   if (tier.remainder && typeof tier.percent === "number") {
-    return `${name} — remaining ${tier.percent}% of the prize pool`;
+    return `${name} — ${tier.percent}% of the total prize pool (remainder)`;
   }
   if (tier.remainder) {
-    return `${name} — the rest of the prize pool after the places above`;
+    return `${name} — the rest of the total prize pool after the places above`;
   }
   if (typeof tier.percent === "number") {
-    if (tier.place === 1) {
-      return `${name} — ${tier.percent}% of the prize pool`;
-    }
-    return `${name} — ${tier.percent}%`;
+    return `${name} — ${tier.percent}% of the total prize pool`;
   }
   return name;
 }

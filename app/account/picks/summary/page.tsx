@@ -81,7 +81,7 @@ export default async function AccountPicksSummaryPage({ searchParams }: PageProp
 
       <PageTitle
         title="Your bracket snapshot"
-        description="A simple view of your knockout path — quarter-finals through champion — plus what’s next for the teams you picked."
+        description="Groups, every knockout round, third-place picks, bonus answers, and upcoming matches for the teams you selected."
       />
 
       {ctx.loadError ? (
@@ -172,7 +172,8 @@ export default async function AccountPicksSummaryPage({ searchParams }: PageProp
                   <div className="mt-3">
                     <ParticipantPicksNextMatches
                       matches={nextMatches}
-                      pickedCountryCodes={codes}
+                      initialSlots={ctx.initialSlots}
+                      teams={ctx.teams}
                     />
                   </div>
                 )}

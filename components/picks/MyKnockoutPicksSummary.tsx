@@ -33,6 +33,11 @@ function StageBlock({ title, subtitle, rows, teamById }: StageBlockProps) {
           const strength = team
             ? teamStrengthLabel(team.countryCode)
             : null;
+          const lineLabel =
+            row.predictionKind === "group_winner" ||
+            row.predictionKind === "group_runner_up"
+              ? `${row.sectionLabel} — ${row.slotLabel}`
+              : row.slotLabel;
           return (
             <li
               key={row.rowKey}
@@ -42,6 +47,9 @@ function StageBlock({ title, subtitle, rows, teamById }: StageBlockProps) {
                 {flag || "🌍"}
               </span>
               <div className="min-w-0 flex-1">
+                <p className="text-xs font-medium uppercase tracking-wide text-ash-muted">
+                  {lineLabel}
+                </p>
                 <p className="font-medium text-ash-text">
                   {team?.name ?? (tid ? "Unknown team" : "Not picked")}
                 </p>
@@ -79,6 +87,16 @@ type Props = {
   showSavedBanner: boolean;
 };
 
+function sortGroupRows(rows: KnockoutPickSlotDraft[]): KnockoutPickSlotDraft[] {
+  return [...rows].sort((a, b) => {
+    const ga = a.groupCode ?? "";
+    const gb = b.groupCode ?? "";
+    if (ga !== gb) return ga.localeCompare(gb);
+    if (a.predictionKind === b.predictionKind) return 0;
+    return a.predictionKind === "group_winner" ? -1 : 1;
+  });
+}
+
 export function MyKnockoutPicksSummary({
   slots,
   teams,
@@ -89,10 +107,21 @@ export function MyKnockoutPicksSummary({
   showSavedBanner,
 }: Props) {
   const teamById = new Map(teams.map((t) => [t.id, t]));
+  const group = sortGroupRows(
+    slots.filter(
+      (s) =>
+        s.predictionKind === "group_winner" ||
+        s.predictionKind === "group_runner_up",
+    ),
+  );
+  const third = slots.filter((s) => s.predictionKind === "third_place_qualifier");
+  const r32 = slots.filter((s) => s.predictionKind === "round_of_32");
+  const r16 = slots.filter((s) => s.predictionKind === "round_of_16");
   const qf = slots.filter((s) => s.predictionKind === "quarterfinalist");
   const sf = slots.filter((s) => s.predictionKind === "semifinalist");
   const fin = slots.filter((s) => s.predictionKind === "finalist");
   const champ = slots.filter((s) => s.predictionKind === "champion");
+  const bonus = slots.filter((s) => s.predictionKind === "bonus_pick");
 
   const filledCount = slots.filter((s) => s.teamId.trim() !== "").length;
 
@@ -107,7 +136,7 @@ export function MyKnockoutPicksSummary({
         >
           <p className="font-semibold text-ash-text">You’re all set — picks saved.</p>
           <p className="mt-1 text-ash-muted">
-            Here’s a clean snapshot of your bracket. You can still edit until the
+            Snapshot of your full tournament picks. You can still edit until the
             pool locks.
           </p>
         </div>
@@ -144,14 +173,38 @@ export function MyKnockoutPicksSummary({
 
       <div className="grid gap-4 lg:grid-cols-2">
         <StageBlock
+          title="Group stage"
+          subtitle="First and second in each letter group"
+          rows={group}
+          teamById={teamById}
+        />
+        <StageBlock
+          title="Third-place qualifiers"
+          subtitle="Eight teams advancing from third place"
+          rows={third}
+          teamById={teamById}
+        />
+        <StageBlock
+          title="Round of 32"
+          subtitle="All 32 teams you expect in this round"
+          rows={r32}
+          teamById={teamById}
+        />
+        <StageBlock
+          title="Round of 16"
+          subtitle="Sixteen teams in the second knockout round"
+          rows={r16}
+          teamById={teamById}
+        />
+        <StageBlock
           title="Quarter-finalists"
-          subtitle="The eight teams you expect in the last eight"
+          subtitle="Last eight"
           rows={qf}
           teamById={teamById}
         />
         <StageBlock
           title="Semi-finalists"
-          subtitle="Four teams you think make the semis"
+          subtitle="Four teams in the semis"
           rows={sf}
           teamById={teamById}
         />
@@ -163,8 +216,14 @@ export function MyKnockoutPicksSummary({
         />
         <StageBlock
           title="Champion"
-          subtitle="Your tournament winner"
+          subtitle="Tournament winner"
           rows={champ}
+          teamById={teamById}
+        />
+        <StageBlock
+          title="Bonus picks"
+          subtitle="Extra tournament-wide questions"
+          rows={bonus}
           teamById={teamById}
         />
       </div>

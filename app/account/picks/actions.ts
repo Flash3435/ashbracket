@@ -1,11 +1,11 @@
 "use server";
 
 import { createClient } from "@/lib/supabase/server";
-import { applyKnockoutPickSlots } from "../../../lib/predictions/applyKnockoutPickSlots";
+import { applyParticipantPickSlots } from "../../../lib/predictions/applyParticipantPickSlots";
 import { validateKnockoutPickSaveInput } from "../../../lib/predictions/validateKnockoutPickPayload";
 import { revalidatePath } from "next/cache";
 import type {
-  KnockoutPickSlotPayload,
+  ParticipantPickSlotPayload,
   SaveKnockoutPicksResult,
 } from "../../../types/knockoutPicksSave";
 
@@ -27,7 +27,7 @@ function poolIsLocked(lockAt: string | null): boolean {
  */
 export async function saveMyKnockoutPicksAction(input: {
   participantId: string;
-  slots: KnockoutPickSlotPayload[];
+  slots: ParticipantPickSlotPayload[];
 }): Promise<SaveKnockoutPicksResult> {
   const invalid = validateKnockoutPickSaveInput(input);
   if (invalid) return invalid;
@@ -72,7 +72,7 @@ export async function saveMyKnockoutPicksAction(input: {
       };
     }
 
-    const applied = await applyKnockoutPickSlots(supabase, {
+    const applied = await applyParticipantPickSlots(supabase, {
       poolId: row.pool_id,
       participantId: input.participantId,
       slots: input.slots,

@@ -2,13 +2,13 @@
 
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState, useTransition } from "react";
-import type {
-  KnockoutPickPredictionKind,
-  KnockoutPickSlotDraft,
-} from "../../types/adminKnockoutPicks";
+import type { KnockoutPickSlotDraft } from "../../types/adminKnockoutPicks";
 import type { SaveKnockoutPicksResult } from "../../types/knockoutPicksSave";
 import type { Team } from "../../src/types/domain";
-import { assignKnockoutTeamDeduped } from "../../lib/predictions/knockoutPickConsistency";
+import {
+  assignParticipantPickDeduped,
+  eligibleRoundOf32Pool,
+} from "../../lib/predictions/knockoutPickConsistency";
 import { applyQuickPickToSlots } from "../../lib/predictions/knockoutQuickPickStrategies";
 import { flagEmojiForFifaCountryCode } from "../../lib/teams/fifaToIso2ForFlag";
 import {
@@ -23,9 +23,11 @@ import {
 export type SaveKnockoutPicksFn = (input: {
   participantId: string;
   slots: Array<{
-    predictionKind: KnockoutPickPredictionKind;
+    predictionKind: string;
     tournamentStageId: string;
     slotKey: string | null;
+    groupCode: string | null;
+    bonusKey: string | null;
     teamId: string;
   }>;
 }) => Promise<SaveKnockoutPicksResult>;
@@ -40,62 +42,241 @@ export type KnockoutPicksWizardProps = {
   lockedMessage?: string | null;
   savePicks: SaveKnockoutPicksFn;
   successMessage?: string;
-  /** Optional secondary line under the success banner (e.g. when standings update separately). */
   successDetail?: string | null;
-  /** Helper text under the save button; defaults to copy that mentions standings updates. */
   saveHelpText?: string;
-  /** If set, navigate here after a successful save (e.g. participant summary). */
   postSaveRedirectTo?: string;
 };
 
-const STEPS = [
+type BracketStepKind =
+  | "third_place_qualifier"
+  | "round_of_32"
+  | "round_of_16"
+  | "quarterfinalist"
+  | "semifinalist"
+  | "finalist"
+  | "champion";
+
+type WizardStepDef =
+  | { id: number; mode: "group"; title: string; intro: string; hint: string }
+  | {
+      id: number;
+      mode: "bracket";
+      bracketKind: BracketStepKind;
+      title: string;
+      intro: string;
+      hint: string;
+    }
+  | { id: number; mode: "bonus"; title: string; intro: string; hint: string };
+
+const WIZARD_STEPS: WizardStepDef[] = [
   {
     id: 0,
-    kind: "quarterfinalist" as const,
-    title: "Quarter-finals",
+    mode: "group",
+    title: "Group stage",
     intro:
-      "Pick eight teams you think will still be playing in the quarter-finals. These are your “last eight” — the heart of your knockout story.",
-    hint: "You’ll narrow this list down on the next steps, so your later picks stay consistent.",
+      "For every letter group, pick who finishes first and who finishes second. In the real tournament both of those teams move on.",
+    hint: "You can jump between steps anytime; later rounds may narrow your choices based on what you chose here.",
   },
   {
     id: 1,
-    kind: "semifinalist" as const,
-    title: "Semi-finals",
+    mode: "bracket",
+    bracketKind: "third_place_qualifier",
+    title: "Third-place qualifiers",
     intro:
-      "Of those eight, choose the four you believe will make the semi-finals. Only teams you already picked can appear here.",
-    hint: "If you change the quarter-finalists, we’ll clear any semi picks that no longer fit.",
+      "Choose the eight teams you think will advance as the best third-place finishers into the Round of 32.",
+    hint: "These picks can be any national teams — they don’t have to match your group winners.",
   },
   {
     id: 2,
-    kind: "finalist" as const,
-    title: "The final",
+    mode: "bracket",
+    bracketKind: "round_of_32",
+    title: "Round of 32",
     intro:
-      "Pick the two teams you think will play in the final. Both must come from your semi-finalists.",
-    hint: "Same idea: change a semi-finalist, and we’ll reset the final picks that break the chain.",
+      "Pick all 32 teams you expect to play in this round. Choices are easiest if they match your group finishes and third-place picks (we’ll highlight that pool).",
+    hint: "If you haven’t finished groups yet, you can still pick freely — we only narrow the list once those picks exist.",
   },
   {
     id: 3,
-    kind: "champion" as const,
-    title: "Champion",
+    mode: "bracket",
+    bracketKind: "round_of_16",
+    title: "Round of 16",
     intro:
-      "Choose one winner — your tournament champion. They must be one of the two finalists you picked.",
-    hint: "That’s it. Save when you’re happy; you can come back and edit until the pool locks.",
+      "Narrow to sixteen teams. Each should be one of your Round of 32 teams when those picks are filled in.",
+    hint: "Changing Round of 32 can clear picks here that no longer fit.",
+  },
+  {
+    id: 4,
+    mode: "bracket",
+    bracketKind: "quarterfinalist",
+    title: "Quarter-finals",
+    intro: "Pick eight teams for the last eight.",
+    hint: "Each must come from your Round of 16 when that step is complete.",
+  },
+  {
+    id: 5,
+    mode: "bracket",
+    bracketKind: "semifinalist",
+    title: "Semi-finals",
+    intro: "Pick four teams to reach the semi-finals.",
+    hint: "They must be teams you already picked for the quarters.",
+  },
+  {
+    id: 6,
+    mode: "bracket",
+    bracketKind: "finalist",
+    title: "The final",
+    intro: "Pick the two finalists.",
+    hint: "Both must come from your semi-finalists.",
+  },
+  {
+    id: 7,
+    mode: "bracket",
+    bracketKind: "champion",
+    title: "Champion",
+    intro: "Pick one tournament winner from your two finalists.",
+    hint: "Save whenever you’re ready — you can edit until the pool locks.",
+  },
+  {
+    id: 8,
+    mode: "bonus",
+    title: "Bonus picks",
+    intro:
+      "Three extra questions for the whole tournament. One team per question.",
+    hint: "These don’t affect your bracket chain — pick any team for each.",
   },
 ];
 
-function stepComplete(slots: KnockoutPickSlotDraft[], stepId: number): boolean {
-  const kind = STEPS[stepId]?.kind;
-  if (!kind) return false;
-  const rows = slots.filter((s) => s.predictionKind === kind);
+function groupPickRows(slots: KnockoutPickSlotDraft[]): KnockoutPickSlotDraft[] {
+  return slots
+    .filter(
+      (s) =>
+        s.predictionKind === "group_winner" ||
+        s.predictionKind === "group_runner_up",
+    )
+    .sort((a, b) => {
+      const ga = a.groupCode ?? "";
+      const gb = b.groupCode ?? "";
+      if (ga !== gb) return ga.localeCompare(gb);
+      if (a.predictionKind === b.predictionKind) return 0;
+      return a.predictionKind === "group_winner" ? -1 : 1;
+    });
+}
+
+function stepRowsFor(
+  slots: KnockoutPickSlotDraft[],
+  stepIdx: number,
+): KnockoutPickSlotDraft[] {
+  const def = WIZARD_STEPS[stepIdx];
+  if (!def) return [];
+  if (def.mode === "group") return groupPickRows(slots);
+  if (def.mode === "bonus")
+    return slots.filter((s) => s.predictionKind === "bonus_pick");
+  return slots.filter((s) => s.predictionKind === def.bracketKind);
+}
+
+function stepComplete(slots: KnockoutPickSlotDraft[], stepIdx: number): boolean {
+  const rows = stepRowsFor(slots, stepIdx);
   return rows.length > 0 && rows.every((s) => s.teamId.trim() !== "");
 }
 
-function allowedTeamsForRow(
+function allowedTeamsForPickRow(
   row: KnockoutPickSlotDraft,
   slots: KnockoutPickSlotDraft[],
   allTeams: Team[],
 ): Team[] {
+  if (row.predictionKind === "group_winner" || row.predictionKind === "group_runner_up") {
+    const otherKind =
+      row.predictionKind === "group_winner" ? "group_runner_up" : "group_winner";
+    const otherId = slots.find(
+      (s) =>
+        s.groupCode === row.groupCode &&
+        s.predictionKind === otherKind &&
+        s.rowKey !== row.rowKey,
+    )?.teamId.trim();
+    return allTeams.filter(
+      (t) => !otherId || t.id === row.teamId.trim() || t.id !== otherId,
+    );
+  }
+
+  if (row.predictionKind === "third_place_qualifier") {
+    const taken = new Set(
+      slots
+        .filter(
+          (s) =>
+            s.predictionKind === "third_place_qualifier" &&
+            s.rowKey !== row.rowKey &&
+            s.teamId.trim(),
+        )
+        .map((s) => s.teamId.trim()),
+    );
+    return allTeams.filter(
+      (t) => !taken.has(t.id) || t.id === row.teamId.trim(),
+    );
+  }
+
+  if (row.predictionKind === "round_of_32") {
+    const eligible = eligibleRoundOf32Pool(slots);
+    const taken = new Set(
+      slots
+        .filter(
+          (s) =>
+            s.predictionKind === "round_of_32" &&
+            s.rowKey !== row.rowKey &&
+            s.teamId.trim(),
+        )
+        .map((s) => s.teamId.trim()),
+    );
+    if (eligible.size === 0) {
+      return allTeams.filter(
+        (t) => !taken.has(t.id) || t.id === row.teamId.trim(),
+      );
+    }
+    return allTeams.filter(
+      (t) =>
+        eligible.has(t.id) &&
+        (!taken.has(t.id) || t.id === row.teamId.trim()),
+    );
+  }
+
+  if (row.predictionKind === "round_of_16") {
+    const r32 = new Set(
+      slots
+        .filter((s) => s.predictionKind === "round_of_32" && s.teamId.trim())
+        .map((s) => s.teamId.trim()),
+    );
+    const taken = new Set(
+      slots
+        .filter(
+          (s) =>
+            s.predictionKind === "round_of_16" &&
+            s.rowKey !== row.rowKey &&
+            s.teamId.trim(),
+        )
+        .map((s) => s.teamId.trim()),
+    );
+    if (r32.size === 0) {
+      return allTeams.filter(
+        (t) => !taken.has(t.id) || t.id === row.teamId.trim(),
+      );
+    }
+    return allTeams.filter(
+      (t) =>
+        r32.has(t.id) &&
+        (!taken.has(t.id) || t.id === row.teamId.trim()),
+    );
+  }
+
   if (row.predictionKind === "quarterfinalist") {
+    const r16 = new Set(
+      slots
+        .filter((s) => s.predictionKind === "round_of_16" && s.teamId.trim())
+        .map((s) => s.teamId.trim()),
+    );
+    const r32 = new Set(
+      slots
+        .filter((s) => s.predictionKind === "round_of_32" && s.teamId.trim())
+        .map((s) => s.teamId.trim()),
+    );
     const taken = new Set(
       slots
         .filter(
@@ -106,7 +287,20 @@ function allowedTeamsForRow(
         )
         .map((s) => s.teamId.trim()),
     );
-    return allTeams.filter((t) => !taken.has(t.id));
+    if (r16.size === 0 && r32.size === 0) {
+      return allTeams.filter(
+        (t) => !taken.has(t.id) || t.id === row.teamId.trim(),
+      );
+    }
+    const pool =
+      r16.size > 0
+        ? r16
+        : r32;
+    return allTeams.filter(
+      (t) =>
+        pool.has(t.id) &&
+        (!taken.has(t.id) || t.id === row.teamId.trim()),
+    );
   }
 
   if (row.predictionKind === "semifinalist") {
@@ -155,12 +349,39 @@ function allowedTeamsForRow(
     );
   }
 
-  const fin = new Set(
-    slots
-      .filter((s) => s.predictionKind === "finalist" && s.teamId.trim())
-      .map((s) => s.teamId.trim()),
-  );
-  return allTeams.filter((t) => fin.has(t.id));
+  if (row.predictionKind === "champion") {
+    const fin = new Set(
+      slots
+        .filter((s) => s.predictionKind === "finalist" && s.teamId.trim())
+        .map((s) => s.teamId.trim()),
+    );
+    return allTeams.filter((t) => fin.has(t.id));
+  }
+
+  if (row.predictionKind === "bonus_pick") {
+    return allTeams;
+  }
+
+  return allTeams;
+}
+
+function emptyOptionsHint(row: KnockoutPickSlotDraft): string {
+  switch (row.predictionKind) {
+    case "round_of_32":
+      return "Finish your group picks (and ideally third-place picks) first, or clear a conflicting slot.";
+    case "round_of_16":
+      return "Finish your Round of 32 picks first, or clear a conflicting slot.";
+    case "quarterfinalist":
+      return "Finish your Round of 16 picks first (or Round of 32 if you skipped it), or clear a conflicting pick.";
+    case "semifinalist":
+      return "Finish your quarter-final picks first.";
+    case "finalist":
+      return "Finish your semi-final picks first.";
+    case "champion":
+      return "Pick two finalists first.";
+    default:
+      return "No teams available.";
+  }
 }
 
 export function KnockoutPicksWizard({
@@ -207,24 +428,24 @@ export function KnockoutPicksWizard({
 
   const formDisabled = disabled || readOnly || isPending;
 
-  const currentStepDef = STEPS[step];
+  const currentStepDef = WIZARD_STEPS[step];
   const stepRows = useMemo(
-    () => slots.filter((s) => s.predictionKind === STEPS[step]!.kind),
+    () => stepRowsFor(slots, step),
     [slots, step],
   );
 
   function setTeamForRow(rowKey: string, teamId: string) {
-    setSlots((prev) => assignKnockoutTeamDeduped(prev, rowKey, teamId));
+    setSlots((prev) => assignParticipantPickDeduped(prev, rowKey, teamId));
   }
 
   function applyQuick(mode: "random" | "favorites" | "balanced") {
     setSlots((prev) => applyQuickPickToSlots(prev, teams, mode));
     setQuickHint(
       mode === "random"
-        ? "We dropped in a random bracket — adjust anything you like."
+        ? "We filled the bracket from groups through champion — adjust anything you like."
         : mode === "favorites"
-          ? "We leaned on popular picks for the last eight, then narrowed down — tweak as you wish."
-          : "We spread teams across regions for the last eight, then narrowed down — edit freely.",
+          ? "We leaned on popular picks through the whole path — tweak as you wish."
+          : "We spread teams across regions for groups, then narrowed down — edit freely.",
     );
     setOpenRowKey(null);
     setStep(0);
@@ -242,6 +463,8 @@ export function KnockoutPicksWizard({
           predictionKind: s.predictionKind,
           tournamentStageId: s.tournamentStageId,
           slotKey: s.slotKey,
+          groupCode: s.groupCode,
+          bonusKey: s.bonusKey,
           teamId: s.teamId,
         })),
       });
@@ -259,7 +482,7 @@ export function KnockoutPicksWizard({
   }
 
   function goNext() {
-    if (step >= STEPS.length - 1) return;
+    if (step >= WIZARD_STEPS.length - 1) return;
     if (!stepComplete(slots, step)) return;
     setStep((s) => s + 1);
     setOpenRowKey(null);
@@ -276,7 +499,19 @@ export function KnockoutPicksWizard({
   if (slots.length === 0) {
     return (
       <div className="rounded-md border border-amber-700/50 bg-amber-950/30 px-3 py-2 text-sm text-amber-100">
-        Knockout stages are not available. Ensure{" "}
+        Tournament stages are not set up yet. Ensure{" "}
+        <code className="rounded bg-amber-950/60 px-1 py-0.5 text-[11px] text-amber-100">
+          group
+        </code>
+        ,{" "}
+        <code className="rounded bg-amber-950/60 px-1 py-0.5 text-[11px] text-amber-100">
+          round_of_32
+        </code>
+        ,{" "}
+        <code className="rounded bg-amber-950/60 px-1 py-0.5 text-[11px] text-amber-100">
+          round_of_16
+        </code>
+        ,{" "}
         <code className="rounded bg-amber-950/60 px-1 py-0.5 text-[11px] text-amber-100">
           quarterfinal
         </code>
@@ -288,12 +523,25 @@ export function KnockoutPicksWizard({
         <code className="rounded bg-amber-950/60 px-1 py-0.5 text-[11px] text-amber-100">
           final
         </code>{" "}
-        exist in <code className="text-[11px] text-amber-200">tournament_stages</code>.
+        exist in{" "}
+        <code className="text-[11px] text-amber-200">tournament_stages</code>.
       </div>
     );
   }
 
-  const canGoNext = stepComplete(slots, step) && step < STEPS.length - 1;
+  const canGoNext = stepComplete(slots, step) && step < WIZARD_STEPS.length - 1;
+
+  const groupFilled = stepRowsFor(slots, 0).filter((s) => s.teamId.trim()).length;
+  const groupTotal = stepRowsFor(slots, 0).length;
+  const thirdFilled = slots.filter(
+    (s) => s.predictionKind === "third_place_qualifier" && s.teamId.trim(),
+  ).length;
+  const r32Filled = slots.filter(
+    (s) => s.predictionKind === "round_of_32" && s.teamId.trim(),
+  ).length;
+  const r16Filled = slots.filter(
+    (s) => s.predictionKind === "round_of_16" && s.teamId.trim(),
+  ).length;
   const qfCount = slots.filter(
     (s) => s.predictionKind === "quarterfinalist" && s.teamId.trim(),
   ).length;
@@ -307,7 +555,7 @@ export function KnockoutPicksWizard({
         </span>
         {readOnly
           ? " — this pool is locked; picks cannot be changed."
-          : ". Use the steps below, then save. Partial saves are OK."}
+          : ". Follow the steps in order or jump ahead — then save. Partial saves are OK."}
       </p>
 
       {lockedMessage ? (
@@ -332,7 +580,9 @@ export function KnockoutPicksWizard({
           className="rounded-md border border-ash-accent/40 bg-ash-accent/10 px-3 py-2 text-sm text-ash-muted"
           role="status"
         >
-          <p className={successDetail ? "font-medium text-ash-text" : undefined}>{successMessage}</p>
+          <p className={successDetail ? "font-medium text-ash-text" : undefined}>
+            {successMessage}
+          </p>
           {successDetail ? (
             <p className="mt-1.5 text-xs font-normal leading-relaxed text-ash-muted">
               {successDetail}
@@ -349,8 +599,8 @@ export function KnockoutPicksWizard({
         </p>
       ) : null}
 
-      <nav aria-label="Bracket steps" className="flex flex-wrap gap-2">
-        {STEPS.map((s, i) => {
+      <nav aria-label="Tournament pick steps" className="flex flex-wrap gap-2">
+        {WIZARD_STEPS.map((s, i) => {
           const done = stepComplete(slots, i);
           const active = i === step;
           return (
@@ -385,17 +635,19 @@ export function KnockoutPicksWizard({
           <p className="mt-2 text-sm leading-relaxed text-ash-muted">
             {currentStepDef.intro}
           </p>
-          <p className="mt-2 text-xs text-ash-border-hover">{currentStepDef.hint}</p>
+          <p className="mt-2 text-xs text-ash-border-hover">
+            {currentStepDef.hint}
+          </p>
 
           {step === 0 && !readOnly && !formDisabled ? (
             <div className="ash-surface mt-4 border border-ash-border bg-ash-body/30 p-3">
               <p className="text-sm font-medium text-ash-text">
-                Quick starter brackets
+                Quick starter (groups through champion)
               </p>
               <p className="mt-1 text-xs text-ash-muted">
-                We’ll fill all rounds at once in a way that still makes sense
-                (later picks always come from earlier ones). You can change
-                anything afterward.
+                We’ll fill group finishes, third-place slots, every knockout
+                round, and the champion in one coherent pass. Bonus questions
+                stay for you to choose.
               </p>
               <div className="mt-3 flex flex-wrap gap-2">
                 <button
@@ -423,25 +675,45 @@ export function KnockoutPicksWizard({
             </div>
           ) : null}
 
-          {step === 1 && qfCount < 8 ? (
+          {step === 0 && groupFilled < groupTotal ? (
             <p className="mt-4 rounded-md border border-amber-700/40 bg-amber-950/25 px-3 py-2 text-sm text-amber-100">
-              Pick all eight quarter-finalists first (step 1). You’ve chosen{" "}
-              {qfCount} so far.
+              Pick first and second for every group. You’ve filled {groupFilled}{" "}
+              of {groupTotal} slots.
             </p>
           ) : null}
-          {step === 2 &&
+          {step === 1 && thirdFilled < 8 ? (
+            <p className="mt-4 rounded-md border border-amber-700/40 bg-amber-950/25 px-3 py-2 text-sm text-amber-100">
+              Choose all eight third-place qualifiers. {thirdFilled} of 8 so
+              far.
+            </p>
+          ) : null}
+          {step === 2 && r32Filled < 32 ? (
+            <p className="mt-4 rounded-md border border-amber-700/40 bg-amber-950/25 px-3 py-2 text-sm text-amber-100">
+              Pick all 32 Round of 32 teams. {r32Filled} of 32 so far.
+            </p>
+          ) : null}
+          {step === 3 && r16Filled < 16 ? (
+            <p className="mt-4 rounded-md border border-amber-700/40 bg-amber-950/25 px-3 py-2 text-sm text-amber-100">
+              Pick sixteen Round of 16 teams. {r16Filled} of 16 so far.
+            </p>
+          ) : null}
+          {step === 4 && qfCount < 8 ? (
+            <p className="mt-4 rounded-md border border-amber-700/40 bg-amber-950/25 px-3 py-2 text-sm text-amber-100">
+              Pick all eight quarter-finalists. {qfCount} of 8 so far.
+            </p>
+          ) : null}
+          {step === 5 &&
           slots.filter((s) => s.predictionKind === "semifinalist" && s.teamId.trim())
             .length < 4 ? (
             <p className="mt-4 rounded-md border border-amber-700/40 bg-amber-950/25 px-3 py-2 text-sm text-amber-100">
-              Choose four semi-finalists on the previous step before locking in
-              your finalists.
+              Choose four semi-finalists on the previous step first.
             </p>
           ) : null}
-          {step === 3 &&
+          {step === 6 &&
           slots.filter((s) => s.predictionKind === "finalist" && s.teamId.trim())
             .length < 2 ? (
             <p className="mt-4 rounded-md border border-amber-700/40 bg-amber-950/25 px-3 py-2 text-sm text-amber-100">
-              Pick both finalists on the step before this one first.
+              Pick both finalists before choosing a champion.
             </p>
           ) : null}
 
@@ -454,7 +726,7 @@ export function KnockoutPicksWizard({
               const strength = team
                 ? teamStrengthLabel(team.countryCode)
                 : null;
-              const options = allowedTeamsForRow(row, slots, teams);
+              const options = allowedTeamsForPickRow(row, slots, teams);
               const q = search.trim().toLowerCase();
               const rankQuery = /^\d{1,3}$/.test(q) ? parseInt(q, 10) : null;
               const filtered = q
@@ -466,12 +738,23 @@ export function KnockoutPicksWizard({
                   )
                 : options;
 
+              const heading =
+                row.predictionKind === "group_winner" ||
+                row.predictionKind === "group_runner_up"
+                  ? `${row.sectionLabel} — ${row.slotLabel}`
+                  : row.predictionKind === "bonus_pick"
+                    ? row.slotLabel
+                    : row.slotLabel;
+
               return (
-                <li key={row.rowKey} className="rounded-lg border border-ash-border bg-ash-body/40 p-3">
+                <li
+                  key={row.rowKey}
+                  className="rounded-lg border border-ash-border bg-ash-body/40 p-3"
+                >
                   <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                     <div>
                       <p className="text-xs font-medium uppercase tracking-wide text-ash-muted">
-                        {row.slotLabel}
+                        {heading}
                       </p>
                       <div className="mt-1 flex items-center gap-2">
                         <span className="text-2xl leading-none" aria-hidden>
@@ -529,13 +812,7 @@ export function KnockoutPicksWizard({
                       </label>
                       {options.length === 0 ? (
                         <p className="mt-2 text-sm text-amber-200">
-                          {row.predictionKind === "semifinalist"
-                            ? "Finish your quarter-final picks first, or clear a conflicting semi pick."
-                            : row.predictionKind === "finalist"
-                              ? "Finish your semi-final picks first."
-                              : row.predictionKind === "champion"
-                                ? "Pick two finalists first."
-                                : "No teams available."}
+                          {emptyOptionsHint(row)}
                         </p>
                       ) : (
                         <ul className="mt-2 max-h-52 overflow-y-auto rounded-md border border-ash-border bg-ash-body p-1 sm:grid sm:max-h-64 sm:grid-cols-2 sm:gap-1">
@@ -598,7 +875,7 @@ export function KnockoutPicksWizard({
             >
               Back
             </button>
-            {step < STEPS.length - 1 ? (
+            {step < WIZARD_STEPS.length - 1 ? (
               <button
                 type="button"
                 disabled={formDisabled || !canGoNext}

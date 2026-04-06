@@ -1,13 +1,17 @@
-import type { KnockoutPickPredictionKind } from "./adminKnockoutPicks";
-
 export type SaveKnockoutPicksResult =
   | { ok: true }
   | { ok: false; error: string };
 
-export type KnockoutPickSlotPayload = {
-  predictionKind: KnockoutPickPredictionKind;
+/** Payload for saving any tournament pick row (group, bracket, bonus). */
+export type ParticipantPickSlotPayload = {
+  predictionKind: string;
   tournamentStageId: string;
   slotKey: string | null;
-  /** Empty or missing means clear this slot. */
+  groupCode: string | null;
+  bonusKey: string | null;
+  /** Empty or whitespace means clear this slot. */
   teamId: string;
 };
+
+/** @deprecated Use ParticipantPickSlotPayload */
+export type KnockoutPickSlotPayload = ParticipantPickSlotPayload;

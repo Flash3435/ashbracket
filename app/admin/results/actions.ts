@@ -5,10 +5,13 @@ import { recomputePoolLedgerForPool } from "@/lib/scoring/recomputePoolLedger";
 import { SAMPLE_POOL_ID } from "../../../lib/config/sample-pool";
 
 const KNOCKOUT_KINDS = [
+  "round_of_32",
+  "round_of_16",
   "quarterfinalist",
   "semifinalist",
   "finalist",
   "champion",
+  "third_place_qualifier",
 ] as const;
 
 export type KnockoutResultKind = (typeof KNOCKOUT_KINDS)[number];

@@ -1,5 +1,8 @@
 import { createClient } from "@/lib/supabase/server";
-import { buildKnockoutPickSlotDrafts } from "../predictions/knockoutPickSlots";
+import {
+  buildAllParticipantPickDrafts,
+  DEFAULT_PARTICIPANT_BONUS_KEYS,
+} from "../predictions/buildParticipantPickDrafts";
 import {
   mapParticipantRow,
   type ParticipantRow,
@@ -11,7 +14,11 @@ import type { Prediction, Team, TournamentStage } from "../../src/types/domain";
 import type { Participant } from "../../types/participant";
 import type { KnockoutPickSlotDraft } from "../../types/adminKnockoutPicks";
 
-export const ACCOUNT_KNOCKOUT_STAGE_CODES = [
+/** Stages needed to build the full participant picks wizard. */
+export const ACCOUNT_TOURNAMENT_STAGE_CODES = [
+  "group",
+  "round_of_32",
+  "round_of_16",
   "quarterfinal",
   "semifinal",
   "final",
@@ -64,12 +71,13 @@ export type AccountKnockoutSelection = {
   teams: Team[];
   stages: TournamentStage[];
   predictions: Prediction[];
+  bonusKeysOrdered: string[];
   initialSlots: KnockoutPickSlotDraft[];
   profileLinkItems: Array<{ id: string; displayName: string; poolName: string }>;
 };
 
 /**
- * Loads the signed-in user's pool profiles, teams, stages, and knockout predictions
+ * Loads the signed-in user's pool profiles, teams, stages, and all tournament predictions
  * for the participant id from the query string (when valid and owned).
  */
 export async function loadAccountKnockoutSelection(
@@ -84,6 +92,7 @@ export async function loadAccountKnockoutSelection(
   let teams: Team[] = [];
   let stages: TournamentStage[] = [];
   let predictions: Prediction[] = [];
+  let bonusKeysOrdered: string[] = [...DEFAULT_PARTICIPANT_BONUS_KEYS];
   let loadError: string | null = null;
   let selectedId: string | null = null;
   let selectedParticipant: Participant | null = null;
@@ -142,7 +151,7 @@ export async function loadAccountKnockoutSelection(
           .select(
             "id, code, label, sort_order, starts_at, ends_at, created_at, updated_at",
           )
-          .in("code", [...ACCOUNT_KNOCKOUT_STAGE_CODES])
+          .in("code", [...ACCOUNT_TOURNAMENT_STAGE_CODES])
           .order("sort_order", { ascending: true }),
       ]);
 
@@ -155,7 +164,7 @@ export async function loadAccountKnockoutSelection(
     }
 
     if (!loadError) {
-      for (const code of ACCOUNT_KNOCKOUT_STAGE_CODES) {
+      for (const code of ACCOUNT_TOURNAMENT_STAGE_CODES) {
         if (!stages.some((s) => s.code === code)) {
           loadError = `Missing tournament stage "${code}" in Supabase. Seed or migrate tournament_stages.`;
           break;
@@ -185,26 +194,37 @@ export async function loadAccountKnockoutSelection(
         selectedPoolName = row.pools?.name ?? "Pool";
         selectedLockAt = row.pools?.lock_at ?? null;
 
-        const { data: predData, error: predErr } = await supabase
-          .from("predictions")
-          .select(
-            "id, pool_id, participant_id, prediction_kind, team_id, tournament_stage_id, group_code, slot_key, bonus_key, value_text, created_at, updated_at",
-          )
-          .eq("pool_id", row.pool_id)
-          .eq("participant_id", selectedId)
-          .in("prediction_kind", [
-            "quarterfinalist",
-            "semifinalist",
-            "finalist",
-            "champion",
+        const [{ data: predData, error: predErr }, { data: ruleRows, error: ruleErr }] =
+          await Promise.all([
+            supabase
+              .from("predictions")
+              .select(
+                "id, pool_id, participant_id, prediction_kind, team_id, tournament_stage_id, group_code, slot_key, bonus_key, value_text, created_at, updated_at",
+              )
+              .eq("pool_id", row.pool_id)
+              .eq("participant_id", selectedId),
+            supabase
+              .from("scoring_rules")
+              .select("bonus_key")
+              .eq("pool_id", row.pool_id)
+              .eq("prediction_kind", "bonus_pick")
+              .order("bonus_key", { ascending: true }),
           ]);
 
         if (predErr) loadError = predErr.message;
+        else if (ruleErr) loadError = ruleErr.message;
         else {
           type PredRow = Parameters<typeof mapPredictionRow>[0];
           predictions = (predData ?? []).map((r) =>
             mapPredictionRow(r as PredRow),
           );
+
+          const fromDb = (ruleRows ?? [])
+            .map((r) => r.bonus_key as string | null)
+            .filter((k): k is string => Boolean(k && k.trim()));
+          if (fromDb.length > 0) {
+            bonusKeysOrdered = fromDb;
+          }
         }
       }
     }
@@ -226,11 +246,12 @@ export async function loadAccountKnockoutSelection(
 
   const initialSlots =
     selectedParticipant && !loadError
-      ? buildKnockoutPickSlotDrafts(
+      ? buildAllParticipantPickDrafts({
           stageByCode,
           predictions,
-          selectedParticipant.id,
-        )
+          participantId: selectedParticipant.id,
+          bonusKeys: bonusKeysOrdered,
+        })
       : [];
 
   const profileLinkItems = myParticipants.map((p) => ({
@@ -252,7 +273,11 @@ export async function loadAccountKnockoutSelection(
     teams,
     stages,
     predictions,
+    bonusKeysOrdered,
     initialSlots,
     profileLinkItems,
   };
 }
+
+/** @deprecated Use ACCOUNT_TOURNAMENT_STAGE_CODES */
+export const ACCOUNT_KNOCKOUT_STAGE_CODES = ACCOUNT_TOURNAMENT_STAGE_CODES;

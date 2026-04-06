@@ -16,10 +16,13 @@ export type TournamentStageCode =
 export type PredictionKind =
   | "group_winner"
   | "group_runner_up"
+  | "round_of_32"
+  | "round_of_16"
   | "quarterfinalist"
   | "semifinalist"
   | "finalist"
   | "champion"
+  | "third_place_qualifier"
   | "bonus_pick";
 
 /** Contest group (`pools`). */

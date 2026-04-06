@@ -4,6 +4,7 @@ const BONUS_KEY_ORDER: readonly string[] = [
   "most_goals",
   "most_yellow_cards",
   "most_red_cards",
+  "golden_boot",
 ];
 
 function bonusKeySortIndex(key: string | null | undefined): number {

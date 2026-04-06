@@ -9,7 +9,8 @@
 INSERT INTO public.tournament_stages (code, label, sort_order, starts_at, ends_at)
 VALUES
   ('group', 'Group stage', 10, '2026-06-11 00:00:00+00', '2026-06-26 23:59:59+00'),
-  ('round_of_16', 'Round of 16', 20, '2026-06-27 00:00:00+00', '2026-06-30 23:59:59+00'),
+  ('round_of_32', 'Round of 32', 15, '2026-06-27 00:00:00+00', '2026-06-28 23:59:59+00'),
+  ('round_of_16', 'Round of 16', 20, '2026-06-29 00:00:00+00', '2026-06-30 23:59:59+00'),
   ('quarterfinal', 'Quarter-finals', 30, '2026-07-04 00:00:00+00', '2026-07-05 23:59:59+00'),
   ('semifinal', 'Semi-finals', 40, '2026-07-08 00:00:00+00', '2026-07-09 23:59:59+00'),
   ('third_place', 'Third place', 50, '2026-07-11 12:00:00+00', '2026-07-11 23:59:59+00'),
@@ -65,20 +66,27 @@ VALUES (
     {"place": 1, "label": "1st place", "percent": 50},
     {"place": 2, "label": "2nd place", "percent": 25},
     {"place": 3, "label": "3rd place", "percent": 15},
-    {"place": 4, "label": "4th place", "percent": 10, "remainder": true}
+    {"place": 4, "label": "4th place", "percent": 10}
   ]'::jsonb,
   5,
   2.5,
-  'If total points are tied, the organizer decides the tie-break rule.'
+  'If two or more users finish with the same total score, the prize money for the tied positions is combined and split equally among those tied users.
+
+Examples:
+• If two users tie for 1st, they split 1st and 2nd prize money evenly.
+• If three users tie across 2nd to 4th, they split the combined 2nd, 3rd, and 4th prize money evenly.'
 );
 
 -- Legacy spreadsheet scoring: knockout + per-bonus rows. Group stage uses pool columns above.
 INSERT INTO public.scoring_rules (pool_id, prediction_kind, bonus_key, points)
 VALUES
+  ('a0000001-0000-4000-8000-000000000001', 'round_of_32', NULL, 4),
+  ('a0000001-0000-4000-8000-000000000001', 'round_of_16', NULL, 5),
   ('a0000001-0000-4000-8000-000000000001', 'quarterfinalist', NULL, 10),
   ('a0000001-0000-4000-8000-000000000001', 'semifinalist', NULL, 20),
   ('a0000001-0000-4000-8000-000000000001', 'finalist', NULL, 50),
   ('a0000001-0000-4000-8000-000000000001', 'champion', NULL, 100),
+  ('a0000001-0000-4000-8000-000000000001', 'third_place_qualifier', NULL, 3),
   ('a0000001-0000-4000-8000-000000000001', 'bonus_pick', 'most_goals', 50),
   ('a0000001-0000-4000-8000-000000000001', 'bonus_pick', 'most_yellow_cards', 10),
   ('a0000001-0000-4000-8000-000000000001', 'bonus_pick', 'most_red_cards', 10)

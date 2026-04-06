@@ -70,7 +70,7 @@ export default async function AccountPicksPage({ searchParams }: PageProps) {
 
       <PageTitle
         title="Your picks"
-        description="Walk through quarter-finals, semis, the final, and your champion — with quick starter options if you want a nudge. Edits apply until the pool lock time."
+        description="Walk through the full tournament: groups, third-place qualifiers, Round of 32 through champion, then bonus questions. Quick start fills everything except bonuses. Edits apply until the pool locks."
       />
 
       {ctx.loadError ? (

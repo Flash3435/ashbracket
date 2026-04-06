@@ -5,6 +5,9 @@
 export const PREDICTION_KIND_DISPLAY_ORDER: readonly string[] = [
   "group_winner",
   "group_runner_up",
+  "round_of_32",
+  "third_place_qualifier",
+  "round_of_16",
   "quarterfinalist",
   "semifinalist",
   "finalist",

@@ -1,13 +1,13 @@
 "use server";
 
 import { createClient } from "@/lib/supabase/server";
-import { applyKnockoutPickSlots } from "../../../lib/predictions/applyKnockoutPickSlots";
+import { applyParticipantPickSlots } from "../../../lib/predictions/applyParticipantPickSlots";
 import { validateKnockoutPickSaveInput } from "../../../lib/predictions/validateKnockoutPickPayload";
 import { recomputePoolLedgerForPool } from "@/lib/scoring/recomputePoolLedger";
 import { revalidatePath } from "next/cache";
 import { SAMPLE_POOL_ID } from "../../../lib/config/sample-pool";
 import type {
-  KnockoutPickSlotPayload,
+  ParticipantPickSlotPayload,
   SaveKnockoutPicksResult,
 } from "../../../types/knockoutPicksSave";
 
@@ -17,7 +17,7 @@ function messageFromUnknown(e: unknown): string {
 
 export async function saveParticipantKnockoutPicksAction(input: {
   participantId: string;
-  slots: KnockoutPickSlotPayload[];
+  slots: ParticipantPickSlotPayload[];
 }): Promise<SaveKnockoutPicksResult> {
   const invalid = validateKnockoutPickSaveInput(input);
   if (invalid) return invalid;
@@ -37,7 +37,7 @@ export async function saveParticipantKnockoutPicksAction(input: {
       return { ok: false, error: "Participant not found in this pool." };
     }
 
-    const applied = await applyKnockoutPickSlots(supabase, {
+    const applied = await applyParticipantPickSlots(supabase, {
       poolId: SAMPLE_POOL_ID,
       participantId: input.participantId,
       slots: input.slots,

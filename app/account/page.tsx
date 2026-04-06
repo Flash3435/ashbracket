@@ -6,6 +6,7 @@ import { PageTitle } from "@/components/ui/PageTitle";
 import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
 import { loadAccountKnockoutSelection } from "../../lib/account/loadAccountKnockoutSelection";
+import { resolveAccountParticipantId } from "../../lib/account/resolveAccountParticipantId";
 import { SAMPLE_POOL_ID } from "../../lib/config/sample-pool";
 import {
   countryCodesFromKnockoutSlots,
@@ -16,7 +17,12 @@ import type { TournamentMatchPublicRow } from "../../types/tournamentPublic";
 
 export const dynamic = "force-dynamic";
 
-export default async function AccountPage() {
+type PageProps = {
+  searchParams: Promise<{ participant?: string }>;
+};
+
+export default async function AccountPage({ searchParams }: PageProps) {
+  const sp = await searchParams;
   const supabase = await createClient();
   const {
     data: { user },
@@ -35,10 +41,13 @@ export default async function AccountPage() {
   const list = rows ?? [];
   const sample = list.find((p) => p.pool_id === SAMPLE_POOL_ID);
 
-  const firstParticipantId = list[0]?.id ?? "";
+  const preferredParticipantId = resolveAccountParticipantId(
+    list,
+    sp.participant,
+  );
   const picksCtx =
-    !error && firstParticipantId
-      ? await loadAccountKnockoutSelection(user.id, firstParticipantId)
+    !error && preferredParticipantId
+      ? await loadAccountKnockoutSelection(user.id, preferredParticipantId)
       : null;
 
   let accountNextMatches: TournamentMatchPublicRow[] = [];
@@ -57,7 +66,7 @@ export default async function AccountPage() {
       accountNextMatches = nextMatchesForTeamCountryCodes(
         tp.matches,
         accountNextCodes,
-        5,
+        8,
       );
     }
   }
@@ -119,10 +128,15 @@ export default async function AccountPage() {
             Upcoming matches for your bracket
           </h2>
           <p className="mt-1 text-xs text-ash-muted">
-            Using your first pool profile ({picksCtx.selectedPoolName}). Times
-            are America/Edmonton (Calgary).{" "}
+            Highlights use your saved picks for{" "}
+            <span className="font-medium text-ash-text">
+              {picksCtx.selectedPoolName}
+            </span>
+            . Times are America/Edmonton (Calgary). If you are in several pools,
+            open Account from that profile’s row below so the schedule matches
+            that bracket.{" "}
             <Link
-              href={`/account/picks/summary?participant=${firstParticipantId}`}
+              href={`/account/picks/summary?participant=${preferredParticipantId}`}
               className="ash-link"
             >
               Full snapshot
@@ -136,7 +150,8 @@ export default async function AccountPage() {
             <div className="mt-3">
               <ParticipantPicksNextMatches
                 matches={accountNextMatches}
-                pickedCountryCodes={accountNextCodes}
+                initialSlots={picksCtx.initialSlots}
+                teams={picksCtx.teams}
               />
             </div>
           )}
@@ -165,6 +180,9 @@ export default async function AccountPage() {
                 </Link>
                 <Link href={`/account/picks?participant=${p.id}`} className="ash-link">
                   Edit picks
+                </Link>
+                <Link href={`/account?participant=${p.id}`} className="ash-link">
+                  Dashboard schedule for this pool
                 </Link>
               </div>
             </li>

@@ -1,5 +1,6 @@
 import type { Team } from "../../src/types/domain";
 import type { KnockoutPickSlotDraft } from "../../types/adminKnockoutPicks";
+import { WC2026_GROUP_CODES } from "../tournament/wc2026GroupCodes";
 import { teamStrengthLabel } from "../teams/teamStrengthLabel";
 
 function shuffleInPlace<T>(arr: T[]): T[] {
@@ -16,7 +17,6 @@ function pickDistinctTeams(teams: Team[], n: number): Team[] {
 }
 
 const REGION_BUCKET: Record<string, number> = {
-  // Americas
   MEX: 0,
   CAN: 0,
   USA: 0,
@@ -29,7 +29,6 @@ const REGION_BUCKET: Record<string, number> = {
   HAI: 0,
   CUW: 0,
   PAN: 0,
-  // Europe-ish
   CZE: 1,
   BIH: 1,
   SUI: 1,
@@ -52,7 +51,6 @@ const REGION_BUCKET: Record<string, number> = {
   UKR: 1,
   DEN: 1,
   ITA: 1,
-  // Africa
   RSA: 2,
   MAR: 2,
   TUN: 2,
@@ -64,7 +62,6 @@ const REGION_BUCKET: Record<string, number> = {
   COD: 2,
   ALG: 2,
   NGA: 2,
-  // Asia / Pacific / Middle East
   KOR: 3,
   QAT: 3,
   AUS: 3,
@@ -81,7 +78,6 @@ function bucketForTeam(t: Team): number {
   return REGION_BUCKET[t.countryCode.toUpperCase()] ?? 1;
 }
 
-/** Try to pick `count` teams rotating across rough world regions. */
 function balancedPick(teams: Team[], count: number): Team[] {
   const byBucket: Team[][] = [[], [], [], []];
   for (const t of teams) {
@@ -143,10 +139,29 @@ function favoritesOrderedPool(teams: Team[]): Team[] {
   return copy;
 }
 
+function orderedTeamsForMode(teams: Team[], mode: QuickPickMode): Team[] {
+  if (mode === "random") return shuffleInPlace([...teams]);
+  if (mode === "balanced") return balancedPick(teams, teams.length);
+  return favoritesOrderedPool(teams);
+}
+
+function pickNTeamIdsFromPool(pool: Team[], n: number): string[] {
+  const ids = pool.map((t) => t.id);
+  if (ids.length >= n) return ids.slice(0, n);
+  const out = [...ids];
+  let i = 0;
+  while (out.length < n && pool.length > 0) {
+    out.push(pool[i % pool.length]!.id);
+    i += 1;
+  }
+  return out.slice(0, n);
+}
+
 export type QuickPickMode = "random" | "favorites" | "balanced";
 
 /**
- * Fills all knockout slots with a coherent bracket: SF ⊆ QF, F ⊆ SF, champion ∈ F.
+ * Fills group through champion with a coherent story (later rounds ⊆ earlier).
+ * Bonus picks are left unchanged so participants choose those themselves.
  */
 export function applyQuickPickToSlots(
   slots: KnockoutPickSlotDraft[],
@@ -155,43 +170,133 @@ export function applyQuickPickToSlots(
 ): KnockoutPickSlotDraft[] {
   if (teams.length === 0) return slots;
 
-  let qfPool: Team[];
-  if (mode === "random") {
-    qfPool = pickDistinctTeams(teams, 8);
-  } else if (mode === "balanced") {
-    qfPool = balancedPick(teams, 8);
-  } else {
-    const ordered = favoritesOrderedPool(teams);
-    qfPool = ordered.slice(0, 8);
-    if (qfPool.length < 8) {
-      const extra = teams.filter((t) => !qfPool.some((q) => q.id === t.id));
-      shuffleInPlace(extra);
-      qfPool = [...qfPool, ...extra.slice(0, 8 - qfPool.length)];
+  const pool = orderedTeamsForMode(teams, mode);
+  const used = new Set<string>();
+
+  const groupWinnerByLetter = new Map<string, string>();
+  const groupRunnerByLetter = new Map<string, string>();
+
+  for (const letter of WC2026_GROUP_CODES) {
+    const avail = pool.filter((t) => !used.has(t.id));
+    const pickSource = avail.length >= 2 ? avail : pool;
+    const two = pickDistinctTeams(pickSource, 2);
+    let a = two[0]?.id ?? "";
+    let b = two[1]?.id ?? a;
+    if (a && !used.has(a)) used.add(a);
+    if (b && b !== a && !used.has(b)) used.add(b);
+    if (!a && pool[0]) a = pool[0].id;
+    if (!b && pool[1]) b = pool[1]!.id;
+    groupWinnerByLetter.set(letter, a);
+    groupRunnerByLetter.set(letter, b);
+  }
+
+  const thirdPool = pool.filter((t) => !used.has(t.id));
+  const thirdIds = pickNTeamIdsFromPool(
+    thirdPool.length > 0 ? thirdPool : pool,
+    8,
+  );
+  for (const id of thirdIds) used.add(id);
+
+  const r32List: string[] = [];
+  for (const letter of WC2026_GROUP_CODES) {
+    const w = groupWinnerByLetter.get(letter) ?? "";
+    const r = groupRunnerByLetter.get(letter) ?? "";
+    if (w) r32List.push(w);
+    if (r) r32List.push(r);
+  }
+  for (const id of thirdIds) r32List.push(id);
+  while (r32List.length < 32) {
+    const t = pool[r32List.length % pool.length]!;
+    r32List.push(t.id);
+  }
+  r32List.splice(32);
+
+  const r32Set = new Set(r32List);
+  const r16PoolTeams = pool.filter((t) => r32Set.has(t.id));
+  const r16Pick = pickDistinctTeams(
+    r16PoolTeams.length > 0 ? r16PoolTeams : pool,
+    16,
+  );
+  let r16Ids = r16Pick.map((t) => t.id);
+  if (r16Ids.length < 16) {
+    const extra = r32List.filter((id) => !r16Ids.includes(id));
+    shuffleInPlace(extra);
+    for (const id of extra) {
+      if (r16Ids.length >= 16) break;
+      r16Ids.push(id);
     }
   }
+  r16Ids = r16Ids.slice(0, 16);
 
-  if (qfPool.length < 8) {
-    const need = 8 - qfPool.length;
-    const extra = teams.filter((t) => !qfPool.some((q) => q.id === t.id));
+  const qfPoolTeams = pool.filter((t) => r16Ids.includes(t.id));
+  let qfIds = pickDistinctTeams(
+    qfPoolTeams.length > 0 ? qfPoolTeams : pool,
+    8,
+  ).map((t) => t.id);
+  if (qfIds.length < 8) {
+    const extra = r16Ids.filter((id) => !qfIds.includes(id));
     shuffleInPlace(extra);
-    qfPool = [...qfPool, ...extra.slice(0, need)];
+    qfIds = [...qfIds, ...extra.slice(0, 8 - qfIds.length)];
+  }
+  qfIds = qfIds.slice(0, 8);
+
+  const sfTeams = pickDistinctTeams(
+    pool.filter((t) => qfIds.includes(t.id)),
+    4,
+  );
+  let sfIds = sfTeams.map((t) => t.id);
+  if (sfIds.length < 4) {
+    const extra = qfIds.filter((id) => !sfIds.includes(id));
+    sfIds = [...sfIds, ...extra.slice(0, 4 - sfIds.length)];
   }
 
-  const qfIds = qfPool.map((t) => t.id);
-  const sfTeams = pickDistinctTeams([...qfPool], 4);
-  const sfIds = sfTeams.map((t) => t.id);
+  const fTeams = pickDistinctTeams(
+    pool.filter((t) => sfIds.includes(t.id)),
+    2,
+  );
+  let fIds = fTeams.map((t) => t.id);
+  if (fIds.length < 2) {
+    const extra = sfIds.filter((id) => !fIds.includes(id));
+    fIds = [...fIds, ...extra.slice(0, 2 - fIds.length)];
+  }
 
-  const fTeams = pickDistinctTeams([...sfTeams], 2);
-  const fIds = fTeams.map((t) => t.id);
+  const cTeams = pickDistinctTeams(
+    pool.filter((t) => fIds.includes(t.id)),
+    1,
+  );
+  const cId = cTeams[0]?.id ?? fIds[0] ?? "";
 
-  const cTeams = pickDistinctTeams([...fTeams], 1);
-  const cIds = cTeams.map((t) => t.id);
-
+  let r32i = 0;
+  let r16i = 0;
   let qi = 0;
   let si = 0;
   let fi = 0;
 
   return slots.map((row) => {
+    if (row.predictionKind === "group_winner" && row.groupCode) {
+      const id = groupWinnerByLetter.get(row.groupCode) ?? "";
+      return { ...row, teamId: id };
+    }
+    if (row.predictionKind === "group_runner_up" && row.groupCode) {
+      const id = groupRunnerByLetter.get(row.groupCode) ?? "";
+      return { ...row, teamId: id };
+    }
+    if (row.predictionKind === "third_place_qualifier") {
+      const sk = parseInt(row.slotKey ?? "0", 10);
+      const idx = Number.isFinite(sk) ? sk - 1 : 0;
+      const id = thirdIds[idx] ?? "";
+      return { ...row, teamId: id };
+    }
+    if (row.predictionKind === "round_of_32") {
+      const id = r32List[r32i] ?? "";
+      r32i += 1;
+      return { ...row, teamId: id };
+    }
+    if (row.predictionKind === "round_of_16") {
+      const id = r16Ids[r16i] ?? "";
+      r16i += 1;
+      return { ...row, teamId: id };
+    }
     if (row.predictionKind === "quarterfinalist") {
       const id = qfIds[qi] ?? "";
       qi += 1;
@@ -208,7 +313,7 @@ export function applyQuickPickToSlots(
       return { ...row, teamId: id };
     }
     if (row.predictionKind === "champion") {
-      return { ...row, teamId: cIds[0] ?? "" };
+      return { ...row, teamId: cId };
     }
     return row;
   });

@@ -56,7 +56,7 @@ export default async function HomePage() {
           <Link href="/rules" className="ash-surface-interactive block p-4">
             <h2 className="text-lg font-bold text-ash-text">Pool rules</h2>
             <p className="mt-1 text-sm font-normal leading-relaxed text-ash-muted">
-              Scoring, deadlines, and tie-breakers for your pool.
+              Scoring, deadlines, prizes, and how ties split the pot.
             </p>
           </Link>
           <Link

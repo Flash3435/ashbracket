@@ -3,7 +3,7 @@ import { RecomputeStandingsPanel } from "@/components/admin/RecomputeStandingsPa
 import { PageContainer } from "@/components/ui/PageContainer";
 import { PageTitle } from "@/components/ui/PageTitle";
 import { createClient } from "@/lib/supabase/server";
-import { KNOCKOUT_EDITOR_SECTIONS } from "../../../lib/admin/knockoutResultsConfig";
+import { ALL_BRACKET_PICK_SECTIONS } from "../../../lib/admin/knockoutResultsConfig";
 import {
   mapResultRow,
   mapTeamRow,
@@ -14,7 +14,12 @@ import type { Result, Team, TournamentStage } from "../../../src/types/domain";
 
 export const dynamic = "force-dynamic";
 
-const STAGE_CODES_NEEDED = ["quarterfinal", "semifinal", "final"] as const;
+const STAGE_CODES_NEEDED = Array.from(
+  new Set(ALL_BRACKET_PICK_SECTIONS.map((s) => s.stageCode)),
+);
+const RESULT_KINDS = Array.from(
+  new Set(ALL_BRACKET_PICK_SECTIONS.map((s) => s.kind)),
+);
 
 export default async function AdminResultsPage() {
   let teams: Team[] = [];
@@ -35,19 +40,14 @@ export default async function AdminResultsPage() {
         .select(
           "id, code, label, sort_order, starts_at, ends_at, created_at, updated_at",
         )
-        .in("code", [...STAGE_CODES_NEEDED])
+        .in("code", STAGE_CODES_NEEDED)
         .order("sort_order", { ascending: true }),
       supabase
         .from("results")
         .select(
           "id, tournament_stage_id, kind, team_id, group_code, slot_key, value_text, resolved_at, created_at",
         )
-        .in("kind", [
-          "quarterfinalist",
-          "semifinalist",
-          "finalist",
-          "champion",
-        ]),
+        .in("kind", RESULT_KINDS),
     ]);
 
     if (teamsRes.error) loadError = teamsRes.error.message;
@@ -72,15 +72,16 @@ export default async function AdminResultsPage() {
       e instanceof Error ? e.message : "Failed to load results editor data.";
   }
 
-  const stageByCode = Object.fromEntries(
-    stages.map((s) => [s.code, s]),
-  ) as Record<(typeof STAGE_CODES_NEEDED)[number], TournamentStage | undefined>;
+  const stageByCode = Object.fromEntries(stages.map((s) => [s.code, s])) as Record<
+    string,
+    TournamentStage | undefined
+  >;
 
   return (
     <PageContainer>
       <PageTitle
         title="Tournament results"
-        description="Enter the real outcomes by stage (quarterfinals through champion). Each save updates official results, recalculates everyone’s points, and refreshes the leaderboard."
+        description="Enter real outcomes for each round, third-place qualifiers, and the champion. Each save updates official results, recalculates points, and refreshes the leaderboard."
       />
       {loadError ? (
         <p className="mb-4 rounded-md border border-red-800/80 bg-red-950/40 px-3 py-2 text-sm text-red-200">
@@ -97,7 +98,7 @@ export default async function AdminResultsPage() {
         </p>
       ) : null}
       <KnockoutResultsEditor
-        sections={KNOCKOUT_EDITOR_SECTIONS}
+        sections={ALL_BRACKET_PICK_SECTIONS}
         teams={teams}
         stageByCode={stageByCode}
         initialResults={results}

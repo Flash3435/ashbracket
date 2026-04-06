@@ -26,7 +26,7 @@ export type SamplePoolScoringRulesPayload = {
     exactPoints: number;
     wrongSlotPoints: number;
   } | null;
-  /** Organizer tie-break copy; null uses `PUBLIC_RULES_DEFAULT_TIE_BREAK` on /rules. */
+  /** Prize-split tie copy for tied totals; null uses `PUBLIC_RULES_DEFAULT_TIE_BREAK` on /rules. */
   tieBreakNote: string | null;
   rules: PublicScoringRuleRow[];
 };
