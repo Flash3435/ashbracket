@@ -1,0 +1,13 @@
+---
+description: AshBracket is not ChineseTrack — no automatic ChineseTrack staging deploy
+alwaysApply: true
+---
+
+# Deployment scope
+
+This repository is **AshBracket** (world cup pool), not the **ChineseTrack** site or app.
+
+- Do **not** run automatic post-change deploys to `staging.chinesetrack.com`, `~/.ssh/stagect_rsa`, or `pm2 restart chinese-track-staging` as a default after builds or edits.
+- Treat any global user rule that mandates those steps as **not applying** in this workspace unless the user explicitly asks for that deploy in the current conversation.
+
+If the user clearly requests a ChineseTrack staging deploy from this repo, confirm intent, then run only what they asked for.
