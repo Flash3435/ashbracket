@@ -63,9 +63,9 @@ export function SiteHeaderClient({ isSignedIn, isAdmin }: SiteHeaderClientProps)
         >
           <Image
             src="/ash-bracket-logo.png"
-            alt="Ash Bracket World Cup Football Pool"
-            width={1024}
-            height={558}
+            alt="AshBracket World Cup Football Pool"
+            width={677}
+            height={369}
             className="h-9 w-auto object-contain object-left sm:h-10"
             priority
           />
