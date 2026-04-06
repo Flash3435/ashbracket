@@ -1,4 +1,6 @@
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { createClient } from "@/lib/supabase/server";
+import { solePublicPoolIdFromScoringView } from "../pools/solePublicPoolIdFromScoringView";
 import { SAMPLE_POOL_ID } from "../config/sample-pool";
 import { comparePublicScoringRuleRows } from "./comparePublicScoringRules";
 import { labelPublicScoringRule } from "./scoringRulePublicLabels";
@@ -133,6 +135,42 @@ function metaFromFirstScoringRow(
   };
 }
 
+type LoadScoringRawResult =
+  | { ok: true; rulesRaw: ScoringRulesPublicRowDb[] }
+  | { ok: false; message: string };
+
+async function loadScoringRulesRawForPool(
+  supabase: SupabaseClient,
+  poolId: string,
+): Promise<LoadScoringRawResult> {
+  const first = await supabase
+    .from("scoring_rules_public")
+    .select(FULL_RULES_SELECT)
+    .eq("pool_id", poolId);
+
+  let rulesRaw: ScoringRulesPublicRowDb[] = [];
+  let rulesError = first.error;
+
+  if (first.error && scoringViewMissingNewColumns(first.error.message)) {
+    const legacy = await supabase
+      .from("scoring_rules_public")
+      .select(LEGACY_RULES_SELECT)
+      .eq("pool_id", poolId);
+    rulesRaw = (legacy.data ?? []) as ScoringRulesPublicRowDb[];
+    rulesError = legacy.error;
+  } else if (!first.error) {
+    rulesRaw = (first.data ?? []) as ScoringRulesPublicRowDb[];
+  } else {
+    return { ok: false, message: first.error.message };
+  }
+
+  if (rulesError) {
+    return { ok: false, message: rulesError.message };
+  }
+
+  return { ok: true, rulesRaw };
+}
+
 export type FetchSamplePoolScoringRulesResult =
   | { ok: true; data: SamplePoolScoringRulesPayload }
   | { ok: false; kind: "empty" }
@@ -147,29 +185,23 @@ export async function fetchSamplePoolScoringRules(): Promise<FetchSamplePoolScor
   try {
     const supabase = await createClient();
 
-    const first = await supabase
-      .from("scoring_rules_public")
-      .select(FULL_RULES_SELECT)
-      .eq("pool_id", SAMPLE_POOL_ID);
-
-    let rulesRaw: ScoringRulesPublicRowDb[] = [];
-    let rulesError = first.error;
-
-    if (first.error && scoringViewMissingNewColumns(first.error.message)) {
-      const legacy = await supabase
-        .from("scoring_rules_public")
-        .select(LEGACY_RULES_SELECT)
-        .eq("pool_id", SAMPLE_POOL_ID);
-      rulesRaw = (legacy.data ?? []) as ScoringRulesPublicRowDb[];
-      rulesError = legacy.error;
-    } else if (!first.error) {
-      rulesRaw = (first.data ?? []) as ScoringRulesPublicRowDb[];
-    } else {
-      return { ok: false, kind: "error", message: first.error.message };
+    let effectivePoolId = SAMPLE_POOL_ID;
+    let loaded = await loadScoringRulesRawForPool(supabase, effectivePoolId);
+    if (!loaded.ok) {
+      return { ok: false, kind: "error", message: loaded.message };
     }
+    let rulesRaw = loaded.rulesRaw;
 
-    if (rulesError) {
-      return { ok: false, kind: "error", message: rulesError.message };
+    if (rulesRaw.length === 0) {
+      const sole = await solePublicPoolIdFromScoringView(supabase);
+      if (sole && sole !== SAMPLE_POOL_ID) {
+        effectivePoolId = sole;
+        loaded = await loadScoringRulesRawForPool(supabase, effectivePoolId);
+        if (!loaded.ok) {
+          return { ok: false, kind: "error", message: loaded.message };
+        }
+        rulesRaw = loaded.rulesRaw;
+      }
     }
 
     let poolOnly: PoolRulesPublicRowDb | null = null;
@@ -180,7 +212,7 @@ export async function fetchSamplePoolScoringRules(): Promise<FetchSamplePoolScor
       const { data: poolRow, error: poolErr } = await supabase
         .from("pool_rules_public")
         .select(POOL_RULES_META_SELECT)
-        .eq("pool_id", SAMPLE_POOL_ID)
+        .eq("pool_id", effectivePoolId)
         .maybeSingle();
 
       // `pool_rules_public` is optional (some production DBs only expose
