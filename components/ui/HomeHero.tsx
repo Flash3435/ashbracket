@@ -1,7 +1,12 @@
 import Image from "next/image";
 import Link from "next/link";
 
-export function HomeHero() {
+type HomeHeroProps = {
+  primaryCtaHref: string;
+  primaryCtaLabel: string;
+};
+
+export function HomeHero({ primaryCtaHref, primaryCtaLabel }: HomeHeroProps) {
   return (
     <section
       className="w-full border-b border-ash-border bg-ash-body px-4 py-14 sm:py-16"
@@ -22,8 +27,8 @@ export function HomeHero() {
           Run your own World Cup pool. Track standings. Crown a winner.
         </p>
         <div className="mt-8 flex flex-wrap items-center justify-center gap-3">
-          <Link href="/join" className="btn-primary">
-            Join the Pool
+          <Link href={primaryCtaHref} className="btn-primary">
+            {primaryCtaLabel}
           </Link>
           <Link href="/rules" className="btn-ghost">
             View Rules

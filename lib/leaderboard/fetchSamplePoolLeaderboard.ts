@@ -1,6 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
-import { SAMPLE_POOL_ID } from "../config/sample-pool";
-import { solePublicPoolIdFromScoringView } from "../pools/solePublicPoolIdFromScoringView";
+import type { ResolvedHomePublicPool } from "../pool/resolveHomePublicPool";
+import { resolveHomePublicPool } from "../pool/resolveHomePublicPool";
 import type {
   LeaderboardPublicRowDb,
   PublicLeaderboardPoolSection,
@@ -11,17 +11,19 @@ import {
 } from "./publicLeaderboard";
 
 /**
- * Loads `leaderboard_public` rows for the configured sample pool only.
+ * Loads `leaderboard_public` rows for the home public pool.
  * Uses the Supabase view (safe columns; no email / payment / notes).
  */
-export async function fetchSamplePoolLeaderboard(): Promise<{
+export async function fetchSamplePoolLeaderboard(
+  resolved?: ResolvedHomePublicPool,
+): Promise<{
   sections: PublicLeaderboardPoolSection[];
   error: string | null;
 }> {
   try {
     const supabase = await createClient();
-    let poolId = SAMPLE_POOL_ID;
-    const first = await supabase
+    const { poolId } = resolved ?? (await resolveHomePublicPool(supabase));
+    const { data, error } = await supabase
       .from("leaderboard_public")
       .select(
         "pool_id, pool_name, participant_id, display_name, total_points, rank",
@@ -29,28 +31,8 @@ export async function fetchSamplePoolLeaderboard(): Promise<{
       .eq("pool_id", poolId)
       .order("rank", { ascending: true });
 
-    if (first.error) {
-      return { sections: [], error: first.error.message };
-    }
-
-    let data = first.data;
-
-    if (!(data ?? []).length) {
-      const sole = await solePublicPoolIdFromScoringView(supabase);
-      if (sole && sole !== SAMPLE_POOL_ID) {
-        poolId = sole;
-        const second = await supabase
-          .from("leaderboard_public")
-          .select(
-            "pool_id, pool_name, participant_id, display_name, total_points, rank",
-          )
-          .eq("pool_id", poolId)
-          .order("rank", { ascending: true });
-        if (second.error) {
-          return { sections: [], error: second.error.message };
-        }
-        data = second.data;
-      }
+    if (error) {
+      return { sections: [], error: error.message };
     }
 
     const rows = (data ?? []).map((row) =>

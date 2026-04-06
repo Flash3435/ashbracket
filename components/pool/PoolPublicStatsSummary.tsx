@@ -19,14 +19,23 @@ export function PoolPublicStatsSummary({
         aria-live="polite"
       >
         <p className="text-xs text-ash-border-hover">{poolLabel}</p>
-        <p className="mt-2 text-sm text-amber-200">{errorMessage}</p>
+        <p className="mt-2 text-sm text-ash-muted">
+          Pool totals are temporarily unavailable. The leaderboard below is
+          unchanged.
+        </p>
       </section>
     );
   }
 
   if (!stats) return null;
 
-  const { registeredCount, paidCount, entryFeeCents, prizePoolCents } = stats;
+  const {
+    registeredCount,
+    paidCount,
+    entryFeeCents,
+    prizePoolCents,
+    partial,
+  } = stats;
 
   return (
     <section className="mb-6 rounded-xl border border-ash-border bg-ash-surface px-4 py-4">
@@ -44,7 +53,11 @@ export function PoolPublicStatsSummary({
         <div>
           <dt className="text-xs text-ash-muted">Paid entries</dt>
           <dd className="mt-0.5 text-lg font-semibold tabular-nums text-ash-text">
-            {paidCount}
+            {paidCount != null ? (
+              paidCount
+            ) : (
+              <span className="text-sm font-normal text-ash-muted">—</span>
+            )}
           </dd>
         </div>
         <div>
@@ -54,16 +67,18 @@ export function PoolPublicStatsSummary({
               formatUsdCents(prizePoolCents)
             ) : (
               <span className="text-sm font-normal text-ash-muted">
-                Set when entry fee is configured
+                {partial
+                  ? "Not shown right now"
+                  : "Set when entry fee is configured"}
               </span>
             )}
           </dd>
         </div>
       </dl>
       <p className="mt-3 text-xs leading-relaxed text-ash-border-hover">
-        Counts include everyone registered in the pool. The prize pool is paid
-        entries × the published entry fee; individual payment status is not
-        shown here.
+        {partial
+          ? "Registered count is from the public leaderboard. Paid entries and the prize estimate will appear here when available."
+          : "Counts include everyone registered in the pool. The prize pool is paid entries × the published entry fee; individual payment status is not shown here."}
       </p>
     </section>
   );
