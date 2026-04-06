@@ -107,4 +107,8 @@ h2 {
   .ash-link:hover {
     text-decoration: underline;
   }
+
+  .clicky-badge {
+    display: none;
+  }
 }
