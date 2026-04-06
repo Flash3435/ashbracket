@@ -2,19 +2,18 @@ import type {
   PublicTournamentProgressPayload,
   TournamentMatchPublicRow,
 } from "../../types/tournamentPublic";
+import { formatKickoffAmericaEdmonton } from "../../lib/datetime/scheduleDisplay";
 import {
   knockoutAdvancementByStage,
   summarizeTournamentStage,
 } from "../../lib/tournament/publicTournamentSummary";
 
 function formatWhen(iso: string | null | undefined): string {
-  if (iso == null || iso === "") return "—";
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return iso;
-  return new Intl.DateTimeFormat(undefined, {
-    dateStyle: "medium",
-    timeStyle: "short",
-  }).format(d);
+  const p = formatKickoffAmericaEdmonton(iso);
+  if (p.singleLineFallback) {
+    return p.singleLineFallback === "Time TBD" ? "—" : p.singleLineFallback;
+  }
+  return `${p.dateLine} · ${p.timeLine}`;
 }
 
 function teamLabel(name: string | null, code: string | null): string {

@@ -1,9 +1,70 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { applyFifaRankSnapshot } from "./applyFifaRankSnapshot";
 import wc from "./wc2026Data.json";
-import { groupRoundRobinPairings } from "./groupRoundRobin";
+import groupFixtures from "./wc2026GroupFixtures.json";
 
 type WcData = typeof wc;
+
+type OfficialGroupFixture = { home: string; away: string; kickoff_at: string };
+
+const WC2026_GROUP_FIXTURES = groupFixtures as Record<string, OfficialGroupFixture[]>;
+
+function sortedPairKey(a: string, b: string): string {
+  return [a, b].sort().join("\0");
+}
+
+function expectedPairsForRoster(roster: string[]): Set<string> {
+  const out = new Set<string>();
+  for (let i = 0; i < roster.length; i += 1) {
+    for (let j = i + 1; j < roster.length; j += 1) {
+      out.add(sortedPairKey(roster[i]!, roster[j]!));
+    }
+  }
+  return out;
+}
+
+/**
+ * Confirms six fixtures form a full round robin for the four FIFA codes.
+ */
+function validateGroupFixtures(
+  groupLetter: string,
+  rosterFifaCodes: string[],
+  fixtures: { home: string; away: string }[],
+): string | null {
+  if (fixtures.length !== 6) {
+    return `Group ${groupLetter}: expected 6 fixtures, got ${fixtures.length}.`;
+  }
+  const roster = new Set(rosterFifaCodes.map((c) => c.toUpperCase()));
+  if (roster.size !== 4) {
+    return `Group ${groupLetter}: roster must have 4 distinct FIFA codes.`;
+  }
+  const expected = expectedPairsForRoster([...roster]);
+  const seen = new Set<string>();
+  for (const f of fixtures) {
+    const h = f.home.toUpperCase();
+    const a = f.away.toUpperCase();
+    if (!roster.has(h) || !roster.has(a)) {
+      return `Group ${groupLetter}: fixture ${h}–${a} uses a team outside the group roster.`;
+    }
+    if (h === a) {
+      return `Group ${groupLetter}: home and away must differ.`;
+    }
+    const k = sortedPairKey(h, a);
+    if (seen.has(k)) {
+      return `Group ${groupLetter}: duplicate pairing ${h} vs ${a}.`;
+    }
+    seen.add(k);
+  }
+  if (seen.size !== expected.size) {
+    return `Group ${groupLetter}: fixture pairings do not match a full round robin.`;
+  }
+  for (const k of expected) {
+    if (!seen.has(k)) {
+      return `Group ${groupLetter}: missing pairing in fixtures.`;
+    }
+  }
+  return null;
+}
 
 /**
  * Idempotent: upserts teams, edition, and all group-stage matches for WC 2026.
@@ -68,26 +129,38 @@ export async function seedOfficialWc2026(
 
   for (const [groupLetter, fifaCodes] of Object.entries(groups)) {
     const g = groupLetter.toUpperCase();
-    const ids = fifaCodes.map((c) => codeToId.get(c));
-    if (ids.some((x) => !x)) {
-      return {
-        ok: false,
-        error: `Missing team id for group ${g} (check wc2026Data.json).`,
-      };
+    const fixtures = WC2026_GROUP_FIXTURES[g];
+    if (!fixtures) {
+      return { ok: false, error: `Missing official fixtures for group ${g} in wc2026GroupFixtures.json.` };
     }
-    const pairs = groupRoundRobinPairings(ids as [string, string, string, string]);
-    pairs.forEach(([home, away], i) => {
+
+    const rosterErr = validateGroupFixtures(g, fifaCodes as string[], fixtures);
+    if (rosterErr) {
+      return { ok: false, error: rosterErr };
+    }
+
+    for (let i = 0; i < fixtures.length; i += 1) {
+      const fx = fixtures[i]!;
+      const homeId = codeToId.get(fx.home);
+      const awayId = codeToId.get(fx.away);
+      if (!homeId || !awayId) {
+        return {
+          ok: false,
+          error: `Group ${g}: missing team id for ${fx.home} vs ${fx.away} (seed teams first).`,
+        };
+      }
       matchRows.push({
         edition_id: editionId,
         match_code: `WC2026-G-${g}-${String(i + 1).padStart(2, "0")}`,
         stage_code: "group",
         group_code: g,
         round_index: i,
-        home_team_id: home,
-        away_team_id: away,
+        kickoff_at: fx.kickoff_at,
+        home_team_id: homeId,
+        away_team_id: awayId,
         status: "scheduled",
       });
-    });
+    }
   }
 
   const { error: mErr } = await supabase.from("tournament_matches").upsert(

@@ -39,27 +39,35 @@ function matchInvolvesCodes(
 /**
  * Upcoming or live matches that include at least one of the given national teams
  * (by FIFA country code). Sorted: live first, then by kickoff time.
+ * Past `scheduled` fixtures (kickoff before `now`) are omitted unless `includePastScheduled`.
  */
 export function nextMatchesForTeamCountryCodes(
   matches: TournamentMatchPublicRow[],
   codes: Set<string>,
   limit = 8,
+  options?: { nowMs?: number; includePastScheduled?: boolean },
 ): TournamentMatchPublicRow[] {
   if (codes.size === 0) return [];
 
-  const relevant = matches.filter(
-    (m) =>
-      matchInvolvesCodes(m, codes) &&
-      (m.status === "scheduled" ||
-        m.status === "postponed" ||
-        m.status === "live"),
-  );
+  const nowMs = options?.nowMs ?? Date.now();
+  const includePastScheduled = options?.includePastScheduled ?? false;
 
   const kickMs = (iso: string | null | undefined) => {
     if (iso == null || iso === "") return Number.POSITIVE_INFINITY;
     const t = new Date(iso).getTime();
     return Number.isNaN(t) ? Number.POSITIVE_INFINITY : t;
   };
+
+  const relevant = matches.filter((m) => {
+    if (!matchInvolvesCodes(m, codes)) return false;
+    if (m.status === "live" || m.status === "postponed") return true;
+    if (m.status === "scheduled") {
+      if (includePastScheduled) return true;
+      const t = kickMs(m.kickoff_at);
+      return t === Number.POSITIVE_INFINITY || t >= nowMs;
+    }
+    return false;
+  });
 
   return [...relevant]
     .sort((a, b) => {

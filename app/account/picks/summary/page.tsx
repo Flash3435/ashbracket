@@ -159,9 +159,9 @@ export default async function AccountPicksSummaryPage({ searchParams }: PageProp
                   Next matches for your teams
                 </h2>
                 <p className="mt-1 text-xs text-ash-muted">
-                  Pulled from the official tournament schedule in the app (teams
-                  match on country codes). Live and upcoming fixtures involving
-                  any team in your bracket are listed first.
+                  From the official group schedule in the app (FIFA country
+                  codes). Date and time use America/Edmonton (Calgary). Live and
+                  upcoming fixtures for teams in your bracket are listed first.
                 </p>
                 {tournamentErr ? (
                   <p className="mt-3 text-sm text-amber-200" role="status">
@@ -170,7 +170,10 @@ export default async function AccountPicksSummaryPage({ searchParams }: PageProp
                   </p>
                 ) : (
                   <div className="mt-3">
-                    <ParticipantPicksNextMatches matches={nextMatches} />
+                    <ParticipantPicksNextMatches
+                      matches={nextMatches}
+                      pickedCountryCodes={codes}
+                    />
                   </div>
                 )}
               </section>

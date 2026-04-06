@@ -1,14 +1,6 @@
+import { formatKickoffAmericaEdmonton } from "../../lib/datetime/scheduleDisplay";
+import { opponentLineForPickedCodes } from "../../lib/participant/opponentLineForPickedCodes";
 import type { TournamentMatchPublicRow } from "../../types/tournamentPublic";
-
-function formatWhen(iso: string | null | undefined): string {
-  if (iso == null || iso === "") return "Time TBD";
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return iso;
-  return new Intl.DateTimeFormat(undefined, {
-    dateStyle: "medium",
-    timeStyle: "short",
-  }).format(d);
-}
 
 function teamLabel(name: string | null, code: string | null): string {
   if (name) return name;
@@ -31,15 +23,19 @@ function statusClass(status: string): string {
 
 type Props = {
   matches: TournamentMatchPublicRow[];
+  /** FIFA country codes from the participant’s knockout picks (for opponent line). */
+  pickedCountryCodes?: Set<string>;
 };
 
-export function ParticipantPicksNextMatches({ matches }: Props) {
+export function ParticipantPicksNextMatches({
+  matches,
+  pickedCountryCodes,
+}: Props) {
   if (matches.length === 0) {
     return (
       <p className="text-sm text-ash-muted">
-        When the schedule includes your teams, their next fixtures will show up
-        here. Group-stage lineups can still be TBD in the data — check back as
-        the tournament fills in.
+        When the official schedule includes your teams, their next fixtures
+        will show here (times in Calgary / Alberta — America/Edmonton).
       </p>
     );
   }
@@ -49,6 +45,11 @@ export function ParticipantPicksNextMatches({ matches }: Props) {
       {matches.map((m) => {
         const meta = [m.stage_label];
         if (m.group_code) meta.push(`Group ${m.group_code}`);
+        const when = formatKickoffAmericaEdmonton(m.kickoff_at);
+        const opponent =
+          pickedCountryCodes && pickedCountryCodes.size > 0
+            ? opponentLineForPickedCodes(m, pickedCountryCodes)
+            : "";
 
         return (
           <li key={m.match_id} className="py-3 first:pt-0">
@@ -56,10 +57,26 @@ export function ParticipantPicksNextMatches({ matches }: Props) {
               <p className="text-xs text-ash-muted">{meta.join(" · ")}</p>
               <span className={statusClass(m.status)}>{m.status}</span>
             </div>
-            <p className="mt-1 text-sm text-ash-muted">{formatWhen(m.kickoff_at)}</p>
-            <p className="mt-1 text-sm font-medium text-ash-text">
+            {when.singleLineFallback ? (
+              <p className="mt-1 text-sm text-ash-muted">
+                {when.singleLineFallback}
+              </p>
+            ) : (
+              <>
+                <p className="mt-1 text-sm font-medium text-ash-text">
+                  {when.dateLine}
+                </p>
+                <p className="mt-1 text-sm text-ash-muted">{when.timeLine}</p>
+              </>
+            )}
+            {opponent ? (
+              <p className="mt-1 text-sm font-medium text-ash-accent">
+                {opponent}
+              </p>
+            ) : null}
+            <p className="mt-1 text-xs text-ash-muted">
               {teamLabel(m.home_team_name, m.home_country_code)}
-              <span className="mx-2 font-normal text-ash-border-hover">vs</span>
+              <span className="mx-1.5 font-normal text-ash-border-hover">vs</span>
               {teamLabel(m.away_team_name, m.away_country_code)}
             </p>
           </li>

@@ -1,11 +1,19 @@
 import Link from "next/link";
 import { SignOutButton } from "@/components/auth/SignOutButton";
+import { ParticipantPicksNextMatches } from "@/components/picks/ParticipantPicksNextMatches";
 import { PageContainer } from "@/components/ui/PageContainer";
 import { PageTitle } from "@/components/ui/PageTitle";
 import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
+import { loadAccountKnockoutSelection } from "../../lib/account/loadAccountKnockoutSelection";
 import { isAppAdmin } from "../../lib/auth/isAppAdmin";
 import { SAMPLE_POOL_ID } from "../../lib/config/sample-pool";
+import {
+  countryCodesFromKnockoutSlots,
+  nextMatchesForTeamCountryCodes,
+} from "../../lib/participant/nextMatchesForPickedTeams";
+import { fetchPublicTournamentProgress } from "../../lib/tournament/fetchPublicTournamentProgress";
+import type { TournamentMatchPublicRow } from "../../types/tournamentPublic";
 
 export const dynamic = "force-dynamic";
 
@@ -29,6 +37,33 @@ export default async function AccountPage() {
 
   const list = rows ?? [];
   const sample = list.find((p) => p.pool_id === SAMPLE_POOL_ID);
+
+  const firstParticipantId = list[0]?.id ?? "";
+  const picksCtx =
+    !error && firstParticipantId
+      ? await loadAccountKnockoutSelection(user.id, firstParticipantId)
+      : null;
+
+  let accountNextMatches: TournamentMatchPublicRow[] = [];
+  let accountNextCodes = new Set<string>();
+  let accountTournamentErr: string | null = null;
+
+  if (picksCtx && !picksCtx.loadError && picksCtx.initialSlots.length > 0) {
+    const teamById = new Map(picksCtx.teams.map((t) => [t.id, t]));
+    accountNextCodes = countryCodesFromKnockoutSlots(
+      picksCtx.initialSlots,
+      teamById,
+    );
+    const { data: tp, error: te } = await fetchPublicTournamentProgress();
+    accountTournamentErr = te;
+    if (tp?.matches && !te) {
+      accountNextMatches = nextMatchesForTeamCountryCodes(
+        tp.matches,
+        accountNextCodes,
+        5,
+      );
+    }
+  }
 
   return (
     <PageContainer>
@@ -85,6 +120,40 @@ export default async function AccountPage() {
             {list.length === 1 ? "Enter your picks" : "Your picks"}
           </Link>
         </div>
+      ) : null}
+
+      {!error &&
+      list.length > 0 &&
+      picksCtx &&
+      !picksCtx.loadError &&
+      picksCtx.initialSlots.length > 0 ? (
+        <section className="mb-6 rounded-xl border border-ash-border bg-ash-surface p-4">
+          <h2 className="text-base font-bold text-ash-text">
+            Upcoming matches for your bracket
+          </h2>
+          <p className="mt-1 text-xs text-ash-muted">
+            Using your first pool profile ({picksCtx.selectedPoolName}). Times
+            are America/Edmonton (Calgary).{" "}
+            <Link
+              href={`/account/picks/summary?participant=${firstParticipantId}`}
+              className="ash-link"
+            >
+              Full snapshot
+            </Link>
+          </p>
+          {accountTournamentErr ? (
+            <p className="mt-3 text-sm text-amber-200" role="status">
+              Schedule could not be loaded ({accountTournamentErr}).
+            </p>
+          ) : (
+            <div className="mt-3">
+              <ParticipantPicksNextMatches
+                matches={accountNextMatches}
+                pickedCountryCodes={accountNextCodes}
+              />
+            </div>
+          )}
+        </section>
       ) : null}
 
       {!error && list.length > 0 ? (
