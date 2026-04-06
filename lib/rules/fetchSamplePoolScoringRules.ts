@@ -18,11 +18,27 @@ type PoolRulesPublicRowDb = {
   group_advance_wrong_slot_points: number | string | null;
 };
 
-type ScoringRulesPublicRowDb = PoolRulesPublicRowDb & {
+type ScoringRulesPublicRowDb = {
+  pool_id: string;
+  pool_name: string;
+  pool_lock_at: string | null;
   prediction_kind: string;
-  bonus_key: string | null;
+  bonus_key?: string | null;
   points: number | string;
+  entry_fee_cents?: number | null;
+  prize_distribution_json?: unknown;
+  group_advance_exact_points?: number | string | null;
+  group_advance_wrong_slot_points?: number | string | null;
 };
+
+const FULL_RULES_SELECT =
+  "pool_id, pool_name, pool_lock_at, entry_fee_cents, prize_distribution_json, group_advance_exact_points, group_advance_wrong_slot_points, prediction_kind, bonus_key, points";
+
+const LEGACY_RULES_SELECT =
+  "pool_id, pool_name, pool_lock_at, prediction_kind, points";
+
+const POOL_RULES_META_SELECT =
+  "pool_id, pool_name, pool_lock_at, entry_fee_cents, prize_distribution_json, group_advance_exact_points, group_advance_wrong_slot_points";
 
 function parsePrizeTiers(raw: unknown): PoolPrizeTier[] {
   if (!raw || !Array.isArray(raw)) return [];
@@ -68,6 +84,65 @@ function poolMetaFromRow(row: PoolRulesPublicRowDb): Pick<
   };
 }
 
+function scoringViewMissingNewColumns(message: string): boolean {
+  const m = message.toLowerCase();
+  return (
+    m.includes("entry_fee_cents") ||
+    m.includes("prize_distribution_json") ||
+    m.includes("group_advance_exact_points") ||
+    m.includes("group_advance_wrong_slot_points") ||
+    m.includes("bonus_key")
+  );
+}
+
+/** Missing view / not in schema cache — safe to ignore and use scoring view only. */
+function ignorablePoolRulesViewError(message: string): boolean {
+  const m = message.toLowerCase();
+  return (
+    m.includes("pool_rules_public") ||
+    m.includes("42p01") ||
+    (m.includes("could not find") && m.includes("schema cache"))
+  );
+}
+
+function hasExtendedPoolColumnsOnRow(
+  row: ScoringRulesPublicRowDb | undefined,
+): boolean {
+  return (
+    row != null &&
+    typeof row === "object" &&
+    "entry_fee_cents" in row &&
+    row.entry_fee_cents !== undefined
+  );
+}
+
+function metaFromFirstScoringRow(
+  row: ScoringRulesPublicRowDb | undefined,
+): Pick<
+  SamplePoolScoringRulesPayload,
+  "poolName" | "lockAt" | "entryFeeCents" | "prizeTiers" | "groupAdvance"
+> {
+  if (!row) {
+    return {
+      poolName: "",
+      lockAt: null,
+      entryFeeCents: null,
+      prizeTiers: [],
+      groupAdvance: null,
+    };
+  }
+  if (hasExtendedPoolColumnsOnRow(row)) {
+    return poolMetaFromRow(row as PoolRulesPublicRowDb);
+  }
+  return {
+    poolName: row.pool_name,
+    lockAt: row.pool_lock_at,
+    entryFeeCents: null,
+    prizeTiers: [],
+    groupAdvance: null,
+  };
+}
+
 export type FetchSamplePoolScoringRulesResult =
   | { ok: true; data: SamplePoolScoringRulesPayload }
   | { ok: false; kind: "empty" }
@@ -75,63 +150,96 @@ export type FetchSamplePoolScoringRulesResult =
 
 /**
  * Loads public pool rules for the configured sample pool (anon-safe views).
+ * Supports DBs that have not applied the extended `scoring_rules_public` migration yet
+ * by falling back to the legacy view columns, then optionally enriching from `pool_rules_public`.
  */
 export async function fetchSamplePoolScoringRules(): Promise<FetchSamplePoolScoringRulesResult> {
   try {
     const supabase = await createClient();
 
-    const { data: rulesData, error: rulesError } = await supabase
+    const first = await supabase
       .from("scoring_rules_public")
-      .select(
-        "pool_id, pool_name, pool_lock_at, entry_fee_cents, prize_distribution_json, group_advance_exact_points, group_advance_wrong_slot_points, prediction_kind, bonus_key, points",
-      )
+      .select(FULL_RULES_SELECT)
       .eq("pool_id", SAMPLE_POOL_ID);
+
+    let rulesRaw: ScoringRulesPublicRowDb[] = [];
+    let rulesError = first.error;
+
+    if (first.error && scoringViewMissingNewColumns(first.error.message)) {
+      const legacy = await supabase
+        .from("scoring_rules_public")
+        .select(LEGACY_RULES_SELECT)
+        .eq("pool_id", SAMPLE_POOL_ID);
+      rulesRaw = (legacy.data ?? []) as ScoringRulesPublicRowDb[];
+      rulesError = legacy.error;
+    } else if (!first.error) {
+      rulesRaw = (first.data ?? []) as ScoringRulesPublicRowDb[];
+    } else {
+      return { ok: false, kind: "error", message: first.error.message };
+    }
 
     if (rulesError) {
       return { ok: false, kind: "error", message: rulesError.message };
     }
 
-    const rulesRaw = (rulesData ?? []) as ScoringRulesPublicRowDb[];
+    let poolOnly: PoolRulesPublicRowDb | null = null;
+    const needsPoolMetaFromView =
+      rulesRaw.length === 0 || !hasExtendedPoolColumnsOnRow(rulesRaw[0]);
 
-    if (rulesRaw.length > 0) {
-      const meta = poolMetaFromRow(rulesRaw[0]!);
-      const rules: PublicScoringRuleRow[] = rulesRaw
-        .map((row) => ({
-          predictionKind: row.prediction_kind,
-          bonusKey: row.bonus_key,
-          points: Number(row.points),
-          label: labelPublicScoringRule(row.prediction_kind, row.bonus_key),
-        }))
-        .sort(comparePublicScoringRuleRows);
+    if (needsPoolMetaFromView) {
+      const { data: poolRow, error: poolErr } = await supabase
+        .from("pool_rules_public")
+        .select(POOL_RULES_META_SELECT)
+        .eq("pool_id", SAMPLE_POOL_ID)
+        .maybeSingle();
 
+      if (poolErr && !ignorablePoolRulesViewError(poolErr.message)) {
+        return { ok: false, kind: "error", message: poolErr.message };
+      }
+      if (!poolErr && poolRow) {
+        poolOnly = poolRow as PoolRulesPublicRowDb;
+      }
+    }
+
+    if (rulesRaw.length === 0) {
+      if (!poolOnly) {
+        return { ok: false, kind: "empty" };
+      }
       return {
         ok: true,
-        data: { ...meta, rules },
+        data: {
+          ...poolMetaFromRow(poolOnly),
+          rules: [],
+        },
       };
     }
 
-    const { data: poolOnly, error: poolErr } = await supabase
-      .from("pool_rules_public")
-      .select(
-        "pool_id, pool_name, pool_lock_at, entry_fee_cents, prize_distribution_json, group_advance_exact_points, group_advance_wrong_slot_points",
-      )
-      .eq("pool_id", SAMPLE_POOL_ID)
-      .maybeSingle();
+    const metaFromScoring = metaFromFirstScoringRow(rulesRaw[0]);
+    const meta = poolOnly
+      ? {
+          poolName: poolOnly.pool_name,
+          lockAt: poolOnly.pool_lock_at,
+          entryFeeCents: poolMetaFromRow(poolOnly).entryFeeCents,
+          prizeTiers: poolMetaFromRow(poolOnly).prizeTiers,
+          groupAdvance: poolMetaFromRow(poolOnly).groupAdvance,
+        }
+      : metaFromScoring;
 
-    if (poolErr) {
-      return { ok: false, kind: "error", message: poolErr.message };
-    }
-
-    if (!poolOnly) {
-      return { ok: false, kind: "empty" };
-    }
+    const rules: PublicScoringRuleRow[] = rulesRaw
+      .map((row) => ({
+        predictionKind: row.prediction_kind,
+        bonusKey: row.bonus_key ?? null,
+        points: Number(row.points),
+        label: labelPublicScoringRule(
+          row.prediction_kind,
+          row.bonus_key ?? null,
+        ),
+      }))
+      .sort(comparePublicScoringRuleRows);
 
     return {
       ok: true,
-      data: {
-        ...poolMetaFromRow(poolOnly as PoolRulesPublicRowDb),
-        rules: [],
-      },
+      data: { ...meta, rules },
     };
   } catch (e) {
     return {
