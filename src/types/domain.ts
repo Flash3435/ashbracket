@@ -116,6 +116,8 @@ export interface ScoringRule {
   id: string;
   poolId: string;
   predictionKind: PredictionKind;
+  /** For `bonus_pick`, matches `predictions.bonus_key` / results slot category. */
+  bonusKey: string | null;
   points: number;
   createdAt: string;
   updatedAt: string;

@@ -66,7 +66,8 @@ export function mapScoringRuleRow(row: {
   id: string;
   pool_id: string;
   prediction_kind: string;
-  points: number;
+  bonus_key?: string | null;
+  points: number | string;
   created_at: string;
   updated_at: string;
 }): ScoringRule {
@@ -74,7 +75,8 @@ export function mapScoringRuleRow(row: {
     id: row.id,
     poolId: row.pool_id,
     predictionKind: row.prediction_kind as ScoringRule["predictionKind"],
-    points: row.points,
+    bonusKey: row.bonus_key ?? null,
+    points: Number(row.points),
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };

@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { formatPoolPoints } from "@/lib/format/poolPoints";
 import { groupPicksByStage } from "../../lib/participant/groupPicksByStage";
 import { formatPickSlot } from "../../lib/participant/pickDescription";
 import { labelPredictionKind } from "../../lib/participant/predictionKindLabels";
@@ -40,7 +41,7 @@ export function PublicParticipantProfile({ detail }: Props) {
               Total points
             </dt>
             <dd className="mt-0.5 text-lg font-semibold tabular-nums text-ash-text">
-              {detail.totalPoints}
+              {formatPoolPoints(detail.totalPoints)}
             </dd>
           </div>
           <div>
@@ -153,7 +154,7 @@ export function PublicParticipantProfile({ detail }: Props) {
                       }`}
                     >
                       {row.pointsDelta > 0 ? "+" : ""}
-                      {row.pointsDelta}
+                      {formatPoolPoints(row.pointsDelta)}
                     </td>
                   </tr>
                 ))}

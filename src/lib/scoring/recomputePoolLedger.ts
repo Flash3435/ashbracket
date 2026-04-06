@@ -27,9 +27,43 @@ export async function recomputePoolLedgerWithClient(
 
   if (predErr) return { error: predErr.message };
 
+  const { data: poolRow, error: poolErr } = await supabase
+    .from("pools")
+    .select("id, group_advance_exact_points, group_advance_wrong_slot_points")
+    .eq("id", poolId)
+    .maybeSingle();
+
+  if (poolErr) return { error: poolErr.message };
+
+  const { data: groupStageRow } = await supabase
+    .from("tournament_stages")
+    .select("id")
+    .eq("code", "group")
+    .maybeSingle();
+
+  let groupStageScoring: {
+    groupStageId: string;
+    exactPoints: number;
+    wrongSlotPoints: number;
+  } | null = null;
+  if (
+    poolRow &&
+    poolRow.group_advance_exact_points != null &&
+    poolRow.group_advance_wrong_slot_points != null &&
+    groupStageRow?.id
+  ) {
+    groupStageScoring = {
+      groupStageId: groupStageRow.id,
+      exactPoints: Number(poolRow.group_advance_exact_points),
+      wrongSlotPoints: Number(poolRow.group_advance_wrong_slot_points),
+    };
+  }
+
   const { data: rulesRaw, error: rulesErr } = await supabase
     .from("scoring_rules")
-    .select("id, pool_id, prediction_kind, points, created_at, updated_at")
+    .select(
+      "id, pool_id, prediction_kind, bonus_key, points, created_at, updated_at",
+    )
     .eq("pool_id", poolId);
 
   if (rulesErr) return { error: rulesErr.message };
@@ -51,6 +85,7 @@ export async function recomputePoolLedgerWithClient(
     predictions,
     results,
     scoringRules,
+    groupStageScoring,
   });
 
   const payload = outcome.ledgerLines.map((l) => ({

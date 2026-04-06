@@ -42,25 +42,45 @@ ON CONFLICT (country_code) DO NOTHING;
 
 DELETE FROM public.pools WHERE id = 'a0000001-0000-4000-8000-000000000001';
 
-INSERT INTO public.pools (id, name, lock_at, is_public, join_code)
+INSERT INTO public.pools (
+  id,
+  name,
+  lock_at,
+  is_public,
+  join_code,
+  entry_fee_cents,
+  prize_distribution_json,
+  group_advance_exact_points,
+  group_advance_wrong_slot_points
+)
 VALUES (
   'a0000001-0000-4000-8000-000000000001',
   'AshBracket 2026',
   '2026-06-10 23:59:00+00',
   true,
-  'ASH2026'
+  'ASH2026',
+  2500,
+  '[
+    {"place": 1, "label": "1st place", "percent": 50},
+    {"place": 2, "label": "2nd place", "percent": 25},
+    {"place": 3, "label": "3rd place", "percent": 15},
+    {"place": 4, "label": "4th place", "remainder": true}
+  ]'::jsonb,
+  5,
+  2.5
 );
 
-INSERT INTO public.scoring_rules (pool_id, prediction_kind, points)
+-- Legacy spreadsheet scoring: knockout + per-bonus rows. Group stage uses pool columns above.
+INSERT INTO public.scoring_rules (pool_id, prediction_kind, bonus_key, points)
 VALUES
-  ('a0000001-0000-4000-8000-000000000001', 'group_winner', 3),
-  ('a0000001-0000-4000-8000-000000000001', 'group_runner_up', 2),
-  ('a0000001-0000-4000-8000-000000000001', 'quarterfinalist', 5),
-  ('a0000001-0000-4000-8000-000000000001', 'semifinalist', 8),
-  ('a0000001-0000-4000-8000-000000000001', 'finalist', 12),
-  ('a0000001-0000-4000-8000-000000000001', 'champion', 25),
-  ('a0000001-0000-4000-8000-000000000001', 'bonus_pick', 4)
-ON CONFLICT (pool_id, prediction_kind) DO UPDATE SET
+  ('a0000001-0000-4000-8000-000000000001', 'quarterfinalist', NULL, 10),
+  ('a0000001-0000-4000-8000-000000000001', 'semifinalist', NULL, 20),
+  ('a0000001-0000-4000-8000-000000000001', 'finalist', NULL, 50),
+  ('a0000001-0000-4000-8000-000000000001', 'champion', NULL, 100),
+  ('a0000001-0000-4000-8000-000000000001', 'bonus_pick', 'most_goals', 50),
+  ('a0000001-0000-4000-8000-000000000001', 'bonus_pick', 'most_yellow_cards', 10),
+  ('a0000001-0000-4000-8000-000000000001', 'bonus_pick', 'most_red_cards', 10)
+ON CONFLICT (pool_id, prediction_kind, bonus_key) DO UPDATE SET
   points = EXCLUDED.points;
 
 INSERT INTO public.participants (

@@ -1,4 +1,5 @@
 import type { PublicLeaderboardPoolSection } from "../../types/leaderboard";
+import { formatPoolPoints } from "@/lib/format/poolPoints";
 import Link from "next/link";
 
 function rowHighlightClass(rank: number): string {
@@ -84,7 +85,7 @@ export function PublicLeaderboard({
                       )}
                     </td>
                     <td className="px-3 py-2 text-right font-medium tabular-nums text-ash-text">
-                      {r.totalPoints}
+                      {formatPoolPoints(r.totalPoints)}
                     </td>
                   </tr>
                 ))}

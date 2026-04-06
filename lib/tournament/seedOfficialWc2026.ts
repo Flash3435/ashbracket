@@ -89,10 +89,21 @@ export async function seedOfficialWc2026(
 
   const rankOut = await applyFifaRankSnapshot(supabase);
   if (!rankOut.ok) {
-    return {
-      ok: false,
-      error: `Teams saved but FIFA rank snapshot failed: ${rankOut.error}`,
-    };
+    const rankErr = rankOut.error;
+    const missingRankColumn =
+      /fifa_rank/i.test(rankErr) &&
+      (/schema cache|column/i.test(rankErr) || /does not exist/i.test(rankErr));
+    if (missingRankColumn) {
+      console.warn(
+        "[seedOfficialWc2026] Skipping FIFA rank snapshot: `teams.fifa_rank` is not in the database.\n" +
+          "  Apply supabase/migrations/20260408140000_teams_fifa_rank.sql (SQL Editor or `supabase db push`), then re-run seed:fifa-ranks if you want ranks.",
+      );
+    } else {
+      return {
+        ok: false,
+        error: `Teams saved but FIFA rank snapshot failed: ${rankErr}`,
+      };
+    }
   }
 
   const codes = Object.keys(teamMap);
