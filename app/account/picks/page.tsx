@@ -158,6 +158,7 @@ export default async function AccountPicksPage({ searchParams }: PageProps) {
                 participantDisplayName={ctx.selectedParticipant.displayName}
                 initialSlots={ctx.initialSlots}
                 teams={ctx.teams}
+                groupTeamCountryCodesByLetter={ctx.groupTeamCountryCodesByLetter}
                 disabled={ctx.teams.length === 0}
                 readOnly={locked}
                 lockedMessage={lockHint}

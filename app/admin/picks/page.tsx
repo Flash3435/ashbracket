@@ -18,6 +18,7 @@ import {
   mapTeamRow,
   mapTournamentStageRow,
 } from "../../../lib/results/mapRows";
+import { fetchGroupTeamCountryCodesByLetter } from "../../../lib/tournament/fetchGroupTeamCountryCodesByLetter";
 import { TEAM_TABLE_SELECT } from "../../../lib/teams/teamDbSelect";
 import { mapPredictionRow } from "../../../src/lib/scoring/mapSupabaseRows";
 import type { Prediction, Team, TournamentStage } from "../../../src/types/domain";
@@ -47,13 +48,14 @@ export default async function AdminPicksPage({ searchParams }: PageProps) {
   let stages: TournamentStage[] = [];
   let predictions: Prediction[] = [];
   let bonusKeysOrdered: string[] = [...DEFAULT_PARTICIPANT_BONUS_KEYS];
+  let groupTeamCountryCodesByLetter: Record<string, string[]> = {};
   let loadError: string | null = null;
   let selectedParticipant: Participant | null = null;
 
   try {
     const supabase = await createClient();
 
-    const [participantsRes, teamsRes, stagesRes] = await Promise.all([
+    const [participantsRes, teamsRes, stagesRes, groupCodes] = await Promise.all([
       supabase
         .from("participants")
         .select("id, pool_id, display_name, email, is_paid, paid_at")
@@ -70,6 +72,7 @@ export default async function AdminPicksPage({ searchParams }: PageProps) {
         )
         .in("code", STAGE_CODES_NEEDED)
         .order("sort_order", { ascending: true }),
+      fetchGroupTeamCountryCodesByLetter(supabase),
     ]);
 
     if (participantsRes.error) loadError = participantsRes.error.message;
@@ -81,6 +84,7 @@ export default async function AdminPicksPage({ searchParams }: PageProps) {
       );
       teams = (teamsRes.data ?? []).map(mapTeamRow);
       stages = (stagesRes.data ?? []).map(mapTournamentStageRow);
+      groupTeamCountryCodesByLetter = groupCodes;
     }
 
     if (!loadError) {
@@ -223,6 +227,7 @@ export default async function AdminPicksPage({ searchParams }: PageProps) {
                 participantDisplayName={selectedParticipant.displayName}
                 initialSlots={initialSlots}
                 teams={teams}
+                groupTeamCountryCodesByLetter={groupTeamCountryCodesByLetter}
                 disabled={teams.length === 0}
                 savePicks={saveParticipantKnockoutPicksAction}
               />

@@ -31,7 +31,7 @@ export async function applyParticipantPickSlots(
       if (!bk) {
         return { ok: false, error: "Bonus pick is missing a category." };
       }
-      let del = supabase
+      const del = supabase
         .from("predictions")
         .delete()
         .eq("pool_id", poolId)
@@ -72,7 +72,7 @@ export async function applyParticipantPickSlots(
       if (!gc) {
         return { ok: false, error: "Group pick is missing a group code." };
       }
-      let del = supabase
+      const del = supabase
         .from("predictions")
         .delete()
         .eq("pool_id", poolId)

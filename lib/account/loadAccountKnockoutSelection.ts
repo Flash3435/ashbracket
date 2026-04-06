@@ -8,6 +8,7 @@ import {
   type ParticipantRow,
 } from "../participants/participantsDb";
 import { mapTeamRow, mapTournamentStageRow } from "../results/mapRows";
+import { fetchGroupTeamCountryCodesByLetter } from "../tournament/fetchGroupTeamCountryCodesByLetter";
 import { TEAM_TABLE_SELECT } from "../teams/teamDbSelect";
 import { mapPredictionRow } from "../../src/lib/scoring/mapSupabaseRows";
 import type { Prediction, Team, TournamentStage } from "../../src/types/domain";
@@ -74,6 +75,8 @@ export type AccountKnockoutSelection = {
   bonusKeysOrdered: string[];
   initialSlots: KnockoutPickSlotDraft[];
   profileLinkItems: Array<{ id: string; displayName: string; poolName: string }>;
+  /** Group letter → country codes from official group fixtures; empty when unavailable. */
+  groupTeamCountryCodesByLetter: Record<string, string[]>;
 };
 
 /**
@@ -93,6 +96,7 @@ export async function loadAccountKnockoutSelection(
   let stages: TournamentStage[] = [];
   let predictions: Prediction[] = [];
   let bonusKeysOrdered: string[] = [...DEFAULT_PARTICIPANT_BONUS_KEYS];
+  let groupTeamCountryCodesByLetter: Record<string, string[]> = {};
   let loadError: string | null = null;
   let selectedId: string | null = null;
   let selectedParticipant: Participant | null = null;
@@ -141,7 +145,7 @@ export async function loadAccountKnockoutSelection(
     }
 
     if (!loadError) {
-      const [teamsRes, stagesRes] = await Promise.all([
+      const [teamsRes, stagesRes, groupCodes] = await Promise.all([
         supabase
           .from("teams")
           .select(TEAM_TABLE_SELECT)
@@ -153,6 +157,7 @@ export async function loadAccountKnockoutSelection(
           )
           .in("code", [...ACCOUNT_TOURNAMENT_STAGE_CODES])
           .order("sort_order", { ascending: true }),
+        fetchGroupTeamCountryCodesByLetter(supabase),
       ]);
 
       if (teamsRes.error) loadError = teamsRes.error.message;
@@ -160,6 +165,7 @@ export async function loadAccountKnockoutSelection(
       else {
         teams = (teamsRes.data ?? []).map(mapTeamRow);
         stages = (stagesRes.data ?? []).map(mapTournamentStageRow);
+        groupTeamCountryCodesByLetter = groupCodes;
       }
     }
 
@@ -276,6 +282,7 @@ export async function loadAccountKnockoutSelection(
     bonusKeysOrdered,
     initialSlots,
     profileLinkItems,
+    groupTeamCountryCodesByLetter,
   };
 }
 
