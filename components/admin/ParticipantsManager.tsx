@@ -5,6 +5,8 @@ import { useEffect, useMemo, useState, useTransition } from "react";
 import {
   createParticipantAction,
   deleteParticipantAction,
+  inviteParticipantAction,
+  sendParticipantInviteAction,
   updateParticipantAction,
 } from "../../app/admin/participants/actions";
 import type { Participant } from "../../types/participant";
@@ -14,9 +16,34 @@ type ParticipantsManagerProps = {
   disabled?: boolean;
 };
 
+type Panel = "none" | "invite" | "manual";
+
 function emptyForm() {
   return { displayName: "", email: "", paid: false as boolean };
 }
+
+function statusLabel(p: Participant): string {
+  if (p.inviteStatus === "joined") return "Joined";
+  if (p.inviteStatus === "invited") return "Invited";
+  return "Manual";
+}
+
+function statusClass(p: Participant): string {
+  if (p.inviteStatus === "joined") {
+    return "inline-flex rounded-full bg-emerald-950/50 px-2 py-0.5 text-xs font-medium text-emerald-300 ring-1 ring-emerald-800/60";
+  }
+  if (p.inviteStatus === "invited") {
+    return "inline-flex rounded-full bg-amber-950/40 px-2 py-0.5 text-xs font-medium text-amber-200 ring-1 ring-amber-800/50";
+  }
+  return "inline-flex rounded-full bg-ash-body px-2 py-0.5 text-xs font-medium text-ash-muted ring-1 ring-ash-border";
+}
+
+type InviteFeedback = {
+  tone: "success" | "warning";
+  headline: string;
+  detail?: string;
+  inviteUrl?: string;
+};
 
 export function ParticipantsManager({
   initialParticipants,
@@ -27,11 +54,16 @@ export function ParticipantsManager({
   const [participants, setParticipants] = useState<Participant[]>(
     initialParticipants,
   );
-  const [addOpen, setAddOpen] = useState(false);
-  const [addForm, setAddForm] = useState(emptyForm);
+  const [panel, setPanel] = useState<Panel>("none");
+  const [inviteForm, setInviteForm] = useState(emptyForm);
+  const [manualForm, setManualForm] = useState(emptyForm);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editForm, setEditForm] = useState(emptyForm);
   const [actionError, setActionError] = useState<string | null>(null);
+  const [inviteFeedback, setInviteFeedback] = useState<InviteFeedback | null>(
+    null,
+  );
+  const [copyDone, setCopyDone] = useState(false);
 
   useEffect(() => {
     setParticipants(initialParticipants);
@@ -61,27 +93,118 @@ export function ParticipantsManager({
     setEditForm(emptyForm());
   }
 
-  function handleAdd(e: React.FormEvent) {
+  function handleInvite(e: React.FormEvent) {
     e.preventDefault();
     if (disabled) return;
-    const name = addForm.displayName.trim();
-    const email = addForm.email.trim();
+    const name = inviteForm.displayName.trim();
+    const email = inviteForm.email.trim();
     if (!name || !email) return;
     setActionError(null);
+    setInviteFeedback(null);
+    setCopyDone(false);
     startTransition(async () => {
-      const res = await createParticipantAction({
+      const res = await inviteParticipantAction({
         displayName: name,
         email,
-        paid: addForm.paid,
+        paid: inviteForm.paid,
       });
       if (!res.ok) {
         setActionError(res.error);
         return;
       }
-      setAddForm(emptyForm());
-      setAddOpen(false);
+      setInviteForm(emptyForm());
+      setPanel("none");
+      if (res.emailSent) {
+        setInviteFeedback({
+          tone: "success",
+          headline: `Invite email sent to ${email}`,
+          detail: res.emailMessage,
+          inviteUrl: res.inviteUrl,
+        });
+      } else {
+        setInviteFeedback({
+          tone: "warning",
+          headline: res.emailMessage?.includes("not configured")
+            ? "Invite ready — email is not set up on this server"
+            : "Invite created, but the email could not be sent",
+          detail: res.emailMessage,
+          inviteUrl: res.inviteUrl,
+        });
+      }
       router.refresh();
     });
+  }
+
+  function handleManualAdd(e: React.FormEvent) {
+    e.preventDefault();
+    if (disabled) return;
+    const name = manualForm.displayName.trim();
+    const email = manualForm.email.trim();
+    if (!name || !email) return;
+    setActionError(null);
+    setInviteFeedback(null);
+    startTransition(async () => {
+      const res = await createParticipantAction({
+        displayName: name,
+        email,
+        paid: manualForm.paid,
+      });
+      if (!res.ok) {
+        setActionError(res.error);
+        return;
+      }
+      setManualForm(emptyForm());
+      setPanel("none");
+      setInviteFeedback({
+        tone: "success",
+        headline: `${name} added to the list (not emailed)`,
+        detail:
+          "They are not notified automatically. Use Send invite when you want them to sign in.",
+      });
+      router.refresh();
+    });
+  }
+
+  function handleSendOrResendInvite(id: string) {
+    if (disabled) return;
+    setActionError(null);
+    setInviteFeedback(null);
+    setCopyDone(false);
+    startTransition(async () => {
+      const res = await sendParticipantInviteAction(id);
+      if (!res.ok) {
+        setActionError(res.error);
+        return;
+      }
+      const p = participants.find((x) => x.id === id);
+      const label = p?.email ?? "participant";
+      if (res.emailSent) {
+        setInviteFeedback({
+          tone: "success",
+          headline: `Invite email sent to ${label}`,
+          detail: res.emailMessage,
+          inviteUrl: res.inviteUrl,
+        });
+      } else {
+        setInviteFeedback({
+          tone: "warning",
+          headline: "Invite link is ready (email was not sent)",
+          detail: res.emailMessage,
+          inviteUrl: res.inviteUrl,
+        });
+      }
+      router.refresh();
+    });
+  }
+
+  async function copyInviteUrl(url: string) {
+    try {
+      await navigator.clipboard.writeText(url);
+      setCopyDone(true);
+      window.setTimeout(() => setCopyDone(false), 2000);
+    } catch {
+      setActionError("Could not copy to the clipboard.");
+    }
   }
 
   function handleSaveEdit(e: React.FormEvent) {
@@ -138,31 +261,92 @@ export function ParticipantsManager({
           {actionError}
         </p>
       ) : null}
+
+      {inviteFeedback ? (
+        <div
+          className={
+            inviteFeedback.tone === "success"
+              ? "rounded-md border border-emerald-800/70 bg-emerald-950/35 px-3 py-3 text-sm text-emerald-100"
+              : "rounded-md border border-amber-800/70 bg-amber-950/35 px-3 py-3 text-sm text-amber-100"
+          }
+        >
+          <p className="font-medium text-ash-text">{inviteFeedback.headline}</p>
+          {inviteFeedback.detail ? (
+            <p className="mt-1 text-ash-muted">{inviteFeedback.detail}</p>
+          ) : null}
+          {inviteFeedback.inviteUrl ? (
+            <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:items-center">
+              <button
+                type="button"
+                onClick={() => copyInviteUrl(inviteFeedback.inviteUrl!)}
+                className="btn-ghost inline-flex w-fit text-xs disabled:opacity-50"
+              >
+                {copyDone ? "Copied" : "Copy invite link"}
+              </button>
+              <span className="break-all font-mono text-xs text-ash-muted">
+                {inviteFeedback.inviteUrl}
+              </span>
+            </div>
+          ) : null}
+        </div>
+      ) : null}
+
       <div className="flex flex-wrap items-center justify-between gap-3">
         <p className="text-sm text-ash-muted">
           {participants.length} participant
           {participants.length === 1 ? "" : "s"}
           {isPending ? " · saving…" : ""}
         </p>
-        <button
-          type="button"
-          disabled={disabled || isPending}
-          onClick={() => setAddOpen((o) => !o)}
-          className={
-            addOpen
-              ? "btn-ghost transition disabled:cursor-not-allowed disabled:opacity-50"
-              : "btn-primary transition disabled:cursor-not-allowed disabled:opacity-50"
-          }
-        >
-          {addOpen ? "Cancel" : "Add participant"}
-        </button>
+        <div className="flex flex-wrap gap-2">
+          <button
+            type="button"
+            disabled={disabled || isPending}
+            onClick={() => {
+              setPanel((p) => (p === "invite" ? "none" : "invite"));
+              setActionError(null);
+            }}
+            className={
+              panel === "invite"
+                ? "btn-ghost transition disabled:cursor-not-allowed disabled:opacity-50"
+                : "btn-primary transition disabled:cursor-not-allowed disabled:opacity-50"
+            }
+          >
+            {panel === "invite" ? "Close" : "Invite participant"}
+          </button>
+          <button
+            type="button"
+            disabled={disabled || isPending}
+            onClick={() => {
+              setPanel((p) => (p === "manual" ? "none" : "manual"));
+              setActionError(null);
+            }}
+            className={
+              panel === "manual"
+                ? "btn-ghost transition disabled:cursor-not-allowed disabled:opacity-50"
+                : "rounded-lg bg-ash-surface px-4 py-2 text-sm font-medium text-ash-text ring-1 ring-ash-border transition-colors hover:bg-ash-border/40 disabled:cursor-not-allowed disabled:opacity-50"
+            }
+          >
+            {panel === "manual" ? "Close" : "Add manually"}
+          </button>
+        </div>
       </div>
 
-      {addOpen ? (
-        <form onSubmit={handleAdd} className="ash-surface p-4">
+      <p className="text-xs text-ash-muted">
+        <span className="font-semibold text-ash-text">Invite participant</span>{" "}
+        emails a private link so they can sign in and open picks.{" "}
+        <span className="font-semibold text-ash-text">Add manually</span> only
+        updates your list (for example cash tracking) — they are not notified.
+      </p>
+
+      {panel === "invite" ? (
+        <form onSubmit={handleInvite} className="ash-surface p-4">
           <h2 className="text-sm font-bold text-ash-text">
-            New participant
+            Invite participant
           </h2>
+          <p className="mt-1 text-sm text-ash-muted">
+            We will email them a link to this pool. They should sign in with the
+            same email address you enter here.
+          </p>
           <div className="mt-4 grid gap-4 sm:grid-cols-2">
             <label className="block space-y-1.5">
               <span className="text-xs font-medium uppercase tracking-wide text-ash-muted">
@@ -171,9 +355,9 @@ export function ParticipantsManager({
               <input
                 required
                 disabled={disabled || isPending}
-                value={addForm.displayName}
+                value={inviteForm.displayName}
                 onChange={(e) =>
-                  setAddForm((f) => ({ ...f, displayName: e.target.value }))
+                  setInviteForm((f) => ({ ...f, displayName: e.target.value }))
                 }
                 className="w-full rounded-md border border-ash-border bg-ash-body px-3 py-2 text-sm text-ash-text shadow-sm outline-none ring-ash-accent/20 focus:border-ash-accent focus:ring-2 disabled:opacity-50"
                 placeholder="e.g. Jamie Lee"
@@ -187,9 +371,9 @@ export function ParticipantsManager({
                 required
                 disabled={disabled || isPending}
                 type="email"
-                value={addForm.email}
+                value={inviteForm.email}
                 onChange={(e) =>
-                  setAddForm((f) => ({ ...f, email: e.target.value }))
+                  setInviteForm((f) => ({ ...f, email: e.target.value }))
                 }
                 className="w-full rounded-md border border-ash-border bg-ash-body px-3 py-2 text-sm text-ash-text shadow-sm outline-none ring-ash-accent/20 focus:border-ash-accent focus:ring-2 disabled:opacity-50"
                 placeholder="name@example.com"
@@ -200,9 +384,9 @@ export function ParticipantsManager({
             <input
               type="checkbox"
               disabled={disabled || isPending}
-              checked={addForm.paid}
+              checked={inviteForm.paid}
               onChange={(e) =>
-                setAddForm((f) => ({ ...f, paid: e.target.checked }))
+                setInviteForm((f) => ({ ...f, paid: e.target.checked }))
               }
               className="size-4 rounded border-ash-border text-ash-accent focus:ring-ash-accent disabled:opacity-50"
             />
@@ -213,8 +397,8 @@ export function ParticipantsManager({
               type="button"
               disabled={disabled || isPending}
               onClick={() => {
-                setAddOpen(false);
-                setAddForm(emptyForm());
+                setPanel("none");
+                setInviteForm(emptyForm());
               }}
               className="btn-ghost disabled:cursor-not-allowed disabled:opacity-50"
             >
@@ -225,7 +409,82 @@ export function ParticipantsManager({
               disabled={disabled || isPending}
               className="btn-primary disabled:cursor-not-allowed disabled:opacity-50"
             >
-              Add
+              Send invite
+            </button>
+          </div>
+        </form>
+      ) : null}
+
+      {panel === "manual" ? (
+        <form onSubmit={handleManualAdd} className="ash-surface p-4">
+          <h2 className="text-sm font-bold text-ash-text">Add manually</h2>
+          <p className="mt-1 text-sm text-ash-muted">
+            Adds someone to your list for your own records only. No email is
+            sent — use Invite participant when they should sign in.
+          </p>
+          <div className="mt-4 grid gap-4 sm:grid-cols-2">
+            <label className="block space-y-1.5">
+              <span className="text-xs font-medium uppercase tracking-wide text-ash-muted">
+                Display name
+              </span>
+              <input
+                required
+                disabled={disabled || isPending}
+                value={manualForm.displayName}
+                onChange={(e) =>
+                  setManualForm((f) => ({ ...f, displayName: e.target.value }))
+                }
+                className="w-full rounded-md border border-ash-border bg-ash-body px-3 py-2 text-sm text-ash-text shadow-sm outline-none ring-ash-accent/20 focus:border-ash-accent focus:ring-2 disabled:opacity-50"
+                placeholder="e.g. Jamie Lee"
+              />
+            </label>
+            <label className="block space-y-1.5">
+              <span className="text-xs font-medium uppercase tracking-wide text-ash-muted">
+                Email
+              </span>
+              <input
+                required
+                disabled={disabled || isPending}
+                type="email"
+                value={manualForm.email}
+                onChange={(e) =>
+                  setManualForm((f) => ({ ...f, email: e.target.value }))
+                }
+                className="w-full rounded-md border border-ash-border bg-ash-body px-3 py-2 text-sm text-ash-text shadow-sm outline-none ring-ash-accent/20 focus:border-ash-accent focus:ring-2 disabled:opacity-50"
+                placeholder="name@example.com"
+              />
+            </label>
+          </div>
+          <label className="mt-4 flex cursor-pointer items-center gap-2 text-sm text-ash-muted">
+            <input
+              type="checkbox"
+              disabled={disabled || isPending}
+              checked={manualForm.paid}
+              onChange={(e) =>
+                setManualForm((f) => ({ ...f, paid: e.target.checked }))
+              }
+              className="size-4 rounded border-ash-border text-ash-accent focus:ring-ash-accent disabled:opacity-50"
+            />
+            Paid
+          </label>
+          <div className="mt-4 flex justify-end gap-2">
+            <button
+              type="button"
+              disabled={disabled || isPending}
+              onClick={() => {
+                setPanel("none");
+                setManualForm(emptyForm());
+              }}
+              className="btn-ghost disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              disabled={disabled || isPending}
+              className="btn-primary disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              Add to list
             </button>
           </div>
         </form>
@@ -238,6 +497,7 @@ export function ParticipantsManager({
             <tr>
               <th className="px-4 py-3">Name</th>
               <th className="px-4 py-3">Email</th>
+              <th className="px-4 py-3">Status</th>
               <th className="px-4 py-3">Paid</th>
               <th className="px-4 py-3 text-right">Actions</th>
             </tr>
@@ -246,10 +506,10 @@ export function ParticipantsManager({
             {sorted.length === 0 ? (
               <tr>
                 <td
-                  colSpan={4}
+                  colSpan={5}
                   className="px-4 py-8 text-center text-ash-muted"
                 >
-                  No participants yet. Add someone to get started.
+                  No participants yet. Invite someone or add them manually.
                 </td>
               </tr>
             ) : (
@@ -259,6 +519,18 @@ export function ParticipantsManager({
                     {p.displayName}
                   </td>
                   <td className="px-4 py-3 text-ash-muted">{p.email}</td>
+                  <td className="px-4 py-3">
+                    <span className={statusClass(p)}>{statusLabel(p)}</span>
+                    {p.inviteStatus === "invited" && p.inviteLastSentAt ? (
+                      <span className="mt-1 block text-xs text-ash-muted">
+                        Last sent{" "}
+                        {new Date(p.inviteLastSentAt).toLocaleString(undefined, {
+                          dateStyle: "short",
+                          timeStyle: "short",
+                        })}
+                      </span>
+                    ) : null}
+                  </td>
                   <td className="px-4 py-3">
                     <span
                       className={
@@ -271,6 +543,18 @@ export function ParticipantsManager({
                     </span>
                   </td>
                   <td className="px-4 py-3 text-right">
+                    {p.inviteStatus !== "joined" ? (
+                      <button
+                        type="button"
+                        disabled={disabled || isPending || !p.email?.trim()}
+                        onClick={() => handleSendOrResendInvite(p.id)}
+                        className="mr-2 text-sm font-medium text-ash-accent hover:underline disabled:cursor-not-allowed disabled:opacity-40"
+                      >
+                        {p.inviteStatus === "invited"
+                          ? "Resend invite"
+                          : "Send invite"}
+                      </button>
+                    ) : null}
                     <button
                       type="button"
                       disabled={disabled || isPending}
@@ -309,6 +593,18 @@ export function ParticipantsManager({
                   <p className="font-medium text-ash-text">{p.displayName}</p>
                   <p className="mt-0.5 text-sm text-ash-muted">{p.email}</p>
                   <p className="mt-2">
+                    <span className={statusClass(p)}>{statusLabel(p)}</span>
+                  </p>
+                  {p.inviteStatus === "invited" && p.inviteLastSentAt ? (
+                    <p className="mt-1 text-xs text-ash-muted">
+                      Last sent{" "}
+                      {new Date(p.inviteLastSentAt).toLocaleString(undefined, {
+                        dateStyle: "short",
+                        timeStyle: "short",
+                      })}
+                    </p>
+                  ) : null}
+                  <p className="mt-2">
                     <span
                       className={
                         p.paid
@@ -321,6 +617,18 @@ export function ParticipantsManager({
                   </p>
                 </div>
                 <div className="flex shrink-0 flex-col items-end gap-1">
+                  {p.inviteStatus !== "joined" ? (
+                    <button
+                      type="button"
+                      disabled={disabled || isPending || !p.email?.trim()}
+                      onClick={() => handleSendOrResendInvite(p.id)}
+                      className="text-sm font-medium text-ash-accent hover:underline disabled:cursor-not-allowed disabled:opacity-40"
+                    >
+                      {p.inviteStatus === "invited"
+                        ? "Resend invite"
+                        : "Send invite"}
+                    </button>
+                  ) : null}
                   <button
                     type="button"
                     disabled={disabled || isPending}

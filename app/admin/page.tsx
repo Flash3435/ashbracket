@@ -48,6 +48,16 @@ export default function AdminPage() {
           </span>
         </li>
         <li>
+          <Link href="/admin/communications" className="ash-link">
+            Email participants
+          </Link>
+          <span>
+            {" "}
+            — payment or deadline reminders, or a custom message to groups you
+            choose.
+          </span>
+        </li>
+        <li>
           <Link
             href="/admin/results"
             className="ash-link"

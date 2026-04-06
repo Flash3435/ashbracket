@@ -196,6 +196,9 @@ export async function loadAccountKnockoutSelection(
           email: row.email,
           is_paid: row.is_paid,
           paid_at: row.paid_at,
+          user_id: userId,
+          invite_pending: false,
+          invite_last_sent_at: null,
         } as ParticipantRow);
         selectedPoolName = row.pools?.name ?? "Pool";
         selectedLockAt = row.pools?.lock_at ?? null;

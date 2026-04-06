@@ -58,7 +58,9 @@ export default async function AdminPicksPage({ searchParams }: PageProps) {
     const [participantsRes, teamsRes, stagesRes, groupCodes] = await Promise.all([
       supabase
         .from("participants")
-        .select("id, pool_id, display_name, email, is_paid, paid_at")
+        .select(
+          "id, pool_id, display_name, email, is_paid, paid_at, user_id, invite_pending, invite_last_sent_at",
+        )
         .eq("pool_id", SAMPLE_POOL_ID)
         .order("display_name", { ascending: true }),
       supabase
