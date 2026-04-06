@@ -24,7 +24,7 @@ export default async function AdminPoolSettingsPage() {
       .maybeSingle();
 
     if (error) loadError = error.message;
-    else if (!data) loadError = "Sample pool row was not found.";
+    else if (!data) loadError = "Pool settings could not be loaded.";
     else initial = mapPoolSettingsRow(data as PoolSettingsRow);
   } catch (e) {
     loadError =
@@ -35,7 +35,7 @@ export default async function AdminPoolSettingsPage() {
     <PageContainer>
       <PageTitle
         title="Pool settings"
-        description="Name, public visibility, and pick lock time for the configured sample pool. Changes apply immediately in Supabase."
+        description="Set your pool’s name, whether the leaderboard and rules are visible to the public, and when picks must be in by."
       />
 
       {loadError ? (
@@ -47,22 +47,12 @@ export default async function AdminPoolSettingsPage() {
             {loadError}
           </p>
           <p className="text-sm text-ash-muted">
-            Ensure the sample pool id matches your database seed and your admin
-            account is listed in{" "}
-            <code className="rounded bg-ash-body px-1 py-0.5 text-xs text-ash-text">
-              app_admins
-            </code>
-            .
+            Make sure you are signed in with an organizer account. If this
+            keeps happening, contact whoever runs or built this site for you.
           </p>
         </div>
       ) : initial ? (
         <>
-          <p className="mb-6 text-sm text-ash-muted">
-            Pool id:{" "}
-            <code className="rounded bg-ash-body px-1 py-0.5 text-xs text-ash-text">
-              {SAMPLE_POOL_ID}
-            </code>
-          </p>
           <PoolSettingsForm initial={initial} />
         </>
       ) : (

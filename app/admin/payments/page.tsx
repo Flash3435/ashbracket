@@ -1,20 +1,19 @@
-import { ParticipantsManager } from "@/components/admin/ParticipantsManager";
+import { PaymentsOverview } from "@/components/admin/PaymentsOverview";
 import { PageContainer } from "@/components/ui/PageContainer";
 import { PageTitle } from "@/components/ui/PageTitle";
 import { createClient } from "@/lib/supabase/server";
 import { SAMPLE_POOL_ID } from "../../../lib/config/sample-pool";
 import {
-  mapParticipantRow,
+  mapParticipantPaymentRow,
+  type ParticipantPaymentView,
   type ParticipantRow,
 } from "../../../lib/participants/participantsDb";
-import type { Participant } from "../../../types/participant";
 
-/** Dynamic page: loads current participants on each request. */
 export const dynamic = "force-dynamic";
 
-export default async function AdminParticipantsPage() {
-  let initialParticipants: Participant[] = [];
+export default async function AdminPaymentsPage() {
   let loadError: string | null = null;
+  let rows: ParticipantPaymentView[] = [];
 
   try {
     const supabase = await createClient();
@@ -25,10 +24,7 @@ export default async function AdminParticipantsPage() {
       .order("display_name", { ascending: true });
 
     if (error) loadError = error.message;
-    else
-      initialParticipants = (data ?? []).map((row) =>
-        mapParticipantRow(row as ParticipantRow),
-      );
+    else rows = (data ?? []).map((r) => mapParticipantPaymentRow(r as ParticipantRow));
   } catch (e) {
     loadError = e instanceof Error ? e.message : "Failed to load participants.";
   }
@@ -36,18 +32,15 @@ export default async function AdminParticipantsPage() {
   return (
     <PageContainer>
       <PageTitle
-        title="Participants"
-        description="Add, edit, or remove people in your pool. Changes apply right away."
+        title="Payments"
+        description="See who has paid and when. To mark someone paid or unpaid, edit them on the Participants page."
       />
       {loadError ? (
         <p className="mb-4 rounded-md border border-red-800/80 bg-red-950/40 px-3 py-2 text-sm text-red-200">
           {loadError}
         </p>
       ) : null}
-      <ParticipantsManager
-        initialParticipants={initialParticipants}
-        disabled={Boolean(loadError)}
-      />
+      {!loadError ? <PaymentsOverview rows={rows} /> : null}
     </PageContainer>
   );
 }

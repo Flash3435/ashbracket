@@ -48,7 +48,7 @@ export async function saveParticipantKnockoutPicksAction(input: {
     if (ledger.error) {
       return {
         ok: false,
-        error: `Picks saved, but standings could not be recomputed: ${ledger.error}`,
+        error: `Picks saved, but the leaderboard could not be updated: ${ledger.error}`,
       };
     }
 

@@ -6,7 +6,6 @@ import { PageTitle } from "@/components/ui/PageTitle";
 import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
 import { loadAccountKnockoutSelection } from "../../lib/account/loadAccountKnockoutSelection";
-import { isAppAdmin } from "../../lib/auth/isAppAdmin";
 import { SAMPLE_POOL_ID } from "../../lib/config/sample-pool";
 import {
   countryCodesFromKnockoutSlots,
@@ -26,8 +25,6 @@ export default async function AccountPage() {
   if (!user) {
     redirect("/login?next=/account");
   }
-
-  const admin = await isAppAdmin(supabase, user.id);
 
   const { data: rows, error } = await supabase
     .from("participants")
@@ -78,16 +75,6 @@ export default async function AccountPage() {
         />
         <SignOutButton className="btn-ghost shrink-0 self-start text-sm disabled:opacity-50" />
       </div>
-
-      {admin ? (
-        <p className="mb-4 rounded-md border border-ash-border bg-ash-surface px-3 py-2 text-sm text-ash-muted">
-          You have organizer access. Open{" "}
-          <Link href="/admin" className="ash-link">
-            Admin
-          </Link>{" "}
-          to manage the pool.
-        </p>
-      ) : null}
 
       {error ? (
         <p className="text-sm text-red-300" role="alert">

@@ -38,16 +38,12 @@ export function RecomputeStandingsPanel({ disabled = false }: Props) {
   return (
     <section className="ash-surface border border-ash-border bg-ash-body/30 p-4">
       <h2 className="text-sm font-bold text-ash-text">
-        Recompute standings
+        Recalculate leaderboard
       </h2>
       <p className="mt-1 text-sm leading-relaxed text-ash-muted">
-        Calls the same job as after saving results or picks: reloads predictions,
-        all tournament results, and pool scoring rules; recomputes points; replaces{" "}
-        <code className="rounded bg-ash-surface px-1 py-0.5 text-xs text-ash-text ring-1 ring-ash-border">
-          points_ledger
-        </code>{" "}
-        in one transaction. Next.js caches for public and admin routes are
-        invalidated afterward.
+        Re-scores every entry from the latest picks, official results, and your
+        pool’s point rules—same as after you save results or picks. Use this if
+        the standings look out of step with what you expect.
       </p>
       <div className="mt-3 flex flex-wrap items-center gap-3">
         <button
@@ -56,7 +52,7 @@ export function RecomputeStandingsPanel({ disabled = false }: Props) {
           disabled={disabled || isPending}
           className="rounded-lg border border-ash-border bg-ash-body px-3 py-2 text-sm font-medium text-ash-text shadow-sm transition hover:bg-ash-surface disabled:cursor-not-allowed disabled:opacity-50"
         >
-          {isPending ? "Recomputing…" : "Recompute now"}
+          {isPending ? "Recalculating…" : "Recalculate now"}
         </button>
       </div>
       {error ? (
@@ -72,8 +68,7 @@ export function RecomputeStandingsPanel({ disabled = false }: Props) {
           className="mt-3 rounded-md border border-ash-accent/40 bg-ash-accent/10 px-3 py-2 text-sm text-ash-muted"
           role="status"
         >
-          Standings recomputed successfully. Refresh any open tabs if counts look
-          stale.
+          Leaderboard updated. Refresh the page if you still see old numbers.
         </p>
       ) : null}
     </section>

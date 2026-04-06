@@ -143,13 +143,12 @@ export default async function AdminTournamentStatusPage({ searchParams }: PagePr
     <PageContainer>
       <PageTitle
         title="Tournament status"
-        description="Read-only snapshot of official data, scoring rows, and whether the sample pool ledger looks up to date. Sync still runs from Tournament sync."
+        description="A read-only overview of teams, matches, results, and how fresh the leaderboard looks. To pull new data in, use Tournament sync."
       />
 
       {sp.ok === "1" ? (
         <p className="mb-4 rounded-md border border-ash-accent/40 bg-ash-accent/10 px-3 py-2 text-sm text-ash-muted">
-          Last sync run reported success. Standings were recomputed for the sample
-          pool.
+          Last sync finished successfully and the leaderboard was recalculated.
         </p>
       ) : null}
       {sp.err ? (
@@ -164,11 +163,11 @@ export default async function AdminTournamentStatusPage({ searchParams }: PagePr
 
       {!sp.ok && !sp.err ? (
         <p className="mb-4 text-xs text-ash-muted">
-          Run messages appear here after you use{" "}
+          After you run{" "}
           <Link href="/admin/tournament" className="ash-link">
             Tournament sync
           </Link>
-          . They are not stored in the database.
+          , success or error messages show here for this visit only.
         </p>
       ) : null}
 
@@ -188,27 +187,18 @@ export default async function AdminTournamentStatusPage({ searchParams }: PagePr
               <span className="text-ash-border-hover">({edition.code})</span>
             </li>
             <li>
-              <span className="font-medium text-ash-text">Row id: </span>
-              <code className="rounded bg-ash-body px-1 text-xs text-ash-text">{edition.id}</code>
-            </li>
-            <li>
               <span className="font-medium text-ash-text">Schedule window: </span>
               {edition.starts_on ?? "—"} → {edition.ends_on ?? "—"}
             </li>
             <li>
-              <span className="font-medium text-ash-text">Row timestamps: </span>
-              created {formatWhen(edition.created_at)}, updated{" "}
+              <span className="font-medium text-ash-text">Record last updated: </span>
               {formatWhen(edition.updated_at)}
             </li>
           </ul>
         ) : (
           <p className="text-amber-200">
-            No edition row for code{" "}
-            <code className="rounded bg-amber-950/60 px-1 text-xs text-amber-100">
-              {OFFICIAL_EDITION_CODE}
-            </code>
-            . Seed official data (e.g.{" "}
-            <code className="text-xs">npm run seed:wc2026</code>) first.
+            Official tournament data for this edition is not installed yet.
+            Contact whoever set up this site.
           </p>
         )}
       </section>
@@ -229,19 +219,19 @@ export default async function AdminTournamentStatusPage({ searchParams }: PagePr
             <dd>{editionId ? matchesFinished : "—"}</dd>
           </div>
           <div className="flex justify-between gap-4 border-b border-ash-border py-2 sm:block sm:border-0 sm:py-0">
-            <dt className="font-medium text-ash-text">Result rows (sync)</dt>
+            <dt className="font-medium text-ash-text">Results from sync</dt>
             <dd>{resultsSyncRes.count ?? "—"}</dd>
           </div>
           <div className="flex justify-between gap-4 border-b border-ash-border py-2 sm:block sm:border-0 sm:py-0">
-            <dt className="font-medium text-ash-text">Result rows (manual)</dt>
+            <dt className="font-medium text-ash-text">Results entered manually</dt>
             <dd>{resultsManualRes.count ?? "—"}</dd>
           </div>
           <div className="flex justify-between gap-4 border-b border-ash-border py-2 sm:block sm:border-0 sm:py-0">
-            <dt className="font-medium text-ash-text">Result rows (locked)</dt>
+            <dt className="font-medium text-ash-text">Locked results (won’t auto-update)</dt>
             <dd>{resultsLockedRes.count ?? "—"}</dd>
           </div>
           <div className="flex justify-between gap-4 py-2 sm:block sm:py-0">
-            <dt className="font-medium text-ash-text">Matches sync_locked</dt>
+            <dt className="font-medium text-ash-text">Matches frozen for sync</dt>
             <dd>{editionId ? matchesSyncLocked : "—"}</dd>
           </div>
         </dl>
@@ -251,46 +241,42 @@ export default async function AdminTournamentStatusPage({ searchParams }: PagePr
         <h2 className="text-base font-bold text-ash-text">Sync & standings</h2>
         <p>
           <span className="font-medium text-ash-text">
-            Latest match sync timestamp:
+            Last time match data was synced:
           </span>{" "}
           {formatWhen(lastMatchSyncAt)}
-          <span className="mt-1 block text-xs text-ash-border-hover">
-            Max <code className="text-[11px]">tournament_matches.last_sync_at</code>{" "}
-            for this edition (set when sync persists match rows).
-          </span>
         </p>
         <div className="rounded-md border border-ash-border bg-ash-body/40 px-3 py-2">
-          <p className="font-medium text-ash-text">Sample pool standings</p>
-          <p className="mt-1 text-ash-muted">
-            Pool id{" "}
-            <code className="rounded bg-ash-surface px-1 text-xs text-ash-text">{SAMPLE_POOL_ID}</code>
-          </p>
+          <p className="font-medium text-ash-text">Leaderboard freshness</p>
           {freshness.ledgerEmpty ? (
             <p className="mt-2 text-amber-200">
-              No ledger rows yet — run sync or recompute standings.
+              No scores calculated yet. Run{" "}
+              <Link href="/admin/tournament" className="ash-link">
+                Tournament sync
+              </Link>{" "}
+              or use <strong className="font-medium text-ash-text">Recalculate leaderboard</strong>{" "}
+              on the admin home page.
             </p>
           ) : freshness.appearsCurrent ? (
             <p className="mt-2 text-ash-accent">
-              Appear current: last ledger build ({formatWhen(freshness.lastLedgerAt)})
-              is on or after the latest prediction update (
-              {formatWhen(freshness.lastPredictionUpdateAt)}) and latest result{" "}
-              <code className="text-[11px]">resolved_at</code> (
-              {formatWhen(freshness.lastResultResolvedAt)}).
+              Looks up to date. Last full score run:{" "}
+              {formatWhen(freshness.lastLedgerAt)}. Latest pick change:{" "}
+              {formatWhen(freshness.lastPredictionUpdateAt)}. Latest official
+              result entered: {formatWhen(freshness.lastResultResolvedAt)}.
             </p>
           ) : (
             <p className="mt-2 text-amber-200">
-              May be stale: something changed after the last ledger build (
+              Something may have changed after the last score run (
               {formatWhen(freshness.lastLedgerAt)}). Run{" "}
               <Link href="/admin/tournament" className="ash-link">
-                tournament sync
+                Tournament sync
               </Link>{" "}
-              or recompute from the admin home panel.
+              or recalculate the leaderboard from the admin home page.
             </p>
           )}
           <p className="mt-2 text-xs text-ash-muted">
-            Heuristic only; does not detect scoring rule edits. Ledger timestamp uses
-            the newest <code className="text-[11px]">points_ledger.created_at</code>{" "}
-            for the sample pool.
+            This is an automatic check and may not catch every edge case (for
+            example, scoring rule changes). If in doubt, recalculate the
+            leaderboard.
           </p>
         </div>
       </section>
@@ -309,11 +295,8 @@ export default async function AdminTournamentStatusPage({ searchParams }: PagePr
             {(matchesSyncLocked ?? 0) > 0 ? (
               <li>
                 {matchesSyncLocked} match
-                {(matchesSyncLocked ?? 0) === 1 ? "" : "es"} with{" "}
-                <code className="rounded bg-amber-950/60 px-1 text-xs text-amber-100">
-                  sync_locked
-                </code>{" "}
-                — score patches from sync skip those rows.
+                {(matchesSyncLocked ?? 0) === 1 ? "" : "es"} frozen for sync —
+                automated updates will not overwrite scores for those games.
               </li>
             ) : null}
           </ul>

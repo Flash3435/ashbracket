@@ -62,7 +62,7 @@ export default async function AdminResultsPage() {
     if (!loadError) {
       for (const code of STAGE_CODES_NEEDED) {
         if (!stages.some((s) => s.code === code)) {
-          loadError = `Missing tournament stage "${code}" in Supabase. Seed or migrate tournament_stages.`;
+          loadError = `A required tournament stage (“${code}”) is missing. Ask your site host to finish tournament setup.`;
           break;
         }
       }
@@ -80,7 +80,7 @@ export default async function AdminResultsPage() {
     <PageContainer>
       <PageTitle
         title="Tournament results"
-        description="Enter official outcomes by stage (quarterfinal through champion). Each save updates the results table, recomputes scores for the configured pool, and replaces points_ledger for that pool."
+        description="Enter the real outcomes by stage (quarterfinals through champion). Each save updates official results, recalculates everyone’s points, and refreshes the leaderboard."
       />
       {loadError ? (
         <p className="mb-4 rounded-md border border-red-800/80 bg-red-950/40 px-3 py-2 text-sm text-red-200">
@@ -92,8 +92,8 @@ export default async function AdminResultsPage() {
       </div>
       {!loadError && teams.length === 0 ? (
         <p className="rounded-md border border-amber-700/50 bg-amber-950/30 px-3 py-2 text-sm text-amber-100">
-          No teams found. Add rows to the teams table (or run seed.sql) before
-          you can enter results.
+          No teams found. Ask your site host to load the team list before you
+          enter results.
         </p>
       ) : null}
       <KnockoutResultsEditor

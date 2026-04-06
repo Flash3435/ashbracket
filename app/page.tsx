@@ -1,13 +1,17 @@
 import Link from "next/link";
 import { PublicLeaderboard } from "@/components/leaderboard/PublicLeaderboard";
+import { PoolPublicStatsSummary } from "@/components/pool/PoolPublicStatsSummary";
 import { HomeHero } from "@/components/ui/HomeHero";
 import { PageContainer } from "@/components/ui/PageContainer";
 import { fetchSamplePoolLeaderboard } from "../lib/leaderboard/fetchSamplePoolLeaderboard";
+import { fetchSamplePoolPublicStats } from "../lib/pool/fetchSamplePoolPublicStats";
 
 export const dynamic = "force-dynamic";
 
 export default async function HomePage() {
   const { sections, error } = await fetchSamplePoolLeaderboard();
+  const { stats, poolLabel, error: statsError } =
+    await fetchSamplePoolPublicStats();
 
   return (
     <>
@@ -20,6 +24,15 @@ export default async function HomePage() {
             shown.
           </p>
         </div>
+
+        {statsError ? (
+          <PoolPublicStatsSummary
+            poolLabel={poolLabel}
+            errorMessage={statsError}
+          />
+        ) : (
+          <PoolPublicStatsSummary poolLabel={poolLabel} stats={stats} />
+        )}
 
         <PublicLeaderboard
         errorMessage={error}
@@ -42,14 +55,6 @@ export default async function HomePage() {
             </p>
           </Link>
         </div>
-
-        <p className="text-sm text-ash-muted">
-          Organizers:{" "}
-          <Link href="/admin" className="ash-link">
-            Admin
-          </Link>{" "}
-          for pool setup and participants.
-        </p>
       </PageContainer>
     </>
   );

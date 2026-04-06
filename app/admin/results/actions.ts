@@ -102,7 +102,7 @@ export async function setKnockoutResultAction(input: {
     if (ledger.error) {
       return {
         ok: false,
-        error: `Result updated, but standings could not be recomputed: ${ledger.error}`,
+        error: `Result saved, but the leaderboard could not be updated: ${ledger.error}`,
       };
     }
 

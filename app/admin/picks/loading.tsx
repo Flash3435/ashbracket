@@ -6,7 +6,7 @@ export default function AdminPicksLoading() {
     <PageContainer>
       <PageTitle
         title="Participant picks"
-        description="Loading pool participants, teams, and stages…"
+        description="Loading people in your pool, teams, and bracket stages…"
       />
       <p className="text-sm text-ash-muted" aria-live="polite">
         Loading…

@@ -6,7 +6,7 @@ export default function AdminTournamentStatusLoading() {
     <PageContainer>
       <PageTitle
         title="Tournament status"
-        description="Loading edition, counts, and ledger freshness…"
+        description="Loading tournament overview and leaderboard status…"
       />
       <p className="text-sm text-ash-muted" aria-live="polite">
         Loading…

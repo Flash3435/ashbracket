@@ -40,6 +40,8 @@ export async function createParticipantAction(input: {
 
     if (error) return { ok: false, error: error.message };
     revalidatePath("/admin/participants");
+    revalidatePath("/admin/payments");
+    revalidatePath("/");
     return {
       ok: true,
       participant: mapParticipantRow(data as ParticipantRow),
@@ -92,6 +94,8 @@ export async function updateParticipantAction(input: {
 
     if (error) return { ok: false, error: error.message };
     revalidatePath("/admin/participants");
+    revalidatePath("/admin/payments");
+    revalidatePath("/");
     return {
       ok: true,
       participant: mapParticipantRow(data as ParticipantRow),
@@ -114,6 +118,8 @@ export async function deleteParticipantAction(
 
     if (error) return { ok: false, error: error.message };
     revalidatePath("/admin/participants");
+    revalidatePath("/admin/payments");
+    revalidatePath("/");
     return { ok: true };
   } catch (e) {
     return { ok: false, error: messageFromUnknown(e) };

@@ -145,8 +145,8 @@ export function PoolSettingsForm({
           className="w-full max-w-md rounded-md border border-ash-border bg-ash-body px-3 py-2 text-sm text-ash-text shadow-sm focus:border-ash-accent focus:outline-none focus:ring-1 focus:ring-ash-accent disabled:opacity-50"
         />
         <p className="text-xs text-ash-muted">
-          Uses your browser&apos;s local timezone. Clear the field to remove a
-          lock deadline (stored as empty in the database).
+          Uses your browser&apos;s local timezone. Clear the field if you do not
+          want a lock deadline.
         </p>
       </div>
 

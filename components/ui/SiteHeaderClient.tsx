@@ -35,15 +35,6 @@ function TextNavLink({
   );
 }
 
-function organizerLinkClass(pathname: string, adminActive: boolean) {
-  const active = adminActive && pathname.startsWith("/admin");
-  const base =
-    "text-xs font-medium transition-colors border-b border-transparent pb-0.5";
-  return active
-    ? `${base} text-ash-muted border-ash-accent/45`
-    : `${base} text-ash-border-hover hover:text-ash-muted`;
-}
-
 export type SiteHeaderClientProps = {
   isSignedIn: boolean;
   isAdmin: boolean;
@@ -51,7 +42,6 @@ export type SiteHeaderClientProps = {
 
 export function SiteHeaderClient({ isSignedIn, isAdmin }: SiteHeaderClientProps) {
   const pathname = usePathname();
-  const organizerHrefLoggedOut = "/login?next=/admin";
 
   return (
     <header className="sticky top-0 z-50 w-full border-b border-ash-border bg-ash-body">
@@ -109,12 +99,6 @@ export function SiteHeaderClient({ isSignedIn, isAdmin }: SiteHeaderClientProps)
               >
                 Sign up
               </Link>
-              <Link
-                href={organizerHrefLoggedOut}
-                className={organizerLinkClass(pathname, false)}
-              >
-                Organizer
-              </Link>
             </>
           )}
 
@@ -123,14 +107,11 @@ export function SiteHeaderClient({ isSignedIn, isAdmin }: SiteHeaderClientProps)
               <TextNavLink href="/account" pathname={pathname} match="prefix">
                 Account
               </TextNavLink>
-              {isAdmin && (
-                <Link
-                  href="/admin"
-                  className={organizerLinkClass(pathname, true)}
-                >
-                  Organizer
-                </Link>
-              )}
+              {isAdmin ? (
+                <TextNavLink href="/admin" pathname={pathname} match="prefix">
+                  Admin
+                </TextNavLink>
+              ) : null}
               <SignOutButton className="btn-ghost px-3 py-1.5 text-sm disabled:opacity-50" />
             </>
           )}

@@ -113,8 +113,8 @@ export function KnockoutResultsEditor({
                 {section.label}
               </h2>
               <p className="mt-1 text-sm text-amber-100/90">
-                Stage &quot;{section.stageCode}&quot; is not loaded. Check
-                tournament_stages.
+                This stage is not available yet. Ask your site host to finish
+                tournament setup.
               </p>
             </section>
           );
@@ -131,10 +131,7 @@ export function KnockoutResultsEditor({
                   {section.label}
                 </h2>
                 <p className="mt-0.5 text-xs text-ash-muted">
-                  Stage: {stage.label} ({stage.code}) · kind:{" "}
-                  <code className="rounded bg-ash-body px-1 py-0.5 text-[11px] text-ash-text">
-                    {section.kind}
-                  </code>
+                  {stage.label}
                 </p>
               </div>
             </div>

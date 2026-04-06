@@ -81,7 +81,7 @@ export default async function AdminPicksPage({ searchParams }: PageProps) {
     if (!loadError) {
       for (const code of STAGE_CODES_NEEDED) {
         if (!stages.some((s) => s.code === code)) {
-          loadError = `Missing tournament stage "${code}" in Supabase. Seed or migrate tournament_stages.`;
+          loadError = `A required tournament stage (“${code}”) is missing. Ask your site host to finish tournament setup.`;
           break;
         }
       }
@@ -93,7 +93,7 @@ export default async function AdminPicksPage({ searchParams }: PageProps) {
 
       if (!selectedParticipant) {
         loadError =
-          "That participant is not in the sample pool, or the id is invalid.";
+          "That person is not in this pool, or the link you used is invalid.";
       } else {
         const { data: predData, error: predErr } = await supabase
           .from("predictions")
@@ -148,7 +148,7 @@ export default async function AdminPicksPage({ searchParams }: PageProps) {
     <PageContainer>
       <PageTitle
         title="Participant picks"
-        description="Edit knockout bracket picks (quarterfinal through champion) for anyone in the sample pool. Changes are written to predictions and standings are recomputed."
+        description="Open anyone’s knockout bracket (quarterfinals through champion) and save changes. Scores and the public leaderboard update automatically."
       />
 
       {loadError ? (
@@ -165,7 +165,8 @@ export default async function AdminPicksPage({ searchParams }: PageProps) {
           className="mb-4 rounded-md border border-amber-700/50 bg-amber-950/30 px-3 py-2 text-sm text-amber-100"
           role="alert"
         >
-          The participant query parameter is not a valid UUID.
+          That participant link is not valid. Choose someone from the list
+          above.
         </p>
       ) : null}
 
@@ -214,8 +215,8 @@ export default async function AdminPicksPage({ searchParams }: PageProps) {
               />
               {teams.length === 0 ? (
                 <p className="mt-4 text-sm text-amber-200">
-                  Add teams in Supabase (or run seed.sql) before you can assign
-                  picks.
+                  No teams are available yet. Ask your site host to load the
+                  team list before you assign picks.
                 </p>
               ) : null}
             </>

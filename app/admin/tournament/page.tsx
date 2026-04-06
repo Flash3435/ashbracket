@@ -42,13 +42,14 @@ export default async function AdminTournamentPage() {
         </Link>
         <span>
           {" "}
-          — edition details, counts, ledger freshness, locked rows.
+          — see team and match counts, last sync time, and whether standings
+          look current.
         </span>
       </p>
 
       <PageTitle
         title="Tournament data"
-        description="Official schedule and scores live in tournament_matches. Sync derives scoring results and recomputes standings. Knockout rows can carry scoring_* columns when you add them via seed or SQL."
+        description="Bring in official match scores and turn them into results your pool can score against. After a successful sync, everyone’s points and the public leaderboard are updated."
       />
 
       <div className="ash-surface mb-6 space-y-2 p-4 text-sm text-ash-muted">
@@ -56,15 +57,15 @@ export default async function AdminTournamentPage() {
           <span className="font-medium text-ash-text">Edition:</span>{" "}
           {edition
             ? `${edition.name} (${edition.code})`
-            : `Not loaded — run npm run seed:wc2026 with a service role key.`}
+            : "Not loaded yet — the official schedule needs to be installed. Contact whoever set up this site."}
         </p>
         <p>
-          <span className="font-medium text-ash-text">Matches in DB:</span>{" "}
+          <span className="font-medium text-ash-text">Matches on file:</span>{" "}
           {matchCount ?? "—"}
         </p>
         <p>
           <span className="font-medium text-ash-text">
-            Group matches marked finished:
+            Group-stage matches marked finished:
           </span>{" "}
           {edition ? finishedGroupMatches : "—"}
         </p>
@@ -72,16 +73,14 @@ export default async function AdminTournamentPage() {
 
       <div className="ash-surface flex flex-col gap-4 p-4">
         <p className="text-sm text-ash-muted">
-          Enter scores in Supabase (or via a future API adapter calling{" "}
-          <code className="rounded bg-ash-body px-1 text-xs text-ash-text">
-            syncOfficialTournament(..., {"{"} patches: [...] {"}"})
-          </code>
-          ). Set <code className="rounded bg-ash-body px-1 text-ash-text">sync_locked</code>{" "}
-          on a match row to freeze automated score updates for that match.
+          Match scores are usually updated where your tournament data is
+          maintained. You can <span className="font-medium text-ash-text">freeze</span>{" "}
+          a match so automated sync skips it and leaves your manual score in
+          place.
         </p>
         <form action={runTournamentSyncAction}>
           <button type="submit" className="btn-primary">
-            Run sync → scoring results → standings
+            Sync tournament and update standings
           </button>
         </form>
       </div>

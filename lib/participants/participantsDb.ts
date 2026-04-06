@@ -18,6 +18,26 @@ export function mapParticipantRow(row: ParticipantRow): Participant {
   };
 }
 
+export type ParticipantPaymentView = {
+  id: string;
+  displayName: string;
+  email: string;
+  paid: boolean;
+  paidAt: string | null;
+};
+
+export function mapParticipantPaymentRow(
+  row: ParticipantRow,
+): ParticipantPaymentView {
+  return {
+    id: row.id,
+    displayName: row.display_name,
+    email: row.email ?? "",
+    paid: row.is_paid,
+    paidAt: row.paid_at,
+  };
+}
+
 export function paidAtForInsert(paid: boolean): string | null {
   return paid ? new Date().toISOString() : null;
 }

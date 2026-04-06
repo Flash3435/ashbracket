@@ -10,14 +10,14 @@ export default function AdminPage() {
     <PageContainer>
       <PageTitle
         title="Admin"
-        description="Configure pools, invite participants, and manage the tournament. These routes require an admin sign-in."
+        description="Run your pool from here: settings, people, picks, scores, and the live leaderboard. Sign in with your organizer account to use these tools."
       />
       <ul className="list-inside list-disc space-y-2 text-sm text-ash-muted">
         <li>
           <Link href="/admin/settings" className="ash-link">
             Pool settings
           </Link>
-          <span> — name, public visibility, and lock time.</span>
+          <span> — pool name, whether the leaderboard is public, and when picks lock.</span>
         </li>
         <li>
           <Link
@@ -26,7 +26,7 @@ export default function AdminPage() {
           >
             Participant picks
           </Link>
-          <span> — edit knockout picks per participant.</span>
+          <span> — open anyone’s bracket and update their knockout picks.</span>
         </li>
         <li>
           <Link
@@ -35,7 +35,17 @@ export default function AdminPage() {
           >
             Participants
           </Link>
-          <span> — manage who is in the pool.</span>
+          <span> — add or remove people in the pool.</span>
+        </li>
+        <li>
+          <Link href="/admin/payments" className="ash-link">
+            Payments
+          </Link>
+          <span>
+            {" "}
+            — who has paid, contact emails, and paid dates. To change status,
+            edit the person under Participants.
+          </span>
         </li>
         <li>
           <Link
@@ -46,8 +56,8 @@ export default function AdminPage() {
           </Link>
           <span>
             {" "}
-            — enter quarterfinalists through champion (each save recomputes
-            standings).
+            — enter the real tournament outcomes (quarterfinals through
+            champion). Saving updates scores and the leaderboard.
           </span>
         </li>
         <li>
@@ -59,7 +69,8 @@ export default function AdminPage() {
           </Link>
           <span>
             {" "}
-            — official matches, automated scoring rows, recompute standings.
+            — pull in official match data and refresh everyone’s scores from
+            that.
           </span>
         </li>
         <li>
@@ -71,7 +82,8 @@ export default function AdminPage() {
           </Link>
           <span>
             {" "}
-            — counts, sync timestamps, sample pool ledger freshness, overrides.
+            — quick overview: teams, matches, results, and whether the
+            leaderboard looks up to date.
           </span>
         </li>
       </ul>
