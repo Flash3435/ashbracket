@@ -14,5 +14,15 @@ function samplePoolIdFromEnv(): string | undefined {
 /** Pool id for public `/rules`, leaderboard, and admin sample-pool flows. */
 export const SAMPLE_POOL_ID = samplePoolIdFromEnv() ?? DEFAULT_SAMPLE_POOL_ID;
 
+/**
+ * True when `poolId` is the configured sample pool, ignoring case/whitespace.
+ * Production env UUIDs may not match Postgres casing; PostgREST usually returns lowercase.
+ */
+export function poolIdsMatchConfiguredSample(poolId: string): boolean {
+  return (
+    poolId.trim().toLowerCase() === SAMPLE_POOL_ID.trim().toLowerCase()
+  );
+}
+
 /** Default join code for the sample pool (seed + migration). */
 export const SAMPLE_POOL_JOIN_CODE = "ASH2026" as const;

@@ -1,7 +1,10 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { createClient } from "@/lib/supabase/server";
 import { solePublicPoolIdFromScoringView } from "../pools/solePublicPoolIdFromScoringView";
-import { SAMPLE_POOL_ID } from "../config/sample-pool";
+import {
+  SAMPLE_POOL_ID,
+  poolIdsMatchConfiguredSample,
+} from "../config/sample-pool";
 import { comparePublicScoringRuleRows } from "./comparePublicScoringRules";
 import { labelPublicScoringRule } from "./scoringRulePublicLabels";
 import { applyPublicRulesDisplayDefaults } from "./publicRulesDisplayDefaults";
@@ -267,6 +270,7 @@ export async function fetchSamplePoolScoringRules(): Promise<FetchSamplePoolScor
     const supabase = await createClient();
 
     let effectivePoolId = SAMPLE_POOL_ID;
+    let usedSolePublicPoolFallback = false;
     let loaded = await loadScoringRulesRawForPool(supabase, effectivePoolId);
     if (!loaded.ok) {
       return { ok: false, kind: "error", message: loaded.message };
@@ -275,8 +279,9 @@ export async function fetchSamplePoolScoringRules(): Promise<FetchSamplePoolScor
 
     if (rulesRaw.length === 0) {
       const sole = await solePublicPoolIdFromScoringView(supabase);
-      if (sole && sole !== SAMPLE_POOL_ID) {
+      if (sole && !poolIdsMatchConfiguredSample(sole)) {
         effectivePoolId = sole;
+        usedSolePublicPoolFallback = true;
         loaded = await loadScoringRulesRawForPool(supabase, effectivePoolId);
         if (!loaded.ok) {
           return { ok: false, kind: "error", message: loaded.message };
@@ -284,6 +289,10 @@ export async function fetchSamplePoolScoringRules(): Promise<FetchSamplePoolScor
         rulesRaw = loaded.rulesRaw;
       }
     }
+
+    const displayDefaultOpts = usedSolePublicPoolFallback
+      ? { solePublicPoolFallback: true as const }
+      : undefined;
 
     if (rulesRaw.length === 0) {
       let poolOnly: PoolRulesPublicRowDb | null = null;
@@ -314,6 +323,7 @@ export async function fetchSamplePoolScoringRules(): Promise<FetchSamplePoolScor
       const meta = applyPublicRulesDisplayDefaults(
         effectivePoolId,
         poolMetaFromRow(poolOnly),
+        displayDefaultOpts,
       );
       return {
         ok: true,
@@ -327,6 +337,7 @@ export async function fetchSamplePoolScoringRules(): Promise<FetchSamplePoolScor
     const meta = applyPublicRulesDisplayDefaults(
       effectivePoolId,
       metaFromFirstScoringRow(rulesRaw[0]),
+      displayDefaultOpts,
     );
 
     const rules: PublicScoringRuleRow[] = rulesRaw

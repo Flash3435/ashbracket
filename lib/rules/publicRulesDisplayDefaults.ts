@@ -1,6 +1,7 @@
 /**
  * Public /rules page: display copy and fallback values for the **configured sample pool**
- * (`SAMPLE_POOL_ID` from `lib/config/sample-pool.ts`).
+ * (`SAMPLE_POOL_ID` from `lib/config/sample-pool.ts`, or the sole public pool when
+ * the configured id has no scoring rows — see fetcher `solePublicPoolFallback`).
  *
  * ## Workflow for future edits
  * - **Wording** (tie-break text, prize intro, section blurbs): edit `PUBLIC_RULES_PAGE_COPY` below.
@@ -13,7 +14,7 @@
  *   defaults fill only missing pieces.
  */
 
-import { SAMPLE_POOL_ID } from "../config/sample-pool";
+import { poolIdsMatchConfiguredSample } from "../config/sample-pool";
 import type {
   PoolPrizeTier,
   SamplePoolScoringRulesPayload,
@@ -69,8 +70,21 @@ export const PUBLIC_RULES_PAGE_COPY = {
     "No bonus questions are published for this pool yet.",
 } as const;
 
-export function shouldApplyPublicRulesDisplayDefaults(poolId: string): boolean {
-  return poolId === SAMPLE_POOL_ID;
+export type PublicRulesDisplayDefaultsOptions = {
+  /**
+   * Set when the fetcher had no rows for `SAMPLE_POOL_ID` and loaded the only public
+   * pool from `scoring_rules_public` instead. That pool is what /rules is showing, so
+   * empty display fields (e.g. prize JSON) should still get app defaults.
+   */
+  solePublicPoolFallback?: boolean;
+};
+
+export function shouldApplyPublicRulesDisplayDefaults(
+  poolId: string,
+  opts?: PublicRulesDisplayDefaultsOptions,
+): boolean {
+  if (opts?.solePublicPoolFallback) return true;
+  return poolIdsMatchConfiguredSample(poolId);
 }
 
 type RulesPageMeta = Pick<
@@ -90,8 +104,9 @@ type RulesPageMeta = Pick<
 export function applyPublicRulesDisplayDefaults(
   poolId: string,
   meta: RulesPageMeta,
+  opts?: PublicRulesDisplayDefaultsOptions,
 ): RulesPageMeta {
-  if (!shouldApplyPublicRulesDisplayDefaults(poolId)) {
+  if (!shouldApplyPublicRulesDisplayDefaults(poolId, opts)) {
     return meta;
   }
 
