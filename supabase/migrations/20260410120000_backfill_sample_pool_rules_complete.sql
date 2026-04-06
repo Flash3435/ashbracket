@@ -27,14 +27,21 @@ SET tie_break_note = 'If total points are tied, the organizer decides the tie-br
 WHERE id = 'a0000001-0000-4000-8000-000000000001'
   AND (tie_break_note IS NULL OR btrim(tie_break_note) = '');
 
+-- Skip scoring rows when the seed pool id does not exist (e.g. production uses another pool UUID).
 INSERT INTO public.scoring_rules (pool_id, prediction_kind, bonus_key, points)
-VALUES
-  ('a0000001-0000-4000-8000-000000000001', 'quarterfinalist', NULL, 10),
-  ('a0000001-0000-4000-8000-000000000001', 'semifinalist', NULL, 20),
-  ('a0000001-0000-4000-8000-000000000001', 'finalist', NULL, 50),
-  ('a0000001-0000-4000-8000-000000000001', 'champion', NULL, 100),
-  ('a0000001-0000-4000-8000-000000000001', 'bonus_pick', 'most_goals', 50),
-  ('a0000001-0000-4000-8000-000000000001', 'bonus_pick', 'most_yellow_cards', 10),
-  ('a0000001-0000-4000-8000-000000000001', 'bonus_pick', 'most_red_cards', 10)
+SELECT pool_id, prediction_kind, bonus_key, points
+FROM (
+  VALUES
+    ('a0000001-0000-4000-8000-000000000001'::uuid, 'quarterfinalist'::text, NULL::text, 10::numeric),
+    ('a0000001-0000-4000-8000-000000000001', 'semifinalist', NULL, 20),
+    ('a0000001-0000-4000-8000-000000000001', 'finalist', NULL, 50),
+    ('a0000001-0000-4000-8000-000000000001', 'champion', NULL, 100),
+    ('a0000001-0000-4000-8000-000000000001', 'bonus_pick', 'most_goals', 50),
+    ('a0000001-0000-4000-8000-000000000001', 'bonus_pick', 'most_yellow_cards', 10),
+    ('a0000001-0000-4000-8000-000000000001', 'bonus_pick', 'most_red_cards', 10)
+) AS v(pool_id, prediction_kind, bonus_key, points)
+WHERE EXISTS (
+  SELECT 1 FROM public.pools p WHERE p.id = v.pool_id
+)
 ON CONFLICT (pool_id, prediction_kind, bonus_key) DO UPDATE SET
   points = EXCLUDED.points;
