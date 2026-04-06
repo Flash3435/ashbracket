@@ -54,6 +54,9 @@ const nextConfig: NextConfig = {
   turbopack: {
     root: packageRoot,
   },
+  async rewrites() {
+    return [{ source: "/favicon.ico", destination: "/icon.png" }];
+  },
   env: {
     NEXT_PUBLIC_SUPABASE_URL: supabaseUrl,
     NEXT_PUBLIC_SUPABASE_ANON_KEY: supabasePublicKey,
