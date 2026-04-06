@@ -3,9 +3,16 @@ import { formatPoolPoints } from "@/lib/format/poolPoints";
 import { PageContainer } from "@/components/ui/PageContainer";
 import { PageTitle } from "@/components/ui/PageTitle";
 import { fetchSamplePoolScoringRules } from "../../lib/rules/fetchSamplePoolScoringRules";
-import type { PoolPrizeTier } from "../../types/publicScoringRules";
+import { partitionPublicRulesForDisplay } from "../../lib/rules/partitionPublicRulesForDisplay";
+import type {
+  PoolPrizeTier,
+  PublicScoringRuleRow,
+} from "../../types/publicScoringRules";
 
 export const dynamic = "force-dynamic";
+
+const DEFAULT_TIE_BREAK_COPY =
+  "If two or more players finish with the same total points, the pool organizer decides how to break the tie (for example earlier pick time or another rule they announce).";
 
 function formatLockAt(iso: string | null): string | null {
   if (iso == null) return null;
@@ -32,9 +39,35 @@ function describePrizeTier(tier: PoolPrizeTier): string {
     return `${tier.label}: the rest of the prize pool after the places above`;
   }
   if (typeof tier.percent === "number") {
-    return `${tier.label}: ${tier.percent}% of the pool`;
+    return `${tier.label}: ${tier.percent}% of the total prize pool`;
   }
   return tier.label;
+}
+
+function RulesPointsTable({ rows }: { rows: PublicScoringRuleRow[] }) {
+  if (rows.length === 0) return null;
+  return (
+    <div className="mt-3 overflow-x-auto rounded-md border border-ash-border">
+      <table className="w-full min-w-[320px] text-left text-sm">
+        <thead className="border-b border-ash-border bg-ash-body/50 text-xs font-medium uppercase tracking-wide text-ash-muted">
+          <tr>
+            <th className="px-4 py-3">Pick type</th>
+            <th className="px-4 py-3 text-right">Points</th>
+          </tr>
+        </thead>
+        <tbody className="divide-y divide-ash-border">
+          {rows.map((row) => (
+            <tr key={`${row.predictionKind}:${row.bonusKey ?? ""}`}>
+              <td className="px-4 py-3 text-ash-text">{row.label}</td>
+              <td className="px-4 py-3 text-right font-medium tabular-nums text-ash-text">
+                {formatPoolPoints(row.points)}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
 }
 
 export default async function RulesPage() {
@@ -87,140 +120,184 @@ export default async function RulesPage() {
   const { data } = result;
   const lockLabel = formatLockAt(data.lockAt);
   const feeLabel = formatEntryFee(data.entryFeeCents);
+  const { groupKindRules, knockoutRules, bonusRules } =
+    partitionPublicRulesForDisplay(data.rules);
+  const tieCopy = data.tieBreakNote?.trim() || DEFAULT_TIE_BREAK_COPY;
+
+  const pageTitle = data.poolName.trim() || "Pool rules";
+  const pageDescription = lockLabel
+    ? `Picks lock ${lockLabel} (UTC). Below: entry, prizes, and every way you can score.`
+    : "Entry, prizes, and every way you can score — in plain language.";
 
   return (
     <PageContainer>
-      <PageTitle
-        title="Pool rules"
-        description={
-          lockLabel
-            ? `${data.poolName} — picks lock ${lockLabel} (UTC).`
-            : `${data.poolName} — how points and prizes work.`
-        }
-      />
+      <PageTitle title={pageTitle} description={pageDescription} />
 
       <div className="space-y-6">
-        {feeLabel ? (
-          <section className="ash-surface px-4 py-4">
-            <h2 className="text-sm font-semibold uppercase tracking-wide text-ash-muted">
-              Entry fee
-            </h2>
-            <p className="mt-2 text-lg font-medium text-ash-text">{feeLabel}</p>
-            <p className="mt-1 text-sm text-ash-muted">
-              One entry per person unless the organizer says otherwise.
-            </p>
-          </section>
-        ) : null}
-
-        {data.prizeTiers.length > 0 ? (
-          <section className="ash-surface px-4 py-4">
-            <h2 className="text-sm font-semibold uppercase tracking-wide text-ash-muted">
-              Prize pool
-            </h2>
-            <p className="mt-2 text-sm text-ash-muted">
-              Payouts are a share of the total collected entry fees (after any
-              host fees the organizer announces).
-            </p>
-            <ul className="mt-3 list-inside list-disc space-y-1.5 text-sm text-ash-text">
-              {data.prizeTiers.map((tier) => (
-                <li key={tier.place}>{describePrizeTier(tier)}</li>
-              ))}
-            </ul>
-          </section>
-        ) : null}
+        <section className="ash-surface px-4 py-4">
+          <h2 className="text-sm font-semibold uppercase tracking-wide text-ash-muted">
+            How you score points
+          </h2>
+          <p className="mt-2 text-sm leading-relaxed text-ash-text">
+            You earn points when your picks match what actually happens in the
+            tournament. After each stage, official results are compared to your
+            bracket — you do not need to do anything once your picks are in.
+          </p>
+          <p className="mt-2 text-sm leading-relaxed text-ash-muted">
+            Points from the group stage, knockout rounds, and bonus questions
+            all add up to your total. The standings page shows everyone ranked
+            by that total.
+          </p>
+        </section>
 
         <section className="ash-surface px-4 py-4">
           <h2 className="text-sm font-semibold uppercase tracking-wide text-ash-muted">
-            How you earn points
+            Entry
           </h2>
-          <p className="mt-2 text-sm leading-relaxed text-ash-muted">
-            Scores are added automatically when official results are recorded.
-            Your picks are compared to those results — no manual grading.
-          </p>
+          {feeLabel ? (
+            <>
+              <p className="mt-2 text-lg font-medium text-ash-text">
+                {feeLabel} per entry
+              </p>
+              <p className="mt-1 text-sm text-ash-muted">
+                One entry per person unless the organizer says otherwise.
+              </p>
+            </>
+          ) : (
+            <p className="mt-2 text-sm leading-relaxed text-ash-muted">
+              No entry fee is listed on this page. Ask the organizer if you are
+              unsure what to pay or how to pay.
+            </p>
+          )}
+        </section>
 
+        <section className="ash-surface px-4 py-4">
+          <h2 className="text-sm font-semibold uppercase tracking-wide text-ash-muted">
+            Prizes
+          </h2>
+          {data.prizeTiers.length > 0 ? (
+            <>
+              <p className="mt-2 text-sm text-ash-muted">
+                Payouts are a share of the total collected entry fees, after
+                anything the organizer takes out for fees or costs (if they
+                announce that).
+              </p>
+              <ul className="mt-3 list-inside list-disc space-y-1.5 text-sm text-ash-text">
+                {data.prizeTiers.map((tier) => (
+                  <li key={tier.place}>{describePrizeTier(tier)}</li>
+                ))}
+              </ul>
+            </>
+          ) : (
+            <p className="mt-2 text-sm leading-relaxed text-ash-muted">
+              The prize breakdown is not published here yet. Ask the host how
+              the pot is split.
+            </p>
+          )}
+        </section>
+
+        <section className="ash-surface px-4 py-4">
+          <h2 className="text-sm font-semibold uppercase tracking-wide text-ash-muted">
+            Group-stage picks
+          </h2>
           {data.groupAdvance ? (
-            <div className="mt-4 rounded-lg border border-ash-border bg-ash-body/40 px-3 py-3">
-              <h3 className="text-sm font-semibold text-ash-text">
-                Group stage (finish in 1st or 2nd in the group)
-              </h3>
-              <ul className="mt-2 list-inside list-disc space-y-1.5 text-sm text-ash-muted">
+            <div className="mt-3 rounded-lg border border-ash-border bg-ash-body/40 px-3 py-3">
+              <p className="text-sm text-ash-muted">
+                For each group, you pick which team finishes{" "}
+                <span className="font-medium text-ash-text">first</span> and
+                which finishes{" "}
+                <span className="font-medium text-ash-text">second</span>{" "}
+                (both teams advance).
+              </p>
+              <ul className="mt-3 list-inside list-disc space-y-1.5 text-sm text-ash-muted">
                 <li>
-                  <span className="text-ash-text">
+                  <span className="font-medium text-ash-text">
                     {formatPoolPoints(data.groupAdvance.exactPoints)} points
                   </span>{" "}
-                  if you put the team in the{" "}
-                  <span className="font-medium text-ash-text">correct</span>{" "}
-                  spot — first in the group where they actually finish first, or
-                  second where they actually finish second.
+                  if the team is in the{" "}
+                  <span className="font-medium text-ash-text">right</span> slot
+                  — winner where they actually place first, runner-up where they
+                  actually place second.
                 </li>
                 <li>
-                  <span className="text-ash-text">
+                  <span className="font-medium text-ash-text">
                     {formatPoolPoints(data.groupAdvance.wrongSlotPoints)} points
                   </span>{" "}
                   if the team{" "}
                   <span className="font-medium text-ash-text">
                     still advances
                   </span>{" "}
-                  from the group but you had them in the other qualifying slot
-                  (for example you picked them 1st and they placed 2nd, or the
-                  other way around).
+                  but you had them in the other qualifying spot (for example you
+                  picked them first and they came second, or the other way
+                  around).
                 </li>
                 <li className="list-none pl-0 text-ash-muted">
                   No points if the team does not advance from the group.
                 </li>
               </ul>
             </div>
-          ) : null}
-
-          {data.rules.length > 0 ? (
+          ) : groupKindRules.length > 0 ? (
             <>
-              <h3 className="mt-5 text-sm font-semibold text-ash-text">
-                Knockout round picks &amp; bonuses
-              </h3>
-              <p className="mt-1 text-sm text-ash-muted">
-                Each correct pick below scores once when that result is final.
+              <p className="mt-2 text-sm text-ash-muted">
+                Points per correct group finishing position for this pool:
               </p>
-              <div className="mt-3 overflow-x-auto rounded-md border border-ash-border">
-                <table className="w-full min-w-[320px] text-left text-sm">
-                  <thead className="border-b border-ash-border bg-ash-body/50 text-xs font-medium uppercase tracking-wide text-ash-muted">
-                    <tr>
-                      <th className="px-4 py-3">What you picked</th>
-                      <th className="px-4 py-3 text-right">Points</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-ash-border">
-                    {data.rules.map((row) => (
-                      <tr
-                        key={`${row.predictionKind}:${row.bonusKey ?? ""}`}
-                      >
-                        <td className="px-4 py-3 text-ash-text">
-                          {row.label}
-                        </td>
-                        <td className="px-4 py-3 text-right font-medium tabular-nums text-ash-text">
-                          {formatPoolPoints(row.points)}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+              <RulesPointsTable rows={groupKindRules} />
             </>
           ) : (
-            <p className="mt-4 text-sm text-ash-muted">
-              Point values for knockout picks and bonus questions will show
-              here once the host publishes them.
+            <p className="mt-2 text-sm leading-relaxed text-ash-muted">
+              This pool does not list separate group-stage points on this page.
+              Knockout and bonus scoring below still apply.
             </p>
           )}
         </section>
 
-        <p className="text-sm font-normal leading-relaxed text-ash-muted">
-          Standings rank everyone by total points. If there is a tie, the
-          organizer decides any tie-breakers (for example picks submitted
-          earliest).
-        </p>
+        <section className="ash-surface px-4 py-4">
+          <h2 className="text-sm font-semibold uppercase tracking-wide text-ash-muted">
+            Knockout picks
+          </h2>
+          <p className="mt-2 text-sm text-ash-muted">
+            Each row is a one-time score when that team reaches the round — for
+            example you get quarter-finalist points once when they make the
+            quarter-finals, not again in later rounds.
+          </p>
+          {knockoutRules.length > 0 ? (
+            <RulesPointsTable rows={knockoutRules} />
+          ) : (
+            <p className="mt-3 text-sm text-ash-muted">
+              Knockout point values are not published here yet.
+            </p>
+          )}
+        </section>
+
+        <section className="ash-surface px-4 py-4">
+          <h2 className="text-sm font-semibold uppercase tracking-wide text-ash-muted">
+            Bonus picks
+          </h2>
+          <p className="mt-2 text-sm text-ash-muted">
+            Separate questions tied to the whole tournament (for example most
+            goals). You pick one team per bonus; points apply if your team wins
+            that stat when the organizer locks the result.
+          </p>
+          {bonusRules.length > 0 ? (
+            <RulesPointsTable rows={bonusRules} />
+          ) : (
+            <p className="mt-3 text-sm text-ash-muted">
+              No bonus questions are published for this pool yet.
+            </p>
+          )}
+        </section>
+
+        <section className="ash-surface px-4 py-4">
+          <h2 className="text-sm font-semibold uppercase tracking-wide text-ash-muted">
+            Tie-breaks
+          </h2>
+          <p className="mt-2 text-sm leading-relaxed text-ash-text">
+            {tieCopy}
+          </p>
+        </section>
       </div>
 
-      <p className="text-sm text-ash-muted">
+      <p className="mt-8 text-sm text-ash-muted">
         <Link href="/" className="ash-link">
           ← Back to standings
         </Link>

@@ -51,7 +51,8 @@ INSERT INTO public.pools (
   entry_fee_cents,
   prize_distribution_json,
   group_advance_exact_points,
-  group_advance_wrong_slot_points
+  group_advance_wrong_slot_points,
+  tie_break_note
 )
 VALUES (
   'a0000001-0000-4000-8000-000000000001',
@@ -67,7 +68,8 @@ VALUES (
     {"place": 4, "label": "4th place", "remainder": true}
   ]'::jsonb,
   5,
-  2.5
+  2.5,
+  'If two or more players finish with the same total points, the pool organizer decides how to break the tie (for example earlier pick time or another rule they announce).'
 );
 
 -- Legacy spreadsheet scoring: knockout + per-bonus rows. Group stage uses pool columns above.

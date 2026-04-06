@@ -26,5 +26,7 @@ export type SamplePoolScoringRulesPayload = {
     exactPoints: number;
     wrongSlotPoints: number;
   } | null;
+  /** Organizer tie-break copy; null uses app default wording on /rules. */
+  tieBreakNote: string | null;
   rules: PublicScoringRuleRow[];
 };
