@@ -4,7 +4,11 @@
 -- ---------------------------------------------------------------------------
 -- Dependent views (column type / definition changes below)
 -- ---------------------------------------------------------------------------
+-- `points_ledger_public` selects `points_delta`; `leaderboard_public` aggregates it.
+-- PostgreSQL blocks ALTER COLUMN TYPE while those views exist — drop them first.
+-- `scoring_rules_public` is dropped because this migration recreates it with new columns.
 
+DROP VIEW IF EXISTS public.points_ledger_public;
 DROP VIEW IF EXISTS public.leaderboard_public;
 DROP VIEW IF EXISTS public.scoring_rules_public;
 
@@ -66,6 +70,28 @@ COMMENT ON COLUMN public.scoring_rules.bonus_key IS
 
 ALTER TABLE public.points_ledger
   ALTER COLUMN points_delta TYPE numeric(10, 2) USING points_delta::numeric(10, 2);
+
+-- Restore public ledger lines view (same definition as 20260405120000; fractional points_delta).
+CREATE VIEW public.points_ledger_public
+WITH (security_invoker = false)
+AS
+SELECT
+  l.id,
+  l.participant_id,
+  l.pool_id,
+  l.points_delta,
+  l.prediction_kind,
+  l.created_at,
+  l.prediction_id,
+  l.result_id
+FROM public.points_ledger l
+INNER JOIN public.participants par ON par.id = l.participant_id
+INNER JOIN public.pools pl ON pl.id = l.pool_id AND pl.is_public IS TRUE;
+
+COMMENT ON VIEW public.points_ledger_public IS
+  'Ledger rows for public pools only. Omits internal note text.';
+
+GRANT SELECT ON public.points_ledger_public TO anon, authenticated;
 
 -- ---------------------------------------------------------------------------
 -- RPC: persist fractional ledger lines

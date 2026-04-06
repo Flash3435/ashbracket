@@ -1,5 +1,9 @@
 This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
 
+## Deployment
+
+See **[DEPLOY_NOTES.md](./DEPLOY_NOTES.md)** for the release checklist, `npm run deploy:*` scripts, and production smoke tests (`verify:prod`).
+
 ## Getting Started
 
 First, run the development server:

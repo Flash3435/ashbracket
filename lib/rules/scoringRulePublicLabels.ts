@@ -2,8 +2,8 @@ import { labelPredictionKind } from "../participant/predictionKindLabels";
 
 const BONUS_LABELS: Record<string, string> = {
   most_goals: "Team with the most goals in the tournament",
-  most_yellow_cards: "Team with the most yellow cards in the tournament",
-  most_red_cards: "Team with the most red cards in the tournament",
+  most_yellow_cards: "Team with the most yellow cards",
+  most_red_cards: "Team with the most red cards",
 };
 
 /**

@@ -65,11 +65,11 @@ VALUES (
     {"place": 1, "label": "1st place", "percent": 50},
     {"place": 2, "label": "2nd place", "percent": 25},
     {"place": 3, "label": "3rd place", "percent": 15},
-    {"place": 4, "label": "4th place", "remainder": true}
+    {"place": 4, "label": "4th place", "percent": 10, "remainder": true}
   ]'::jsonb,
   5,
   2.5,
-  'If two or more players finish with the same total points, the pool organizer decides how to break the tie (for example earlier pick time or another rule they announce).'
+  'If total points are tied, the organizer decides the tie-break rule.'
 );
 
 -- Legacy spreadsheet scoring: knockout + per-bonus rows. Group stage uses pool columns above.

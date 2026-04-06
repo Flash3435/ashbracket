@@ -12,7 +12,7 @@ import type {
 export const dynamic = "force-dynamic";
 
 const DEFAULT_TIE_BREAK_COPY =
-  "If two or more players finish with the same total points, the pool organizer decides how to break the tie (for example earlier pick time or another rule they announce).";
+  "If total points are tied, the organizer decides the tie-break rule.";
 
 function formatLockAt(iso: string | null): string | null {
   if (iso == null) return null;
@@ -35,13 +35,20 @@ function formatEntryFee(cents: number | null): string | null {
 }
 
 function describePrizeTier(tier: PoolPrizeTier): string {
+  const name = tier.label;
+  if (tier.remainder && typeof tier.percent === "number") {
+    return `${name} — remaining ${tier.percent}% of the prize pool`;
+  }
   if (tier.remainder) {
-    return `${tier.label}: the rest of the prize pool after the places above`;
+    return `${name} — the rest of the prize pool after the places above`;
   }
   if (typeof tier.percent === "number") {
-    return `${tier.label}: ${tier.percent}% of the total prize pool`;
+    if (tier.place === 1) {
+      return `${name} — ${tier.percent}% of the prize pool`;
+    }
+    return `${name} — ${tier.percent}%`;
   }
-  return tier.label;
+  return name;
 }
 
 function RulesPointsTable({ rows }: { rows: PublicScoringRuleRow[] }) {
@@ -178,9 +185,10 @@ export default async function RulesPage() {
           {data.prizeTiers.length > 0 ? (
             <>
               <p className="mt-2 text-sm text-ash-muted">
-                Payouts are a share of the total collected entry fees, after
-                anything the organizer takes out for fees or costs (if they
-                announce that).
+                Payouts are a percentage of the prize pool (usually the total
+                collected entry fees, unless the organizer keeps a portion for
+                costs and says so). The exact dollar amounts depend on how many
+                paid entries there are.
               </p>
               <ul className="mt-3 list-inside list-disc space-y-1.5 text-sm text-ash-text">
                 {data.prizeTiers.map((tier) => (

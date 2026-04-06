@@ -58,21 +58,84 @@ function normalizeTieBreakNote(raw: string | null | undefined): string | null {
   return t.length > 0 ? t : null;
 }
 
+function toFiniteNumber(v: unknown): number | null {
+  if (typeof v === "number" && Number.isFinite(v)) return v;
+  if (typeof v === "string" && v.trim() !== "") {
+    const n = Number(v);
+    if (Number.isFinite(n)) return n;
+  }
+  return null;
+}
+
+function normalizeJsonArray(raw: unknown): unknown[] {
+  if (Array.isArray(raw)) return raw;
+  if (typeof raw === "string") {
+    try {
+      const p: unknown = JSON.parse(raw);
+      return Array.isArray(p) ? p : [];
+    } catch {
+      return [];
+    }
+  }
+  return [];
+}
+
 function parsePrizeTiers(raw: unknown): PoolPrizeTier[] {
-  if (!raw || !Array.isArray(raw)) return [];
+  const items = normalizeJsonArray(raw);
   const out: PoolPrizeTier[] = [];
-  for (const item of raw) {
+  for (const item of items) {
     if (!item || typeof item !== "object") continue;
     const o = item as Record<string, unknown>;
-    const place = o.place;
+    const place = toFiniteNumber(o.place);
     const label = o.label;
-    if (typeof place !== "number" || typeof label !== "string") continue;
-    const tier: PoolPrizeTier = { place, label };
-    if (typeof o.percent === "number") tier.percent = o.percent;
+    if (place == null || typeof label !== "string" || label.trim() === "") continue;
+    const tier: PoolPrizeTier = { place, label: label.trim() };
+    const pct = toFiniteNumber(o.percent);
+    if (pct != null) tier.percent = pct;
     if (o.remainder === true) tier.remainder = true;
     out.push(tier);
   }
   return out.sort((a, b) => a.place - b.place);
+}
+
+function mergeRulesPagePoolMeta(
+  scoring: Pick<
+    SamplePoolScoringRulesPayload,
+    | "poolName"
+    | "lockAt"
+    | "entryFeeCents"
+    | "prizeTiers"
+    | "groupAdvance"
+    | "tieBreakNote"
+  >,
+  pool: Pick<
+    SamplePoolScoringRulesPayload,
+    | "poolName"
+    | "lockAt"
+    | "entryFeeCents"
+    | "prizeTiers"
+    | "groupAdvance"
+    | "tieBreakNote"
+  > | null,
+): Pick<
+  SamplePoolScoringRulesPayload,
+  | "poolName"
+  | "lockAt"
+  | "entryFeeCents"
+  | "prizeTiers"
+  | "groupAdvance"
+  | "tieBreakNote"
+> {
+  if (!pool) return scoring;
+  return {
+    poolName: pool.poolName.trim() || scoring.poolName.trim() || scoring.poolName,
+    lockAt: pool.lockAt ?? scoring.lockAt,
+    entryFeeCents: pool.entryFeeCents ?? scoring.entryFeeCents,
+    prizeTiers:
+      pool.prizeTiers.length > 0 ? pool.prizeTiers : scoring.prizeTiers,
+    groupAdvance: pool.groupAdvance ?? scoring.groupAdvance,
+    tieBreakNote: pool.tieBreakNote ?? scoring.tieBreakNote,
+  };
 }
 
 function poolMetaFromRow(row: PoolRulesPublicRowDb): Pick<
@@ -257,33 +320,26 @@ export async function fetchSamplePoolScoringRules(): Promise<FetchSamplePoolScor
     }
 
     let poolOnly: PoolRulesPublicRowDb | null = null;
-    const needsPoolMetaFromView =
-      rulesRaw.length === 0 || !hasExtendedPoolColumnsOnRow(rulesRaw[0]);
+    let poolRes = await supabase
+      .from("pool_rules_public")
+      .select(POOL_RULES_META_SELECT)
+      .eq("pool_id", effectivePoolId)
+      .maybeSingle();
 
-    if (needsPoolMetaFromView) {
-      let poolRes = await supabase
+    if (
+      poolRes.error &&
+      poolRes.error.message.toLowerCase().includes("tie_break_note")
+    ) {
+      poolRes = await supabase
         .from("pool_rules_public")
-        .select(POOL_RULES_META_SELECT)
+        .select(POOL_RULES_META_SELECT_WITHOUT_TIE)
         .eq("pool_id", effectivePoolId)
         .maybeSingle();
+    }
 
-      if (
-        poolRes.error &&
-        poolRes.error.message.toLowerCase().includes("tie_break_note")
-      ) {
-        poolRes = await supabase
-          .from("pool_rules_public")
-          .select(POOL_RULES_META_SELECT_WITHOUT_TIE)
-          .eq("pool_id", effectivePoolId)
-          .maybeSingle();
-      }
-
-      // `pool_rules_public` is optional (some production DBs only expose
-      // `scoring_rules_public`). Never fail the rules page because metadata
-      // enrichment failed — scoring rows alone are enough to render the table.
-      if (!poolRes.error && poolRes.data) {
-        poolOnly = poolRes.data as PoolRulesPublicRowDb;
-      }
+    // Canonical pool-level fields for /rules; optional if the view is missing.
+    if (!poolRes.error && poolRes.data) {
+      poolOnly = poolRes.data as PoolRulesPublicRowDb;
     }
 
     // Empty state only when there are no public scoring rows for this pool id.
@@ -302,17 +358,8 @@ export async function fetchSamplePoolScoringRules(): Promise<FetchSamplePoolScor
     }
 
     const metaFromScoring = metaFromFirstScoringRow(rulesRaw[0]);
-    const poolMeta = poolOnly ? poolMetaFromRow(poolOnly) : null;
-    const meta = poolMeta
-      ? {
-          poolName: poolMeta.poolName,
-          lockAt: poolMeta.lockAt,
-          entryFeeCents: poolMeta.entryFeeCents,
-          prizeTiers: poolMeta.prizeTiers,
-          groupAdvance: poolMeta.groupAdvance,
-          tieBreakNote: poolMeta.tieBreakNote,
-        }
-      : metaFromScoring;
+    const metaFromPool = poolOnly ? poolMetaFromRow(poolOnly) : null;
+    const meta = mergeRulesPagePoolMeta(metaFromScoring, metaFromPool);
 
     const rules: PublicScoringRuleRow[] = rulesRaw
       .map((row) => ({

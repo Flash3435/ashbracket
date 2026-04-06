@@ -21,7 +21,7 @@ export async function fetchSamplePoolLeaderboard(): Promise<{
   try {
     const supabase = await createClient();
     let poolId = SAMPLE_POOL_ID;
-    let { data, error } = await supabase
+    const first = await supabase
       .from("leaderboard_public")
       .select(
         "pool_id, pool_name, participant_id, display_name, total_points, rank",
@@ -29,9 +29,11 @@ export async function fetchSamplePoolLeaderboard(): Promise<{
       .eq("pool_id", poolId)
       .order("rank", { ascending: true });
 
-    if (error) {
-      return { sections: [], error: error.message };
+    if (first.error) {
+      return { sections: [], error: first.error.message };
     }
+
+    let data = first.data;
 
     if (!(data ?? []).length) {
       const sole = await solePublicPoolIdFromScoringView(supabase);
