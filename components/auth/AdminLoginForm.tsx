@@ -37,19 +37,19 @@ export function AdminLoginForm({
     return (
       <div className="space-y-4">
         {showForbiddenMessage ? (
-          <p className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+          <p className="rounded-md border border-amber-700/50 bg-amber-950/30 px-3 py-2 text-sm text-amber-100">
             That page is only available to pool organizers (admin accounts).
           </p>
         ) : null}
-        <p className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
-          Signed in as <span className="font-medium">{blockedEmail}</span>.
+        <p className="rounded-md border border-amber-700/50 bg-amber-950/30 px-3 py-2 text-sm text-amber-100">
+          Signed in as <span className="font-medium text-amber-50">{blockedEmail}</span>.
           {variant === "organizer" ? (
             <>
               {" "}
               This account is not in the admin list. Sign out and use an
               authorized organizer account, or ask an owner to add your user id
               to{" "}
-              <code className="rounded bg-amber-100/80 px-1">app_admins</code>{" "}
+              <code className="rounded bg-amber-950/60 px-1 text-amber-100">app_admins</code>{" "}
               in Supabase.
             </>
           ) : (
@@ -64,21 +64,18 @@ export function AdminLoginForm({
           <button
             type="button"
             onClick={onSignOut}
-            className="rounded-md bg-zinc-800 px-3 py-2 text-sm font-medium text-white shadow-sm hover:bg-zinc-900"
+            className="rounded-lg bg-ash-surface px-3 py-2 text-sm font-medium text-ash-text ring-1 ring-ash-border transition-colors hover:bg-ash-border/30"
           >
             Sign out
           </button>
           {variant === "organizer" ? (
-            <Link
-              href="/login"
-              className="inline-flex items-center rounded-md border border-zinc-300 bg-white px-3 py-2 text-sm font-medium text-zinc-800 shadow-sm hover:bg-zinc-50"
-            >
+            <Link href="/login" className="btn-ghost inline-flex items-center text-sm">
               Participant sign-in
             </Link>
           ) : (
             <Link
               href="/login?next=/admin"
-              className="inline-flex items-center rounded-md border border-zinc-300 bg-white px-3 py-2 text-sm font-medium text-zinc-800 shadow-sm hover:bg-zinc-50"
+              className="btn-ghost inline-flex items-center text-sm"
             >
               Organizer sign-in
             </Link>
@@ -92,33 +89,24 @@ export function AdminLoginForm({
     <div className="space-y-4">
       <SignInWithEmailForm redirectAfterLogin={redirectAfterLogin} />
       {variant === "participant" ? (
-        <p className="text-center text-sm text-zinc-600">
+        <p className="text-center text-sm text-ash-muted">
           No account yet?{" "}
-          <Link
-            href={signupHref}
-            className="font-medium text-emerald-700 underline-offset-4 hover:underline"
-          >
+          <Link href={signupHref} className="ash-link">
             Sign up
           </Link>
         </p>
       ) : null}
       {variant === "participant" ? (
-        <p className="text-center text-sm text-zinc-500">
+        <p className="text-center text-sm text-ash-muted">
           Running the pool?{" "}
-          <Link
-            href="/login?next=/admin"
-            className="font-medium text-zinc-700 underline-offset-4 hover:underline"
-          >
+          <Link href="/login?next=/admin" className="ash-link">
             Organizer sign-in
           </Link>
         </p>
       ) : (
-        <p className="text-center text-sm text-zinc-500">
+        <p className="text-center text-sm text-ash-muted">
           Joining as a player?{" "}
-          <Link
-            href="/login"
-            className="font-medium text-zinc-700 underline-offset-4 hover:underline"
-          >
+          <Link href="/login" className="ash-link">
             Participant sign-in
           </Link>
         </p>

@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useEffect, useState, useTransition } from "react";
 import { setKnockoutResultAction } from "../../app/admin/results/actions";
+import { fifaRankShort } from "../../lib/teams/fifaRankDisplay";
 import type { KnockoutEditorSection } from "../../lib/admin/knockoutResultsConfig";
 import { resultRowKey } from "../../lib/admin/knockoutResultsConfig";
 import type { Result, Team, TournamentStage } from "../../src/types/domain";
@@ -95,7 +96,7 @@ export function KnockoutResultsEditor({
   return (
     <div className="space-y-8">
       {actionError ? (
-        <p className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800">
+        <p className="rounded-md border border-red-800/80 bg-red-950/40 px-3 py-2 text-sm text-red-200">
           {actionError}
         </p>
       ) : null}
@@ -106,12 +107,12 @@ export function KnockoutResultsEditor({
           return (
             <section
               key={section.kind}
-              className="rounded-lg border border-amber-200 bg-amber-50/80 p-4"
+              className="rounded-lg border border-amber-700/50 bg-amber-950/25 p-4"
             >
-              <h2 className="text-sm font-semibold text-amber-900">
+              <h2 className="text-sm font-bold text-amber-100">
                 {section.label}
               </h2>
-              <p className="mt-1 text-sm text-amber-800">
+              <p className="mt-1 text-sm text-amber-100/90">
                 Stage &quot;{section.stageCode}&quot; is not loaded. Check
                 tournament_stages.
               </p>
@@ -122,16 +123,16 @@ export function KnockoutResultsEditor({
         return (
           <section
             key={`${section.kind}-${section.stageCode}`}
-            className="rounded-lg border border-zinc-200 bg-white p-4 shadow-sm"
+            className="ash-surface p-4"
           >
-            <div className="mb-4 flex flex-wrap items-baseline justify-between gap-2 border-b border-zinc-100 pb-3">
+            <div className="mb-4 flex flex-wrap items-baseline justify-between gap-2 border-b border-ash-border pb-3">
               <div>
-                <h2 className="text-base font-semibold text-zinc-900">
+                <h2 className="text-base font-bold text-ash-text">
                   {section.label}
                 </h2>
-                <p className="mt-0.5 text-xs text-zinc-500">
+                <p className="mt-0.5 text-xs text-ash-muted">
                   Stage: {stage.label} ({stage.code}) · kind:{" "}
-                  <code className="rounded bg-zinc-100 px-1 py-0.5 text-[11px]">
+                  <code className="rounded bg-ash-body px-1 py-0.5 text-[11px] text-ash-text">
                     {section.kind}
                   </code>
                 </p>
@@ -146,10 +147,10 @@ export function KnockoutResultsEditor({
                 return (
                   <li key={rowKey}>
                     <label className="block space-y-1.5">
-                      <span className="text-xs font-medium uppercase tracking-wide text-zinc-500">
+                      <span className="text-xs font-medium uppercase tracking-wide text-ash-muted">
                         {slotLabel(slotKey)}
                         {saving ? (
-                          <span className="ml-2 font-normal normal-case text-emerald-600">
+                          <span className="ml-2 font-normal normal-case text-ash-accent">
                             Saving…
                           </span>
                         ) : null}
@@ -165,14 +166,17 @@ export function KnockoutResultsEditor({
                             e.target.value,
                           )
                         }
-                        className="w-full rounded-md border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 shadow-sm outline-none ring-emerald-700/20 focus:border-emerald-600 focus:ring-2 disabled:cursor-not-allowed disabled:opacity-50"
+                        className="w-full rounded-md border border-ash-border bg-ash-body px-3 py-2 text-sm text-ash-text shadow-sm outline-none ring-ash-accent/20 focus:border-ash-accent focus:ring-2 disabled:cursor-not-allowed disabled:opacity-50"
                       >
                         <option value="">— None —</option>
-                        {teams.map((t) => (
-                          <option key={t.id} value={t.id}>
-                            {t.name} ({t.countryCode})
-                          </option>
-                        ))}
+                        {teams.map((t) => {
+                          const fr = fifaRankShort(t);
+                          return (
+                            <option key={t.id} value={t.id}>
+                              {`${t.name} (${t.countryCode})${fr ? ` · ${fr}` : ""}`}
+                            </option>
+                          );
+                        })}
                       </select>
                     </label>
                   </li>

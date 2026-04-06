@@ -5,6 +5,8 @@ export function mapTeamRow(row: {
   name: string;
   country_code: string;
   fifa_code: string | null;
+  fifa_rank?: number | null;
+  fifa_rank_as_of?: string | null;
   created_at: string;
   updated_at: string;
 }): Team {
@@ -13,6 +15,8 @@ export function mapTeamRow(row: {
     name: row.name,
     countryCode: row.country_code,
     fifaCode: row.fifa_code,
+    fifaRank: row.fifa_rank ?? null,
+    fifaRankAsOf: row.fifa_rank_as_of ?? null,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };

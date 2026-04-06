@@ -40,7 +40,7 @@ export default async function AdminParticipantsPage() {
         description="Manage who is in the pool. Changes are saved to Supabase for the configured sample pool."
       />
       {loadError ? (
-        <p className="mb-4 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800">
+        <p className="mb-4 rounded-md border border-red-800/80 bg-red-950/40 px-3 py-2 text-sm text-red-200">
           {loadError}
         </p>
       ) : null}

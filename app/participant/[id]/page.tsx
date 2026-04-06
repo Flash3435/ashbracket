@@ -24,7 +24,7 @@ export default async function PublicParticipantPage({ params }: PageProps) {
           title="Participant"
           description="Public profile and picks for this pool."
         />
-        <p className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800">
+        <p className="rounded-md border border-red-800/80 bg-red-950/40 px-3 py-2 text-sm text-red-200">
           Could not load this profile
           {result.message ? `: ${result.message}` : "."}
         </p>

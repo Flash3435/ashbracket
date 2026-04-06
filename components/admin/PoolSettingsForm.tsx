@@ -81,7 +81,7 @@ export function PoolSettingsForm({
     <form onSubmit={onSubmit} className="space-y-6">
       {actionError ? (
         <p
-          className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800"
+          className="rounded-md border border-red-800/80 bg-red-950/40 px-3 py-2 text-sm text-red-200"
           role="alert"
         >
           {actionError}
@@ -89,7 +89,7 @@ export function PoolSettingsForm({
       ) : null}
       {success ? (
         <p
-          className="rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-900"
+          className="rounded-md border border-ash-accent/40 bg-ash-accent/10 px-3 py-2 text-sm text-ash-muted"
           role="status"
         >
           Saved. Public pages will show updated name, visibility, and lock time
@@ -100,7 +100,7 @@ export function PoolSettingsForm({
       <div className="space-y-2">
         <label
           htmlFor="pool-name"
-          className="block text-sm font-medium text-zinc-800"
+          className="block text-sm font-medium text-ash-text"
         >
           Pool name
         </label>
@@ -110,7 +110,7 @@ export function PoolSettingsForm({
           value={name}
           onChange={(e) => setName(e.target.value)}
           disabled={disabled || isPending}
-          className="w-full max-w-md rounded-md border border-zinc-300 px-3 py-2 text-sm text-zinc-900 shadow-sm focus:border-emerald-600 focus:outline-none focus:ring-1 focus:ring-emerald-600 disabled:bg-zinc-100"
+          className="w-full max-w-md rounded-md border border-ash-border bg-ash-body px-3 py-2 text-sm text-ash-text shadow-sm focus:border-ash-accent focus:outline-none focus:ring-1 focus:ring-ash-accent disabled:opacity-50"
           autoComplete="off"
         />
       </div>
@@ -122,9 +122,9 @@ export function PoolSettingsForm({
           checked={isPublic}
           onChange={(e) => setIsPublic(e.target.checked)}
           disabled={disabled || isPending}
-          className="h-4 w-4 rounded border-zinc-300 text-emerald-700 focus:ring-emerald-600"
+          className="h-4 w-4 rounded border-ash-border text-ash-accent focus:ring-ash-accent"
         />
-        <label htmlFor="pool-public" className="text-sm text-zinc-800">
+        <label htmlFor="pool-public" className="text-sm text-ash-muted">
           Public pool (leaderboard and rules visible without admin sign-in)
         </label>
       </div>
@@ -132,7 +132,7 @@ export function PoolSettingsForm({
       <div className="space-y-2">
         <label
           htmlFor="pool-lock"
-          className="block text-sm font-medium text-zinc-800"
+          className="block text-sm font-medium text-ash-text"
         >
           Picks lock at
         </label>
@@ -142,9 +142,9 @@ export function PoolSettingsForm({
           value={lockLocal}
           onChange={(e) => setLockLocal(e.target.value)}
           disabled={disabled || isPending}
-          className="w-full max-w-md rounded-md border border-zinc-300 px-3 py-2 text-sm text-zinc-900 shadow-sm focus:border-emerald-600 focus:outline-none focus:ring-1 focus:ring-emerald-600 disabled:bg-zinc-100"
+          className="w-full max-w-md rounded-md border border-ash-border bg-ash-body px-3 py-2 text-sm text-ash-text shadow-sm focus:border-ash-accent focus:outline-none focus:ring-1 focus:ring-ash-accent disabled:opacity-50"
         />
-        <p className="text-xs text-zinc-500">
+        <p className="text-xs text-ash-muted">
           Uses your browser&apos;s local timezone. Clear the field to remove a
           lock deadline (stored as empty in the database).
         </p>
@@ -154,7 +154,7 @@ export function PoolSettingsForm({
         <button
           type="submit"
           disabled={disabled || isPending}
-          className="rounded-md bg-emerald-700 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-emerald-800 disabled:cursor-not-allowed disabled:opacity-60"
+          className="btn-primary disabled:cursor-not-allowed disabled:opacity-60"
         >
           {isPending ? "Saving…" : "Save changes"}
         </button>

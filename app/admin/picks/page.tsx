@@ -14,6 +14,7 @@ import {
   mapTeamRow,
   mapTournamentStageRow,
 } from "../../../lib/results/mapRows";
+import { TEAM_TABLE_SELECT } from "../../../lib/teams/teamDbSelect";
 import { mapPredictionRow } from "../../../src/lib/scoring/mapSupabaseRows";
 import type { Prediction, Team, TournamentStage } from "../../../src/types/domain";
 import type { Participant } from "../../../types/participant";
@@ -55,7 +56,7 @@ export default async function AdminPicksPage({ searchParams }: PageProps) {
         .order("display_name", { ascending: true }),
       supabase
         .from("teams")
-        .select("id, name, country_code, fifa_code, created_at, updated_at")
+        .select(TEAM_TABLE_SELECT)
         .order("name", { ascending: true }),
       supabase
         .from("tournament_stages")
@@ -152,7 +153,7 @@ export default async function AdminPicksPage({ searchParams }: PageProps) {
 
       {loadError ? (
         <p
-          className="mb-4 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800"
+          className="mb-4 rounded-md border border-red-800/80 bg-red-950/40 px-3 py-2 text-sm text-red-200"
           role="alert"
         >
           {loadError}
@@ -161,7 +162,7 @@ export default async function AdminPicksPage({ searchParams }: PageProps) {
 
       {invalidQuery ? (
         <p
-          className="mb-4 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900"
+          className="mb-4 rounded-md border border-amber-700/50 bg-amber-950/30 px-3 py-2 text-sm text-amber-100"
           role="alert"
         >
           The participant query parameter is not a valid UUID.
@@ -169,11 +170,11 @@ export default async function AdminPicksPage({ searchParams }: PageProps) {
       ) : null}
 
       {!loadError && participants.length === 0 ? (
-        <div className="rounded-md border border-zinc-200 bg-zinc-50 px-4 py-8 text-center">
-          <p className="text-sm font-medium text-zinc-800">
+        <div className="ash-surface px-4 py-8 text-center">
+          <p className="text-sm font-medium text-ash-text">
             No participants in this pool
           </p>
-          <p className="mt-2 text-sm text-zinc-600">
+          <p className="mt-2 text-sm text-ash-muted">
             Add people on the Participants admin page before editing picks.
           </p>
         </div>
@@ -189,7 +190,7 @@ export default async function AdminPicksPage({ searchParams }: PageProps) {
           </div>
 
           {!selectedId ? (
-            <p className="text-sm text-zinc-600">
+            <p className="text-sm text-ash-muted">
               Select a participant to load their current predictions and edit
               knockout picks.
             </p>
@@ -198,7 +199,7 @@ export default async function AdminPicksPage({ searchParams }: PageProps) {
           {selectedId && selectedParticipant && !loadError ? (
             <>
               {predictions.length === 0 ? (
-                <p className="mb-6 rounded-md border border-zinc-200 bg-zinc-50 px-3 py-2 text-sm text-zinc-700">
+                <p className="mb-6 rounded-md border border-ash-border bg-ash-surface px-3 py-2 text-sm text-ash-muted">
                   No saved knockout picks yet for this participant — all slots
                   start empty.
                 </p>
@@ -212,7 +213,7 @@ export default async function AdminPicksPage({ searchParams }: PageProps) {
                 savePicks={saveParticipantKnockoutPicksAction}
               />
               {teams.length === 0 ? (
-                <p className="mt-4 text-sm text-amber-800">
+                <p className="mt-4 text-sm text-amber-200">
                   Add teams in Supabase (or run seed.sql) before you can assign
                   picks.
                 </p>

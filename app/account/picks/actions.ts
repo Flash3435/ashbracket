@@ -80,6 +80,7 @@ export async function saveMyKnockoutPicksAction(input: {
     if (!applied.ok) return applied;
 
     revalidatePath("/account/picks");
+    revalidatePath("/account/picks/summary");
     revalidatePath("/account");
     revalidatePath(`/participant/${input.participantId}`);
 

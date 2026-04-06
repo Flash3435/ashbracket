@@ -55,6 +55,10 @@ export interface Team {
   /** FIFA 3-letter code (e.g. USA, ENG); stored uppercase in DB. */
   countryCode: string;
   fifaCode: string | null;
+  /** Men's FIFA/Coca-Cola world ranking at `fifaRankAsOf`, if seeded. */
+  fifaRank: number | null;
+  /** ISO date (YYYY-MM-DD) for the ranking snapshot. */
+  fifaRankAsOf: string | null;
   createdAt: string;
   updatedAt: string;
 }

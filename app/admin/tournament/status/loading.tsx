@@ -8,7 +8,7 @@ export default function AdminTournamentStatusLoading() {
         title="Tournament status"
         description="Loading edition, counts, and ledger freshness…"
       />
-      <p className="text-sm text-zinc-500" aria-live="polite">
+      <p className="text-sm text-ash-muted" aria-live="polite">
         Loading…
       </p>
     </PageContainer>

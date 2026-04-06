@@ -122,7 +122,7 @@ function balancedPick(teams: Team[], count: number): Team[] {
 }
 
 function favoritesOrderedPool(teams: Team[]): Team[] {
-  const rank = (t: Team) => {
+  const strengthTier = (t: Team) => {
     const label = teamStrengthLabel(t.countryCode);
     if (label === "Often picked") return 0;
     if (label === "Solid") return 1;
@@ -130,8 +130,13 @@ function favoritesOrderedPool(teams: Team[]): Team[] {
   };
   const copy = [...teams];
   copy.sort((a, b) => {
-    const ra = rank(a);
-    const rb = rank(b);
+    const fa = a.fifaRank;
+    const fb = b.fifaRank;
+    if (fa != null && fb != null && fa !== fb) return fa - fb;
+    if (fa != null && fb == null) return -1;
+    if (fa == null && fb != null) return 1;
+    const ra = strengthTier(a);
+    const rb = strengthTier(b);
     if (ra !== rb) return ra - rb;
     return a.name.localeCompare(b.name);
   });

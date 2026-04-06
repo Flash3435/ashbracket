@@ -134,12 +134,12 @@ export function ParticipantsManager({
   return (
     <div className="space-y-6">
       {actionError ? (
-        <p className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800">
+        <p className="rounded-md border border-red-800/80 bg-red-950/40 px-3 py-2 text-sm text-red-200">
           {actionError}
         </p>
       ) : null}
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <p className="text-sm text-zinc-600">
+        <p className="text-sm text-ash-muted">
           {participants.length} participant
           {participants.length === 1 ? "" : "s"}
           {isPending ? " · saving…" : ""}
@@ -148,23 +148,24 @@ export function ParticipantsManager({
           type="button"
           disabled={disabled || isPending}
           onClick={() => setAddOpen((o) => !o)}
-          className="rounded-md bg-emerald-700 px-3 py-2 text-sm font-medium text-white shadow-sm transition hover:bg-emerald-800 disabled:cursor-not-allowed disabled:opacity-50"
+          className={
+            addOpen
+              ? "btn-ghost transition disabled:cursor-not-allowed disabled:opacity-50"
+              : "btn-primary transition disabled:cursor-not-allowed disabled:opacity-50"
+          }
         >
           {addOpen ? "Cancel" : "Add participant"}
         </button>
       </div>
 
       {addOpen ? (
-        <form
-          onSubmit={handleAdd}
-          className="rounded-lg border border-zinc-200 bg-white p-4 shadow-sm"
-        >
-          <h2 className="text-sm font-semibold text-zinc-900">
+        <form onSubmit={handleAdd} className="ash-surface p-4">
+          <h2 className="text-sm font-bold text-ash-text">
             New participant
           </h2>
           <div className="mt-4 grid gap-4 sm:grid-cols-2">
             <label className="block space-y-1.5">
-              <span className="text-xs font-medium uppercase tracking-wide text-zinc-500">
+              <span className="text-xs font-medium uppercase tracking-wide text-ash-muted">
                 Display name
               </span>
               <input
@@ -174,12 +175,12 @@ export function ParticipantsManager({
                 onChange={(e) =>
                   setAddForm((f) => ({ ...f, displayName: e.target.value }))
                 }
-                className="w-full rounded-md border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 shadow-sm outline-none ring-emerald-700/20 focus:border-emerald-600 focus:ring-2 disabled:opacity-50"
+                className="w-full rounded-md border border-ash-border bg-ash-body px-3 py-2 text-sm text-ash-text shadow-sm outline-none ring-ash-accent/20 focus:border-ash-accent focus:ring-2 disabled:opacity-50"
                 placeholder="e.g. Jamie Lee"
               />
             </label>
             <label className="block space-y-1.5">
-              <span className="text-xs font-medium uppercase tracking-wide text-zinc-500">
+              <span className="text-xs font-medium uppercase tracking-wide text-ash-muted">
                 Email
               </span>
               <input
@@ -190,12 +191,12 @@ export function ParticipantsManager({
                 onChange={(e) =>
                   setAddForm((f) => ({ ...f, email: e.target.value }))
                 }
-                className="w-full rounded-md border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 shadow-sm outline-none ring-emerald-700/20 focus:border-emerald-600 focus:ring-2 disabled:opacity-50"
+                className="w-full rounded-md border border-ash-border bg-ash-body px-3 py-2 text-sm text-ash-text shadow-sm outline-none ring-ash-accent/20 focus:border-ash-accent focus:ring-2 disabled:opacity-50"
                 placeholder="name@example.com"
               />
             </label>
           </div>
-          <label className="mt-4 flex cursor-pointer items-center gap-2 text-sm text-zinc-700">
+          <label className="mt-4 flex cursor-pointer items-center gap-2 text-sm text-ash-muted">
             <input
               type="checkbox"
               disabled={disabled || isPending}
@@ -203,7 +204,7 @@ export function ParticipantsManager({
               onChange={(e) =>
                 setAddForm((f) => ({ ...f, paid: e.target.checked }))
               }
-              className="size-4 rounded border-zinc-300 text-emerald-700 focus:ring-emerald-600 disabled:opacity-50"
+              className="size-4 rounded border-ash-border text-ash-accent focus:ring-ash-accent disabled:opacity-50"
             />
             Paid
           </label>
@@ -215,14 +216,14 @@ export function ParticipantsManager({
                 setAddOpen(false);
                 setAddForm(emptyForm());
               }}
-              className="rounded-md border border-zinc-300 bg-white px-3 py-2 text-sm font-medium text-zinc-700 shadow-sm hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-50"
+              className="btn-ghost disabled:cursor-not-allowed disabled:opacity-50"
             >
               Cancel
             </button>
             <button
               type="submit"
               disabled={disabled || isPending}
-              className="rounded-md bg-emerald-700 px-3 py-2 text-sm font-medium text-white shadow-sm hover:bg-emerald-800 disabled:cursor-not-allowed disabled:opacity-50"
+              className="btn-primary disabled:cursor-not-allowed disabled:opacity-50"
             >
               Add
             </button>
@@ -231,9 +232,9 @@ export function ParticipantsManager({
       ) : null}
 
       {/* Table — desktop */}
-      <div className="hidden overflow-hidden rounded-lg border border-zinc-200 bg-white shadow-sm md:block">
+      <div className="ash-surface hidden overflow-hidden md:block">
         <table className="w-full text-left text-sm">
-          <thead className="border-b border-zinc-200 bg-zinc-50 text-xs font-semibold uppercase tracking-wide text-zinc-500">
+          <thead className="border-b border-ash-border bg-ash-body/50 text-xs font-semibold uppercase tracking-wide text-ash-muted">
             <tr>
               <th className="px-4 py-3">Name</th>
               <th className="px-4 py-3">Email</th>
@@ -241,29 +242,29 @@ export function ParticipantsManager({
               <th className="px-4 py-3 text-right">Actions</th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-zinc-100">
+          <tbody className="divide-y divide-ash-border">
             {sorted.length === 0 ? (
               <tr>
                 <td
                   colSpan={4}
-                  className="px-4 py-8 text-center text-zinc-500"
+                  className="px-4 py-8 text-center text-ash-muted"
                 >
                   No participants yet. Add someone to get started.
                 </td>
               </tr>
             ) : (
               sorted.map((p) => (
-                <tr key={p.id} className="text-zinc-800">
-                  <td className="px-4 py-3 font-medium text-zinc-900">
+                <tr key={p.id} className="text-ash-muted">
+                  <td className="px-4 py-3 font-medium text-ash-text">
                     {p.displayName}
                   </td>
-                  <td className="px-4 py-3 text-zinc-600">{p.email}</td>
+                  <td className="px-4 py-3 text-ash-muted">{p.email}</td>
                   <td className="px-4 py-3">
                     <span
                       className={
                         p.paid
-                          ? "inline-flex rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-medium text-emerald-800"
-                          : "inline-flex rounded-full bg-zinc-100 px-2 py-0.5 text-xs font-medium text-zinc-600"
+                          ? "inline-flex rounded-full bg-ash-accent/20 px-2 py-0.5 text-xs font-medium text-ash-accent"
+                          : "inline-flex rounded-full bg-ash-body px-2 py-0.5 text-xs font-medium text-ash-muted ring-1 ring-ash-border"
                       }
                     >
                       {p.paid ? "Paid" : "Unpaid"}
@@ -274,7 +275,7 @@ export function ParticipantsManager({
                       type="button"
                       disabled={disabled || isPending}
                       onClick={() => openEdit(p)}
-                      className="mr-2 text-sm font-medium text-emerald-700 hover:underline disabled:cursor-not-allowed disabled:opacity-50"
+                      className="mr-2 text-sm font-medium text-ash-accent hover:underline disabled:cursor-not-allowed disabled:opacity-50"
                     >
                       Edit
                     </button>
@@ -282,7 +283,7 @@ export function ParticipantsManager({
                       type="button"
                       disabled={disabled || isPending}
                       onClick={() => handleDelete(p.id)}
-                      className="text-sm font-medium text-red-700 hover:underline disabled:cursor-not-allowed disabled:opacity-50"
+                      className="text-sm font-medium text-red-400 hover:underline disabled:cursor-not-allowed disabled:opacity-50"
                     >
                       Delete
                     </button>
@@ -297,25 +298,22 @@ export function ParticipantsManager({
       {/* Cards — mobile */}
       <ul className="space-y-3 md:hidden">
         {sorted.length === 0 ? (
-          <li className="rounded-lg border border-dashed border-zinc-300 bg-zinc-50 px-4 py-8 text-center text-sm text-zinc-500">
+          <li className="ash-surface px-4 py-8 text-center text-sm text-ash-muted">
             No participants yet.
           </li>
         ) : (
           sorted.map((p) => (
-            <li
-              key={p.id}
-              className="rounded-lg border border-zinc-200 bg-white p-4 shadow-sm"
-            >
+            <li key={p.id} className="ash-surface p-4">
               <div className="flex items-start justify-between gap-2">
                 <div>
-                  <p className="font-medium text-zinc-900">{p.displayName}</p>
-                  <p className="mt-0.5 text-sm text-zinc-600">{p.email}</p>
+                  <p className="font-medium text-ash-text">{p.displayName}</p>
+                  <p className="mt-0.5 text-sm text-ash-muted">{p.email}</p>
                   <p className="mt-2">
                     <span
                       className={
                         p.paid
-                          ? "inline-flex rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-medium text-emerald-800"
-                          : "inline-flex rounded-full bg-zinc-100 px-2 py-0.5 text-xs font-medium text-zinc-600"
+                          ? "inline-flex rounded-full bg-ash-accent/20 px-2 py-0.5 text-xs font-medium text-ash-accent"
+                          : "inline-flex rounded-full bg-ash-body px-2 py-0.5 text-xs font-medium text-ash-muted ring-1 ring-ash-border"
                       }
                     >
                       {p.paid ? "Paid" : "Unpaid"}
@@ -327,7 +325,7 @@ export function ParticipantsManager({
                     type="button"
                     disabled={disabled || isPending}
                     onClick={() => openEdit(p)}
-                    className="text-sm font-medium text-emerald-700 hover:underline disabled:cursor-not-allowed disabled:opacity-50"
+                    className="text-sm font-medium text-ash-accent hover:underline disabled:cursor-not-allowed disabled:opacity-50"
                   >
                     Edit
                   </button>
@@ -335,7 +333,7 @@ export function ParticipantsManager({
                     type="button"
                     disabled={disabled || isPending}
                     onClick={() => handleDelete(p.id)}
-                    className="text-sm font-medium text-red-700 hover:underline disabled:cursor-not-allowed disabled:opacity-50"
+                    className="text-sm font-medium text-red-400 hover:underline disabled:cursor-not-allowed disabled:opacity-50"
                   >
                     Delete
                   </button>
@@ -355,20 +353,20 @@ export function ParticipantsManager({
         >
           <button
             type="button"
-            className="absolute inset-0 bg-zinc-900/40"
+            className="absolute inset-0 bg-black/60"
             aria-label="Close dialog"
             onClick={closeEdit}
           />
-          <div className="relative z-10 w-full max-w-md rounded-lg border border-zinc-200 bg-white p-5 shadow-lg">
+          <div className="relative z-10 w-full max-w-md rounded-xl border border-ash-border bg-ash-surface p-5 shadow-[0_4px_12px_rgba(0,0,0,0.5)]">
             <h2
               id="edit-participant-title"
-              className="text-base font-semibold text-zinc-900"
+              className="text-base font-bold text-ash-text"
             >
               Edit participant
             </h2>
             <form onSubmit={handleSaveEdit} className="mt-4 space-y-4">
               <label className="block space-y-1.5">
-                <span className="text-xs font-medium uppercase tracking-wide text-zinc-500">
+                <span className="text-xs font-medium uppercase tracking-wide text-ash-muted">
                   Display name
                 </span>
                 <input
@@ -378,11 +376,11 @@ export function ParticipantsManager({
                   onChange={(e) =>
                     setEditForm((f) => ({ ...f, displayName: e.target.value }))
                   }
-                  className="w-full rounded-md border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 shadow-sm outline-none ring-emerald-700/20 focus:border-emerald-600 focus:ring-2 disabled:opacity-50"
+                  className="w-full rounded-md border border-ash-border bg-ash-body px-3 py-2 text-sm text-ash-text shadow-sm outline-none ring-ash-accent/20 focus:border-ash-accent focus:ring-2 disabled:opacity-50"
                 />
               </label>
               <label className="block space-y-1.5">
-                <span className="text-xs font-medium uppercase tracking-wide text-zinc-500">
+                <span className="text-xs font-medium uppercase tracking-wide text-ash-muted">
                   Email
                 </span>
                 <input
@@ -393,10 +391,10 @@ export function ParticipantsManager({
                   onChange={(e) =>
                     setEditForm((f) => ({ ...f, email: e.target.value }))
                   }
-                  className="w-full rounded-md border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 shadow-sm outline-none ring-emerald-700/20 focus:border-emerald-600 focus:ring-2 disabled:opacity-50"
+                  className="w-full rounded-md border border-ash-border bg-ash-body px-3 py-2 text-sm text-ash-text shadow-sm outline-none ring-ash-accent/20 focus:border-ash-accent focus:ring-2 disabled:opacity-50"
                 />
               </label>
-              <label className="flex cursor-pointer items-center gap-2 text-sm text-zinc-700">
+              <label className="flex cursor-pointer items-center gap-2 text-sm text-ash-muted">
                 <input
                   type="checkbox"
                   disabled={disabled || isPending}
@@ -404,7 +402,7 @@ export function ParticipantsManager({
                   onChange={(e) =>
                     setEditForm((f) => ({ ...f, paid: e.target.checked }))
                   }
-                  className="size-4 rounded border-zinc-300 text-emerald-700 focus:ring-emerald-600 disabled:opacity-50"
+                  className="size-4 rounded border-ash-border text-ash-accent focus:ring-ash-accent disabled:opacity-50"
                 />
                 Paid
               </label>
@@ -413,14 +411,14 @@ export function ParticipantsManager({
                   type="button"
                   disabled={disabled || isPending}
                   onClick={closeEdit}
-                  className="rounded-md border border-zinc-300 bg-white px-3 py-2 text-sm font-medium text-zinc-700 shadow-sm hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-50"
+                  className="btn-ghost disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
                   disabled={disabled || isPending}
-                  className="rounded-md bg-emerald-700 px-3 py-2 text-sm font-medium text-white shadow-sm hover:bg-emerald-800 disabled:cursor-not-allowed disabled:opacity-50"
+                  className="btn-primary disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   Save
                 </button>

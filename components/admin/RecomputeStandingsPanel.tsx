@@ -36,14 +36,14 @@ export function RecomputeStandingsPanel({ disabled = false }: Props) {
   }, [success]);
 
   return (
-    <section className="rounded-lg border border-zinc-200 bg-zinc-50/80 p-4">
-      <h2 className="text-sm font-semibold text-zinc-900">
+    <section className="ash-surface border border-ash-border bg-ash-body/30 p-4">
+      <h2 className="text-sm font-bold text-ash-text">
         Recompute standings
       </h2>
-      <p className="mt-1 text-sm leading-relaxed text-zinc-600">
+      <p className="mt-1 text-sm leading-relaxed text-ash-muted">
         Calls the same job as after saving results or picks: reloads predictions,
         all tournament results, and pool scoring rules; recomputes points; replaces{" "}
-        <code className="rounded bg-zinc-200/80 px-1 py-0.5 text-xs text-zinc-800">
+        <code className="rounded bg-ash-surface px-1 py-0.5 text-xs text-ash-text ring-1 ring-ash-border">
           points_ledger
         </code>{" "}
         in one transaction. Next.js caches for public and admin routes are
@@ -54,14 +54,14 @@ export function RecomputeStandingsPanel({ disabled = false }: Props) {
           type="button"
           onClick={runRecompute}
           disabled={disabled || isPending}
-          className="rounded-md border border-zinc-300 bg-white px-3 py-2 text-sm font-medium text-zinc-900 shadow-sm transition hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-50"
+          className="rounded-lg border border-ash-border bg-ash-body px-3 py-2 text-sm font-medium text-ash-text shadow-sm transition hover:bg-ash-surface disabled:cursor-not-allowed disabled:opacity-50"
         >
           {isPending ? "Recomputing…" : "Recompute now"}
         </button>
       </div>
       {error ? (
         <p
-          className="mt-3 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800"
+          className="mt-3 rounded-md border border-red-800/80 bg-red-950/40 px-3 py-2 text-sm text-red-200"
           role="alert"
         >
           {error}
@@ -69,7 +69,7 @@ export function RecomputeStandingsPanel({ disabled = false }: Props) {
       ) : null}
       {success && !error ? (
         <p
-          className="mt-3 rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-900"
+          className="mt-3 rounded-md border border-ash-accent/40 bg-ash-accent/10 px-3 py-2 text-sm text-ash-muted"
           role="status"
         >
           Standings recomputed successfully. Refresh any open tabs if counts look

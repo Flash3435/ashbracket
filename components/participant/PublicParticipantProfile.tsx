@@ -6,19 +6,15 @@ import type { PublicParticipantDetail } from "../../types/publicParticipant";
 
 function emptyBox(message: string, hint: string) {
   return (
-    <div className="rounded-lg border border-dashed border-zinc-300 bg-zinc-50/80 px-4 py-8 text-center">
-      <p className="text-sm font-medium text-zinc-800">{message}</p>
-      <p className="mt-2 text-sm text-zinc-600">{hint}</p>
+    <div className="ash-surface px-4 py-8 text-center">
+      <p className="text-sm font-medium text-ash-text">{message}</p>
+      <p className="mt-2 text-sm text-ash-muted">{hint}</p>
     </div>
   );
 }
 
 function tableShell(children: React.ReactNode) {
-  return (
-    <div className="mt-2 overflow-x-auto rounded-lg border border-zinc-200 bg-white shadow-sm">
-      {children}
-    </div>
-  );
+  return <div className="ash-surface mt-2 overflow-x-auto">{children}</div>;
 }
 
 type Props = {
@@ -31,30 +27,27 @@ export function PublicParticipantProfile({ detail }: Props) {
   return (
     <div className="space-y-10">
       <div>
-        <Link
-          href="/"
-          className="text-sm font-medium text-emerald-700 underline-offset-4 hover:underline"
-        >
+        <Link href="/" className="ash-link text-sm">
           ← Standings
         </Link>
       </div>
 
-      <div className="rounded-lg border border-zinc-200 bg-white p-4 shadow-sm">
-        <p className="text-sm text-zinc-600">{detail.poolName}</p>
+      <div className="ash-surface p-4">
+        <p className="text-sm text-ash-muted">{detail.poolName}</p>
         <dl className="mt-3 grid gap-3 sm:grid-cols-2">
           <div>
-            <dt className="text-xs font-medium uppercase tracking-wide text-zinc-500">
+            <dt className="text-xs font-medium uppercase tracking-wide text-ash-muted">
               Total points
             </dt>
-            <dd className="mt-0.5 text-lg font-semibold tabular-nums text-zinc-900">
+            <dd className="mt-0.5 text-lg font-semibold tabular-nums text-ash-text">
               {detail.totalPoints}
             </dd>
           </div>
           <div>
-            <dt className="text-xs font-medium uppercase tracking-wide text-zinc-500">
+            <dt className="text-xs font-medium uppercase tracking-wide text-ash-muted">
               Rank
             </dt>
-            <dd className="mt-0.5 text-lg font-semibold tabular-nums text-zinc-900">
+            <dd className="mt-0.5 text-lg font-semibold tabular-nums text-ash-text">
               {detail.rank}
             </dd>
           </div>
@@ -62,7 +55,7 @@ export function PublicParticipantProfile({ detail }: Props) {
       </div>
 
       <section>
-        <h2 className="text-lg font-semibold text-zinc-900">Picks by stage</h2>
+        <h2 className="text-lg font-bold text-ash-text">Picks by stage</h2>
         {stageSections.length === 0 ? (
           emptyBox(
             "No picks on file",
@@ -72,40 +65,40 @@ export function PublicParticipantProfile({ detail }: Props) {
           <div className="space-y-8">
             {stageSections.map((section) => (
               <div key={section.stageCode ?? section.stageLabel}>
-                <h3 className="text-sm font-medium text-zinc-700">
+                <h3 className="text-sm font-medium text-ash-muted">
                   {section.stageLabel}
                 </h3>
                 {tableShell(
                   <table className="w-full min-w-[420px] text-left text-sm">
-                    <thead className="border-b border-zinc-200 bg-zinc-50 text-xs font-medium uppercase tracking-wide text-zinc-600">
+                    <thead className="border-b border-ash-border bg-ash-body/50 text-xs font-medium uppercase tracking-wide text-ash-muted">
                       <tr>
                         <th className="px-3 py-2">Pick type</th>
                         <th className="px-3 py-2">Slot</th>
                         <th className="px-3 py-2">Team</th>
                       </tr>
                     </thead>
-                    <tbody className="divide-y divide-zinc-100">
+                    <tbody className="divide-y divide-ash-border">
                       {section.picks.map((p) => (
                         <tr key={p.predictionId}>
-                          <td className="px-3 py-2 text-zinc-800">
+                          <td className="px-3 py-2 text-ash-muted">
                             {labelPredictionKind(p.predictionKind)}
                           </td>
-                          <td className="px-3 py-2 text-zinc-600">
+                          <td className="px-3 py-2 text-ash-border-hover">
                             {formatPickSlot(p)}
                           </td>
-                          <td className="px-3 py-2 text-zinc-800">
+                          <td className="px-3 py-2 text-ash-muted">
                             {p.teamName ? (
                               <span>
                                 {p.teamName}
                                 {p.teamCountryCode ? (
-                                  <span className="text-zinc-500">
+                                  <span className="text-ash-border-hover">
                                     {" "}
                                     ({p.teamCountryCode})
                                   </span>
                                 ) : null}
                               </span>
                             ) : (
-                              <span className="text-zinc-400">—</span>
+                              <span className="text-ash-border">—</span>
                             )}
                           </td>
                         </tr>
@@ -120,7 +113,7 @@ export function PublicParticipantProfile({ detail }: Props) {
       </section>
 
       <section>
-        <h2 className="text-lg font-semibold text-zinc-900">
+        <h2 className="text-lg font-bold text-ash-text">
           Points history
         </h2>
         {detail.ledger.length === 0 ? (
@@ -131,32 +124,32 @@ export function PublicParticipantProfile({ detail }: Props) {
         ) : (
           tableShell(
             <table className="w-full min-w-[420px] text-left text-sm">
-              <thead className="border-b border-zinc-200 bg-zinc-50 text-xs font-medium uppercase tracking-wide text-zinc-600">
+              <thead className="border-b border-ash-border bg-ash-body/50 text-xs font-medium uppercase tracking-wide text-ash-muted">
                 <tr>
                   <th className="px-3 py-2">When</th>
                   <th className="px-3 py-2">Category</th>
                   <th className="px-3 py-2 text-right">Points</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-zinc-100">
+              <tbody className="divide-y divide-ash-border">
                 {detail.ledger.map((row) => (
                   <tr key={row.id}>
-                    <td className="whitespace-nowrap px-3 py-2 text-zinc-600">
+                    <td className="whitespace-nowrap px-3 py-2 text-ash-border-hover">
                       {new Date(row.createdAt).toLocaleString("en-US", {
                         dateStyle: "medium",
                         timeStyle: "short",
                       })}
                     </td>
-                    <td className="px-3 py-2 text-zinc-800">
+                    <td className="px-3 py-2 text-ash-muted">
                       {labelPredictionKind(row.predictionKind)}
                     </td>
                     <td
                       className={`px-3 py-2 text-right font-medium tabular-nums ${
                         row.pointsDelta > 0
-                          ? "text-emerald-700"
+                          ? "text-ash-accent"
                           : row.pointsDelta < 0
-                            ? "text-red-700"
-                            : "text-zinc-900"
+                            ? "text-red-400"
+                            : "text-ash-text"
                       }`}
                     >
                       {row.pointsDelta > 0 ? "+" : ""}

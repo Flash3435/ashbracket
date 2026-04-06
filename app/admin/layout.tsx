@@ -13,14 +13,14 @@ export default async function AdminLayout({
 
   return (
     <div>
-      <div className="border-b border-zinc-200 bg-white">
+      <div className="border-b border-ash-border bg-ash-body">
         <div className="mx-auto flex w-full max-w-3xl items-center justify-between gap-3 px-4 py-3">
-          <p className="truncate text-sm text-zinc-600">
-            <span className="font-medium text-zinc-800">Admin</span>
+          <p className="truncate text-sm text-ash-muted">
+            <span className="font-medium text-ash-text">Admin</span>
             {user?.email ? (
               <>
-                <span className="mx-1.5 text-zinc-400">·</span>
-                <span className="text-zinc-500">{user.email}</span>
+                <span className="mx-1.5 text-ash-border">·</span>
+                <span className="text-ash-border-hover">{user.email}</span>
               </>
             ) : null}
           </p>

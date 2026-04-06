@@ -41,15 +41,15 @@ export default async function AdminPoolSettingsPage() {
       {loadError ? (
         <div className="space-y-4">
           <p
-            className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800"
+            className="rounded-md border border-red-800/80 bg-red-950/40 px-3 py-2 text-sm text-red-200"
             role="alert"
           >
             {loadError}
           </p>
-          <p className="text-sm text-zinc-500">
+          <p className="text-sm text-ash-muted">
             Ensure the sample pool id matches your database seed and your admin
             account is listed in{" "}
-            <code className="rounded bg-zinc-100 px-1 py-0.5 text-xs">
+            <code className="rounded bg-ash-body px-1 py-0.5 text-xs text-ash-text">
               app_admins
             </code>
             .
@@ -57,16 +57,16 @@ export default async function AdminPoolSettingsPage() {
         </div>
       ) : initial ? (
         <>
-          <p className="mb-6 text-sm text-zinc-500">
+          <p className="mb-6 text-sm text-ash-muted">
             Pool id:{" "}
-            <code className="rounded bg-zinc-100 px-1 py-0.5 text-xs">
+            <code className="rounded bg-ash-body px-1 py-0.5 text-xs text-ash-text">
               {SAMPLE_POOL_ID}
             </code>
           </p>
           <PoolSettingsForm initial={initial} />
         </>
       ) : (
-        <p className="text-sm text-zinc-600">No pool data to display.</p>
+        <p className="text-sm text-ash-muted">No pool data to display.</p>
       )}
     </PageContainer>
   );

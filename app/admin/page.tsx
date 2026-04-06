@@ -12,12 +12,9 @@ export default function AdminPage() {
         title="Admin"
         description="Configure pools, invite participants, and manage the tournament. These routes require an admin sign-in."
       />
-      <ul className="list-inside list-disc space-y-2 text-sm text-zinc-600">
+      <ul className="list-inside list-disc space-y-2 text-sm text-ash-muted">
         <li>
-          <Link
-            href="/admin/settings"
-            className="font-medium text-emerald-700 underline-offset-4 hover:underline"
-          >
+          <Link href="/admin/settings" className="ash-link">
             Pool settings
           </Link>
           <span> — name, public visibility, and lock time.</span>
@@ -25,7 +22,7 @@ export default function AdminPage() {
         <li>
           <Link
             href="/admin/picks"
-            className="font-medium text-emerald-700 underline-offset-4 hover:underline"
+            className="ash-link"
           >
             Participant picks
           </Link>
@@ -34,7 +31,7 @@ export default function AdminPage() {
         <li>
           <Link
             href="/admin/participants"
-            className="font-medium text-emerald-700 underline-offset-4 hover:underline"
+            className="ash-link"
           >
             Participants
           </Link>
@@ -43,7 +40,7 @@ export default function AdminPage() {
         <li>
           <Link
             href="/admin/results"
-            className="font-medium text-emerald-700 underline-offset-4 hover:underline"
+            className="ash-link"
           >
             Results
           </Link>
@@ -56,7 +53,7 @@ export default function AdminPage() {
         <li>
           <Link
             href="/admin/tournament"
-            className="font-medium text-emerald-700 underline-offset-4 hover:underline"
+            className="ash-link"
           >
             Tournament sync
           </Link>
@@ -68,7 +65,7 @@ export default function AdminPage() {
         <li>
           <Link
             href="/admin/tournament/status"
-            className="font-medium text-emerald-700 underline-offset-4 hover:underline"
+            className="ash-link"
           >
             Tournament status
           </Link>

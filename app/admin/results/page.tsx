@@ -9,6 +9,7 @@ import {
   mapTeamRow,
   mapTournamentStageRow,
 } from "../../../lib/results/mapRows";
+import { TEAM_TABLE_SELECT } from "../../../lib/teams/teamDbSelect";
 import type { Result, Team, TournamentStage } from "../../../src/types/domain";
 
 export const dynamic = "force-dynamic";
@@ -27,7 +28,7 @@ export default async function AdminResultsPage() {
     const [teamsRes, stagesRes, resultsRes] = await Promise.all([
       supabase
         .from("teams")
-        .select("id, name, country_code, fifa_code, created_at, updated_at")
+        .select(TEAM_TABLE_SELECT)
         .order("name", { ascending: true }),
       supabase
         .from("tournament_stages")
@@ -82,7 +83,7 @@ export default async function AdminResultsPage() {
         description="Enter official outcomes by stage (quarterfinal through champion). Each save updates the results table, recomputes scores for the configured pool, and replaces points_ledger for that pool."
       />
       {loadError ? (
-        <p className="mb-4 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800">
+        <p className="mb-4 rounded-md border border-red-800/80 bg-red-950/40 px-3 py-2 text-sm text-red-200">
           {loadError}
         </p>
       ) : null}
@@ -90,7 +91,7 @@ export default async function AdminResultsPage() {
         <RecomputeStandingsPanel />
       </div>
       {!loadError && teams.length === 0 ? (
-        <p className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+        <p className="rounded-md border border-amber-700/50 bg-amber-950/30 px-3 py-2 text-sm text-amber-100">
           No teams found. Add rows to the teams table (or run seed.sql) before
           you can enter results.
         </p>

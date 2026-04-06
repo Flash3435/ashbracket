@@ -8,7 +8,7 @@ export default function AdminPicksLoading() {
         title="Participant picks"
         description="Loading pool participants, teams, and stages…"
       />
-      <p className="text-sm text-zinc-500" aria-live="polite">
+      <p className="text-sm text-ash-muted" aria-live="polite">
         Loading…
       </p>
     </PageContainer>

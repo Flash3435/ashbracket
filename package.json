@@ -12,7 +12,8 @@
     "start": "next start",
     "lint": "eslint",
     "test:scoring": "tsx src/lib/scoring/computePoolScores.selftest.ts",
-    "seed:wc2026": "tsx scripts/seed-official-wc2026.ts"
+    "seed:wc2026": "tsx scripts/seed-official-wc2026.ts",
+    "seed:fifa-ranks": "tsx scripts/seed-fifa-ranks.ts"
   },
   "dependencies": {
     "@supabase/ssr": "^0.10.0",

@@ -11,7 +11,7 @@ type SignOutButtonProps = {
 
 export function SignOutButton({
   redirectTo = "/",
-  className = "rounded-md border border-zinc-300 bg-white px-3 py-1.5 text-sm font-medium text-zinc-700 shadow-sm hover:bg-zinc-50 disabled:opacity-50",
+  className = "btn-ghost px-3 py-1.5 text-sm disabled:opacity-50",
 }: SignOutButtonProps) {
   const router = useRouter();
   const [loading, setLoading] = useState(false);

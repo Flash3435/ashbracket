@@ -36,14 +36,11 @@ export default async function AdminTournamentPage() {
 
   return (
     <PageContainer>
-      <p className="mb-4 text-sm">
-        <Link
-          href="/admin/tournament/status"
-          className="font-medium text-emerald-700 underline-offset-4 hover:underline"
-        >
+      <p className="mb-4 text-sm text-ash-muted">
+        <Link href="/admin/tournament/status" className="ash-link">
           Tournament status
         </Link>
-        <span className="text-zinc-600">
+        <span>
           {" "}
           — edition details, counts, ledger freshness, locked rows.
         </span>
@@ -54,46 +51,43 @@ export default async function AdminTournamentPage() {
         description="Official schedule and scores live in tournament_matches. Sync derives scoring results and recomputes standings. Knockout rows can carry scoring_* columns when you add them via seed or SQL."
       />
 
-      <div className="mb-6 space-y-2 rounded-lg border border-zinc-200 bg-white p-4 text-sm text-zinc-700 shadow-sm">
+      <div className="ash-surface mb-6 space-y-2 p-4 text-sm text-ash-muted">
         <p>
-          <span className="font-medium text-zinc-900">Edition:</span>{" "}
+          <span className="font-medium text-ash-text">Edition:</span>{" "}
           {edition
             ? `${edition.name} (${edition.code})`
             : `Not loaded — run npm run seed:wc2026 with a service role key.`}
         </p>
         <p>
-          <span className="font-medium text-zinc-900">Matches in DB:</span>{" "}
+          <span className="font-medium text-ash-text">Matches in DB:</span>{" "}
           {matchCount ?? "—"}
         </p>
         <p>
-          <span className="font-medium text-zinc-900">
+          <span className="font-medium text-ash-text">
             Group matches marked finished:
           </span>{" "}
           {edition ? finishedGroupMatches : "—"}
         </p>
       </div>
 
-      <div className="flex flex-col gap-4 rounded-lg border border-zinc-200 bg-white p-4 shadow-sm">
-        <p className="text-sm text-zinc-600">
+      <div className="ash-surface flex flex-col gap-4 p-4">
+        <p className="text-sm text-ash-muted">
           Enter scores in Supabase (or via a future API adapter calling{" "}
-          <code className="rounded bg-zinc-100 px-1 text-xs">
+          <code className="rounded bg-ash-body px-1 text-xs text-ash-text">
             syncOfficialTournament(..., {"{"} patches: [...] {"}"})
           </code>
-          ). Set <code className="rounded bg-zinc-100 px-1">sync_locked</code>{" "}
+          ). Set <code className="rounded bg-ash-body px-1 text-ash-text">sync_locked</code>{" "}
           on a match row to freeze automated score updates for that match.
         </p>
         <form action={runTournamentSyncAction}>
-          <button
-            type="submit"
-            className="rounded-md bg-emerald-700 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-emerald-800"
-          >
+          <button type="submit" className="btn-primary">
             Run sync → scoring results → standings
           </button>
         </form>
       </div>
 
-      <p className="mt-8 text-sm text-zinc-500">
-        <Link href="/admin" className="text-emerald-700 underline-offset-4 hover:underline">
+      <p className="mt-8 text-sm text-ash-muted">
+        <Link href="/admin" className="ash-link">
           ← Admin home
         </Link>
       </p>

@@ -1,4 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { applyFifaRankSnapshot } from "./applyFifaRankSnapshot";
 import wc from "./wc2026Data.json";
 import { groupRoundRobinPairings } from "./groupRoundRobin";
 
@@ -24,6 +25,14 @@ export async function seedOfficialWc2026(
     onConflict: "country_code",
   });
   if (teamErr) return { ok: false, error: teamErr.message };
+
+  const rankOut = await applyFifaRankSnapshot(supabase);
+  if (!rankOut.ok) {
+    return {
+      ok: false,
+      error: `Teams saved but FIFA rank snapshot failed: ${rankOut.error}`,
+    };
+  }
 
   const codes = Object.keys(teamMap);
   const { data: teamSel, error: selErr } = await supabase

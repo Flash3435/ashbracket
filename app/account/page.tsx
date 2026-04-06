@@ -41,16 +41,13 @@ export default async function AccountPage() {
               : "Your pool profiles are listed below."
           }
         />
-        <SignOutButton className="shrink-0 self-start rounded-md border border-zinc-300 bg-white px-3 py-2 text-sm font-medium text-zinc-700 shadow-sm hover:bg-zinc-50 disabled:opacity-50" />
+        <SignOutButton className="btn-ghost shrink-0 self-start text-sm disabled:opacity-50" />
       </div>
 
       {admin ? (
-        <p className="mb-4 rounded-md border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-700">
+        <p className="mb-4 rounded-md border border-ash-border bg-ash-surface px-3 py-2 text-sm text-ash-muted">
           You have organizer access. Open{" "}
-          <Link
-            href="/admin"
-            className="font-medium text-emerald-700 underline-offset-4 hover:underline"
-          >
+          <Link href="/admin" className="ash-link">
             Admin
           </Link>{" "}
           to manage the pool.
@@ -58,21 +55,18 @@ export default async function AccountPage() {
       ) : null}
 
       {error ? (
-        <p className="text-sm text-red-700" role="alert">
+        <p className="text-sm text-red-300" role="alert">
           {error.message}
         </p>
       ) : null}
 
       {!error && list.length === 0 ? (
-        <div className="rounded-lg border border-zinc-200 bg-white p-6 shadow-sm">
-          <p className="text-sm text-zinc-700">
+        <div className="ash-surface p-6">
+          <p className="text-sm text-ash-muted">
             You are not linked to a pool yet. Use your join code to create or
             claim a profile.
           </p>
-          <Link
-            href="/join"
-            className="mt-4 inline-flex rounded-md bg-emerald-700 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-emerald-800"
-          >
+          <Link href="/join" className="btn-primary mt-4 inline-flex">
             Join a pool
           </Link>
         </div>
@@ -86,7 +80,7 @@ export default async function AccountPage() {
                 ? `/account/picks?participant=${list[0].id}`
                 : "/account/picks"
             }
-            className="inline-flex rounded-md bg-emerald-700 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-emerald-800"
+            className="btn-primary inline-flex"
           >
             {list.length === 1 ? "Enter your picks" : "Your picks"}
           </Link>
@@ -98,24 +92,22 @@ export default async function AccountPage() {
           {list.map((p) => (
             <li
               key={p.id}
-              className="rounded-lg border border-zinc-200 bg-white p-4 shadow-sm"
+              className="ash-surface p-4"
             >
-              <p className="font-medium text-zinc-900">{p.display_name}</p>
-              <p className="mt-1 text-xs text-zinc-500">
-                Pool id <code className="rounded bg-zinc-100 px-1">{p.pool_id}</code>
+              <p className="font-medium text-ash-text">{p.display_name}</p>
+              <p className="mt-1 text-xs text-ash-muted">
+                Pool id{" "}
+                <code className="rounded bg-ash-body px-1 text-ash-text">{p.pool_id}</code>
                 {p.pool_id === SAMPLE_POOL_ID ? " · sample pool" : null}
               </p>
               <div className="mt-3 flex flex-wrap gap-3 text-sm">
                 <Link
                   href={`/participant/${p.id}`}
-                  className="font-medium text-emerald-700 underline-offset-4 hover:underline"
+                  className="ash-link"
                 >
                   Public profile
                 </Link>
-                <Link
-                  href={`/account/picks?participant=${p.id}`}
-                  className="font-medium text-emerald-700 underline-offset-4 hover:underline"
-                >
+                <Link href={`/account/picks?participant=${p.id}`} className="ash-link">
                   Edit picks
                 </Link>
               </div>
@@ -125,8 +117,8 @@ export default async function AccountPage() {
       ) : null}
 
       {sample ? (
-        <p className="mt-6 text-sm text-zinc-500">
-          <Link href="/" className="underline-offset-4 hover:underline">
+        <p className="mt-6 text-sm text-ash-muted">
+          <Link href="/" className="ash-link">
             Home
           </Link>{" "}
           shows the sample pool leaderboard.

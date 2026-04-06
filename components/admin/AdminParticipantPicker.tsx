@@ -23,7 +23,7 @@ export function AdminParticipantPicker({
     <div className="space-y-2">
       <label
         htmlFor="admin-participant-picker"
-        className="block text-sm font-medium text-zinc-800"
+        className="block text-sm font-medium text-ash-text"
       >
         Participant
       </label>
@@ -38,7 +38,7 @@ export function AdminParticipantPicker({
           }
           router.push(`${basePath}?participant=${encodeURIComponent(id)}`);
         }}
-        className="w-full max-w-md rounded-md border border-zinc-300 px-3 py-2 text-sm text-zinc-900 shadow-sm focus:border-emerald-600 focus:outline-none focus:ring-1 focus:ring-emerald-600"
+        className="w-full max-w-md rounded-md border border-ash-border bg-ash-body px-3 py-2 text-sm text-ash-text shadow-sm focus:border-ash-accent focus:outline-none focus:ring-1 focus:ring-ash-accent"
       >
         <option value="">— Select a participant —</option>
         {participants.map((p) => (

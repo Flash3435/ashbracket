@@ -43,11 +43,11 @@ export default async function SignupPage({
         description="Use the same email your organizer invited, if they mentioned one. After signing up, you can enter your join code on the next step."
       />
       <SignupForm redirectAfterSignup={redirectAfterSignup} />
-      <p className="mt-4 text-center text-sm text-zinc-600">
+      <p className="mt-4 text-center text-sm text-ash-muted">
         Already have an account?{" "}
         <Link
           href={`/login${sp.next ? `?next=${encodeURIComponent(sp.next)}` : ""}`}
-          className="font-medium text-emerald-700 underline-offset-4 hover:underline"
+          className="ash-link"
         >
           Sign in
         </Link>

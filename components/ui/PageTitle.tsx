@@ -7,11 +7,13 @@ export function PageTitle({
 }) {
   return (
     <div className="space-y-2">
-      <h1 className="text-2xl font-semibold tracking-tight text-zinc-900">
+      <h1 className="text-3xl font-bold tracking-tight text-ash-text">
         {title}
       </h1>
       {description ? (
-        <p className="text-base leading-relaxed text-zinc-600">{description}</p>
+        <p className="text-base font-normal leading-relaxed text-ash-muted">
+          {description}
+        </p>
       ) : null}
     </div>
   );
