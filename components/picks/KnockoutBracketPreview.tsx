@@ -8,6 +8,7 @@ import {
   sortKnockoutDraftsBySlot,
   type BracketSide,
 } from "../../lib/predictions/knockoutBracketLayout";
+import { thirdPlaceSlotInvalidReason } from "../../lib/predictions/knockoutPickConsistency";
 import type { KnockoutPickSlotDraft } from "../../types/adminKnockoutPicks";
 import type { Team } from "../../src/types/domain";
 
@@ -120,9 +121,11 @@ function RoundColumn({
 function ThirdPlaceStrip({
   rows,
   teamById,
+  allSlots,
 }: {
   rows: KnockoutPickSlotDraft[];
   teamById: Map<string, Team>;
+  allSlots: KnockoutPickSlotDraft[];
 }) {
   const sorted = sortKnockoutDraftsBySlot(rows);
   return (
@@ -132,7 +135,8 @@ function ThirdPlaceStrip({
       </p>
       <p className="mt-1 text-[11px] leading-relaxed text-ash-muted">
         Your eight advancing third-place teams (order does not matter for scoring).
-        FIFA decides which bracket positions they occupy after the group stage.
+        They cannot overlap teams you picked 1st or 2nd in a group. FIFA decides
+        which bracket positions they occupy after the group stage.
       </p>
       <ul className="mt-2 flex flex-wrap gap-2">
         {sorted.map((row) => {
@@ -142,19 +146,29 @@ function ThirdPlaceStrip({
           const flag = team
             ? flagEmojiForFifaCountryCode(team.countryCode)
             : "";
+          const conflict = thirdPlaceSlotInvalidReason(row, allSlots);
           return (
             <li
               key={row.rowKey}
-              className={`inline-flex max-w-[200px] items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs ${
-                picked
-                  ? "border-ash-accent/40 bg-ash-accent/10 text-ash-text"
-                  : "border-ash-border/60 text-ash-muted"
+              className={`inline-flex max-w-[220px] flex-col gap-0.5 rounded-lg border px-2.5 py-1.5 text-xs ${
+                conflict
+                  ? "border-amber-700/50 bg-amber-950/25 text-amber-100"
+                  : picked
+                    ? "border-ash-accent/40 bg-ash-accent/10 text-ash-text"
+                    : "border-ash-border/60 text-ash-muted"
               }`}
             >
-              <span aria-hidden>{picked ? flag : "○"}</span>
-              <span className="truncate">
-                {picked ? team!.name : "Not picked"}
+              <span className="inline-flex items-center gap-1.5">
+                <span aria-hidden>{picked ? flag : "○"}</span>
+                <span className="truncate font-medium">
+                  {picked ? team!.name : "Not picked"}
+                </span>
               </span>
+              {conflict ? (
+                <span className="block text-[10px] leading-snug text-amber-200/95">
+                  {conflict} — fix in list view.
+                </span>
+              ) : null}
             </li>
           );
         })}
@@ -233,7 +247,7 @@ export function KnockoutBracketPreview({
         Group stage and bonus questions stay in the list steps.
       </p>
 
-      <ThirdPlaceStrip rows={third} teamById={teamById} />
+      <ThirdPlaceStrip rows={third} teamById={teamById} allSlots={slots} />
 
       <div
         className="overflow-x-auto rounded-lg border border-ash-border bg-ash-body/20 p-2 sm:p-3"

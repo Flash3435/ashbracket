@@ -173,6 +173,47 @@ export const DEFAULT_PARTICIPANT_BONUS_KEYS = [
   "most_red_cards",
 ] as const;
 
+/**
+ * Known bonus keys after the three default participant questions (e.g. pool-specific extras).
+ * Used only for stable sort order when merging with `scoring_rules`.
+ */
+const ADDITIONAL_BONUS_KEY_ORDER: readonly string[] = ["golden_boot"];
+
+function sortIndexForMergedBonusKey(key: string): number {
+  const defaults = DEFAULT_PARTICIPANT_BONUS_KEYS as readonly string[];
+  const d = defaults.indexOf(key);
+  if (d >= 0) return d;
+  const a = ADDITIONAL_BONUS_KEY_ORDER.indexOf(key);
+  if (a >= 0) return DEFAULT_PARTICIPANT_BONUS_KEYS.length + a;
+  return 1000;
+}
+
+/**
+ * Builds the ordered list of bonus pick keys shown to participants.
+ * Always includes every `DEFAULT_PARTICIPANT_BONUS_KEYS` entry so the UI never drops
+ * a standard question when `scoring_rules` is missing a row (legacy DBs).
+ * Adds any extra `bonus_key` values from the pool’s scoring rules (e.g. golden_boot).
+ */
+export function participantBonusKeysForPool(
+  scoringRuleBonusKeys: readonly string[],
+): string[] {
+  const seen = new Set<string>();
+  for (const k of DEFAULT_PARTICIPANT_BONUS_KEYS) {
+    const t = k.trim();
+    if (t) seen.add(t);
+  }
+  for (const k of scoringRuleBonusKeys) {
+    const t = (k ?? "").trim();
+    if (t) seen.add(t);
+  }
+  return [...seen].sort((a, b) => {
+    const ia = sortIndexForMergedBonusKey(a);
+    const ib = sortIndexForMergedBonusKey(b);
+    if (ia !== ib) return ia - ib;
+    return a.localeCompare(b);
+  });
+}
+
 export function buildAllParticipantPickDrafts(input: {
   stageByCode: Partial<Record<TournamentStage["code"], TournamentStage>>;
   predictions: Prediction[];

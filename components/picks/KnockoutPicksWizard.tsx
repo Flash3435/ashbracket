@@ -7,7 +7,10 @@ import type { SaveKnockoutPicksResult } from "../../types/knockoutPicksSave";
 import type { Team } from "../../src/types/domain";
 import {
   assignParticipantPickDeduped,
+  buildThirdPlacePickChooserOptions,
   eligibleRoundOf32Pool,
+  pruneParticipantPicks,
+  thirdPlaceSlotInvalidReason,
 } from "../../lib/predictions/knockoutPickConsistency";
 import { applyQuickPickToSlots } from "../../lib/predictions/knockoutQuickPickStrategies";
 import { flagEmojiForFifaCountryCode } from "../../lib/teams/fifaToIso2ForFlag";
@@ -87,6 +90,7 @@ type WizardStepDef =
 
 function participantWizardSteps(
   knockoutBracketPicksUnlocked: boolean,
+  bonusQuestionCount: number,
 ): WizardStepDef[] {
   const core: WizardStepDef[] = [
     {
@@ -104,7 +108,7 @@ function participantWizardSteps(
       title: "Best third-place teams",
       intro:
         "Choose the eight national teams you think will advance as the best third-place finishers. You are only predicting who qualifies — not which Round of 32 bracket slot FIFA assigns them to.",
-      hint: "Any eight different teams are allowed. Order in the list does not change your score.",
+      hint: "Teams must be different from every group winner and runner-up you picked. Order in this list does not change your score. (Picking who finishes third in each group is not part of this pool yet — any eligible national team can be chosen here.)",
     },
   ];
 
@@ -163,13 +167,17 @@ function participantWizardSteps(
       ]
     : [];
 
+  const bonusIntro =
+    bonusQuestionCount > 0
+      ? `${bonusQuestionCount} extra question${bonusQuestionCount === 1 ? "" : "s"} for the whole tournament. One team per question.`
+      : "Extra questions for the whole tournament. One team per question.";
+
   const bonus: WizardStepDef[] = [
     {
       id: 0,
       mode: "bonus",
       title: "Bonus picks",
-      intro:
-        "Three extra questions for the whole tournament. One team per question.",
+      intro: bonusIntro,
       hint: "These don’t affect your bracket chain — pick any team for each.",
     },
   ];
@@ -278,22 +286,6 @@ function allowedTeamsForPickRow(
   slots: KnockoutPickSlotDraft[],
   allTeams: Team[],
 ): Team[] {
-  if (row.predictionKind === "third_place_qualifier") {
-    const taken = new Set(
-      slots
-        .filter(
-          (s) =>
-            s.predictionKind === "third_place_qualifier" &&
-            s.rowKey !== row.rowKey &&
-            s.teamId.trim(),
-        )
-        .map((s) => s.teamId.trim()),
-    );
-    return allTeams.filter(
-      (t) => !taken.has(t.id) || t.id === row.teamId.trim(),
-    );
-  }
-
   if (row.predictionKind === "round_of_32") {
     const eligible = eligibleRoundOf32Pool(slots);
     const taken = new Set(
@@ -462,6 +454,8 @@ function emptyOptionsHint(row: KnockoutPickSlotDraft): string {
       return "Finish your semi-final picks first.";
     case "champion":
       return "Pick two finalists first.";
+    case "third_place_qualifier":
+      return "No teams are available to list. Check that the tournament team list loaded.";
     default:
       return "No teams available.";
   }
@@ -485,12 +479,25 @@ export function KnockoutPicksWizard({
 }: KnockoutPicksWizardProps) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
-  const [slots, setSlots] = useState<KnockoutPickSlotDraft[]>(initialSlots);
+  const [slots, setSlots] = useState<KnockoutPickSlotDraft[]>(() =>
+    pruneParticipantPicks(initialSlots, {
+      freezeKnockoutProgressionPicks: !knockoutBracketPicksUnlocked,
+    }),
+  );
   const [step, setStep] = useState(0);
 
+  const bonusQuestionCount = useMemo(
+    () => slots.filter((s) => s.predictionKind === "bonus_pick").length,
+    [slots],
+  );
+
   const wizardSteps = useMemo(
-    () => participantWizardSteps(knockoutBracketPicksUnlocked),
-    [knockoutBracketPicksUnlocked],
+    () =>
+      participantWizardSteps(
+        knockoutBracketPicksUnlocked,
+        bonusQuestionCount,
+      ),
+    [knockoutBracketPicksUnlocked, bonusQuestionCount],
   );
   const [actionError, setActionError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
@@ -502,13 +509,21 @@ export function KnockoutPicksWizard({
   );
 
   useEffect(() => {
-    setSlots(initialSlots);
-  }, [initialSlots]);
+    startTransition(() => {
+      setSlots(
+        pruneParticipantPicks(initialSlots, {
+          freezeKnockoutProgressionPicks: !knockoutBracketPicksUnlocked,
+        }),
+      );
+    });
+  }, [initialSlots, knockoutBracketPicksUnlocked]);
 
   useEffect(() => {
-    setStep((s) =>
-      s >= wizardSteps.length ? Math.max(0, wizardSteps.length - 1) : s,
-    );
+    startTransition(() => {
+      setStep((s) =>
+        s >= wizardSteps.length ? Math.max(0, wizardSteps.length - 1) : s,
+      );
+    });
   }, [wizardSteps.length]);
 
   useEffect(() => {
@@ -880,11 +895,23 @@ export function KnockoutPicksWizard({
             </p>
           ) : null}
           {currentStepDef.mode === "bracket" &&
-          currentStepDef.bracketKind === "third_place_qualifier" &&
-          thirdFilled < 8 ? (
-            <p className="mt-4 rounded-md border border-amber-700/40 bg-amber-950/25 px-3 py-2 text-sm text-amber-100">
-              Choose all eight third-place advancers. {thirdFilled} of 8 so far.
-            </p>
+          currentStepDef.bracketKind === "third_place_qualifier" ? (
+            <div className="mt-4 space-y-3">
+              <p className="rounded-md border border-ash-border/60 bg-ash-body/25 px-3 py-2 text-xs leading-relaxed text-ash-muted">
+                Duplicate picks are not allowed: a team cannot be a third-place
+                advancer if you already have them finishing first or second in a
+                group, and the eight advancer slots must all be different teams.
+                If you change group finishes, conflicting third-place picks clear
+                immediately; reloading also reapplies these rules to anything stored
+                in the database.
+              </p>
+              {thirdFilled < 8 ? (
+                <p className="rounded-md border border-amber-700/40 bg-amber-950/25 px-3 py-2 text-sm text-amber-100">
+                  Choose all eight third-place advancers. {thirdFilled} of 8 so
+                  far.
+                </p>
+              ) : null}
+            </div>
           ) : null}
           {currentStepDef.mode === "bracket" &&
           currentStepDef.bracketKind === "round_of_32" &&
@@ -937,6 +964,8 @@ export function KnockoutPicksWizard({
               const isGroupRow =
                 row.predictionKind === "group_winner" ||
                 row.predictionKind === "group_runner_up";
+              const isThirdPlaceRow =
+                row.predictionKind === "third_place_qualifier";
               const groupEntries = isGroupRow
                 ? buildGroupPickChooserOptions(
                     row,
@@ -945,22 +974,30 @@ export function KnockoutPicksWizard({
                     groupTeamCountryCodesByLetter,
                   )
                 : null;
-              const flatOptions = isGroupRow
-                ? null
-                : allowedTeamsForPickRow(row, slots, teams);
+              const thirdPlaceEntries = isThirdPlaceRow
+                ? buildThirdPlacePickChooserOptions(row, slots, teams)
+                : null;
+              const chooserEntries = groupEntries ?? thirdPlaceEntries;
+              const flatOptions =
+                isGroupRow || isThirdPlaceRow
+                  ? null
+                  : allowedTeamsForPickRow(row, slots, teams);
+              const thirdInvalidReason = isThirdPlaceRow
+                ? thirdPlaceSlotInvalidReason(row, slots)
+                : null;
               const q = search.trim().toLowerCase();
               const rankQuery = /^\d{1,3}$/.test(q) ? parseInt(q, 10) : null;
-              const filteredGroupEntries =
-                groupEntries == null
+              const filteredChooserEntries =
+                chooserEntries == null
                   ? null
                   : q
-                    ? groupEntries.filter(
+                    ? chooserEntries.filter(
                         ({ team: t }) =>
                           (rankQuery != null && t.fifaRank === rankQuery) ||
                           t.name.toLowerCase().includes(q) ||
                           t.countryCode.toLowerCase().includes(q),
                       )
-                    : groupEntries;
+                    : chooserEntries;
               const filteredFlat =
                 flatOptions == null
                   ? null
@@ -1032,11 +1069,24 @@ export function KnockoutPicksWizard({
                     </button>
                   </div>
 
+                  {thirdInvalidReason ? (
+                    <p
+                      className="mt-2 rounded-md border border-amber-700/50 bg-amber-950/30 px-3 py-2 text-xs text-amber-100"
+                      role="alert"
+                    >
+                      This pick no longer fits your group-stage choices:{" "}
+                      {thirdInvalidReason}. Choose another team or adjust the
+                      group finish for that nation.
+                    </p>
+                  ) : null}
+
                   {openRowKey === row.rowKey ? (
                     <div className="mt-3 border-t border-ash-border pt-3">
                       <label className="block text-xs font-medium text-ash-muted">
                         {isGroupRow && row.groupCode
                           ? `Search teams in Group ${row.groupCode}`
+                          : isThirdPlaceRow
+                            ? "Search teams (ineligible teams stay visible with a short reason)"
                           : "Search teams"}
                         <input
                           value={search}
@@ -1046,24 +1096,28 @@ export function KnockoutPicksWizard({
                           placeholder={
                             isGroupRow && row.groupCode
                               ? `Country name, code, or FIFA rank — Group ${row.groupCode} only`
-                              : "Type a country name or code"
+                              : isThirdPlaceRow
+                                ? "Country name, code, or FIFA rank — unavailable teams show why"
+                                : "Type a country name or code"
                           }
                           autoComplete="off"
                         />
                       </label>
-                      {isGroupRow && groupEntries != null ? (
-                        groupEntries.length === 0 ? (
+                      {chooserEntries != null ? (
+                        chooserEntries.length === 0 ? (
                           <p className="mt-2 text-sm text-amber-200">
                             {emptyOptionsHint(row)}
                           </p>
-                        ) : filteredGroupEntries != null &&
-                          filteredGroupEntries.length === 0 ? (
+                        ) : filteredChooserEntries != null &&
+                          filteredChooserEntries.length === 0 ? (
                           <p className="mt-2 text-sm text-ash-muted">
-                            No teams in this group match your search.
+                            {isGroupRow
+                              ? "No teams in this group match your search."
+                              : "No teams match your search."}
                           </p>
                         ) : (
                           <ul className="mt-2 max-h-52 overflow-y-auto rounded-md border border-ash-border bg-ash-body p-1 sm:grid sm:max-h-64 sm:grid-cols-2 sm:gap-1">
-                            {filteredGroupEntries!.map(
+                            {filteredChooserEntries!.map(
                               ({ team: t, disabled: optDisabled, disabledReason }) => {
                                 const f =
                                   flagEmojiForFifaCountryCode(t.countryCode);

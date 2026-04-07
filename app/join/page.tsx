@@ -30,8 +30,11 @@ export default async function JoinPage({
   } = await supabase.auth.getUser();
 
   const joinPath = buildJoinPath(code, invite);
+  const trimmedInvite = invite.trim();
   const loginHref = `/login?next=${encodeURIComponent(joinPath)}`;
-  const signupHref = `/signup?next=${encodeURIComponent(joinPath)}`;
+  const signupHref = trimmedInvite
+    ? `/signup?invite=${encodeURIComponent(trimmedInvite)}&next=${encodeURIComponent(joinPath)}`
+    : `/signup?next=${encodeURIComponent(joinPath)}`;
 
   const inviteMode = Boolean(invite.trim());
 
@@ -41,7 +44,7 @@ export default async function JoinPage({
         title="Join a pool"
         description={
           inviteMode
-            ? "You have a personal invite. Sign in with the same email your organizer used, then accept the invite to open your bracket."
+            ? "You have a personal invite. Create your account with the email your organizer used, or sign in if you already have one — then we will open your bracket."
             : `Enter your join code, sign in, then create or claim your leaderboard name. Share link: /join?code=… (sample demo code: ${SAMPLE_POOL_JOIN_CODE}).`
         }
       />

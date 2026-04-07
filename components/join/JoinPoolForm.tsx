@@ -237,16 +237,29 @@ export function JoinPoolForm({
           <h2 className="text-sm font-bold text-ash-text">2. Your account</h2>
           <p className="text-sm text-ash-muted">
             {inviteMode
-              ? "Sign in or create an account using the email address your organizer used on the invite."
+              ? "Create your account using the email address your organizer invited. If you already have an account with that email, sign in instead."
               : "Sign in or sign up. After that, you can create or claim your pool profile here."}
           </p>
           <div className="flex flex-wrap gap-3">
-            <Link href={loginHref} className="btn-primary inline-flex text-sm">
-              Sign in
-            </Link>
-            <Link href={signupHref} className="btn-ghost inline-flex text-sm">
-              Create account
-            </Link>
+            {inviteMode ? (
+              <>
+                <Link href={signupHref} className="btn-primary inline-flex text-sm">
+                  Create account
+                </Link>
+                <Link href={loginHref} className="btn-ghost inline-flex text-sm">
+                  Sign in
+                </Link>
+              </>
+            ) : (
+              <>
+                <Link href={loginHref} className="btn-primary inline-flex text-sm">
+                  Sign in
+                </Link>
+                <Link href={signupHref} className="btn-ghost inline-flex text-sm">
+                  Create account
+                </Link>
+              </>
+            )}
           </div>
         </section>
       ) : null}

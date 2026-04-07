@@ -3,7 +3,7 @@ import { ACCOUNT_TOURNAMENT_STAGE_CODES } from "../account/loadAccountKnockoutSe
 import { buildAllParticipantPickDrafts } from "../predictions/buildParticipantPickDrafts";
 import { mapPredictionRow } from "../../src/lib/scoring/mapSupabaseRows";
 import type { Prediction, TournamentStage } from "../../src/types/domain";
-import { DEFAULT_PARTICIPANT_BONUS_KEYS } from "../predictions/buildParticipantPickDrafts";
+import { participantBonusKeysForPool } from "../predictions/buildParticipantPickDrafts";
 import { mapTournamentStageRow } from "../results/mapRows";
 import { isKnockoutProgressionKind } from "../predictions/knockoutProgressionKinds";
 import { fetchOfficialRoundOf32Complete } from "../tournament/fetchOfficialRoundOf32Complete";
@@ -94,8 +94,7 @@ export async function loadParticipantIdsWithIncompletePicks(
   const fromDb = (ruleRows ?? [])
     .map((r) => r.bonus_key as string | null)
     .filter((k): k is string => Boolean(k && k.trim()));
-  const bonusKeys =
-    fromDb.length > 0 ? fromDb : [...DEFAULT_PARTICIPANT_BONUS_KEYS];
+  const bonusKeys = participantBonusKeysForPool(fromDb);
 
   const r32Stage = stages.find((s) => s.code === "round_of_32");
   const knockoutBracketPicksUnlocked = r32Stage

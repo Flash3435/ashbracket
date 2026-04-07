@@ -8,7 +8,7 @@ import { SAMPLE_POOL_ID } from "../../../lib/config/sample-pool";
 import { ACCOUNT_TOURNAMENT_STAGE_CODES } from "../../../lib/account/loadAccountKnockoutSelection";
 import {
   buildAllParticipantPickDrafts,
-  DEFAULT_PARTICIPANT_BONUS_KEYS,
+  participantBonusKeysForPool,
 } from "../../../lib/predictions/buildParticipantPickDrafts";
 import {
   mapParticipantRow,
@@ -47,7 +47,7 @@ export default async function AdminPicksPage({ searchParams }: PageProps) {
   let teams: Team[] = [];
   let stages: TournamentStage[] = [];
   let predictions: Prediction[] = [];
-  let bonusKeysOrdered: string[] = [...DEFAULT_PARTICIPANT_BONUS_KEYS];
+  let bonusKeysOrdered: string[] = participantBonusKeysForPool([]);
   let groupTeamCountryCodesByLetter: Record<string, string[]> = {};
   let loadError: string | null = null;
   let selectedParticipant: Participant | null = null;
@@ -133,7 +133,7 @@ export default async function AdminPicksPage({ searchParams }: PageProps) {
           const fromDb = (ruleRows ?? [])
             .map((r) => r.bonus_key as string | null)
             .filter((k): k is string => Boolean(k && k.trim()));
-          if (fromDb.length > 0) bonusKeysOrdered = fromDb;
+          bonusKeysOrdered = participantBonusKeysForPool(fromDb);
         }
       }
     }

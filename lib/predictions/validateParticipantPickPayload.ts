@@ -1,5 +1,6 @@
 import type { ParticipantPickSlotPayload } from "../../types/knockoutPicksSave";
 import type { SaveKnockoutPicksResult } from "../../types/knockoutPicksSave";
+import { validateParticipantSlotsThirdPlaceRules } from "./knockoutPickConsistency";
 
 const ALLOWED_KINDS = new Set([
   "group_winner",
@@ -49,6 +50,11 @@ export function validateParticipantPickSaveInput(input: {
     if (tid && !PARTICIPANT_PICK_UUID_RE.test(tid)) {
       return { ok: false, error: "Invalid team id." };
     }
+  }
+
+  const thirdErr = validateParticipantSlotsThirdPlaceRules(input.slots);
+  if (thirdErr) {
+    return { ok: false, error: thirdErr };
   }
 
   return null;

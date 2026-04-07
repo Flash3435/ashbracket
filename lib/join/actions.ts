@@ -103,7 +103,14 @@ export async function claimPoolParticipant(
 }
 
 export type PeekInviteResult =
-  | { ok: true; poolId: string; poolName: string; displayName: string }
+  | {
+      ok: true;
+      poolId: string;
+      poolName: string;
+      displayName: string;
+      /** Lowercased email on the invite row; null if organizer left it blank. */
+      invitedEmail: string | null;
+    }
   | { ok: false; message: string };
 
 /**
@@ -152,6 +159,7 @@ export async function peekParticipantInvite(
   const poolId = row?.pool_id as string | undefined;
   const poolName = row?.pool_name as string | undefined;
   const displayName = row?.display_name as string | undefined;
+  const invitedEmail = (row?.invited_email as string | null | undefined) ?? null;
   if (!poolId || !poolName || !displayName) {
     return {
       ok: false,
@@ -160,7 +168,7 @@ export async function peekParticipantInvite(
     };
   }
 
-  return { ok: true, poolId, poolName, displayName };
+  return { ok: true, poolId, poolName, displayName, invitedEmail };
 }
 
 export async function claimParticipantInvite(

@@ -1,7 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import {
   buildAllParticipantPickDrafts,
-  DEFAULT_PARTICIPANT_BONUS_KEYS,
+  participantBonusKeysForPool,
 } from "../predictions/buildParticipantPickDrafts";
 import {
   mapParticipantRow,
@@ -101,7 +101,7 @@ export async function loadAccountKnockoutSelection(
   let teams: Team[] = [];
   let stages: TournamentStage[] = [];
   let predictions: Prediction[] = [];
-  let bonusKeysOrdered: string[] = [...DEFAULT_PARTICIPANT_BONUS_KEYS];
+  let bonusKeysOrdered: string[] = participantBonusKeysForPool([]);
   let groupTeamCountryCodesByLetter: Record<string, string[]> = {};
   let knockoutBracketPicksUnlocked = true;
   let loadError: string | null = null;
@@ -248,9 +248,7 @@ export async function loadAccountKnockoutSelection(
           const fromDb = (ruleRows ?? [])
             .map((r) => r.bonus_key as string | null)
             .filter((k): k is string => Boolean(k && k.trim()));
-          if (fromDb.length > 0) {
-            bonusKeysOrdered = fromDb;
-          }
+          bonusKeysOrdered = participantBonusKeysForPool(fromDb);
         }
       }
     }
