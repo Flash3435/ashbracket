@@ -1,6 +1,6 @@
 /**
  * Regenerates app/icon.png, app/apple-icon.png, and app/favicon.ico
- * from public/brand/ashbracket-logo-source.png (wide logo → square, transparent pad).
+ * from public/brand/ashbracket-logo-source.png (contain-fit → square, transparent pad).
  */
 import { writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
