@@ -4,11 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import { getSiteUrl } from "@/lib/site-url";
 import { isAppAdmin } from "../../../lib/auth/isAppAdmin";
 import { SAMPLE_POOL_ID } from "../../../lib/config/sample-pool";
-import {
-  buildCustomPoolEmail,
-  buildDeadlineReminderEmail,
-  buildPaymentReminderEmail,
-} from "../../../lib/communications/messageTemplates";
+import { renderTemplatedPoolEmail } from "../../../lib/communications/messageTemplates";
 import { loadParticipantIdsWithIncompletePicks } from "../../../lib/communications/picksCompleteness";
 import {
   type PoolCommunicationParticipant,
@@ -28,43 +24,12 @@ export type MessageKind =
 export type SendPoolCommunicationsResult =
   | {
       ok: true;
-      /** Resend + from-address env is present. */
       deliveryConfigured: boolean;
       recipientCount: number;
-      /** Successfully handed to Resend (0 if not configured or no recipients). */
       emailsAccepted: number;
       failures: { email: string; error: string }[];
     }
   | { ok: false; error: string };
-
-function messageForRecipient(
-  kind: MessageKind,
-  displayName: string,
-  poolName: string,
-  lockAt: string | null,
-  customSubject: string,
-  customBody: string,
-  siteUrl: string,
-): { subject: string; text: string; html: string } {
-  if (kind === "payment_reminder") {
-    return buildPaymentReminderEmail({ displayName, poolName, siteUrl });
-  }
-  if (kind === "deadline_reminder") {
-    return buildDeadlineReminderEmail({
-      displayName,
-      poolName,
-      lockAtIso: lockAt,
-      siteUrl,
-    });
-  }
-  return buildCustomPoolEmail({
-    displayName,
-    poolName,
-    lockAtIso: lockAt,
-    subjectTemplate: customSubject,
-    bodyTemplate: customBody,
-  });
-}
 
 async function loadPoolMeta(
   supabase: Awaited<ReturnType<typeof createClient>>,
@@ -114,12 +79,19 @@ async function loadCommunicationParticipants(
   }));
 }
 
+function validateTemplates(subjectTemplate: string, bodyTemplate: string): string | null {
+  const sub = subjectTemplate.trim();
+  const body = bodyTemplate.trim();
+  if (!sub) return "Add a subject.";
+  if (!body) return "Add a message body.";
+  return null;
+}
+
 export async function sendPoolCommunicationsAction(input: {
   preset: RecipientPreset;
   selectedParticipantIds: string[];
-  messageKind: MessageKind;
-  customSubject?: string;
-  customBody?: string;
+  subjectTemplate: string;
+  bodyTemplate: string;
 }): Promise<SendPoolCommunicationsResult> {
   try {
     const supabase = await createClient();
@@ -133,23 +105,16 @@ export async function sendPoolCommunicationsAction(input: {
       return { ok: false, error: "Not allowed." };
     }
 
-    if (input.messageKind === "custom") {
-      const sub = input.customSubject?.trim() ?? "";
-      const body = input.customBody?.trim() ?? "";
-      if (!sub) {
-        return { ok: false, error: "Add a subject for your custom email." };
-      }
-      if (!body) {
-        return { ok: false, error: "Add a message body." };
-      }
-    }
+    const err = validateTemplates(input.subjectTemplate, input.bodyTemplate);
+    if (err) return { ok: false, error: err };
 
     if (input.preset === "selected") {
       const sel = input.selectedParticipantIds.filter((x) => x.trim());
       if (sel.length === 0) {
         return {
           ok: false,
-          error: "Choose at least one person when sending to selected participants.",
+          error:
+            "Choose at least one person when sending to selected participants.",
         };
       }
     }
@@ -174,8 +139,6 @@ export async function sendPoolCommunicationsAction(input: {
     const failures: { email: string; error: string }[] = [];
     let emailsAccepted = 0;
 
-    const customSubject = input.customSubject ?? "";
-    const customBody = input.customBody ?? "";
     const siteUrl = getSiteUrl();
 
     if (!configured) {
@@ -189,15 +152,14 @@ export async function sendPoolCommunicationsAction(input: {
     }
 
     for (const t of targets) {
-      const msg = messageForRecipient(
-        input.messageKind,
-        t.displayName,
-        pool.name,
-        pool.lockAt,
-        customSubject,
-        customBody,
+      const msg = renderTemplatedPoolEmail({
+        subjectTemplate: input.subjectTemplate,
+        bodyTemplate: input.bodyTemplate,
+        displayName: t.displayName,
+        poolName: pool.name,
+        lockAtIso: pool.lockAt,
         siteUrl,
-      );
+      });
       const res = await sendResendEmail({
         to: t.email,
         subject: msg.subject,
@@ -220,6 +182,102 @@ export async function sendPoolCommunicationsAction(input: {
       recipientCount: targets.length,
       emailsAccepted,
       failures,
+    };
+  } catch (e) {
+    return {
+      ok: false,
+      error: e instanceof Error ? e.message : "Something went wrong.",
+    };
+  }
+}
+
+/**
+ * Sends one email to the signed-in admin using the same templates as bulk send,
+ * with personalization as for the first pool participant (or a sample name).
+ */
+export async function sendPoolCommunicationsTestAction(input: {
+  subjectTemplate: string;
+  bodyTemplate: string;
+}): Promise<SendPoolCommunicationsResult> {
+  try {
+    const supabase = await createClient();
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (!user) {
+      return { ok: false, error: "You must be signed in." };
+    }
+    if (!(await isAppAdmin(supabase, user.id))) {
+      return { ok: false, error: "Not allowed." };
+    }
+
+    const err = validateTemplates(input.subjectTemplate, input.bodyTemplate);
+    if (err) return { ok: false, error: err };
+
+    const to = user.email?.trim();
+    if (!to) {
+      return {
+        ok: false,
+        error:
+          "Your account has no email address. Add one in your profile, then try again.",
+      };
+    }
+
+    const participants = await loadCommunicationParticipants(supabase);
+    const pool = await loadPoolMeta(supabase);
+    const siteUrl = getSiteUrl();
+
+    const sampleName =
+      participants.find((p) => p.email.trim())?.displayName ?? "Jamie Lee";
+
+    const msg = renderTemplatedPoolEmail({
+      subjectTemplate: input.subjectTemplate,
+      bodyTemplate: input.bodyTemplate,
+      displayName: sampleName,
+      poolName: pool.name,
+      lockAtIso: pool.lockAt,
+      siteUrl,
+    });
+
+    const configured = getResendMailerConfig() !== null;
+    if (!configured) {
+      return {
+        ok: true,
+        deliveryConfigured: false,
+        recipientCount: 1,
+        emailsAccepted: 0,
+        failures: [],
+      };
+    }
+
+    const res = await sendResendEmail({
+      to,
+      subject: `[Test] ${msg.subject}`,
+      text: msg.text,
+      html: msg.html,
+    });
+
+    if (!res.ok) {
+      return {
+        ok: true,
+        deliveryConfigured: true,
+        recipientCount: 1,
+        emailsAccepted: 0,
+        failures: [
+          {
+            email: to,
+            error: res.skipped ? "Email not configured" : res.error,
+          },
+        ],
+      };
+    }
+
+    return {
+      ok: true,
+      deliveryConfigured: true,
+      recipientCount: 1,
+      emailsAccepted: 1,
+      failures: [],
     };
   } catch (e) {
     return {
