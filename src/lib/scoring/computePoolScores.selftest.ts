@@ -206,10 +206,10 @@ const outcome = computePoolScores({
 });
 
 assert.deepEqual(outcome.totalsByParticipantId, {
-  [alice]: 25.5 + 5 + 50 + 2.5,
+  [alice]: 25.5 + 50 + 2.5,
   [bob]: 5,
 });
-assert.equal(outcome.ledgerLines.length, 5);
+assert.equal(outcome.ledgerLines.length, 4);
 
 const again = computePoolScores({
   poolId,
@@ -237,7 +237,7 @@ const thirdRules: ScoringRule[] = [
     poolId,
     predictionKind: "third_place_qualifier",
     bonusKey: null,
-    points: 3,
+    points: 2,
     createdAt: now,
     updatedAt: now,
   },
@@ -292,7 +292,7 @@ const thirdOutcome = computePoolScores({
   scoringRules: thirdRules,
 });
 
-assert.equal(thirdOutcome.totalsByParticipantId[alice], 3);
+assert.equal(thirdOutcome.totalsByParticipantId[alice], 2);
 assert.equal(thirdOutcome.ledgerLines.length, 1);
 assert.equal(thirdOutcome.ledgerLines[0]?.resultId, "res-tpq-slot3");
 

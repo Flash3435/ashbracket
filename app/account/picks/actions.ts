@@ -2,6 +2,7 @@
 
 import { createClient } from "@/lib/supabase/server";
 import { applyParticipantPickSlots } from "../../../lib/predictions/applyParticipantPickSlots";
+import { validateFrozenPicksUnchangedWhenPoolLocked } from "../../../lib/predictions/frozenPreBracketPickKinds";
 import { mergeKnockoutProgressionSlotsFromPredictions } from "../../../lib/predictions/mergeKnockoutProgressionFromExistingPredictions";
 import { validateKnockoutPickSaveInput } from "../../../lib/predictions/validateKnockoutPickPayload";
 import { fetchOfficialRoundOf32Complete } from "../../../lib/tournament/fetchOfficialRoundOf32Complete";
@@ -67,12 +68,30 @@ export async function saveMyKnockoutPicksAction(input: {
       .maybeSingle();
 
     if (poolErr) return { ok: false, error: poolErr.message };
-    if (poolRow && poolIsLocked(poolRow.lock_at)) {
-      return {
-        ok: false,
-        error:
-          "This pool is locked. Your picks can no longer be changed.",
-      };
+    const poolLockedNow = Boolean(poolRow && poolIsLocked(poolRow.lock_at));
+
+    if (poolLockedNow) {
+      const { data: predData, error: predFetchErr } = await supabase
+        .from("predictions")
+        .select(
+          "id, pool_id, participant_id, prediction_kind, team_id, tournament_stage_id, group_code, slot_key, bonus_key, value_text, created_at, updated_at",
+        )
+        .eq("pool_id", row.pool_id)
+        .eq("participant_id", input.participantId);
+      if (predFetchErr) {
+        return { ok: false, error: predFetchErr.message };
+      }
+      type PredRow = Parameters<typeof mapPredictionRow>[0];
+      const existing = (predData ?? []).map((r) =>
+        mapPredictionRow(r as PredRow),
+      );
+      const freezeErr = validateFrozenPicksUnchangedWhenPoolLocked(
+        existing,
+        input.slots,
+      );
+      if (freezeErr) {
+        return { ok: false, error: freezeErr };
+      }
     }
 
     let slots = input.slots;

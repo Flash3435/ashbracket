@@ -4,13 +4,12 @@
  * the configured id has no scoring rows — see fetcher `solePublicPoolFallback`).
  *
  * ## Workflow for future edits
- * - **Wording** (ties / prize split text, prize intro, section blurbs): edit `PUBLIC_RULES_PAGE_COPY` below
- *   (includes third-place and knockout intros).
+ * - **Wording** (ties / prize split text, prize intro, section blurbs): edit `PUBLIC_RULES_PAGE_COPY` below.
  * - **Default prize tiers / entry fee / group-stage point story** (when the DB omits them for
- *   the sample pool): edit `DEFAULT_*` constants. No migration or seed change required.
- * - **Knockout / third-place / bonus point values on /rules**: canonical copy in
- *   `PUBLIC_RULES_KNOCKOUT_ROWS`, `PUBLIC_RULES_BONUS_ROWS` (must stay aligned with
- *   `scoring_rules` for the sample pool).
+ *   the sample pool): edit `DEFAULT_*` constants.
+ * - **Knockout / bonus point values on /rules**: prefer rows from `scoring_rules_public`.
+ *   Fallback tables `PUBLIC_RULES_KNOCKOUT_ROWS` / `PUBLIC_RULES_BONUS_ROWS` apply only when
+ *   the pool has no rows for those sections (empty DB edge case).
  * - **Optional DB overrides** for the sample pool: `pools` columns (`entry_fee_cents`,
  *   `prize_distribution_json`, group advance columns, `tie_break_note`) still win when set;
  *   defaults fill only missing pieces.
@@ -39,20 +38,20 @@ export const DEFAULT_PUBLIC_RULES_PRIZE_TIERS: readonly PoolPrizeTier[] = [
 ];
 
 export const DEFAULT_PUBLIC_RULES_GROUP_ADVANCE = {
-  exactPoints: 5,
-  wrongSlotPoints: 2.5,
+  exactPoints: 3,
+  wrongSlotPoints: 1,
 } as const;
 
-/** Knockout progression rows shown on /rules (Round of 32 is a pick step but not listed here). */
+/** Fallback knockout table only when `scoring_rules` has no knockout rows. */
 export const PUBLIC_RULES_KNOCKOUT_ROWS: readonly {
   label: string;
   points: number;
 }[] = [
-  { label: "Round of 16", points: 5 },
-  { label: "Quarterfinalist", points: 10 },
-  { label: "Semifinalist", points: 20 },
-  { label: "Finalist", points: 50 },
-  { label: "Champion", points: 100 },
+  { label: "Round of 16", points: 4 },
+  { label: "Quarter-finals", points: 8 },
+  { label: "Semi-finals", points: 16 },
+  { label: "Finalist", points: 24 },
+  { label: "Champion", points: 32 },
 ];
 
 export const PUBLIC_RULES_BONUS_ROWS: readonly {
@@ -65,10 +64,28 @@ export const PUBLIC_RULES_BONUS_ROWS: readonly {
 ];
 
 export const PUBLIC_RULES_PAGE_COPY = {
+  howPoolWorksLead:
+    "This pool has three stages. Every point you earn adds to one total score.",
+  stage1Title: "Stage 1 — First and second in each group",
+  stage1Body:
+    "Pick the team that finishes 1st and the team that finishes 2nd in every group.",
+  stage2Title: "Stage 2 — Best third-place teams",
+  stage2Body:
+    "Pick the eight national teams you think will advance as the best third-place finishers. Order does not matter — you are only choosing who qualifies. FIFA places those teams into the real bracket; your picks do not set matchups. You cannot pick the same nation twice across Stage 1 and Stage 2 (a group top-two team cannot also be one of your eight third-place advancers).",
+  stage3Title: "Stage 3 — Knockout bracket",
+  stage3Body:
+    "After the group stage, organizers publish the official Round of 32 bracket with real FIFA matchups. Once that bracket is live in the app, you fill Round of 32 through champion using those slots. Knockout scoring counts once per team you picked, based on how far that team actually goes in the tournament.",
   howYouScoreP1:
-    "You earn points when your picks match actual tournament results. Points are awarded across the Group Stage, Third Place Qualification, Knockout Rounds, and Bonus Picks.",
+    "You earn points when your picks line up with real results. Group finishes, third-place advancers, knockout depth, and bonus categories all add into the same total.",
   howYouScoreP2:
-    "All points combine into one total score, and standings are based on that total.",
+    "Standings rank everyone by that single total.",
+  lockingTitle: "When things lock",
+  lockingP1:
+    "Stages 1 and 2 (group 1st/2nd picks and your eight third-place advancers), plus bonus picks, are due by the pool’s lock time — usually before the first match.",
+  lockingP2:
+    "Stage 3 stays closed until organizers enter every official Round of 32 slot. After that, you can complete the knockout path while those picks still follow the published FIFA bracket.",
+  knockoutScoringNote:
+    "Knockout point values are listed for this pool in the table below. They are awarded once per team, using the furthest round that team reaches — not once per round pick.",
   entryPerPersonNote:
     "One entry per person unless the organizer says otherwise.",
   entryUnknownFee:
@@ -79,15 +96,13 @@ export const PUBLIC_RULES_PAGE_COPY = {
   groupPerKindIntro:
     "Points per correct group finishing position for this pool:",
   groupNoTableCopy:
-    "This pool does not list separate group-stage points on this page. Knockout and bonus scoring below still apply.",
-  knockoutIntro:
-    "Each row is a one-time score when that team reaches the round. Points are awarded once and do not carry forward.",
-  thirdPlaceIntro:
-    "Pick the 8 national teams that will advance as the best third-place finishers. You are not predicting which bracket slot each one gets — only that they qualify.",
-  thirdPlacePointsLine:
-    "3 points for each correct team (any of your eight slots); 0 points if the team does not advance.",
+    "This pool does not list separate group-stage points on this page. Other scoring sections below still apply.",
+  groupAdvanceZero:
+    "0 points if the team does not finish in the top two in the group.",
   bonusIntro:
-    "Separate questions tied to the whole tournament. You pick one team per category.",
+    "Tournament-wide picks — one team per category. Scoring values come from the table below (or from the database for this pool).",
+  thirdPlaceIntroFallback:
+    "Pick eight teams that advance as the best third-place finishers. You are not placing them into bracket positions — only predicting who qualifies.",
 } as const;
 
 export type PublicRulesDisplayDefaultsOptions = {

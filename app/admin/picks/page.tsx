@@ -168,7 +168,7 @@ export default async function AdminPicksPage({ searchParams }: PageProps) {
     <PageContainer>
       <PageTitle
         title="Participant picks"
-        description="Edit the full tournament path for anyone in this pool — groups, third-place qualifiers, every knockout round, champion, and bonus picks."
+        description="Edit any participant’s full path: Stage 1 group finishes, Stage 2 best third-place advancers, Stage 3 knockout (Round of 32 through champion) when published, and bonus picks."
       />
 
       {loadError ? (

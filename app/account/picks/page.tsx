@@ -34,12 +34,12 @@ export default async function AccountPicksPage({ searchParams }: PageProps) {
   const locked = poolLocked(ctx.selectedLockAt);
   const lockHint =
     locked && ctx.selectedLockAt
-      ? `Picks locked on ${new Intl.DateTimeFormat(undefined, {
+      ? `Group stage, third-place advancers, and bonus picks locked ${new Intl.DateTimeFormat(undefined, {
           dateStyle: "medium",
           timeStyle: "short",
-        }).format(new Date(ctx.selectedLockAt))}.`
+        }).format(new Date(ctx.selectedLockAt))}. Knockout bracket picks still open after the official Round of 32 is published.`
       : locked
-        ? "This pool is locked — picks can no longer be changed."
+        ? "Group stage, third-place, and bonus picks are locked; knockout bracket may still be open."
         : null;
 
   const summaryHref = ctx.selectedId
@@ -70,7 +70,7 @@ export default async function AccountPicksPage({ searchParams }: PageProps) {
 
       <PageTitle
         title="Your picks"
-        description="Groups, eight third-place advancers, then bonus questions anytime. Round of 32 through champion open only after organizers publish the official bracket. Quick start fills groups and third-place picks (and the full knockout path when that step is open). Edits apply until the pool locks."
+        description="Three stages: pick 1st and 2nd in every group, then eight best third-place advancers (order does not matter), then the official Round of 32 through champion once published — plus bonus picks. Quick start fills early stages (and the full bracket when unlocked). Group/third/bonus lock at the pool deadline; knockout can stay open after that."
       />
 
       {ctx.loadError ? (
@@ -136,7 +136,7 @@ export default async function AccountPicksPage({ searchParams }: PageProps) {
                 </span>
                 {locked ? (
                   <span className="ml-2 rounded-full bg-amber-950/50 px-2 py-0.5 text-xs font-medium text-amber-100">
-                    Locked
+                    Pre‑knockout locked
                   </span>
                 ) : (
                   <span className="ml-2 rounded-full bg-ash-accent/20 px-2 py-0.5 text-xs font-medium text-ash-accent">
@@ -161,7 +161,8 @@ export default async function AccountPicksPage({ searchParams }: PageProps) {
                 teams={ctx.teams}
                 groupTeamCountryCodesByLetter={ctx.groupTeamCountryCodesByLetter}
                 disabled={ctx.teams.length === 0}
-                readOnly={locked}
+                readOnly={false}
+                preBracketSelectionsLocked={locked}
                 lockedMessage={lockHint}
                 savePicks={saveMyKnockoutPicksAction}
                 successMessage="Your picks were saved."

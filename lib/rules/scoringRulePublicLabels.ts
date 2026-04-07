@@ -15,7 +15,7 @@ export function labelPublicScoringRule(
   bonusKey: string | null | undefined,
 ): string {
   if (predictionKind === "third_place_qualifier") {
-    return "Third-place advancers (each correct team — any pick slot counts)";
+    return "Each correct best third-place advancer (order of your eight picks does not matter)";
   }
   if (predictionKind === "bonus_pick" && bonusKey) {
     return (

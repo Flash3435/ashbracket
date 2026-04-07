@@ -1,10 +1,121 @@
-import type { Prediction, Result } from "../../types/domain";
+import type { Prediction, PredictionKind, Result } from "../../types/domain";
+import {
+  KNOCKOUT_PROGRESSION_PREDICTION_KINDS,
+  isKnockoutProgressionKind,
+} from "../../../lib/predictions/knockoutProgressionKinds";
 import type {
   ComputedLedgerLine,
   GroupStageScoringConfig,
   PoolScoringInput,
   ScoringOutcome,
 } from "./types";
+
+const KO_PROGRESSION_RANK: Map<string, number> = new Map(
+  KNOCKOUT_PROGRESSION_PREDICTION_KINDS.map((k, i) => [k, i]),
+);
+
+function knockoutProgressionRank(kind: string): number {
+  return KO_PROGRESSION_RANK.get(kind) ?? -1;
+}
+
+function betterKnockoutKind(
+  current: string | null,
+  candidate: string,
+): string {
+  if (current == null) return candidate;
+  return knockoutProgressionRank(candidate) >= knockoutProgressionRank(current)
+    ? candidate
+    : current;
+}
+
+/** Furthest knockout stage each team reached in official results (one row per team at max depth). */
+function buildOfficialTeamFurthestKnockoutKind(
+  results: Result[],
+): Map<string, string> {
+  const m = new Map<string, string>();
+  for (const r of results) {
+    if (!r.teamId) continue;
+    if (knockoutProgressionRank(r.kind) < 0) continue;
+    const prev = m.get(r.teamId);
+    m.set(r.teamId, betterKnockoutKind(prev ?? null, r.kind));
+  }
+  return m;
+}
+
+function pickRepresentativeKnockoutPrediction(
+  preds: Prediction[],
+): Map<string, Prediction> {
+  const byTeam = new Map<string, Prediction>();
+  for (const p of preds) {
+    const tid = p.teamId?.trim();
+    if (!tid) continue;
+    const cur = byTeam.get(tid);
+    if (!cur || p.id.localeCompare(cur.id) < 0) {
+      byTeam.set(tid, p);
+    }
+  }
+  return byTeam;
+}
+
+function firstOfficialResultForTeamKind(
+  results: Result[],
+  teamId: string,
+  kind: string,
+): Result | null {
+  const matches = results.filter((r) => r.teamId === teamId && r.kind === kind);
+  matches.sort((a, b) => a.id.localeCompare(b.id));
+  return matches[0] ?? null;
+}
+
+function appendKnockoutOncePerTeamScores(
+  input: {
+    poolId: string;
+    poolPreds: Prediction[];
+    results: Result[];
+    rulesMap: Map<string, number>;
+  },
+  ledgerLines: ComputedLedgerLine[],
+  totals: Record<string, number>,
+): void {
+  const { poolId, poolPreds, results, rulesMap } = input;
+  const officialFurthest = buildOfficialTeamFurthestKnockoutKind(results);
+
+  const knockoutPreds = poolPreds.filter(
+    (p) =>
+      isKnockoutProgressionKind(p.predictionKind) &&
+      Boolean(p.teamId?.trim()),
+  );
+
+  const byParticipant = new Map<string, Prediction[]>();
+  for (const p of knockoutPreds) {
+    const list = byParticipant.get(p.participantId) ?? [];
+    list.push(p);
+    byParticipant.set(p.participantId, list);
+  }
+
+  for (const [participantId, preds] of byParticipant) {
+    const repByTeam = pickRepresentativeKnockoutPrediction(preds);
+    for (const [teamId, repPred] of repByTeam) {
+      const furthest = officialFurthest.get(teamId);
+      if (!furthest) continue;
+      const points = rulesMap.get(furthest);
+      if (points === undefined || points <= 0) continue;
+      const res = firstOfficialResultForTeamKind(results, teamId, furthest);
+      if (!res) continue;
+
+      ledgerLines.push({
+        poolId,
+        participantId,
+        pointsDelta: points,
+        predictionKind: furthest as PredictionKind,
+        predictionId: repPred.id,
+        resultId: res.id,
+        note: `Knockout: ${furthest} once per team (${points} pts)`,
+      });
+      totals[participantId] = (totals[participantId] ?? 0) + points;
+    }
+  }
+}
 
 /**
  * Canonical slot identity shared by predictions and results (kind + stage + group + slot).
@@ -296,6 +407,10 @@ export function computePoolScores(input: PoolScoringInput): ScoringOutcome {
       continue;
     }
 
+    if (isKnockoutProgressionKind(pred.predictionKind)) {
+      continue;
+    }
+
     const key = keyFromPrediction(pred);
     const res = resultByKey.get(key);
     if (!res) continue;
@@ -315,6 +430,12 @@ export function computePoolScores(input: PoolScoringInput): ScoringOutcome {
     });
     totals[pred.participantId] = (totals[pred.participantId] ?? 0) + points;
   }
+
+  appendKnockoutOncePerTeamScores(
+    { poolId, poolPreds, results, rulesMap },
+    ledgerLines,
+    totals,
+  );
 
   ledgerLines.sort((a, b) => {
     const pa = a.participantId.localeCompare(b.participantId);

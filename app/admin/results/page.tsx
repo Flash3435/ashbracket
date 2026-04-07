@@ -81,7 +81,7 @@ export default async function AdminResultsPage() {
     <PageContainer>
       <PageTitle
         title="Tournament results"
-        description="Enter real outcomes for each round, third-place qualifiers, and the champion. When all 32 official Round of 32 slots have teams, participant knockout picks unlock automatically. Each save updates official results, recalculates points, and refreshes the leaderboard."
+        description="Enter official outcomes: group finishes, best third-place advancers, then the real Round of 32 bracket through champion. When all 32 Round of 32 slots have teams, participant Stage 3 picks unlock. Scoring uses pool rules (knockout points once per team by furthest round reached). Each save updates results, recalculates points, and refreshes the leaderboard."
       />
       {loadError ? (
         <p className="mb-4 rounded-md border border-red-800/80 bg-red-950/40 px-3 py-2 text-sm text-red-200">

@@ -208,7 +208,7 @@ function PendingKnockoutColumn({
               Awaiting official matchups
             </p>
             <p className="text-[9px] leading-snug text-ash-border-hover">
-              Picks open after the pool publishes the real bracket.
+              Opens after organizers publish the official Round of 32 (FIFA slots).
             </p>
           </div>
         ))}
@@ -242,9 +242,11 @@ export function KnockoutBracketPreview({
   return (
     <div className="space-y-3">
       <p className="text-sm text-ash-muted">
-        Read-only preview. Empty cells mean that slot is not filled yet. Switch
-        to <span className="font-medium text-ash-text">List view</span> to edit.
-        Group stage and bonus questions stay in the list steps.
+        Read-only preview. Empty cells are unfilled slots — use{" "}
+        <span className="font-medium text-ash-text">List view</span> to edit.
+        Stage 1–2 and bonus picks stay in the list steps. Third-place advancers
+        here are only “who qualifies,” not bracket placement until the official
+        Round of 32 exists.
       </p>
 
       <ThirdPlaceStrip rows={third} teamById={teamById} allSlots={slots} />

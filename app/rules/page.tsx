@@ -2,15 +2,16 @@ import Link from "next/link";
 import { formatPoolPoints } from "@/lib/format/poolPoints";
 import { PageContainer } from "@/components/ui/PageContainer";
 import { PageTitle } from "@/components/ui/PageTitle";
+import { bonusRulesTableRowsFromPublicRules } from "../../lib/rules/bonusRulesTableRows";
 import { fetchSamplePoolScoringRules } from "../../lib/rules/fetchSamplePoolScoringRules";
+import { knockoutRulesTableRowsFromPublicRules } from "../../lib/rules/knockoutRulesTableRows";
 import { partitionPublicRulesForDisplay } from "../../lib/rules/partitionPublicRulesForDisplay";
 import {
-  PUBLIC_RULES_BONUS_ROWS,
   PUBLIC_RULES_DEFAULT_TIE_BREAK,
-  PUBLIC_RULES_KNOCKOUT_ROWS,
   PUBLIC_RULES_PAGE_COPY,
   describePrizeTier,
 } from "../../lib/rules/publicRulesDisplayDefaults";
+import { comparePublicScoringRuleRows } from "../../lib/rules/comparePublicScoringRules";
 import type { PublicScoringRuleRow } from "../../types/publicScoringRules";
 
 export const dynamic = "force-dynamic";
@@ -37,6 +38,7 @@ function formatEntryFee(cents: number | null): string | null {
 
 function RulesPointsTable({ rows }: { rows: PublicScoringRuleRow[] }) {
   if (rows.length === 0) return null;
+  const sorted = [...rows].sort(comparePublicScoringRuleRows);
   return (
     <div className="mt-3 overflow-x-auto rounded-md border border-ash-border">
       <table className="w-full min-w-[320px] text-left text-sm">
@@ -47,8 +49,40 @@ function RulesPointsTable({ rows }: { rows: PublicScoringRuleRow[] }) {
           </tr>
         </thead>
         <tbody className="divide-y divide-ash-border">
-          {rows.map((row) => (
+          {sorted.map((row) => (
             <tr key={`${row.predictionKind}:${row.bonusKey ?? ""}`}>
+              <td className="px-4 py-3 text-ash-text">{row.label}</td>
+              <td className="px-4 py-3 text-right font-medium tabular-nums text-ash-text">
+                {formatPoolPoints(row.points)}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+function PointsLabelTable({
+  rows,
+  leftHeading,
+}: {
+  rows: { key: string; label: string; points: number }[];
+  leftHeading: string;
+}) {
+  if (rows.length === 0) return null;
+  return (
+    <div className="mt-3 overflow-x-auto rounded-md border border-ash-border">
+      <table className="w-full min-w-[320px] text-left text-sm">
+        <thead className="border-b border-ash-border bg-ash-body/50 text-xs font-medium uppercase tracking-wide text-ash-muted">
+          <tr>
+            <th className="px-4 py-3">{leftHeading}</th>
+            <th className="px-4 py-3 text-right">Points</th>
+          </tr>
+        </thead>
+        <tbody className="divide-y divide-ash-border">
+          {rows.map((row) => (
+            <tr key={row.key}>
               <td className="px-4 py-3 text-ash-text">{row.label}</td>
               <td className="px-4 py-3 text-right font-medium tabular-nums text-ash-text">
                 {formatPoolPoints(row.points)}
@@ -111,13 +145,25 @@ export default async function RulesPage() {
   const { data } = result;
   const lockLabel = formatLockAt(data.lockAt);
   const feeLabel = formatEntryFee(data.entryFeeCents);
-  const { groupKindRules } = partitionPublicRulesForDisplay(data.rules);
+  const { groupKindRules, knockoutRules, thirdPlaceRules, bonusRules } =
+    partitionPublicRulesForDisplay(data.rules);
   const tieCopy = data.tieBreakNote?.trim() || PUBLIC_RULES_DEFAULT_TIE_BREAK;
+
+  const knockoutTableRows =
+    knockoutRulesTableRowsFromPublicRules(knockoutRules);
+  const bonusTableRows = bonusRulesTableRowsFromPublicRules(bonusRules);
+
+  const thirdPlacePoints =
+    thirdPlaceRules.length > 0
+      ? Math.max(...thirdPlaceRules.map((r) => r.points))
+      : null;
 
   const pageTitle = data.poolName.trim() || "Pool rules";
   const pageDescription = lockLabel
-    ? `Picks lock ${lockLabel} (UTC). Below: entry, prizes, and every way you can score.`
-    : "Entry, prizes, and every way you can score — in plain language.";
+    ? `Pre–knockout picks lock ${lockLabel} (UTC) unless the host changes the deadline. Stage 3 opens after the official Round of 32 bracket is published.`
+    : "Three stages — group finishes, best third-place advancers, then the published knockout bracket — plus bonus picks.";
+
+  const c = PUBLIC_RULES_PAGE_COPY;
 
   return (
     <PageContainer>
@@ -126,13 +172,54 @@ export default async function RulesPage() {
       <div className="space-y-6">
         <section className="ash-surface px-4 py-4">
           <h2 className="text-sm font-semibold uppercase tracking-wide text-ash-muted">
+            How the pool works
+          </h2>
+          <p className="mt-2 text-sm leading-relaxed text-ash-text">
+            {c.howPoolWorksLead}
+          </p>
+          <ol className="mt-4 list-decimal space-y-4 pl-5 text-sm text-ash-text">
+            <li>
+              <p className="font-medium text-ash-text">{c.stage1Title}</p>
+              <p className="mt-1 leading-relaxed text-ash-muted">
+                {c.stage1Body}
+              </p>
+            </li>
+            <li>
+              <p className="font-medium text-ash-text">{c.stage2Title}</p>
+              <p className="mt-1 leading-relaxed text-ash-muted">
+                {c.stage2Body}
+              </p>
+            </li>
+            <li>
+              <p className="font-medium text-ash-text">{c.stage3Title}</p>
+              <p className="mt-1 leading-relaxed text-ash-muted">
+                {c.stage3Body}
+              </p>
+            </li>
+          </ol>
+        </section>
+
+        <section className="ash-surface px-4 py-4">
+          <h2 className="text-sm font-semibold uppercase tracking-wide text-ash-muted">
+            {c.lockingTitle}
+          </h2>
+          <p className="mt-2 text-sm leading-relaxed text-ash-text">
+            {c.lockingP1}
+          </p>
+          <p className="mt-2 text-sm leading-relaxed text-ash-muted">
+            {c.lockingP2}
+          </p>
+        </section>
+
+        <section className="ash-surface px-4 py-4">
+          <h2 className="text-sm font-semibold uppercase tracking-wide text-ash-muted">
             How you score points
           </h2>
           <p className="mt-2 text-sm leading-relaxed text-ash-text">
-            {PUBLIC_RULES_PAGE_COPY.howYouScoreP1}
+            {c.howYouScoreP1}
           </p>
           <p className="mt-2 text-sm leading-relaxed text-ash-muted">
-            {PUBLIC_RULES_PAGE_COPY.howYouScoreP2}
+            {c.howYouScoreP2}
           </p>
         </section>
 
@@ -142,9 +229,7 @@ export default async function RulesPage() {
           </h2>
           {data.prizeTiers.length > 0 ? (
             <>
-              <p className="mt-2 text-sm text-ash-muted">
-                {PUBLIC_RULES_PAGE_COPY.prizeIntro}
-              </p>
+              <p className="mt-2 text-sm text-ash-muted">{c.prizeIntro}</p>
               <ul className="mt-3 list-inside list-disc space-y-1.5 text-sm text-ash-text">
                 {data.prizeTiers.map((tier) => (
                   <li key={tier.place}>{describePrizeTier(tier)}</li>
@@ -153,7 +238,7 @@ export default async function RulesPage() {
             </>
           ) : (
             <p className="mt-2 text-sm leading-relaxed text-ash-muted">
-              {PUBLIC_RULES_PAGE_COPY.prizeNotPublished}
+              {c.prizeNotPublished}
             </p>
           )}
         </section>
@@ -168,28 +253,28 @@ export default async function RulesPage() {
                 {feeLabel} per entry
               </p>
               <p className="mt-1 text-sm text-ash-muted">
-                {PUBLIC_RULES_PAGE_COPY.entryPerPersonNote}
+                {c.entryPerPersonNote}
               </p>
             </>
           ) : (
             <p className="mt-2 text-sm leading-relaxed text-ash-muted">
-              {PUBLIC_RULES_PAGE_COPY.entryUnknownFee}
+              {c.entryUnknownFee}
             </p>
           )}
         </section>
 
         <section className="ash-surface px-4 py-4">
           <h2 className="text-sm font-semibold uppercase tracking-wide text-ash-muted">
-            Group stage picks
+            Stage 1 — Group stage picks
           </h2>
           {data.groupAdvance ? (
             <div className="mt-3 rounded-lg border border-ash-border bg-ash-body/40 px-3 py-3">
               <p className="text-sm text-ash-muted">
-                For each group, you pick which team finishes{" "}
+                For each group, pick which team finishes{" "}
                 <span className="font-medium text-ash-text">first</span> and
                 which finishes{" "}
-                <span className="font-medium text-ash-text">second</span>. Both
-                teams advance.
+                <span className="font-medium text-ash-text">second</span> (top
+                two in the group).
               </p>
               <ul className="mt-3 list-inside list-disc space-y-1.5 text-sm text-ash-muted">
                 <li>
@@ -198,101 +283,79 @@ export default async function RulesPage() {
                   </span>{" "}
                   if the team is in the{" "}
                   <span className="font-medium text-ash-text">correct</span>{" "}
-                  slot
+                  position
                 </li>
                 <li>
                   <span className="font-medium text-ash-text">
                     {formatPoolPoints(data.groupAdvance.wrongSlotPoints)} points
                   </span>{" "}
-                  if the team advances but is in the other qualifying slot
+                  if the team finishes in the top two but in the other qualifying
+                  position than you picked
                 </li>
                 <li className="list-none pl-0 text-ash-muted">
-                  0 points if the team does not advance
+                  {c.groupAdvanceZero}
                 </li>
               </ul>
             </div>
           ) : groupKindRules.length > 0 ? (
             <>
               <p className="mt-2 text-sm text-ash-muted">
-                {PUBLIC_RULES_PAGE_COPY.groupPerKindIntro}
+                {c.groupPerKindIntro}
               </p>
               <RulesPointsTable rows={groupKindRules} />
             </>
           ) : (
             <p className="mt-2 text-sm leading-relaxed text-ash-muted">
-              {PUBLIC_RULES_PAGE_COPY.groupNoTableCopy}
+              {c.groupNoTableCopy}
             </p>
           )}
         </section>
 
         <section className="ash-surface px-4 py-4">
           <h2 className="text-sm font-semibold uppercase tracking-wide text-ash-muted">
-            Knockout picks
+            Stage 2 — Best third-place teams
           </h2>
           <p className="mt-2 text-sm text-ash-muted">
-            {PUBLIC_RULES_PAGE_COPY.knockoutIntro}
+            {c.thirdPlaceIntroFallback}
           </p>
-          <div className="mt-3 overflow-x-auto rounded-md border border-ash-border">
-            <table className="w-full min-w-[320px] text-left text-sm">
-              <thead className="border-b border-ash-border bg-ash-body/50 text-xs font-medium uppercase tracking-wide text-ash-muted">
-                <tr>
-                  <th className="px-4 py-3">Round reached</th>
-                  <th className="px-4 py-3 text-right">Points</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-ash-border">
-                {PUBLIC_RULES_KNOCKOUT_ROWS.map((row) => (
-                  <tr key={row.label}>
-                    <td className="px-4 py-3 text-ash-text">{row.label}</td>
-                    <td className="px-4 py-3 text-right font-medium tabular-nums text-ash-text">
-                      {formatPoolPoints(row.points)}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          <p className="mt-2 text-sm text-ash-muted">
+            {thirdPlacePoints != null ? (
+              <>
+                <span className="font-medium text-ash-text">
+                  {formatPoolPoints(thirdPlacePoints)} points
+                </span>{" "}
+                for each correct team (from this pool’s scoring rules).{" "}
+                <span className="text-ash-muted">
+                  0 points if that team does not advance as a best third-place
+                  qualifier.
+                </span>
+              </>
+            ) : (
+              <>
+                Points per correct advancer are set in this pool’s scoring rules
+                when published.
+              </>
+            )}
+          </p>
         </section>
 
         <section className="ash-surface px-4 py-4">
           <h2 className="text-sm font-semibold uppercase tracking-wide text-ash-muted">
-            Third place qualifiers
+            Stage 3 — Knockout bracket
           </h2>
-          <p className="mt-2 text-sm text-ash-muted">
-            {PUBLIC_RULES_PAGE_COPY.thirdPlaceIntro}
-          </p>
-          <p className="mt-2 text-sm text-ash-muted">
-            {PUBLIC_RULES_PAGE_COPY.thirdPlacePointsLine}
-          </p>
+          <p className="mt-2 text-sm text-ash-muted">{c.knockoutScoringNote}</p>
+          <PointsLabelTable
+            rows={knockoutTableRows}
+            leftHeading="Furthest round reached"
+          />
         </section>
 
         <section className="ash-surface px-4 py-4">
           <h2 className="text-sm font-semibold uppercase tracking-wide text-ash-muted">
             Bonus picks
           </h2>
-          <p className="mt-2 text-sm text-ash-muted">
-            {PUBLIC_RULES_PAGE_COPY.bonusIntro}
-          </p>
-          <div className="mt-3 overflow-x-auto rounded-md border border-ash-border">
-            <table className="w-full min-w-[320px] text-left text-sm">
-              <thead className="border-b border-ash-border bg-ash-body/50 text-xs font-medium uppercase tracking-wide text-ash-muted">
-                <tr>
-                  <th className="px-4 py-3">Category</th>
-                  <th className="px-4 py-3 text-right">Points</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-ash-border">
-                {PUBLIC_RULES_BONUS_ROWS.map((row) => (
-                  <tr key={row.label}>
-                    <td className="px-4 py-3 text-ash-text">{row.label}</td>
-                    <td className="px-4 py-3 text-right font-medium tabular-nums text-ash-text">
-                      {formatPoolPoints(row.points)}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          <p className="mt-2 text-sm text-ash-muted">{c.bonusIntro}</p>
+          <PointsLabelTable rows={bonusTableRows} leftHeading="Category" />
         </section>
 
         <section className="ash-surface px-4 py-4">

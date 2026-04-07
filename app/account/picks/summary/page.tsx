@@ -41,12 +41,12 @@ export default async function AccountPicksSummaryPage({ searchParams }: PageProp
   const locked = poolLocked(ctx.selectedLockAt);
   const lockHint =
     locked && ctx.selectedLockAt
-      ? `Picks locked on ${new Intl.DateTimeFormat(undefined, {
+      ? `Group stage, third-place advancers, and bonus picks locked ${new Intl.DateTimeFormat(undefined, {
           dateStyle: "medium",
           timeStyle: "short",
-        }).format(new Date(ctx.selectedLockAt))}.`
+        }).format(new Date(ctx.selectedLockAt))}. Knockout bracket may still be editable after the official Round of 32 is published.`
       : locked
-        ? "This pool is locked — picks can no longer be changed."
+        ? "Pre‑knockout picks are locked; knockout bracket may still be open."
         : null;
 
   const teamById = new Map(ctx.teams.map((t) => [t.id, t]));
@@ -81,7 +81,7 @@ export default async function AccountPicksSummaryPage({ searchParams }: PageProp
 
       <PageTitle
         title="Your bracket snapshot"
-        description="Groups, third-place advancers, knockout rounds (when unlocked), bonus answers, and upcoming matches for the teams you selected."
+        description="Stage 1–2 picks, knockout bracket when unlocked, bonus answers, and upcoming matches for the teams you selected."
       />
 
       {ctx.loadError ? (

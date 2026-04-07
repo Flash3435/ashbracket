@@ -65,7 +65,23 @@ export type KnockoutPicksWizardProps = {
   successDetail?: string | null;
   saveHelpText?: string;
   postSaveRedirectTo?: string;
+  /**
+   * When true (and not `readOnly`), group finishes, third-place advancers, and bonus
+   * picks cannot change. Knockout bracket rows stay editable once the official Round
+   * of 32 is published.
+   */
+  preBracketSelectionsLocked?: boolean;
 };
+
+function isPreBracketPickSlot(slot: KnockoutPickSlotDraft): boolean {
+  const k = slot.predictionKind;
+  return (
+    k === "group_winner" ||
+    k === "group_runner_up" ||
+    k === "third_place_qualifier" ||
+    k === "bonus_pick"
+  );
+}
 
 type BracketStepKind =
   | "third_place_qualifier"
@@ -98,8 +114,8 @@ function participantWizardSteps(
       mode: "group",
       title: "Group stage",
       intro:
-        "For every letter group, pick who finishes first and who finishes second. In the real tournament both of those teams move on.",
-      hint: "You can jump between steps anytime; later rounds may narrow your choices based on what you chose here.",
+        "For every letter group, pick who finishes 1st and who finishes 2nd. Scoring uses the real top two in each group.",
+      hint: "You can jump between steps anytime. Third-place and knockout steps apply their own rules so you cannot reuse the same nation where it would conflict.",
     },
     {
       id: 0,
@@ -107,8 +123,8 @@ function participantWizardSteps(
       bracketKind: "third_place_qualifier",
       title: "Best third-place teams",
       intro:
-        "Choose the eight national teams you think will advance as the best third-place finishers. You are only predicting who qualifies — not which Round of 32 bracket slot FIFA assigns them to.",
-      hint: "Teams must be different from every group winner and runner-up you picked. Order in this list does not change your score. (Picking who finishes third in each group is not part of this pool yet — any eligible national team can be chosen here.)",
+        "Choose the eight national teams you think will advance as the best third-place finishers. Order does not matter — you are only predicting who qualifies, not where FIFA slots them in the real bracket.",
+      hint: "A team cannot appear here if you already have them finishing 1st or 2nd in a group. All eight slots must be different teams. FIFA decides matchups; your list does not place teams into bracket positions.",
     },
   ];
 
@@ -120,8 +136,8 @@ function participantWizardSteps(
           bracketKind: "round_of_32",
           title: "Round of 32",
           intro:
-            "Now that the official Round of 32 bracket is set, pick all 32 teams in their tournament slots (your pool unlocks this step once organizers publish the real lineup).",
-          hint: "Choices are easiest if they match your group finishes and third-place picks — we’ll highlight that pool when your earlier steps are filled.",
+            "After organizers publish the official Round of 32, pick all 32 teams in their real FIFA slots. Your Stage 2 list only predicted which third-place sides qualify — it does not control where they land in the bracket.",
+          hint: "Eligible teams usually match your group top-two and third-place advancers; we highlight that pool when earlier steps are filled. Knockout points count once per team by furthest round reached (see pool rules).",
         },
         {
           id: 0,
@@ -169,8 +185,8 @@ function participantWizardSteps(
 
   const bonusIntro =
     bonusQuestionCount > 0
-      ? `${bonusQuestionCount} extra question${bonusQuestionCount === 1 ? "" : "s"} for the whole tournament. One team per question.`
-      : "Extra questions for the whole tournament. One team per question.";
+      ? `${bonusQuestionCount} tournament-wide question${bonusQuestionCount === 1 ? "" : "s"} — most goals, most yellow cards, most red cards when your pool includes them, plus any extras from the host. One team per question.`
+      : "Tournament-wide bonus questions: one team per category.";
 
   const bonus: WizardStepDef[] = [
     {
@@ -178,7 +194,7 @@ function participantWizardSteps(
       mode: "bonus",
       title: "Bonus picks",
       intro: bonusIntro,
-      hint: "These don’t affect your bracket chain — pick any team for each.",
+      hint: "Independent from the bracket chain — pick any eligible team per category.",
     },
   ];
 
@@ -471,6 +487,7 @@ export function KnockoutPicksWizard({
   disabled = false,
   readOnly = false,
   lockedMessage = null,
+  preBracketSelectionsLocked = false,
   savePicks,
   successMessage = "Saved. Standings and public participant pages are updated.",
   successDetail = null,
@@ -540,7 +557,12 @@ export function KnockoutPicksWizard({
 
   const teamById = useMemo(() => new Map(teams.map((t) => [t.id, t])), [teams]);
 
-  const formDisabled = disabled || readOnly || isPending;
+  const coreDisabled = disabled || readOnly || isPending;
+  const preBracketActive = preBracketSelectionsLocked && !readOnly;
+
+  function pickRowDisabled(row: KnockoutPickSlotDraft): boolean {
+    return coreDisabled || (preBracketActive && isPreBracketPickSlot(row));
+  }
 
   const currentStepDef = wizardSteps[step];
   const stepRows = useMemo(
@@ -549,11 +571,20 @@ export function KnockoutPicksWizard({
   );
 
   function setTeamForRow(rowKey: string, teamId: string) {
-    setSlots((prev) =>
-      assignParticipantPickDeduped(prev, rowKey, teamId, {
+    setSlots((prev) => {
+      const row = prev.find((x) => x.rowKey === rowKey);
+      if (
+        row &&
+        preBracketSelectionsLocked &&
+        !readOnly &&
+        isPreBracketPickSlot(row)
+      ) {
+        return prev;
+      }
+      return assignParticipantPickDeduped(prev, rowKey, teamId, {
         freezeKnockoutProgressionPicks: !knockoutBracketPicksUnlocked,
-      }),
-    );
+      });
+    });
   }
 
   function applyQuick(mode: "random" | "favorites" | "balanced") {
@@ -689,8 +720,10 @@ export function KnockoutPicksWizard({
           {participantDisplayName}
         </span>
         {readOnly
-          ? " — this pool is locked; picks cannot be changed."
-          : ". Follow the steps in order or jump ahead — then save. Partial saves are OK."}
+          ? " — this view is read-only."
+          : preBracketActive
+            ? ". Group stage, third-place advancers, and bonus picks are locked. You can still update knockout bracket picks after the official Round of 32 is published."
+            : ". Follow the steps in order or jump ahead — then save. Partial saves are OK."}
       </p>
 
       {lockedMessage ? (
@@ -818,7 +851,7 @@ export function KnockoutPicksWizard({
             <button
               key={s.id}
               type="button"
-              disabled={formDisabled}
+              disabled={coreDisabled}
               onClick={() => {
                 setStep(i);
                 setOpenRowKey(null);
@@ -850,7 +883,10 @@ export function KnockoutPicksWizard({
             {currentStepDef.hint}
           </p>
 
-          {currentStepDef.mode === "group" && !readOnly && !formDisabled ? (
+          {currentStepDef.mode === "group" &&
+          !readOnly &&
+          !coreDisabled &&
+          !preBracketSelectionsLocked ? (
             <div className="ash-surface mt-4 border border-ash-border bg-ash-body/30 p-3">
               <p className="text-sm font-medium text-ash-text">
                 {knockoutBracketPicksUnlocked
@@ -1056,7 +1092,7 @@ export function KnockoutPicksWizard({
                     </div>
                     <button
                       type="button"
-                      disabled={formDisabled}
+                      disabled={pickRowDisabled(row)}
                       onClick={() => {
                         setOpenRowKey((k) =>
                           k === row.rowKey ? null : row.rowKey,
@@ -1091,7 +1127,7 @@ export function KnockoutPicksWizard({
                         <input
                           value={search}
                           onChange={(e) => setSearch(e.target.value)}
-                          disabled={formDisabled}
+                          disabled={pickRowDisabled(row)}
                           className="mt-1 w-full rounded-md border border-ash-border bg-ash-body px-2 py-1.5 text-sm text-ash-text outline-none ring-ash-accent/20 focus:border-ash-accent focus:ring-2"
                           placeholder={
                             isGroupRow && row.groupCode
@@ -1128,7 +1164,7 @@ export function KnockoutPicksWizard({
                                   <li key={t.id}>
                                     <button
                                       type="button"
-                                      disabled={formDisabled || blocked}
+                                      disabled={pickRowDisabled(row) || blocked}
                                       title={blocked ? disabledReason : undefined}
                                       onClick={() => {
                                         if (blocked) return;
@@ -1202,7 +1238,7 @@ export function KnockoutPicksWizard({
                                 <li key={t.id}>
                                   <button
                                     type="button"
-                                    disabled={formDisabled}
+                                    disabled={pickRowDisabled(row)}
                                     onClick={() => {
                                       setTeamForRow(row.rowKey, t.id);
                                       setOpenRowKey(null);
@@ -1248,7 +1284,7 @@ export function KnockoutPicksWizard({
           <div className="mt-4 flex flex-wrap gap-2 border-t border-ash-border pt-4">
             <button
               type="button"
-              disabled={formDisabled || step <= 0}
+              disabled={coreDisabled || step <= 0}
               onClick={goPrev}
               className="btn-ghost disabled:cursor-not-allowed disabled:opacity-40"
             >
@@ -1257,7 +1293,7 @@ export function KnockoutPicksWizard({
             {step < wizardSteps.length - 1 ? (
               <button
                 type="button"
-                disabled={formDisabled || !canGoNext}
+                disabled={coreDisabled || !canGoNext}
                 onClick={goNext}
                 className="rounded-lg bg-ash-text px-3 py-2 text-sm font-medium text-ash-body shadow-sm transition-colors hover:bg-white disabled:cursor-not-allowed disabled:opacity-40"
               >
@@ -1274,7 +1310,7 @@ export function KnockoutPicksWizard({
         <div>
           <button
             type="submit"
-            disabled={formDisabled}
+            disabled={coreDisabled}
             className="btn-primary disabled:cursor-not-allowed disabled:opacity-60"
           >
             {isPending ? "Saving…" : "Save picks"}
