@@ -11,6 +11,8 @@ type AccountPicksProfileLinksProps = {
   selectedId: string | null;
   /** When set, each profile row also links to this summary path with `?participant=`. */
   summaryBasePath?: string;
+  /** When set, each profile row also links to pool activity with `?participant=`. */
+  activityBasePath?: string;
   /** Heading when multiple profiles (defaults to edit-oriented copy). */
   multiProfileHeading?: string;
 };
@@ -19,6 +21,7 @@ export function AccountPicksProfileLinks({
   profiles,
   selectedId,
   summaryBasePath,
+  activityBasePath,
   multiProfileHeading = "Choose profile to edit",
 }: AccountPicksProfileLinksProps) {
   if (profiles.length <= 1) return null;
@@ -61,6 +64,14 @@ export function AccountPicksProfileLinks({
                       className="rounded-md bg-ash-body px-2.5 py-1 text-xs font-medium text-ash-text ring-1 ring-ash-border hover:bg-ash-surface"
                     >
                       Summary
+                    </Link>
+                  ) : null}
+                  {activityBasePath ? (
+                    <Link
+                      href={`${activityBasePath}?participant=${p.id}`}
+                      className="rounded-md bg-ash-body px-2.5 py-1 text-xs font-medium text-ash-text ring-1 ring-ash-border hover:bg-ash-surface"
+                    >
+                      Activity
                     </Link>
                   ) : null}
                 </div>

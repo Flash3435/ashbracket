@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { SignOutButton } from "@/components/auth/SignOutButton";
+import { PoolActivityPreview } from "@/components/poolActivity/PoolActivityPreview";
 import { ParticipantPicksNextMatches } from "@/components/picks/ParticipantPicksNextMatches";
 import { PageContainer } from "@/components/ui/PageContainer";
 import { PageTitle } from "@/components/ui/PageTitle";
@@ -102,7 +103,7 @@ export default async function AccountPage({ searchParams }: PageProps) {
       ) : null}
 
       {!error && list.length > 0 ? (
-        <div className="mb-4">
+        <div className="mb-4 flex flex-wrap gap-3">
           <Link
             href={
               list.length === 1
@@ -113,7 +114,26 @@ export default async function AccountPage({ searchParams }: PageProps) {
           >
             {list.length === 1 ? "Enter your picks" : "Your picks"}
           </Link>
+          <Link
+            href={
+              list.length === 1
+                ? `/account/activity?participant=${list[0].id}`
+                : "/account/activity"
+            }
+            className="btn-ghost inline-flex ring-1 ring-ash-border"
+          >
+            Activity
+          </Link>
         </div>
+      ) : null}
+
+      {!error && preferredParticipantId ? (
+        <PoolActivityPreview
+          poolId={
+            list.find((p) => p.id === preferredParticipantId)?.pool_id ?? ""
+          }
+          participantId={preferredParticipantId}
+        />
       ) : null}
 
       {!error &&
@@ -173,6 +193,12 @@ export default async function AccountPage({ searchParams }: PageProps) {
                 </Link>
                 <Link href={`/account/picks?participant=${p.id}`} className="ash-link">
                   Edit picks
+                </Link>
+                <Link
+                  href={`/account/activity?participant=${p.id}`}
+                  className="ash-link"
+                >
+                  Activity
                 </Link>
                 <Link href={`/account?participant=${p.id}`} className="ash-link">
                   Dashboard schedule for this pool

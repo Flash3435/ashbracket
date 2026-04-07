@@ -1,7 +1,29 @@
 "use server";
 
 import { createClient } from "@/lib/supabase/server";
+import { insertPoolActivityRow } from "../poolActivity/insertPoolActivity";
 import { revalidatePath } from "next/cache";
+
+async function tryRecordParticipantJoined(input: {
+  poolId: string;
+  participantId: string;
+  userId: string;
+  displayName: string;
+}): Promise<void> {
+  try {
+    const name = input.displayName.trim() || "Someone";
+    await insertPoolActivityRow({
+      poolId: input.poolId,
+      participantId: input.participantId,
+      actorUserId: input.userId,
+      type: "participant_joined",
+      bodyText: `${name} joined the pool`,
+      metadataJson: { display_name: name },
+    });
+  } catch (e) {
+    console.error("pool_activity participant_joined failed", e);
+  }
+}
 
 export type PeekJoinResult =
   | { ok: true; poolId: string; poolName: string }
@@ -64,8 +86,16 @@ export async function registerInPool(
     return { ok: false, message: "Could not create your profile." };
   }
 
+  await tryRecordParticipantJoined({
+    poolId,
+    participantId,
+    userId: user.id,
+    displayName,
+  });
+
   revalidatePath("/account");
   revalidatePath("/join");
+  revalidatePath("/account/activity");
   return { ok: true, participantId };
 }
 
@@ -97,8 +127,16 @@ export async function claimPoolParticipant(
     return { ok: false, message: "Could not claim that profile." };
   }
 
+  await tryRecordParticipantJoined({
+    poolId,
+    participantId,
+    userId: user.id,
+    displayName,
+  });
+
   revalidatePath("/account");
   revalidatePath("/join");
+  revalidatePath("/account/activity");
   return { ok: true, participantId };
 }
 
@@ -195,8 +233,24 @@ export async function claimParticipantInvite(
     return { ok: false, message: "Could not accept this invite." };
   }
 
+  const { data: prRow } = await supabase
+    .from("participants")
+    .select("pool_id, display_name")
+    .eq("id", participantId)
+    .maybeSingle();
+
+  if (prRow?.pool_id) {
+    await tryRecordParticipantJoined({
+      poolId: prRow.pool_id as string,
+      participantId,
+      userId: user.id,
+      displayName: (prRow.display_name as string) ?? "",
+    });
+  }
+
   revalidatePath("/account");
   revalidatePath("/account/picks");
   revalidatePath("/join");
+  revalidatePath("/account/activity");
   return { ok: true, participantId };
 }

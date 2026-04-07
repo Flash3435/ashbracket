@@ -119,3 +119,17 @@ export async function loadParticipantIdsWithIncompletePicks(
 
   return incomplete;
 }
+
+/** Whether one participant’s required pick slots are complete (same rules as bulk incomplete check). */
+export async function isParticipantPicksCompleteForParticipant(
+  supabase: SupabaseClient,
+  poolId: string,
+  participantId: string,
+): Promise<boolean> {
+  const incomplete = await loadParticipantIdsWithIncompletePicks(
+    supabase,
+    poolId,
+    [participantId],
+  );
+  return !incomplete.has(participantId);
+}

@@ -64,6 +64,15 @@ export default async function AccountPicksPage({ searchParams }: PageProps) {
             <Link href={summaryHref} className="ash-link text-sm">
               View bracket summary
             </Link>
+            <span className="text-ash-border" aria-hidden>
+              |
+            </span>
+            <Link
+              href={`/account/activity?participant=${ctx.selectedId}`}
+              className="ash-link text-sm"
+            >
+              Activity
+            </Link>
           </>
         ) : null}
       </div>
@@ -119,6 +128,7 @@ export default async function AccountPicksPage({ searchParams }: PageProps) {
             profiles={ctx.profileLinkItems}
             selectedId={ctx.selectedId}
             summaryBasePath="/account/picks/summary"
+            activityBasePath="/account/activity"
           />
 
           {!ctx.selectedId && ctx.myParticipants.length > 1 ? (

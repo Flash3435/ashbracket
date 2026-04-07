@@ -1,6 +1,9 @@
 "use server";
 
 import { createClient } from "@/lib/supabase/server";
+import { isParticipantPicksCompleteForParticipant } from "../../../lib/communications/picksCompleteness";
+import { insertPoolActivityRow } from "../../../lib/poolActivity/insertPoolActivity";
+import { fingerprintPredictionsForParticipant } from "../../../lib/poolActivity/predictionsFingerprint";
 import { applyParticipantPickSlots } from "../../../lib/predictions/applyParticipantPickSlots";
 import { validateFrozenPicksUnchangedWhenPoolLocked } from "../../../lib/predictions/frozenPreBracketPickKinds";
 import { mergeKnockoutProgressionSlotsFromPredictions } from "../../../lib/predictions/mergeKnockoutProgressionFromExistingPredictions";
@@ -48,7 +51,7 @@ export async function saveMyKnockoutPicksAction(input: {
 
     const { data: row, error: parErr } = await supabase
       .from("participants")
-      .select("id, pool_id")
+      .select("id, pool_id, display_name, picks_first_submitted_at")
       .eq("id", input.participantId)
       .eq("user_id", user.id)
       .maybeSingle();
@@ -127,6 +130,31 @@ export async function saveMyKnockoutPicksAction(input: {
       }
     }
 
+    const { data: predBeforeRows, error: predBeforeErr } = await supabase
+      .from("predictions")
+      .select(
+        "id, pool_id, participant_id, prediction_kind, team_id, tournament_stage_id, group_code, slot_key, bonus_key, value_text, created_at, updated_at",
+      )
+      .eq("pool_id", row.pool_id)
+      .eq("participant_id", input.participantId);
+    if (predBeforeErr) {
+      return { ok: false, error: predBeforeErr.message };
+    }
+    type PredRow = Parameters<typeof mapPredictionRow>[0];
+    const predsBefore = (predBeforeRows ?? []).map((r) =>
+      mapPredictionRow(r as PredRow),
+    );
+    const fpBefore = fingerprintPredictionsForParticipant(
+      predsBefore,
+      input.participantId,
+    );
+    const completeBefore = await isParticipantPicksCompleteForParticipant(
+      supabase,
+      row.pool_id as string,
+      input.participantId,
+    );
+    const hadFirstSubmittedAt = Boolean(row.picks_first_submitted_at);
+
     const applied = await applyParticipantPickSlots(supabase, {
       poolId: row.pool_id,
       participantId: input.participantId,
@@ -134,9 +162,74 @@ export async function saveMyKnockoutPicksAction(input: {
     });
     if (!applied.ok) return applied;
 
+    const completeAfter = await isParticipantPicksCompleteForParticipant(
+      supabase,
+      row.pool_id as string,
+      input.participantId,
+    );
+    const { data: predAfterRows, error: predAfterErr } = await supabase
+      .from("predictions")
+      .select(
+        "id, pool_id, participant_id, prediction_kind, team_id, tournament_stage_id, group_code, slot_key, bonus_key, value_text, created_at, updated_at",
+      )
+      .eq("pool_id", row.pool_id)
+      .eq("participant_id", input.participantId);
+    if (predAfterErr) {
+      return { ok: false, error: predAfterErr.message };
+    }
+    const predsAfter = (predAfterRows ?? []).map((r) =>
+      mapPredictionRow(r as PredRow),
+    );
+    const fpAfter = fingerprintPredictionsForParticipant(
+      predsAfter,
+      input.participantId,
+    );
+
+    if (completeAfter) {
+      try {
+        const displayName = String(row.display_name ?? "").trim() || "Someone";
+        const summaryPath = `/account/picks/summary?participant=${input.participantId}`;
+        if (!hadFirstSubmittedAt) {
+          await supabase
+            .from("participants")
+            .update({ picks_first_submitted_at: new Date().toISOString() })
+            .eq("id", input.participantId)
+            .eq("user_id", user.id)
+            .is("picks_first_submitted_at", null);
+          if (!completeBefore) {
+            await insertPoolActivityRow({
+              poolId: row.pool_id as string,
+              participantId: input.participantId,
+              actorUserId: user.id,
+              type: "participant_submitted_picks",
+              bodyText: `${displayName} made their picks.`,
+              metadataJson: {
+                first_submission: true,
+                display_name: displayName,
+              },
+              relatedPath: summaryPath,
+            });
+          }
+        } else if (fpBefore !== fpAfter) {
+          await insertPoolActivityRow({
+            poolId: row.pool_id as string,
+            participantId: input.participantId,
+            actorUserId: user.id,
+            type: "participant_updated_picks",
+            bodyText: `${displayName} updated their picks.`,
+            metadataJson: { display_name: displayName },
+            relatedPath: summaryPath,
+          });
+        }
+      } catch (e) {
+        console.error("pool_activity picks milestone failed", e);
+      }
+    }
+
     revalidatePath("/account/picks");
     revalidatePath("/account/picks/summary");
     revalidatePath("/account");
+    revalidatePath("/account/activity");
     revalidatePath(`/participant/${input.participantId}`);
 
     return { ok: true };
