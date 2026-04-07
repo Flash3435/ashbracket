@@ -7,7 +7,6 @@ import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
 import { loadAccountKnockoutSelection } from "../../lib/account/loadAccountKnockoutSelection";
 import { resolveAccountParticipantId } from "../../lib/account/resolveAccountParticipantId";
-import { SAMPLE_POOL_ID } from "../../lib/config/sample-pool";
 import {
   countryCodesFromKnockoutSlots,
   nextMatchesForTeamCountryCodes,
@@ -39,7 +38,6 @@ export default async function AccountPage({ searchParams }: PageProps) {
     .order("created_at", { ascending: true });
 
   const list = rows ?? [];
-  const sample = list.find((p) => p.pool_id === SAMPLE_POOL_ID);
 
   const preferredParticipantId = resolveAccountParticipantId(
     list,
@@ -166,12 +164,7 @@ export default async function AccountPage({ searchParams }: PageProps) {
               className="ash-surface p-4"
             >
               <p className="font-medium text-ash-text">{p.display_name}</p>
-              <p className="mt-1 text-xs text-ash-muted">
-                Pool id{" "}
-                <code className="rounded bg-ash-body px-1 text-ash-text">{p.pool_id}</code>
-                {p.pool_id === SAMPLE_POOL_ID ? " · sample pool" : null}
-              </p>
-              <div className="mt-3 flex flex-wrap gap-3 text-sm">
+              <div className="mt-2 flex flex-wrap gap-3 text-sm">
                 <Link
                   href={`/participant/${p.id}`}
                   className="ash-link"
@@ -188,15 +181,6 @@ export default async function AccountPage({ searchParams }: PageProps) {
             </li>
           ))}
         </ul>
-      ) : null}
-
-      {sample ? (
-        <p className="mt-6 text-sm text-ash-muted">
-          <Link href="/" className="ash-link">
-            Home
-          </Link>{" "}
-          shows the sample pool leaderboard.
-        </p>
       ) : null}
     </PageContainer>
   );

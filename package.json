@@ -15,6 +15,7 @@
     "deploy:db": "supabase db push",
     "deploy:vercel-cli": "vercel deploy --prod",
     "verify:prod": "node scripts/verify-production.mjs",
+    "icons": "node scripts/generate-favicons.mjs",
     "test:scoring": "tsx src/lib/scoring/computePoolScores.selftest.ts",
     "test:pick-consistency": "tsx lib/predictions/knockoutPickConsistency.selftest.ts",
     "test:bonus-keys": "tsx lib/predictions/participantBonusKeys.selftest.ts",
@@ -35,6 +36,8 @@
     "@types/react-dom": "^19",
     "eslint": "^9",
     "eslint-config-next": "16.2.2",
+    "png-to-ico": "^3.0.1",
+    "sharp": "^0.34.5",
     "tailwindcss": "^4",
     "tsx": "^4.21.0",
     "typescript": "^5"
