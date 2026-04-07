@@ -1,23 +1,23 @@
 /**
- * Regenerates app/icon.png, app/apple-icon.png, and app/favicon.ico
- * from public/brand/ashbracket-logo-source.png.
+ * Regenerates app/icon.png and app/apple-icon.png from
+ * public/brand/ashbracket-logo-source.png.
  *
- * Wide banner sources are trimmed (alpha) before square resize so the mark
- * stays readable at 16×16 tab sizes instead of shrinking to a hairline.
+ * - Trims transparent margins so wide art stays readable at 16×16.
+ * - Outputs PNG only (alpha preserved). We do not emit favicon.ico: ICO encoders
+ *   often mishandle transparency (opaque black tile in tabs). next.config.ts
+ *   rewrites /favicon.ico → /icon.png so legacy clients still get the PNG.
  */
-import { writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import pngToIco from "png-to-ico";
 import sharp from "sharp";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const root = join(__dirname, "..");
 const source = join(root, "public/brand/ashbracket-logo-source.png");
 
-/** Collapse excess transparent margins (e.g. wide canvases) before squaring. */
 async function trimmedPngBuffer() {
   return sharp(source)
+    .ensureAlpha()
     .trim({ threshold: 12 })
     .png()
     .toBuffer();
@@ -38,13 +38,7 @@ async function main() {
   await toSquarePng(trimmed, 512).toFile(join(root, "app/icon.png"));
   await toSquarePng(trimmed, 180).toFile(join(root, "app/apple-icon.png"));
 
-  const buf16 = await toSquarePng(trimmed, 16).toBuffer();
-  const buf32 = await toSquarePng(trimmed, 32).toBuffer();
-  const buf48 = await toSquarePng(trimmed, 48).toBuffer();
-  const ico = await pngToIco([buf16, buf32, buf48]);
-  writeFileSync(join(root, "app/favicon.ico"), ico);
-
-  console.log("Wrote app/icon.png, app/apple-icon.png, app/favicon.ico (trim → square)");
+  console.log("Wrote app/icon.png, app/apple-icon.png (transparent PNG; /favicon.ico → /icon.png via rewrite)");
 }
 
 main().catch((e) => {
