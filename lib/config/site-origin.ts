@@ -1,22 +1,5 @@
 /**
- * Absolute site URL for invite links and emails.
- * Set NEXT_PUBLIC_SITE_URL in production (e.g. https://ashbracket.example.com).
+ * Re-export canonical site URL helpers from `src/lib/site-url.ts`.
+ * Prefer importing from `@/lib/site-url` in new code.
  */
-export function siteOrigin(): string {
-  const explicit = process.env.NEXT_PUBLIC_SITE_URL?.trim();
-  if (explicit) {
-    return explicit.replace(/\/$/, "");
-  }
-  const vercel = process.env.VERCEL_URL?.trim();
-  if (vercel) {
-    const host = vercel.replace(/\/$/, "");
-    return host.startsWith("http") ? host : `https://${host}`;
-  }
-  return "http://localhost:3000";
-}
-
-export function joinInviteUrl(inviteToken: string): string {
-  const base = siteOrigin();
-  const q = new URLSearchParams({ invite: inviteToken });
-  return `${base}/join?${q.toString()}`;
-}
+export { getSiteUrl, joinInviteUrl, siteOrigin } from "@/lib/site-url";

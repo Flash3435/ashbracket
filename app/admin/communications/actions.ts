@@ -1,6 +1,7 @@
 "use server";
 
 import { createClient } from "@/lib/supabase/server";
+import { getSiteUrl } from "@/lib/site-url";
 import { isAppAdmin } from "../../../lib/auth/isAppAdmin";
 import { SAMPLE_POOL_ID } from "../../../lib/config/sample-pool";
 import {
@@ -43,15 +44,17 @@ function messageForRecipient(
   lockAt: string | null,
   customSubject: string,
   customBody: string,
+  siteUrl: string,
 ): { subject: string; text: string; html: string } {
   if (kind === "payment_reminder") {
-    return buildPaymentReminderEmail({ displayName, poolName });
+    return buildPaymentReminderEmail({ displayName, poolName, siteUrl });
   }
   if (kind === "deadline_reminder") {
     return buildDeadlineReminderEmail({
       displayName,
       poolName,
       lockAtIso: lockAt,
+      siteUrl,
     });
   }
   return buildCustomPoolEmail({
@@ -173,6 +176,7 @@ export async function sendPoolCommunicationsAction(input: {
 
     const customSubject = input.customSubject ?? "";
     const customBody = input.customBody ?? "";
+    const siteUrl = getSiteUrl();
 
     if (!configured) {
       return {
@@ -192,6 +196,7 @@ export async function sendPoolCommunicationsAction(input: {
         pool.lockAt,
         customSubject,
         customBody,
+        siteUrl,
       );
       const res = await sendResendEmail({
         to: t.email,

@@ -106,6 +106,31 @@ export type PeekInviteResult =
   | { ok: true; poolId: string; poolName: string; displayName: string }
   | { ok: false; message: string };
 
+/**
+ * If the signed-in user already has a participant row in this pool, returns that id.
+ * Used on the invite flow when the token still points at an unclaimed placeholder row.
+ */
+export async function getMyParticipantIdInPool(
+  poolId: string,
+): Promise<string | null> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return null;
+
+  const { data, error } = await supabase
+    .from("participants")
+    .select("id")
+    .eq("pool_id", poolId)
+    .eq("user_id", user.id)
+    .limit(1)
+    .maybeSingle();
+
+  if (error || !data?.id) return null;
+  return data.id as string;
+}
+
 export async function peekParticipantInvite(
   token: string,
 ): Promise<PeekInviteResult> {

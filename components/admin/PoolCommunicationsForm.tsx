@@ -88,16 +88,25 @@ export function PoolCommunicationsForm({
     [participants, preset, selectedIds],
   );
 
+  const previewSiteUrl =
+    process.env.NEXT_PUBLIC_SITE_URL?.trim().replace(/\/$/, "") ?? "";
+
   const previewSample = useMemo(() => {
     const name = resolved.targets[0]?.displayName ?? "Jamie Lee";
+    const siteUrl = previewSiteUrl || undefined;
     if (messageKind === "payment_reminder") {
-      return buildPaymentReminderEmail({ displayName: name, poolName });
+      return buildPaymentReminderEmail({
+        displayName: name,
+        poolName,
+        siteUrl,
+      });
     }
     if (messageKind === "deadline_reminder") {
       return buildDeadlineReminderEmail({
         displayName: name,
         poolName,
         lockAtIso,
+        siteUrl,
       });
     }
     const sub = customSubject.trim() || "Reminder: {{pool}}";
@@ -117,6 +126,7 @@ export function PoolCommunicationsForm({
     lockAtIso,
     messageKind,
     poolName,
+    previewSiteUrl,
     resolved.targets,
   ]);
 

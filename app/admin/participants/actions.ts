@@ -1,7 +1,7 @@
 "use server";
 
 import { createClient } from "@/lib/supabase/server";
-import { joinInviteUrl } from "../../../lib/config/site-origin";
+import { joinInviteUrl } from "@/lib/site-url";
 import { generateInviteToken } from "../../../lib/invites/generateInviteToken";
 import { sendParticipantInviteEmail } from "../../../lib/invites/sendParticipantInviteEmail";
 import { revalidatePath } from "next/cache";

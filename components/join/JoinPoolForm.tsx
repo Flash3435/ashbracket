@@ -12,6 +12,7 @@ import {
 import {
   claimParticipantInvite,
   claimPoolParticipant,
+  getMyParticipantIdInPool,
   peekJoinablePool,
   peekParticipantInvite,
   registerInPool,
@@ -48,6 +49,10 @@ export function JoinPoolForm({
   const [mode, setMode] = useState<"create" | "claim">("create");
   const [formError, setFormError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
+  /** `undefined` = not checked yet; `null` = not already in pool; string = existing participant id */
+  const [existingPoolParticipantId, setExistingPoolParticipantId] = useState<
+    string | null | undefined
+  >(undefined);
 
   const resolved = peek?.ok ? peek : null;
   const resolvedInvite = invitePeek?.ok ? invitePeek : null;
@@ -136,6 +141,7 @@ export function JoinPoolForm({
 
   useEffect(() => {
     if (inviteMode) {
+      setExistingPoolParticipantId(undefined);
       startTransition(async () => {
         const result = await peekParticipantInvite(inviteToken);
         setInvitePeek(result);
@@ -153,6 +159,18 @@ export function JoinPoolForm({
       }
     });
   }, [initialCode, inviteMode, inviteToken]);
+
+  useEffect(() => {
+    if (!inviteMode || !isSignedIn || !resolvedInvite) {
+      setExistingPoolParticipantId(undefined);
+      return;
+    }
+    setExistingPoolParticipantId(undefined);
+    startTransition(async () => {
+      const id = await getMyParticipantIdInPool(resolvedInvite.poolId);
+      setExistingPoolParticipantId(id);
+    });
+  }, [inviteMode, isSignedIn, resolvedInvite]);
 
   return (
     <div className="space-y-8">
@@ -236,24 +254,44 @@ export function JoinPoolForm({
       {inviteMode && isSignedIn && resolvedInvite ? (
         <section className="space-y-4">
           <h2 className="text-sm font-bold text-ash-text">2. Connect your bracket</h2>
-          <p className="text-sm text-ash-muted">
-            One step left — we will link your signed-in account to this pool
-            profile and take you to your picks.
-          </p>
-          <form onSubmit={onAcceptInvite} className="space-y-4">
-            {formError ? (
-              <p className="text-sm text-red-300" role="alert">
-                {formError}
+          {existingPoolParticipantId === undefined ? (
+            <p className="text-sm text-ash-muted">Checking your pool membership…</p>
+          ) : existingPoolParticipantId ? (
+            <>
+              <p className="text-sm text-ash-muted">
+                Your account is already in this pool. The invite may be for a
+                separate placeholder row your organizer added; you do not need
+                to accept it again.
               </p>
-            ) : null}
-            <button
-              type="submit"
-              disabled={pending}
-              className="btn-primary disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              {pending ? "Connecting…" : "Join pool & open picks"}
-            </button>
-          </form>
+              <Link
+                href={`/account/picks?participant=${encodeURIComponent(existingPoolParticipantId)}`}
+                className="btn-primary inline-flex text-sm"
+              >
+                Open bracket picks
+              </Link>
+            </>
+          ) : (
+            <>
+              <p className="text-sm text-ash-muted">
+                One step left — we will link your signed-in account to this pool
+                profile and take you to your picks.
+              </p>
+              <form onSubmit={onAcceptInvite} className="space-y-4">
+                {formError ? (
+                  <p className="text-sm text-red-300" role="alert">
+                    {formError}
+                  </p>
+                ) : null}
+                <button
+                  type="submit"
+                  disabled={pending}
+                  className="btn-primary disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {pending ? "Connecting…" : "Join pool & open picks"}
+                </button>
+              </form>
+            </>
+          )}
         </section>
       ) : null}
 
