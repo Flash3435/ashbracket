@@ -5,17 +5,27 @@ import { mapPredictionRow } from "../../src/lib/scoring/mapSupabaseRows";
 import type { Prediction, TournamentStage } from "../../src/types/domain";
 import { DEFAULT_PARTICIPANT_BONUS_KEYS } from "../predictions/buildParticipantPickDrafts";
 import { mapTournamentStageRow } from "../results/mapRows";
+import { isKnockoutProgressionKind } from "../predictions/knockoutProgressionKinds";
+import { fetchOfficialRoundOf32Complete } from "../tournament/fetchOfficialRoundOf32Complete";
 
 type PredRow = Parameters<typeof mapPredictionRow>[0];
 
 /**
- * Whether every required pick slot (groups, bracket, bonuses) has a team chosen.
+ * Whether every required pick slot has a team chosen. When the official Round of 32 is
+ * not published yet, knockout progression rows are ignored so participants are not
+ * flagged incomplete for rounds they cannot fill.
  */
 export function participantPicksCompleteFromDrafts(
   slots: ReturnType<typeof buildAllParticipantPickDrafts>,
+  options?: { knockoutBracketPicksUnlocked?: boolean },
 ): boolean {
   if (slots.length === 0) return false;
-  return slots.every((s) => s.teamId.trim() !== "");
+  const unlocked = options?.knockoutBracketPicksUnlocked !== false;
+  const relevant = unlocked
+    ? slots
+    : slots.filter((s) => !isKnockoutProgressionKind(s.predictionKind));
+  if (relevant.length === 0) return false;
+  return relevant.every((s) => s.teamId.trim() !== "");
 }
 
 /**
@@ -87,6 +97,11 @@ export async function loadParticipantIdsWithIncompletePicks(
   const bonusKeys =
     fromDb.length > 0 ? fromDb : [...DEFAULT_PARTICIPANT_BONUS_KEYS];
 
+  const r32Stage = stages.find((s) => s.code === "round_of_32");
+  const knockoutBracketPicksUnlocked = r32Stage
+    ? await fetchOfficialRoundOf32Complete(supabase, r32Stage.id)
+    : true;
+
   for (const pid of participantIds) {
     const slots = buildAllParticipantPickDrafts({
       stageByCode,
@@ -94,7 +109,11 @@ export async function loadParticipantIdsWithIncompletePicks(
       participantId: pid,
       bonusKeys,
     });
-    if (!participantPicksCompleteFromDrafts(slots)) {
+    if (
+      !participantPicksCompleteFromDrafts(slots, {
+        knockoutBracketPicksUnlocked,
+      })
+    ) {
       incomplete.add(pid);
     }
   }

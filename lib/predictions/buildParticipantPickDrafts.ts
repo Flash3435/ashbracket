@@ -12,8 +12,11 @@ function bracketSlotLabel(kind: string, slotKey: string | null): string {
   if (kind === "quarterfinalist") return `Quarter-final pick ${slotKey}`;
   if (kind === "semifinalist") return `Semi-final pick ${slotKey}`;
   if (kind === "finalist") return `Final pick ${slotKey}`;
-  if (kind === "third_place_qualifier")
-    return `Third-place qualifier ${slotKey}`;
+  if (kind === "third_place_qualifier") {
+    const n = slotKey != null ? parseInt(slotKey, 10) : NaN;
+    const label = Number.isFinite(n) ? `${n}` : "?";
+    return `Third-place advancer (${label} of 8 — order does not affect scoring)`;
+  }
   return `Slot ${slotKey}`;
 }
 

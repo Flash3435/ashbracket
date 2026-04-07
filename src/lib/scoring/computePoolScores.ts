@@ -147,6 +147,25 @@ function lookupRulePoints(rulesMap: Map<string, number>, pred: Prediction): numb
   return rulesMap.get(pred.predictionKind);
 }
 
+/** Official advancing third-place teams: slot order in `results` does not matter. */
+function buildThirdPlaceOfficialByTeamId(
+  results: Result[],
+  stageId: string,
+): Map<string, Result> {
+  const m = new Map<string, Result>();
+  for (const r of results) {
+    if (
+      r.kind !== "third_place_qualifier" ||
+      r.tournamentStageId !== stageId ||
+      !r.teamId
+    ) {
+      continue;
+    }
+    if (!m.has(r.teamId)) m.set(r.teamId, r);
+  }
+  return m;
+}
+
 function scoreGroupAdvancePick(
   pred: Prediction,
   outcomes: Map<string, GroupOutcome>,
@@ -232,6 +251,8 @@ export function computePoolScores(input: PoolScoringInput): ScoringOutcome {
 
   const poolPreds = predictions.filter((p) => p.poolId === poolId);
 
+  const thirdPlaceOfficialCache = new Map<string, Map<string, Result>>();
+
   for (const pred of poolPreds) {
     if (
       useGroupAdvance &&
@@ -244,6 +265,34 @@ export function computePoolScores(input: PoolScoringInput): ScoringOutcome {
         totals[gLine.participantId] =
           (totals[gLine.participantId] ?? 0) + gLine.pointsDelta;
       }
+      continue;
+    }
+
+    if (pred.predictionKind === "third_place_qualifier" && pred.teamId) {
+      const stageId = pred.tournamentStageId;
+      if (!stageId) continue;
+      let official = thirdPlaceOfficialCache.get(stageId);
+      if (!official) {
+        official = buildThirdPlaceOfficialByTeamId(results, stageId);
+        thirdPlaceOfficialCache.set(stageId, official);
+      }
+      if (official.size === 0) continue;
+      const res = official.get(pred.teamId);
+      if (!res) continue;
+
+      const points = lookupRulePoints(rulesMap, pred);
+      if (points === undefined || points <= 0) continue;
+
+      ledgerLines.push({
+        poolId,
+        participantId: pred.participantId,
+        pointsDelta: points,
+        predictionKind: pred.predictionKind,
+        predictionId: pred.id,
+        resultId: res.id,
+        note: `Match: third_place_qualifier (set; ${points} pts)`,
+      });
+      totals[pred.participantId] = (totals[pred.participantId] ?? 0) + points;
       continue;
     }
 

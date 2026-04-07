@@ -14,6 +14,7 @@ import { mapPredictionRow } from "../../src/lib/scoring/mapSupabaseRows";
 import type { Prediction, Team, TournamentStage } from "../../src/types/domain";
 import type { Participant } from "../../types/participant";
 import type { KnockoutPickSlotDraft } from "../../types/adminKnockoutPicks";
+import { fetchOfficialRoundOf32Complete } from "../tournament/fetchOfficialRoundOf32Complete";
 
 /** Stages needed to build the full participant picks wizard. */
 export const ACCOUNT_TOURNAMENT_STAGE_CODES = [
@@ -77,6 +78,11 @@ export type AccountKnockoutSelection = {
   profileLinkItems: Array<{ id: string; displayName: string; poolName: string }>;
   /** Group letter → country codes from official group fixtures; empty when unavailable. */
   groupTeamCountryCodesByLetter: Record<string, string[]>;
+  /**
+   * When false, participants only edit groups, third-place qualifiers, and bonuses until
+   * organizers publish all 32 official Round of 32 `results` rows.
+   */
+  knockoutBracketPicksUnlocked: boolean;
 };
 
 /**
@@ -97,6 +103,7 @@ export async function loadAccountKnockoutSelection(
   let predictions: Prediction[] = [];
   let bonusKeysOrdered: string[] = [...DEFAULT_PARTICIPANT_BONUS_KEYS];
   let groupTeamCountryCodesByLetter: Record<string, string[]> = {};
+  let knockoutBracketPicksUnlocked = true;
   let loadError: string | null = null;
   let selectedId: string | null = null;
   let selectedParticipant: Participant | null = null;
@@ -166,6 +173,16 @@ export async function loadAccountKnockoutSelection(
         teams = (teamsRes.data ?? []).map(mapTeamRow);
         stages = (stagesRes.data ?? []).map(mapTournamentStageRow);
         groupTeamCountryCodesByLetter = groupCodes;
+      }
+    }
+
+    if (!loadError) {
+      const r32Stage = stages.find((s) => s.code === "round_of_32");
+      if (r32Stage) {
+        knockoutBracketPicksUnlocked = await fetchOfficialRoundOf32Complete(
+          supabase,
+          r32Stage.id,
+        );
       }
     }
 
@@ -286,6 +303,7 @@ export async function loadAccountKnockoutSelection(
     initialSlots,
     profileLinkItems,
     groupTeamCountryCodesByLetter,
+    knockoutBracketPicksUnlocked,
   };
 }
 

@@ -13,7 +13,7 @@
     "lint": "eslint",
     "deploy:check": "npm run build && npm run lint",
     "deploy:db": "supabase db push",
-    "deploy:web": "vercel deploy --prod",
+    "deploy:vercel-cli": "vercel deploy --prod",
     "verify:prod": "node scripts/verify-production.mjs",
     "test:scoring": "tsx src/lib/scoring/computePoolScores.selftest.ts",
     "seed:wc2026": "tsx scripts/seed-official-wc2026.ts",

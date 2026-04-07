@@ -10,6 +10,7 @@ import {
 } from "../../lib/teams/teamStrengthLabel";
 import type { KnockoutPickSlotDraft } from "../../types/adminKnockoutPicks";
 import type { Team } from "../../src/types/domain";
+import { isKnockoutProgressionKind } from "../../lib/predictions/knockoutProgressionKinds";
 
 type StageBlockProps = {
   title: string;
@@ -85,6 +86,7 @@ type Props = {
   locked: boolean;
   lockHint: string | null;
   showSavedBanner: boolean;
+  knockoutBracketPicksUnlocked?: boolean;
 };
 
 function sortGroupRows(rows: KnockoutPickSlotDraft[]): KnockoutPickSlotDraft[] {
@@ -105,6 +107,7 @@ export function MyKnockoutPicksSummary({
   locked,
   lockHint,
   showSavedBanner,
+  knockoutBracketPicksUnlocked = true,
 }: Props) {
   const teamById = new Map(teams.map((t) => [t.id, t]));
   const group = sortGroupRows(
@@ -124,6 +127,9 @@ export function MyKnockoutPicksSummary({
   const bonus = slots.filter((s) => s.predictionKind === "bonus_pick");
 
   const filledCount = slots.filter((s) => s.teamId.trim() !== "").length;
+  const hasLegacyKnockoutPicks = slots.some(
+    (s) => isKnockoutProgressionKind(s.predictionKind) && s.teamId.trim(),
+  );
 
   const editHref = `/account/picks?participant=${participantId}`;
 
@@ -179,47 +185,69 @@ export function MyKnockoutPicksSummary({
           teamById={teamById}
         />
         <StageBlock
-          title="Third-place qualifiers"
-          subtitle="Eight teams advancing from third place"
+          title="Third-place advancers"
+          subtitle="Eight teams you predict will qualify from third place (not their bracket slots)"
           rows={third}
           teamById={teamById}
         />
-        <StageBlock
-          title="Round of 32"
-          subtitle="All 32 teams you expect in this round"
-          rows={r32}
-          teamById={teamById}
-        />
-        <StageBlock
-          title="Round of 16"
-          subtitle="Sixteen teams in the second knockout round"
-          rows={r16}
-          teamById={teamById}
-        />
-        <StageBlock
-          title="Quarter-finalists"
-          subtitle="Last eight"
-          rows={qf}
-          teamById={teamById}
-        />
-        <StageBlock
-          title="Semi-finalists"
-          subtitle="Four teams in the semis"
-          rows={sf}
-          teamById={teamById}
-        />
-        <StageBlock
-          title="Finalists"
-          subtitle="Your predicted finalists"
-          rows={fin}
-          teamById={teamById}
-        />
-        <StageBlock
-          title="Champion"
-          subtitle="Tournament winner"
-          rows={champ}
-          teamById={teamById}
-        />
+        {knockoutBracketPicksUnlocked ? (
+          <>
+            <StageBlock
+              title="Round of 32"
+              subtitle="All 32 teams in their official slots"
+              rows={r32}
+              teamById={teamById}
+            />
+            <StageBlock
+              title="Round of 16"
+              subtitle="Sixteen teams in the second knockout round"
+              rows={r16}
+              teamById={teamById}
+            />
+            <StageBlock
+              title="Quarter-finalists"
+              subtitle="Last eight"
+              rows={qf}
+              teamById={teamById}
+            />
+            <StageBlock
+              title="Semi-finalists"
+              subtitle="Four teams in the semis"
+              rows={sf}
+              teamById={teamById}
+            />
+            <StageBlock
+              title="Finalists"
+              subtitle="Your predicted finalists"
+              rows={fin}
+              teamById={teamById}
+            />
+            <StageBlock
+              title="Champion"
+              subtitle="Tournament winner"
+              rows={champ}
+              teamById={teamById}
+            />
+          </>
+        ) : (
+          <section className="ash-surface p-4 lg:col-span-2">
+            <h2 className="text-base font-bold text-ash-text">
+              Knockout bracket (Round of 32 → champion)
+            </h2>
+            <p className="mt-1 text-xs text-ash-muted">
+              This section opens after organizers enter the full official Round of
+              32 lineup. You are not missing a step — the pool intentionally waits
+              for real FIFA bracket slots before knockout picks and scoring.
+            </p>
+            {hasLegacyKnockoutPicks ? (
+              <p className="mt-3 text-xs text-amber-100">
+                Older saved knockout rows are still on file but stay frozen until
+                the bracket unlocks; they are not shown here to avoid looking
+                like a finished draw.
+              </p>
+            ) : null}
+          </section>
+        )}
         <StageBlock
           title="Bonus picks"
           subtitle="Extra tournament-wide questions"

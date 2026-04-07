@@ -1,4 +1,5 @@
 import type { KnockoutPickSlotDraft } from "../../types/adminKnockoutPicks";
+import { isKnockoutProgressionKind } from "./knockoutProgressionKinds";
 
 const BRACKET_DEDUPE_KINDS = new Set([
   "round_of_32",
@@ -53,6 +54,7 @@ export function eligibleRoundOf32Pool(slots: KnockoutPickSlotDraft[]): Set<strin
  */
 export function pruneParticipantPicks(
   slots: KnockoutPickSlotDraft[],
+  options?: { freezeKnockoutProgressionPicks?: boolean },
 ): KnockoutPickSlotDraft[] {
   const eligibleR32 = eligibleRoundOf32Pool(slots);
   const r32 = idsForKind(slots, "round_of_32");
@@ -62,6 +64,12 @@ export function pruneParticipantPicks(
   const fin = idsForKind(slots, "finalist");
 
   return slots.map((row) => {
+    if (
+      options?.freezeKnockoutProgressionPicks &&
+      isKnockoutProgressionKind(row.predictionKind)
+    ) {
+      return row;
+    }
     const id = row.teamId.trim();
     if (!id) return row;
 
@@ -111,6 +119,7 @@ export function assignParticipantPickDeduped(
   slots: KnockoutPickSlotDraft[],
   rowKey: string,
   teamId: string,
+  options?: { freezeKnockoutProgressionPicks?: boolean },
 ): KnockoutPickSlotDraft[] {
   const target = slots.find((s) => s.rowKey === rowKey);
   if (!target) return slots;
@@ -141,7 +150,7 @@ export function assignParticipantPickDeduped(
     return s;
   });
 
-  return pruneParticipantPicks(next);
+  return pruneParticipantPicks(next, options);
 }
 
 /** @deprecated Use assignParticipantPickDeduped */

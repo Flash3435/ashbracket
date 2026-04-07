@@ -81,7 +81,7 @@ export default async function AccountPicksSummaryPage({ searchParams }: PageProp
 
       <PageTitle
         title="Your bracket snapshot"
-        description="Groups, every knockout round, third-place picks, bonus answers, and upcoming matches for the teams you selected."
+        description="Groups, third-place advancers, knockout rounds (when unlocked), bonus answers, and upcoming matches for the teams you selected."
       />
 
       {ctx.loadError ? (
@@ -152,6 +152,7 @@ export default async function AccountPicksSummaryPage({ searchParams }: PageProp
                 locked={locked}
                 lockHint={lockHint}
                 showSavedBanner={showSavedBanner}
+                knockoutBracketPicksUnlocked={ctx.knockoutBracketPicksUnlocked}
               />
 
               <section className="ash-surface p-4">

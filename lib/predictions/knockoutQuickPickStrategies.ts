@@ -2,6 +2,7 @@ import type { Team } from "../../src/types/domain";
 import type { KnockoutPickSlotDraft } from "../../types/adminKnockoutPicks";
 import { WC2026_GROUP_CODES } from "../tournament/wc2026GroupCodes";
 import { teamStrengthLabel } from "../teams/teamStrengthLabel";
+import { isKnockoutProgressionKind } from "./knockoutProgressionKinds";
 
 function shuffleInPlace<T>(arr: T[]): T[] {
   for (let i = arr.length - 1; i > 0; i -= 1) {
@@ -167,8 +168,10 @@ export function applyQuickPickToSlots(
   slots: KnockoutPickSlotDraft[],
   teams: Team[],
   mode: QuickPickMode,
+  options?: { fillKnockoutProgression?: boolean },
 ): KnockoutPickSlotDraft[] {
   if (teams.length === 0) return slots;
+  const fillKnockoutProgression = options?.fillKnockoutProgression !== false;
 
   const pool = orderedTeamsForMode(teams, mode);
   const used = new Set<string>();
@@ -272,7 +275,7 @@ export function applyQuickPickToSlots(
   let si = 0;
   let fi = 0;
 
-  return slots.map((row) => {
+  const mapped = slots.map((row) => {
     if (row.predictionKind === "group_winner" && row.groupCode) {
       const id = groupWinnerByLetter.get(row.groupCode) ?? "";
       return { ...row, teamId: id };
@@ -286,6 +289,9 @@ export function applyQuickPickToSlots(
       const idx = Number.isFinite(sk) ? sk - 1 : 0;
       const id = thirdIds[idx] ?? "";
       return { ...row, teamId: id };
+    }
+    if (!fillKnockoutProgression && isKnockoutProgressionKind(row.predictionKind)) {
+      return { ...row, teamId: "" };
     }
     if (row.predictionKind === "round_of_32") {
       const id = r32List[r32i] ?? "";
@@ -317,4 +323,6 @@ export function applyQuickPickToSlots(
     }
     return row;
   });
+
+  return mapped;
 }

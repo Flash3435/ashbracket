@@ -70,7 +70,7 @@ export default async function AccountPicksPage({ searchParams }: PageProps) {
 
       <PageTitle
         title="Your picks"
-        description="Walk through the full tournament: groups, third-place qualifiers, Round of 32 through champion, then bonus questions. Quick start fills everything except bonuses. Edits apply until the pool locks."
+        description="Groups, eight third-place advancers, then bonus questions anytime. Round of 32 through champion open only after organizers publish the official bracket. Quick start fills groups and third-place picks (and the full knockout path when that step is open). Edits apply until the pool locks."
       />
 
       {ctx.loadError ? (
@@ -157,6 +157,7 @@ export default async function AccountPicksPage({ searchParams }: PageProps) {
                 participantId={ctx.selectedParticipant.id}
                 participantDisplayName={ctx.selectedParticipant.displayName}
                 initialSlots={ctx.initialSlots}
+                knockoutBracketPicksUnlocked={ctx.knockoutBracketPicksUnlocked}
                 teams={ctx.teams}
                 groupTeamCountryCodesByLetter={ctx.groupTeamCountryCodesByLetter}
                 disabled={ctx.teams.length === 0}

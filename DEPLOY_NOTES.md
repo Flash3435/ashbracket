@@ -7,7 +7,7 @@ Small-team workflow: migrate the database first, ship data updates if needed, co
 | Tool | Purpose |
 |------|---------|
 | [Supabase CLI](https://supabase.com/docs/guides/cli) | `supabase db push` to production |
-| [Vercel CLI](optional) | `npm run deploy:web` — or rely on Git → Vercel |
+| [Vercel CLI](optional) | `npm run deploy:vercel-cli` — only if you do not use Git → Vercel |
 
 Link the repo to your Supabase project (from `ashbracket/`):
 
@@ -24,7 +24,7 @@ Use this every time schema, data, or app code changes together.
 - [ ] **2. Database** — `npm run deploy:db` (runs `supabase db push`)
 - [ ] **3. Data** — only when needed (see [Seed / data updates](#seed--data-updates))
 - [ ] **4. Git** — commit and `git push origin main`
-- [ ] **5. App** — if Vercel is **not** auto-deploying from Git: `npm run deploy:web`
+- [ ] **5. App** — normally **skip**: `git push` triggers Vercel. Only if Git integration is off: `npm run deploy:vercel-cli`
 - [ ] **6. Production smoke** — [Manual checklist](#production-smoke-after-deploy) or `npm run verify:prod` with `ASHBRACKET_URL` set
 
 ### npm shortcuts
@@ -33,7 +33,7 @@ Use this every time schema, data, or app code changes together.
 |--------|----------------|
 | `npm run deploy:check` | `npm run build` then `npm run lint` — run before every release |
 | `npm run deploy:db` | `supabase db push` — applies `supabase/migrations/*` to the linked project |
-| `npm run deploy:web` | `vercel deploy --prod` — optional if you deploy from CLI |
+| `npm run deploy:vercel-cli` | `vercel deploy --prod` — rare; default is Git push → Vercel |
 | `npm run verify:prod` | HTTP smoke test (needs `ASHBRACKET_URL`) — see below |
 
 ### Seed / data updates
@@ -82,5 +82,5 @@ ASHBRACKET_URL=https://your-production-domain npm run verify:prod
 ## Audit notes (why this order)
 
 - **DB before app:** New code may expect new columns or views; deploying the app first can cause runtime errors until `db push` runs.
-- **Git push before manual Vercel:** Most teams use Git integration so push = deploy; `deploy:web` is for CLI-only or redeploys.
+- **Git push is the app deploy:** Vercel builds from the repo; `deploy:vercel-cli` is only for CLI-only or emergency redeploys.
 - **verify:prod:** Catches wrong URL, outage, or 500s on key routes without testing every admin page.

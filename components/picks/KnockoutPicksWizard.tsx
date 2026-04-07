@@ -43,6 +43,11 @@ export type KnockoutPicksWizardProps = {
   participantId: string;
   participantDisplayName: string;
   initialSlots: KnockoutPickSlotDraft[];
+  /**
+   * When false, Round of 32 through champion steps are hidden until organizers publish
+   * all 32 official Round of 32 results. Defaults to true (e.g. admin pick editor).
+   */
+  knockoutBracketPicksUnlocked?: boolean;
   teams: Team[];
   /**
    * Group letter (e.g. "A") → FIFA country codes in that group from official
@@ -80,83 +85,97 @@ type WizardStepDef =
     }
   | { id: number; mode: "bonus"; title: string; intro: string; hint: string };
 
-const WIZARD_STEPS: WizardStepDef[] = [
-  {
-    id: 0,
-    mode: "group",
-    title: "Group stage",
-    intro:
-      "For every letter group, pick who finishes first and who finishes second. In the real tournament both of those teams move on.",
-    hint: "You can jump between steps anytime; later rounds may narrow your choices based on what you chose here.",
-  },
-  {
-    id: 1,
-    mode: "bracket",
-    bracketKind: "third_place_qualifier",
-    title: "Third-place qualifiers",
-    intro:
-      "Choose the eight teams you think will advance as the best third-place finishers into the Round of 32.",
-    hint: "These picks can be any national teams — they don’t have to match your group winners.",
-  },
-  {
-    id: 2,
-    mode: "bracket",
-    bracketKind: "round_of_32",
-    title: "Round of 32",
-    intro:
-      "Pick all 32 teams you expect to play in this round. Choices are easiest if they match your group finishes and third-place picks (we’ll highlight that pool).",
-    hint: "If you haven’t finished groups yet, you can still pick freely — we only narrow the list once those picks exist.",
-  },
-  {
-    id: 3,
-    mode: "bracket",
-    bracketKind: "round_of_16",
-    title: "Round of 16",
-    intro:
-      "Narrow to sixteen teams. Each should be one of your Round of 32 teams when those picks are filled in.",
-    hint: "Changing Round of 32 can clear picks here that no longer fit.",
-  },
-  {
-    id: 4,
-    mode: "bracket",
-    bracketKind: "quarterfinalist",
-    title: "Quarter-finals",
-    intro: "Pick eight teams for the last eight.",
-    hint: "Each must come from your Round of 16 when that step is complete.",
-  },
-  {
-    id: 5,
-    mode: "bracket",
-    bracketKind: "semifinalist",
-    title: "Semi-finals",
-    intro: "Pick four teams to reach the semi-finals.",
-    hint: "They must be teams you already picked for the quarters.",
-  },
-  {
-    id: 6,
-    mode: "bracket",
-    bracketKind: "finalist",
-    title: "The final",
-    intro: "Pick the two finalists.",
-    hint: "Both must come from your semi-finalists.",
-  },
-  {
-    id: 7,
-    mode: "bracket",
-    bracketKind: "champion",
-    title: "Champion",
-    intro: "Pick one tournament winner from your two finalists.",
-    hint: "Save whenever you’re ready — you can edit until the pool locks.",
-  },
-  {
-    id: 8,
-    mode: "bonus",
-    title: "Bonus picks",
-    intro:
-      "Three extra questions for the whole tournament. One team per question.",
-    hint: "These don’t affect your bracket chain — pick any team for each.",
-  },
-];
+function participantWizardSteps(
+  knockoutBracketPicksUnlocked: boolean,
+): WizardStepDef[] {
+  const core: WizardStepDef[] = [
+    {
+      id: 0,
+      mode: "group",
+      title: "Group stage",
+      intro:
+        "For every letter group, pick who finishes first and who finishes second. In the real tournament both of those teams move on.",
+      hint: "You can jump between steps anytime; later rounds may narrow your choices based on what you chose here.",
+    },
+    {
+      id: 0,
+      mode: "bracket",
+      bracketKind: "third_place_qualifier",
+      title: "Best third-place teams",
+      intro:
+        "Choose the eight national teams you think will advance as the best third-place finishers. You are only predicting who qualifies — not which Round of 32 bracket slot FIFA assigns them to.",
+      hint: "Any eight different teams are allowed. Order in the list does not change your score.",
+    },
+  ];
+
+  const knockoutChain: WizardStepDef[] = knockoutBracketPicksUnlocked
+    ? [
+        {
+          id: 0,
+          mode: "bracket",
+          bracketKind: "round_of_32",
+          title: "Round of 32",
+          intro:
+            "Now that the official Round of 32 bracket is set, pick all 32 teams in their tournament slots (your pool unlocks this step once organizers publish the real lineup).",
+          hint: "Choices are easiest if they match your group finishes and third-place picks — we’ll highlight that pool when your earlier steps are filled.",
+        },
+        {
+          id: 0,
+          mode: "bracket",
+          bracketKind: "round_of_16",
+          title: "Round of 16",
+          intro:
+            "Narrow to sixteen teams. Each should be one of your Round of 32 teams when those picks are filled in.",
+          hint: "Changing Round of 32 can clear picks here that no longer fit.",
+        },
+        {
+          id: 0,
+          mode: "bracket",
+          bracketKind: "quarterfinalist",
+          title: "Quarter-finals",
+          intro: "Pick eight teams for the last eight.",
+          hint: "Each must come from your Round of 16 when that step is complete.",
+        },
+        {
+          id: 0,
+          mode: "bracket",
+          bracketKind: "semifinalist",
+          title: "Semi-finals",
+          intro: "Pick four teams to reach the semi-finals.",
+          hint: "They must be teams you already picked for the quarters.",
+        },
+        {
+          id: 0,
+          mode: "bracket",
+          bracketKind: "finalist",
+          title: "The final",
+          intro: "Pick the two finalists.",
+          hint: "Both must come from your semi-finalists.",
+        },
+        {
+          id: 0,
+          mode: "bracket",
+          bracketKind: "champion",
+          title: "Champion",
+          intro: "Pick one tournament winner from your two finalists.",
+          hint: "Save whenever you’re ready — you can edit until the pool locks.",
+        },
+      ]
+    : [];
+
+  const bonus: WizardStepDef[] = [
+    {
+      id: 0,
+      mode: "bonus",
+      title: "Bonus picks",
+      intro:
+        "Three extra questions for the whole tournament. One team per question.",
+      hint: "These don’t affect your bracket chain — pick any team for each.",
+    },
+  ];
+
+  return [...core, ...knockoutChain, ...bonus].map((s, i) => ({ ...s, id: i }));
+}
 
 function groupPickRows(slots: KnockoutPickSlotDraft[]): KnockoutPickSlotDraft[] {
   return slots
@@ -177,8 +196,9 @@ function groupPickRows(slots: KnockoutPickSlotDraft[]): KnockoutPickSlotDraft[] 
 function stepRowsFor(
   slots: KnockoutPickSlotDraft[],
   stepIdx: number,
+  steps: WizardStepDef[],
 ): KnockoutPickSlotDraft[] {
-  const def = WIZARD_STEPS[stepIdx];
+  const def = steps[stepIdx];
   if (!def) return [];
   if (def.mode === "group") return groupPickRows(slots);
   if (def.mode === "bonus")
@@ -186,8 +206,12 @@ function stepRowsFor(
   return slots.filter((s) => s.predictionKind === def.bracketKind);
 }
 
-function stepComplete(slots: KnockoutPickSlotDraft[], stepIdx: number): boolean {
-  const rows = stepRowsFor(slots, stepIdx);
+function stepComplete(
+  slots: KnockoutPickSlotDraft[],
+  stepIdx: number,
+  steps: WizardStepDef[],
+): boolean {
+  const rows = stepRowsFor(slots, stepIdx, steps);
   return rows.length > 0 && rows.every((s) => s.teamId.trim() !== "");
 }
 
@@ -447,6 +471,7 @@ export function KnockoutPicksWizard({
   participantId,
   participantDisplayName,
   initialSlots,
+  knockoutBracketPicksUnlocked = true,
   teams,
   groupTeamCountryCodesByLetter,
   disabled = false,
@@ -462,6 +487,11 @@ export function KnockoutPicksWizard({
   const [isPending, startTransition] = useTransition();
   const [slots, setSlots] = useState<KnockoutPickSlotDraft[]>(initialSlots);
   const [step, setStep] = useState(0);
+
+  const wizardSteps = useMemo(
+    () => participantWizardSteps(knockoutBracketPicksUnlocked),
+    [knockoutBracketPicksUnlocked],
+  );
   const [actionError, setActionError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
   const [quickHint, setQuickHint] = useState<string | null>(null);
@@ -474,6 +504,12 @@ export function KnockoutPicksWizard({
   useEffect(() => {
     setSlots(initialSlots);
   }, [initialSlots]);
+
+  useEffect(() => {
+    setStep((s) =>
+      s >= wizardSteps.length ? Math.max(0, wizardSteps.length - 1) : s,
+    );
+  }, [wizardSteps.length]);
 
   useEffect(() => {
     if (!success) return;
@@ -491,24 +527,38 @@ export function KnockoutPicksWizard({
 
   const formDisabled = disabled || readOnly || isPending;
 
-  const currentStepDef = WIZARD_STEPS[step];
+  const currentStepDef = wizardSteps[step];
   const stepRows = useMemo(
-    () => stepRowsFor(slots, step),
-    [slots, step],
+    () => stepRowsFor(slots, step, wizardSteps),
+    [slots, step, wizardSteps],
   );
 
   function setTeamForRow(rowKey: string, teamId: string) {
-    setSlots((prev) => assignParticipantPickDeduped(prev, rowKey, teamId));
+    setSlots((prev) =>
+      assignParticipantPickDeduped(prev, rowKey, teamId, {
+        freezeKnockoutProgressionPicks: !knockoutBracketPicksUnlocked,
+      }),
+    );
   }
 
   function applyQuick(mode: "random" | "favorites" | "balanced") {
-    setSlots((prev) => applyQuickPickToSlots(prev, teams, mode));
+    setSlots((prev) =>
+      applyQuickPickToSlots(prev, teams, mode, {
+        fillKnockoutProgression: knockoutBracketPicksUnlocked,
+      }),
+    );
     setQuickHint(
-      mode === "random"
-        ? "We filled the bracket from groups through champion — adjust anything you like."
-        : mode === "favorites"
-          ? "We leaned on popular picks through the whole path — tweak as you wish."
-          : "We spread teams across regions for groups, then narrowed down — edit freely.",
+      knockoutBracketPicksUnlocked
+        ? mode === "random"
+          ? "We filled the bracket from groups through champion — adjust anything you like."
+          : mode === "favorites"
+            ? "We leaned on popular picks through the whole path — tweak as you wish."
+            : "We spread teams across regions for groups, then narrowed down — edit freely."
+        : mode === "random"
+          ? "We filled group finishes and your eight third-place advancers — knockout steps will open once the official Round of 32 is published."
+          : mode === "favorites"
+            ? "We leaned on popular picks for groups and third-place advancers. Knockout rounds stay empty until the real bracket is set."
+            : "We spread teams for groups and third-place advancers. You’ll finish the knockout path after the official Round of 32 unlocks.",
     );
     setOpenRowKey(null);
     setStep(0);
@@ -545,8 +595,8 @@ export function KnockoutPicksWizard({
   }
 
   function goNext() {
-    if (step >= WIZARD_STEPS.length - 1) return;
-    if (!stepComplete(slots, step)) return;
+    if (step >= wizardSteps.length - 1) return;
+    if (!stepComplete(slots, step, wizardSteps)) return;
     setStep((s) => s + 1);
     setOpenRowKey(null);
     setSearch("");
@@ -592,10 +642,17 @@ export function KnockoutPicksWizard({
     );
   }
 
-  const canGoNext = stepComplete(slots, step) && step < WIZARD_STEPS.length - 1;
+  const canGoNext =
+    stepComplete(slots, step, wizardSteps) && step < wizardSteps.length - 1;
 
-  const groupFilled = stepRowsFor(slots, 0).filter((s) => s.teamId.trim()).length;
-  const groupTotal = stepRowsFor(slots, 0).length;
+  const groupStepIdx = wizardSteps.findIndex((s) => s.mode === "group");
+  const groupFilled =
+    groupStepIdx >= 0
+      ? stepRowsFor(slots, groupStepIdx, wizardSteps).filter((s) => s.teamId.trim())
+          .length
+      : 0;
+  const groupTotal =
+    groupStepIdx >= 0 ? stepRowsFor(slots, groupStepIdx, wizardSteps).length : 0;
   const thirdFilled = slots.filter(
     (s) => s.predictionKind === "third_place_qualifier" && s.teamId.trim(),
   ).length;
@@ -662,6 +719,18 @@ export function KnockoutPicksWizard({
         </p>
       ) : null}
 
+      {!knockoutBracketPicksUnlocked && !readOnly ? (
+        <p
+          className="rounded-md border border-sky-800/50 bg-sky-950/25 px-3 py-2 text-sm text-sky-100"
+          role="status"
+        >
+          Round of 32 through champion stay closed until organizers publish the
+          full official Round of 32 bracket (all 32 teams in their slots). Until
+          then, enter your group finishes, your eight third-place advancers, and
+          bonus picks — then save.
+        </p>
+      ) : null}
+
       <div
         className="flex flex-wrap items-center gap-2 border-b border-ash-border pb-4"
         role="tablist"
@@ -710,11 +779,16 @@ export function KnockoutPicksWizard({
         <section className="ash-surface p-4">
           <h2 className="text-lg font-bold text-ash-text">Knockout bracket</h2>
           <p className="mt-1 text-xs text-ash-muted">
-            How your Round of 32 through champion picks line up. This mirrors
-            your list selections (including unsaved changes until you save).
+            {knockoutBracketPicksUnlocked
+              ? "How your Round of 32 through champion picks line up. This mirrors your list selections (including unsaved changes until you save)."
+              : "Third-place advancers are shown as a simple list. The bracket tree stays in “waiting on official matchups” mode until the pool unlocks Round of 32 picks."}
           </p>
           <div className="mt-4">
-            <KnockoutBracketPreview slots={slots} teams={teams} />
+            <KnockoutBracketPreview
+              slots={slots}
+              teams={teams}
+              knockoutBracketPicksUnlocked={knockoutBracketPicksUnlocked}
+            />
           </div>
         </section>
       ) : null}
@@ -722,8 +796,8 @@ export function KnockoutPicksWizard({
       {picksMainView === "list" ? (
         <>
       <nav aria-label="Tournament pick steps" className="flex flex-wrap gap-2">
-        {WIZARD_STEPS.map((s, i) => {
-          const done = stepComplete(slots, i);
+        {wizardSteps.map((s, i) => {
+          const done = stepComplete(slots, i, wizardSteps);
           const active = i === step;
           return (
             <button
@@ -761,15 +835,17 @@ export function KnockoutPicksWizard({
             {currentStepDef.hint}
           </p>
 
-          {step === 0 && !readOnly && !formDisabled ? (
+          {currentStepDef.mode === "group" && !readOnly && !formDisabled ? (
             <div className="ash-surface mt-4 border border-ash-border bg-ash-body/30 p-3">
               <p className="text-sm font-medium text-ash-text">
-                Quick starter (groups through champion)
+                {knockoutBracketPicksUnlocked
+                  ? "Quick starter (groups through champion)"
+                  : "Quick starter (groups & third-place advancers)"}
               </p>
               <p className="mt-1 text-xs text-ash-muted">
-                We’ll fill group finishes, third-place slots, every knockout
-                round, and the champion in one coherent pass. Bonus questions
-                stay for you to choose.
+                {knockoutBracketPicksUnlocked
+                  ? "We’ll fill group finishes, your eight third-place advancers, every knockout round, and the champion in one coherent pass. Bonus questions stay for you to choose."
+                  : "We’ll fill group finishes and your eight third-place advancers. Knockout rounds open after the official Round of 32 is published. Bonus questions stay for you to choose."}
               </p>
               <div className="mt-3 flex flex-wrap gap-2">
                 <button
@@ -797,41 +873,51 @@ export function KnockoutPicksWizard({
             </div>
           ) : null}
 
-          {step === 0 && groupFilled < groupTotal ? (
+          {currentStepDef.mode === "group" && groupFilled < groupTotal ? (
             <p className="mt-4 rounded-md border border-amber-700/40 bg-amber-950/25 px-3 py-2 text-sm text-amber-100">
               Pick first and second for every group. You’ve filled {groupFilled}{" "}
               of {groupTotal} slots.
             </p>
           ) : null}
-          {step === 1 && thirdFilled < 8 ? (
+          {currentStepDef.mode === "bracket" &&
+          currentStepDef.bracketKind === "third_place_qualifier" &&
+          thirdFilled < 8 ? (
             <p className="mt-4 rounded-md border border-amber-700/40 bg-amber-950/25 px-3 py-2 text-sm text-amber-100">
-              Choose all eight third-place qualifiers. {thirdFilled} of 8 so
-              far.
+              Choose all eight third-place advancers. {thirdFilled} of 8 so far.
             </p>
           ) : null}
-          {step === 2 && r32Filled < 32 ? (
+          {currentStepDef.mode === "bracket" &&
+          currentStepDef.bracketKind === "round_of_32" &&
+          r32Filled < 32 ? (
             <p className="mt-4 rounded-md border border-amber-700/40 bg-amber-950/25 px-3 py-2 text-sm text-amber-100">
-              Pick all 32 Round of 32 teams. {r32Filled} of 32 so far.
+              Pick all 32 Round of 32 teams in their official slots.{" "}
+              {r32Filled} of 32 so far.
             </p>
           ) : null}
-          {step === 3 && r16Filled < 16 ? (
+          {currentStepDef.mode === "bracket" &&
+          currentStepDef.bracketKind === "round_of_16" &&
+          r16Filled < 16 ? (
             <p className="mt-4 rounded-md border border-amber-700/40 bg-amber-950/25 px-3 py-2 text-sm text-amber-100">
               Pick sixteen Round of 16 teams. {r16Filled} of 16 so far.
             </p>
           ) : null}
-          {step === 4 && qfCount < 8 ? (
+          {currentStepDef.mode === "bracket" &&
+          currentStepDef.bracketKind === "quarterfinalist" &&
+          qfCount < 8 ? (
             <p className="mt-4 rounded-md border border-amber-700/40 bg-amber-950/25 px-3 py-2 text-sm text-amber-100">
               Pick all eight quarter-finalists. {qfCount} of 8 so far.
             </p>
           ) : null}
-          {step === 5 &&
+          {currentStepDef.mode === "bracket" &&
+          currentStepDef.bracketKind === "semifinalist" &&
           slots.filter((s) => s.predictionKind === "semifinalist" && s.teamId.trim())
             .length < 4 ? (
             <p className="mt-4 rounded-md border border-amber-700/40 bg-amber-950/25 px-3 py-2 text-sm text-amber-100">
               Choose four semi-finalists on the previous step first.
             </p>
           ) : null}
-          {step === 6 &&
+          {currentStepDef.mode === "bracket" &&
+          currentStepDef.bracketKind === "finalist" &&
           slots.filter((s) => s.predictionKind === "finalist" && s.teamId.trim())
             .length < 2 ? (
             <p className="mt-4 rounded-md border border-amber-700/40 bg-amber-950/25 px-3 py-2 text-sm text-amber-100">
@@ -1114,7 +1200,7 @@ export function KnockoutPicksWizard({
             >
               Back
             </button>
-            {step < WIZARD_STEPS.length - 1 ? (
+            {step < wizardSteps.length - 1 ? (
               <button
                 type="button"
                 disabled={formDisabled || !canGoNext}

@@ -14,6 +14,8 @@ import type { Team } from "../../src/types/domain";
 export type KnockoutBracketPreviewProps = {
   slots: KnockoutPickSlotDraft[];
   teams: Team[];
+  /** When false, the R32→champion columns show placeholders instead of user slot pairings. */
+  knockoutBracketPicksUnlocked?: boolean;
 };
 
 function TeamCell({
@@ -129,8 +131,8 @@ function ThirdPlaceStrip({
         Third-place qualifiers
       </p>
       <p className="mt-1 text-[11px] leading-relaxed text-ash-muted">
-        These eight picks feed the real draw; they are listed here for context.
-        The tree below follows your Round of 32 through champion choices.
+        Your eight advancing third-place teams (order does not matter for scoring).
+        FIFA decides which bracket positions they occupy after the group stage.
       </p>
       <ul className="mt-2 flex flex-wrap gap-2">
         {sorted.map((row) => {
@@ -164,7 +166,48 @@ function ThirdPlaceStrip({
 /**
  * Read-only knockout bracket layout (R32 → champion) from current pick drafts.
  */
-export function KnockoutBracketPreview({ slots, teams }: KnockoutBracketPreviewProps) {
+function PendingKnockoutColumn({
+  title,
+  shortTitle,
+  lineCount,
+}: {
+  title: string;
+  shortTitle: string;
+  lineCount: number;
+}) {
+  return (
+    <div className="flex h-full min-w-[128px] max-w-[180px] flex-1 flex-col border-r border-ash-border/40 pr-2 last:border-r-0 last:pr-0">
+      <h3
+        className="mb-2 shrink-0 text-center text-[10px] font-semibold uppercase tracking-wide text-ash-muted sm:text-xs"
+        title={title}
+      >
+        <span className="sm:hidden">{shortTitle}</span>
+        <span className="hidden sm:inline">{title}</span>
+      </h3>
+      <div className="flex min-h-0 flex-1 flex-col justify-between gap-1">
+        {Array.from({ length: lineCount }, (_, i) => (
+          <div
+            key={i}
+            className="flex min-h-[36px] flex-col justify-center rounded-md border border-dashed border-ash-border/50 bg-ash-body/15 px-2 py-1.5"
+          >
+            <p className="text-[10px] font-medium text-ash-muted">
+              Awaiting official matchups
+            </p>
+            <p className="text-[9px] leading-snug text-ash-border-hover">
+              Picks open after the pool publishes the real bracket.
+            </p>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+export function KnockoutBracketPreview({
+  slots,
+  teams,
+  knockoutBracketPicksUnlocked = true,
+}: KnockoutBracketPreviewProps) {
   const teamById = useMemo(() => new Map(teams.map((t) => [t.id, t])), [teams]);
 
   const third = filterKnockoutSlots(slots, "third_place_qualifier");
@@ -185,9 +228,8 @@ export function KnockoutBracketPreview({ slots, teams }: KnockoutBracketPreviewP
   return (
     <div className="space-y-3">
       <p className="text-sm text-ash-muted">
-        Read-only preview of your knockout path. Empty cells mean you have not
-        chosen that slot yet. Switch to{" "}
-        <span className="font-medium text-ash-text">List view</span> to edit.
+        Read-only preview. Empty cells mean that slot is not filled yet. Switch
+        to <span className="font-medium text-ash-text">List view</span> to edit.
         Group stage and bonus questions stay in the list steps.
       </p>
 
@@ -199,66 +241,112 @@ export function KnockoutBracketPreview({ slots, teams }: KnockoutBracketPreviewP
         aria-label="Knockout bracket preview"
       >
         <div className="flex h-[min(85vh,920px)] min-w-[640px] gap-1 sm:min-w-0 sm:gap-2">
-          <RoundColumn
-            title="Round of 32"
-            shortTitle="R32"
-            pairs={r32}
-            teamById={teamById}
-          />
-          <RoundColumn
-            title="Round of 16"
-            shortTitle="R16"
-            pairs={r16}
-            teamById={teamById}
-          />
-          <RoundColumn
-            title="Quarter-finals"
-            shortTitle="QF"
-            pairs={qf}
-            teamById={teamById}
-          />
-          <RoundColumn
-            title="Semi-finals"
-            shortTitle="SF"
-            pairs={sf}
-            teamById={teamById}
-          />
-          <RoundColumn
-            title="Final"
-            shortTitle="F"
-            pairs={fin}
-            teamById={teamById}
-          />
-          <div className="flex h-full min-w-[100px] max-w-[140px] flex-1 flex-col justify-center">
-            <h3 className="mb-2 text-center text-[10px] font-semibold uppercase tracking-wide text-ash-muted sm:text-xs">
-              Champion
-            </h3>
-            <div
-              className={`rounded-lg border p-3 text-center ${
-                champPicked
-                  ? "border-ash-accent/50 bg-ash-accent/15 ring-1 ring-ash-accent/30"
-                  : "border-ash-border/70 bg-ash-body/30"
-              }`}
-            >
-              <span className="text-2xl" aria-hidden>
-                {champPicked ? champFlag : "🏆"}
-              </span>
-              <p
-                className={`mt-2 text-sm font-semibold ${
-                  champPicked ? "text-ash-text" : "text-ash-muted"
-                }`}
-              >
-                {champPicked
-                  ? champTeam!.name
-                  : champTid
-                    ? "Unknown team"
-                    : "Not picked"}
-              </p>
-              {champPicked ? (
-                <p className="text-[11px] text-ash-muted">{champTeam!.countryCode}</p>
-              ) : null}
-            </div>
-          </div>
+          {knockoutBracketPicksUnlocked ? (
+            <RoundColumn
+              title="Round of 32"
+              shortTitle="R32"
+              pairs={r32}
+              teamById={teamById}
+            />
+          ) : (
+            <PendingKnockoutColumn
+              title="Round of 32"
+              shortTitle="R32"
+              lineCount={16}
+            />
+          )}
+          {knockoutBracketPicksUnlocked ? (
+            <>
+              <RoundColumn
+                title="Round of 16"
+                shortTitle="R16"
+                pairs={r16}
+                teamById={teamById}
+              />
+              <RoundColumn
+                title="Quarter-finals"
+                shortTitle="QF"
+                pairs={qf}
+                teamById={teamById}
+              />
+              <RoundColumn
+                title="Semi-finals"
+                shortTitle="SF"
+                pairs={sf}
+                teamById={teamById}
+              />
+              <RoundColumn
+                title="Final"
+                shortTitle="F"
+                pairs={fin}
+                teamById={teamById}
+              />
+              <div className="flex h-full min-w-[100px] max-w-[140px] flex-1 flex-col justify-center">
+                <h3 className="mb-2 text-center text-[10px] font-semibold uppercase tracking-wide text-ash-muted sm:text-xs">
+                  Champion
+                </h3>
+                <div
+                  className={`rounded-lg border p-3 text-center ${
+                    champPicked
+                      ? "border-ash-accent/50 bg-ash-accent/15 ring-1 ring-ash-accent/30"
+                      : "border-ash-border/70 bg-ash-body/30"
+                  }`}
+                >
+                  <span className="text-2xl" aria-hidden>
+                    {champPicked ? champFlag : "🏆"}
+                  </span>
+                  <p
+                    className={`mt-2 text-sm font-semibold ${
+                      champPicked ? "text-ash-text" : "text-ash-muted"
+                    }`}
+                  >
+                    {champPicked
+                      ? champTeam!.name
+                      : champTid
+                        ? "Unknown team"
+                        : "Not picked"}
+                  </p>
+                  {champPicked ? (
+                    <p className="text-[11px] text-ash-muted">
+                      {champTeam!.countryCode}
+                    </p>
+                  ) : null}
+                </div>
+              </div>
+            </>
+          ) : (
+            <>
+              <PendingKnockoutColumn
+                title="Round of 16"
+                shortTitle="R16"
+                lineCount={8}
+              />
+              <PendingKnockoutColumn
+                title="Quarter-finals"
+                shortTitle="QF"
+                lineCount={4}
+              />
+              <PendingKnockoutColumn
+                title="Semi-finals"
+                shortTitle="SF"
+                lineCount={2}
+              />
+              <PendingKnockoutColumn title="Final" shortTitle="F" lineCount={1} />
+              <div className="flex h-full min-w-[100px] max-w-[140px] flex-1 flex-col justify-center">
+                <h3 className="mb-2 text-center text-[10px] font-semibold uppercase tracking-wide text-ash-muted sm:text-xs">
+                  Champion
+                </h3>
+                <div className="rounded-lg border border-dashed border-ash-border/60 bg-ash-body/15 p-3 text-center">
+                  <span className="text-2xl" aria-hidden>
+                    🏆
+                  </span>
+                  <p className="mt-2 text-[11px] leading-snug text-ash-muted">
+                    Opens with knockout picks
+                  </p>
+                </div>
+              </div>
+            </>
+          )}
         </div>
       </div>
     </div>

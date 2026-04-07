@@ -225,3 +225,75 @@ const again = computePoolScores({
 assert.deepEqual(again.ledgerLines, outcome.ledgerLines);
 
 console.log("scoring selftest: ok");
+
+// Third-place qualifiers: set-based match (official slot order does not matter)
+const stageR32 = "stage-r32-0001-0000-0000-000000000001";
+const teamThirdA = "team-third-a-0001-0000-0000-000000000001";
+const teamThirdB = "team-third-b-0001-0000-0000-000000000001";
+
+const thirdRules: ScoringRule[] = [
+  {
+    id: "rule-tpq",
+    poolId,
+    predictionKind: "third_place_qualifier",
+    bonusKey: null,
+    points: 3,
+    createdAt: now,
+    updatedAt: now,
+  },
+];
+
+const thirdResults: Result[] = [
+  {
+    id: "res-tpq-slot3",
+    tournamentStageId: stageR32,
+    kind: "third_place_qualifier",
+    teamId: teamThirdA,
+    groupCode: null,
+    slotKey: "3",
+    valueText: null,
+    resolvedAt: now,
+    createdAt: now,
+  },
+  {
+    id: "res-tpq-slot1",
+    tournamentStageId: stageR32,
+    kind: "third_place_qualifier",
+    teamId: teamThirdB,
+    groupCode: null,
+    slotKey: "1",
+    valueText: null,
+    resolvedAt: now,
+    createdAt: now,
+  },
+];
+
+const thirdPreds: Prediction[] = [
+  {
+    id: "pred-tpq-user-slot7",
+    poolId,
+    participantId: alice,
+    predictionKind: "third_place_qualifier",
+    teamId: teamThirdA,
+    tournamentStageId: stageR32,
+    groupCode: null,
+    slotKey: "7",
+    bonusKey: null,
+    valueText: null,
+    createdAt: now,
+    updatedAt: now,
+  },
+];
+
+const thirdOutcome = computePoolScores({
+  poolId,
+  predictions: thirdPreds,
+  results: thirdResults,
+  scoringRules: thirdRules,
+});
+
+assert.equal(thirdOutcome.totalsByParticipantId[alice], 3);
+assert.equal(thirdOutcome.ledgerLines.length, 1);
+assert.equal(thirdOutcome.ledgerLines[0]?.resultId, "res-tpq-slot3");
+
+console.log("scoring selftest third-place set match: ok");

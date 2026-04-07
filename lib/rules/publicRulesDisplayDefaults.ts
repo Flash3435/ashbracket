@@ -83,9 +83,9 @@ export const PUBLIC_RULES_PAGE_COPY = {
   knockoutIntro:
     "Each row is a one-time score when that team reaches the round. Points are awarded once and do not carry forward.",
   thirdPlaceIntro:
-    "Pick the 8 third-place teams that will advance to the Round of 32.",
+    "Pick the 8 national teams that will advance as the best third-place finishers. You are not predicting which bracket slot each one gets — only that they qualify.",
   thirdPlacePointsLine:
-    "3 points for each correct team; 0 points if the team does not advance.",
+    "3 points for each correct team (any of your eight slots); 0 points if the team does not advance.",
   bonusIntro:
     "Separate questions tied to the whole tournament. You pick one team per category.",
 } as const;

@@ -2,7 +2,10 @@
 
 import { createClient } from "@/lib/supabase/server";
 import { applyParticipantPickSlots } from "../../../lib/predictions/applyParticipantPickSlots";
+import { mergeKnockoutProgressionSlotsFromPredictions } from "../../../lib/predictions/mergeKnockoutProgressionFromExistingPredictions";
 import { validateKnockoutPickSaveInput } from "../../../lib/predictions/validateKnockoutPickPayload";
+import { fetchOfficialRoundOf32Complete } from "../../../lib/tournament/fetchOfficialRoundOf32Complete";
+import { mapPredictionRow } from "../../../src/lib/scoring/mapSupabaseRows";
 import { revalidatePath } from "next/cache";
 import type {
   ParticipantPickSlotPayload,
@@ -72,10 +75,43 @@ export async function saveMyKnockoutPicksAction(input: {
       };
     }
 
+    let slots = input.slots;
+    const { data: r32StageRow, error: r32StageErr } = await supabase
+      .from("tournament_stages")
+      .select("id")
+      .eq("code", "round_of_32")
+      .maybeSingle();
+    if (r32StageErr) {
+      return { ok: false, error: r32StageErr.message };
+    }
+    if (r32StageRow?.id) {
+      const unlocked = await fetchOfficialRoundOf32Complete(
+        supabase,
+        r32StageRow.id as string,
+      );
+      if (!unlocked) {
+        const { data: predData, error: predFetchErr } = await supabase
+          .from("predictions")
+          .select(
+            "id, pool_id, participant_id, prediction_kind, team_id, tournament_stage_id, group_code, slot_key, bonus_key, value_text, created_at, updated_at",
+          )
+          .eq("pool_id", row.pool_id)
+          .eq("participant_id", input.participantId);
+        if (predFetchErr) {
+          return { ok: false, error: predFetchErr.message };
+        }
+        type PredRow = Parameters<typeof mapPredictionRow>[0];
+        const existing = (predData ?? []).map((r) =>
+          mapPredictionRow(r as PredRow),
+        );
+        slots = mergeKnockoutProgressionSlotsFromPredictions(slots, existing);
+      }
+    }
+
     const applied = await applyParticipantPickSlots(supabase, {
       poolId: row.pool_id,
       participantId: input.participantId,
-      slots: input.slots,
+      slots,
     });
     if (!applied.ok) return applied;
 

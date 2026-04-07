@@ -7,7 +7,7 @@ const LABELS: Record<string, string> = {
   semifinalist: "Semi-finalist",
   finalist: "Finalist",
   champion: "Champion",
-  third_place_qualifier: "Third-place qualifier (Round of 32)",
+  third_place_qualifier: "Third-place advancer (qualifies — not a bracket slot)",
   bonus_pick: "Bonus pick",
 };
 
