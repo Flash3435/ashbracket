@@ -4,8 +4,7 @@ import { PageContainer } from "@/components/ui/PageContainer";
 import { PageTitle } from "@/components/ui/PageTitle";
 import { createClient } from "@/lib/supabase/server";
 import { loadAccountKnockoutSelection } from "../../../lib/account/loadAccountKnockoutSelection";
-import { ensureDailyAshRecapForPool } from "../../../lib/poolActivity/ensureDailyAshRecap";
-import { fetchPoolActivityForPool } from "../../../lib/poolActivity/fetchPoolActivity";
+import { loadPoolActivityForViewer } from "../../../lib/poolActivity/loadPoolActivityForViewer";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 
@@ -30,19 +29,17 @@ export default async function AccountActivityPage({ searchParams }: PageProps) {
   const ctx = await loadAccountKnockoutSelection(user.id, participantParam);
 
   let feedError: string | null = null;
-  let items: Awaited<ReturnType<typeof fetchPoolActivityForPool>> = [];
+  let items: Awaited<ReturnType<typeof loadPoolActivityForViewer>> = [];
   const selectedPoolId = ctx.selectedId
     ? ctx.myParticipants.find((p) => p.id === ctx.selectedId)?.pool_id
     : null;
 
   if (ctx.selectedId && selectedPoolId && !ctx.loadError) {
     try {
-      await ensureDailyAshRecapForPool(selectedPoolId);
-      items = await fetchPoolActivityForPool(
-        supabase,
-        selectedPoolId,
-        20,
-      );
+      items = await loadPoolActivityForViewer(supabase, selectedPoolId, {
+        ensureDailyRecap: true,
+        limit: 20,
+      });
     } catch (e) {
       feedError =
         e instanceof Error ? e.message : "Could not load pool activity.";
@@ -52,8 +49,14 @@ export default async function AccountActivityPage({ searchParams }: PageProps) {
   return (
     <PageContainer>
       <div className="mb-6 flex flex-wrap items-center gap-3">
+        <Link href="/" className="ash-link text-sm">
+          ← Home
+        </Link>
+        <span className="text-ash-border" aria-hidden>
+          |
+        </span>
         <Link href="/account" className="ash-link text-sm">
-          ← Back to account
+          Account
         </Link>
         {ctx.selectedId && !ctx.loadError ? (
           <>

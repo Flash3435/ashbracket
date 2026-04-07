@@ -1,6 +1,5 @@
 import Link from "next/link";
 import { SignOutButton } from "@/components/auth/SignOutButton";
-import { PoolActivityPreview } from "@/components/poolActivity/PoolActivityPreview";
 import { ParticipantPicksNextMatches } from "@/components/picks/ParticipantPicksNextMatches";
 import { PageContainer } from "@/components/ui/PageContainer";
 import { PageTitle } from "@/components/ui/PageTitle";
@@ -125,15 +124,6 @@ export default async function AccountPage({ searchParams }: PageProps) {
             Activity
           </Link>
         </div>
-      ) : null}
-
-      {!error && preferredParticipantId ? (
-        <PoolActivityPreview
-          poolId={
-            list.find((p) => p.id === preferredParticipantId)?.pool_id ?? ""
-          }
-          participantId={preferredParticipantId}
-        />
       ) : null}
 
       {!error &&

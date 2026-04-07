@@ -9,7 +9,20 @@ export async function SiteHeader() {
   } = await supabase.auth.getUser();
   const isAdmin = user ? await isAppAdmin(supabase, user.id) : false;
 
+  let showActivityNav = false;
+  if (user) {
+    const { count, error } = await supabase
+      .from("participants")
+      .select("*", { count: "exact", head: true })
+      .eq("user_id", user.id);
+    showActivityNav = !error && (count ?? 0) > 0;
+  }
+
   return (
-    <SiteHeaderClient isSignedIn={!!user} isAdmin={isAdmin} />
+    <SiteHeaderClient
+      isSignedIn={!!user}
+      isAdmin={isAdmin}
+      showActivityNav={showActivityNav}
+    />
   );
 }

@@ -38,9 +38,15 @@ function TextNavLink({
 export type SiteHeaderClientProps = {
   isSignedIn: boolean;
   isAdmin: boolean;
+  /** True when the user has at least one pool profile (activity is per-pool, not public). */
+  showActivityNav?: boolean;
 };
 
-export function SiteHeaderClient({ isSignedIn, isAdmin }: SiteHeaderClientProps) {
+export function SiteHeaderClient({
+  isSignedIn,
+  isAdmin,
+  showActivityNav = false,
+}: SiteHeaderClientProps) {
   const pathname = usePathname();
 
   return (
@@ -107,6 +113,15 @@ export function SiteHeaderClient({ isSignedIn, isAdmin }: SiteHeaderClientProps)
               <TextNavLink href="/account" pathname={pathname} match="prefix">
                 Account
               </TextNavLink>
+              {showActivityNav ? (
+                <TextNavLink
+                  href="/account/activity"
+                  pathname={pathname}
+                  match="prefix"
+                >
+                  Activity
+                </TextNavLink>
+              ) : null}
               {isAdmin ? (
                 <TextNavLink href="/admin" pathname={pathname} match="prefix">
                   Admin

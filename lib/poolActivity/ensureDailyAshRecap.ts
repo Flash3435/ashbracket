@@ -1,4 +1,5 @@
 import { createServiceRoleClient } from "../../src/lib/supabase/service";
+import { loadParticipantIdsWithIncompletePicks } from "../communications/picksCompleteness";
 import { generateAshDailyRecapOpenAI } from "../ash/generateAshDailyRecapOpenAI";
 import { buildDeterministicRecapBody, type RecapFacts } from "./buildDeterministicRecapBody";
 import { recapCalendarDateYmdEdmonton } from "./recapCalendarDate";
@@ -6,27 +7,40 @@ import { recapCalendarDateYmdEdmonton } from "./recapCalendarDate";
 async function loadRecapFacts(poolId: string): Promise<RecapFacts> {
   const supabase = createServiceRoleClient();
 
-  const { count: participantCount, error: pErr } = await supabase
+  const { data: parRows, error: pErr } = await supabase
     .from("participants")
-    .select("*", { count: "exact", head: true })
+    .select("id")
     .eq("pool_id", poolId);
 
   if (pErr) throw new Error(pErr.message);
 
-  const { count: submittedCount, error: sErr } = await supabase
-    .from("participants")
-    .select("*", { count: "exact", head: true })
-    .eq("pool_id", poolId)
-    .not("picks_first_submitted_at", "is", null);
+  const participantIds = (parRows ?? []).map((r) => r.id as string);
+  const participantCount = participantIds.length;
 
-  if (sErr) throw new Error(sErr.message);
+  /**
+   * Submitted = required slots filled per the same rules as the picks wizard
+   * (`loadParticipantIdsWithIncompletePicks`). Do not use `picks_first_submitted_at`
+   * here: that column is only set on save after the column existed, so recaps would
+   * under-count legacy pickers and contradict champion rows from `predictions`.
+   */
+  const incomplete = await loadParticipantIdsWithIncompletePicks(
+    supabase,
+    poolId,
+    participantIds,
+  );
+  const submittedCount = participantIds.filter((id) => !incomplete.has(id)).length;
+  const completeParticipantIds = participantIds.filter((id) => !incomplete.has(id));
 
-  const { data: champRows, error: cErr } = await supabase
-    .from("predictions")
-    .select("team_id")
-    .eq("pool_id", poolId)
-    .eq("prediction_kind", "champion")
-    .not("team_id", "is", null);
+  const { data: champRows, error: cErr } =
+    completeParticipantIds.length > 0
+      ? await supabase
+          .from("predictions")
+          .select("team_id")
+          .eq("pool_id", poolId)
+          .eq("prediction_kind", "champion")
+          .not("team_id", "is", null)
+          .in("participant_id", completeParticipantIds)
+      : { data: [], error: null };
 
   if (cErr) throw new Error(cErr.message);
 
@@ -69,15 +83,15 @@ function recapPrompt(facts: RecapFacts, recapDate: string): string {
   const factsBlock = [
     `calendar_date=${recapDate} (America/Edmonton)`,
     `participant_count=${facts.participantCount}`,
-    `submitted_picks_count=${facts.submittedCount}`,
+    `participants_with_complete_brackets=${facts.submittedCount}`,
     facts.topChampionTeamName
-      ? `most_common_champion_pick=${facts.topChampionTeamName} (${facts.topChampionPickCount} picks)`
-      : "most_common_champion_pick=not available in data",
+      ? `most_common_champion_among_complete_brackets=${facts.topChampionTeamName} (${facts.topChampionPickCount} picks)`
+      : "most_common_champion_among_complete_brackets=not available in data",
   ].join("\n");
 
   return `You are Ash, the voice of the AshBracket pool app — witty, sports-radio-ish, office-safe, lightly opinionated, never mean.
 
-Write a short daily pool recap in character using ONLY the facts below. Do not invent statistics, match outcomes, or participant names not given. If a fact is missing, skip it gracefully.
+Write a short daily pool recap in character using ONLY the facts below. "Participants_with_complete_brackets" means everyone who has filled every required pick slot (full bracket), not merely opened the form. Champion stats, when given, apply only among those complete brackets. Do not invent statistics, match outcomes, or participant names not given. If a fact is missing, skip it gracefully.
 
 Stay under about 90 words. Sound playful and confident. No abusive or insulting language.
 

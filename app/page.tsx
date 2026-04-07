@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { PublicLeaderboard } from "@/components/leaderboard/PublicLeaderboard";
+import { PoolRecentActivitySection } from "@/components/poolActivity/PoolRecentActivitySection";
 import { PoolPublicStatsSummary } from "@/components/pool/PoolPublicStatsSummary";
 import { HomeHero } from "@/components/ui/HomeHero";
 import { PageContainer } from "@/components/ui/PageContainer";
@@ -7,6 +8,7 @@ import { createClient } from "@/lib/supabase/server";
 import { fetchSamplePoolLeaderboard } from "../lib/leaderboard/fetchSamplePoolLeaderboard";
 import { fetchSamplePoolPublicStats } from "../lib/pool/fetchSamplePoolPublicStats";
 import { resolveHomePageActions } from "../lib/pool/resolveHomePageActions";
+import { resolveHomePoolParticipantId } from "../lib/pool/resolveHomePoolParticipantId";
 import { resolveHomePublicPool } from "../lib/pool/resolveHomePublicPool";
 
 export const dynamic = "force-dynamic";
@@ -14,6 +16,18 @@ export const dynamic = "force-dynamic";
 export default async function HomePage() {
   const supabase = await createClient();
   const homePool = await resolveHomePublicPool(supabase);
+
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  const homePoolParticipantId =
+    user != null
+      ? await resolveHomePoolParticipantId(
+          supabase,
+          user.id,
+          homePool.poolId,
+        )
+      : null;
 
   const [{ sections, error }, { stats, poolLabel, error: statsError }, actions] =
     await Promise.all([
@@ -51,6 +65,16 @@ export default async function HomePage() {
           sections={sections}
           nameLinks
         />
+
+        {homePoolParticipantId ? (
+          <PoolRecentActivitySection
+            poolId={homePool.poolId}
+            viewAllHref={`/account/activity?participant=${homePoolParticipantId}`}
+            itemLimit={5}
+            compact
+            showWhenEmpty
+          />
+        ) : null}
 
         <div className="grid gap-4 sm:grid-cols-2">
           <Link href="/rules" className="ash-surface-interactive block p-4">

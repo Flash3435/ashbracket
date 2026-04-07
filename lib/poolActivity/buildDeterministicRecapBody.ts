@@ -11,9 +11,9 @@ export function buildDeterministicRecapBody(facts: RecapFacts): string {
   if (participantCount <= 0) {
     return "Ash's daily recap: this pool is warming up - no participants yet, so the bracket gossip can wait.";
   }
-  let line = `Ash's daily recap: ${submittedCount} of ${participantCount} participant${participantCount === 1 ? "" : "s"} ha${submittedCount === 1 ? "s" : "ve"} submitted picks`;
+  let line = `Ash's daily recap: ${submittedCount} of ${participantCount} participant${participantCount === 1 ? "" : "s"} ha${submittedCount === 1 ? "s" : "ve"} completed their bracket`;
   if (topChampionTeamName && topChampionPickCount > 0) {
-    line += `. ${topChampionTeamName} is the most popular champion pick so far (${topChampionPickCount} pick${topChampionPickCount === 1 ? "" : "s"})`;
+    line += `. Among them, ${topChampionTeamName} is the top champion pick (${topChampionPickCount} pick${topChampionPickCount === 1 ? "" : "s"})`;
   }
   line += ".";
   return line;
