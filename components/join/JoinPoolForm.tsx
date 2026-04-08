@@ -27,6 +27,15 @@ type JoinPoolFormProps = {
   isSignedIn: boolean;
   loginHref: string;
   signupHref: string;
+  /** When true, the join code comes from a share URL and cannot be edited. */
+  lockJoinCode?: boolean;
+  /** Where to send the user after a successful create/claim via join code. */
+  afterSuccessfulJoin?: "account" | "picks";
+  /**
+   * When provided with `lockJoinCode`, avoids a second peek RPC on the client
+   * (RSC already resolved the pool).
+   */
+  joinCodePeek?: PeekJoinResult | null;
 };
 
 export function JoinPoolForm({
@@ -35,6 +44,9 @@ export function JoinPoolForm({
   isSignedIn,
   loginHref,
   signupHref,
+  lockJoinCode = false,
+  afterSuccessfulJoin = "account",
+  joinCodePeek,
 }: JoinPoolFormProps) {
   const router = useRouter();
   const inviteToken = initialInvite.trim();
@@ -85,11 +97,18 @@ export function JoinPoolForm({
           setFormError(result.message);
           return;
         }
-        router.push("/account");
+        if (afterSuccessfulJoin === "picks") {
+          const q = new URLSearchParams({
+            participant: result.participantId,
+          });
+          router.push(`/account/picks?${q.toString()}`);
+        } else {
+          router.push("/account");
+        }
         router.refresh();
       });
     },
-    [resolved, mode, joinCode, displayName, router],
+    [resolved, mode, joinCode, displayName, router, afterSuccessfulJoin],
   );
 
   const onAcceptInvite = useCallback(
@@ -140,12 +159,28 @@ export function JoinPoolForm({
   }, [resolvedInvite]);
 
   useEffect(() => {
+    if (lockJoinCode) {
+      setJoinCode(initialCode.trim());
+    }
+  }, [lockJoinCode, initialCode]);
+
+  useEffect(() => {
     if (inviteMode) {
       setExistingPoolParticipantId(undefined);
       startTransition(async () => {
         const result = await peekParticipantInvite(inviteToken);
         setInvitePeek(result);
       });
+      return;
+    }
+
+    if (lockJoinCode && joinCodePeek !== undefined) {
+      setPeek(joinCodePeek);
+      if (joinCodePeek && !joinCodePeek.ok) {
+        setFormError(joinCodePeek.message);
+      } else {
+        setFormError(null);
+      }
       return;
     }
 
@@ -158,19 +193,35 @@ export function JoinPoolForm({
         setFormError(result.message);
       }
     });
-  }, [initialCode, inviteMode, inviteToken]);
+  }, [initialCode, inviteMode, inviteToken, lockJoinCode, joinCodePeek]);
 
   useEffect(() => {
-    if (!inviteMode || !isSignedIn || !resolvedInvite) {
+    if (!isSignedIn) {
+      setExistingPoolParticipantId(undefined);
+      return;
+    }
+    if (inviteMode) {
+      if (!resolvedInvite) {
+        setExistingPoolParticipantId(undefined);
+        return;
+      }
+      setExistingPoolParticipantId(undefined);
+      startTransition(async () => {
+        const id = await getMyParticipantIdInPool(resolvedInvite.poolId);
+        setExistingPoolParticipantId(id);
+      });
+      return;
+    }
+    if (!resolved) {
       setExistingPoolParticipantId(undefined);
       return;
     }
     setExistingPoolParticipantId(undefined);
     startTransition(async () => {
-      const id = await getMyParticipantIdInPool(resolvedInvite.poolId);
+      const id = await getMyParticipantIdInPool(resolved.poolId);
       setExistingPoolParticipantId(id);
     });
-  }, [inviteMode, isSignedIn, resolvedInvite]);
+  }, [inviteMode, isSignedIn, resolvedInvite, resolved]);
 
   return (
     <div className="space-y-8">
@@ -192,6 +243,27 @@ export function JoinPoolForm({
             <p className="text-sm text-ash-muted">Checking your invite…</p>
           ) : null}
         </section>
+      ) : lockJoinCode ? (
+        <section className="space-y-3">
+          <h2 className="text-sm font-bold text-ash-text">1. Pool</h2>
+          <p className="text-sm text-ash-muted">
+            This page was opened from a share link. The join code is included in
+            the URL — you do not need to type it.
+          </p>
+          <p className="text-xs text-ash-muted">
+            Join code:{" "}
+            <span className="font-mono text-ash-text">{joinCode.trim()}</span>
+          </p>
+          {peek && !peek.ok ? (
+            <p className="text-sm text-red-300" role="alert">
+              {peek.message}
+            </p>
+          ) : null}
+          {pending && !peek ? (
+            <p className="text-sm text-ash-muted">Checking pool…</p>
+          ) : null}
+          {poolLabel}
+        </section>
       ) : (
         <section className="space-y-3">
           <h2 className="text-sm font-bold text-ash-text">1. Pool code</h2>
@@ -199,6 +271,10 @@ export function JoinPoolForm({
             Paste the code from your pool, or open a link that already includes{" "}
             <code className="rounded bg-ash-body px-1 py-0.5 text-xs text-ash-text">
               ?code=
+            </code>{" "}
+            or use a path link like{" "}
+            <code className="rounded bg-ash-body px-1 py-0.5 text-xs text-ash-text">
+              /join/your-code
             </code>
             .
           </p>
@@ -311,62 +387,88 @@ export function JoinPoolForm({
       {!inviteMode && isSignedIn && resolved ? (
         <section className="space-y-4">
           <h2 className="text-sm font-bold text-ash-text">2. Pool profile</h2>
-          <div className="flex gap-4 text-sm">
-            <label className="inline-flex cursor-pointer items-center gap-2">
-              <input
-                type="radio"
-                name="joinMode"
-                checked={mode === "create"}
-                onChange={() => setMode("create")}
-              />
-              New profile
-            </label>
-            <label className="inline-flex cursor-pointer items-center gap-2">
-              <input
-                type="radio"
-                name="joinMode"
-                checked={mode === "claim"}
-                onChange={() => setMode("claim")}
-              />
-              Claim existing (organizer added me)
-            </label>
-          </div>
-          <p className="text-sm text-ash-muted">
-            {mode === "create"
-              ? "Choose the display name shown on the leaderboard."
-              : "Use the exact display name your organizer used when they created your row (case-insensitive)."}
-          </p>
-          <form onSubmit={onRegisterOrClaim} className="space-y-4">
-            <label className="block space-y-1.5">
-              <span className="text-xs font-medium uppercase tracking-wide text-ash-muted">
-                Display name
-              </span>
-              <input
-                type="text"
-                autoComplete="name"
-                required
-                value={displayName}
-                onChange={(e) => setDisplayName(e.target.value)}
-                className="w-full rounded-md border border-ash-border bg-ash-body px-3 py-2 text-sm text-ash-text shadow-sm outline-none focus:border-ash-accent focus:ring-2 focus:ring-ash-accent/20"
-              />
-            </label>
-            {formError ? (
-              <p className="text-sm text-red-300" role="alert">
-                {formError}
+          {existingPoolParticipantId === undefined ? (
+            <p className="text-sm text-ash-muted">Checking your pool membership…</p>
+          ) : existingPoolParticipantId ? (
+            <>
+              <p className="text-sm text-ash-muted">
+                You’re already in this pool with your signed-in account. Head to
+                your picks or account anytime.
               </p>
-            ) : null}
-            <button
-              type="submit"
-              disabled={pending}
-              className="btn-primary disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              {pending
-                ? "Saving…"
-                : mode === "create"
-                  ? "Create profile"
-                  : "Claim profile"}
-            </button>
-          </form>
+              <div className="flex flex-wrap gap-3">
+                <Link
+                  href={`/account/picks?participant=${encodeURIComponent(existingPoolParticipantId)}`}
+                  className="btn-primary inline-flex text-sm"
+                >
+                  Open bracket picks
+                </Link>
+                <Link href="/account" className="btn-ghost inline-flex text-sm">
+                  Account home
+                </Link>
+              </div>
+            </>
+          ) : (
+            <>
+              <div className="flex gap-4 text-sm">
+                <label className="inline-flex cursor-pointer items-center gap-2">
+                  <input
+                    type="radio"
+                    name="joinMode"
+                    checked={mode === "create"}
+                    onChange={() => setMode("create")}
+                  />
+                  New profile
+                </label>
+                <label className="inline-flex cursor-pointer items-center gap-2">
+                  <input
+                    type="radio"
+                    name="joinMode"
+                    checked={mode === "claim"}
+                    onChange={() => setMode("claim")}
+                  />
+                  Claim existing (organizer added me)
+                </label>
+              </div>
+              <p className="text-sm text-ash-muted">
+                {mode === "create"
+                  ? "Choose the display name shown on the leaderboard."
+                  : "Use the exact display name your organizer used when they created your row (case-insensitive)."}
+              </p>
+              <form onSubmit={onRegisterOrClaim} className="space-y-4">
+                <label className="block space-y-1.5">
+                  <span className="text-xs font-medium uppercase tracking-wide text-ash-muted">
+                    Display name
+                  </span>
+                  <input
+                    type="text"
+                    autoComplete="name"
+                    required
+                    value={displayName}
+                    onChange={(e) => setDisplayName(e.target.value)}
+                    className="w-full rounded-md border border-ash-border bg-ash-body px-3 py-2 text-sm text-ash-text shadow-sm outline-none focus:border-ash-accent focus:ring-2 focus:ring-ash-accent/20"
+                  />
+                </label>
+                {formError ? (
+                  <p className="text-sm text-red-300" role="alert">
+                    {formError}
+                  </p>
+                ) : null}
+                <button
+                  type="submit"
+                  disabled={pending}
+                  className="btn-primary disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {pending
+                    ? "Saving…"
+                    : mode === "create"
+                      ? lockJoinCode
+                        ? "Join pool"
+                        : "Create profile"
+                      : "Claim profile"}
+                </button>
+              </form>
+            </>
+          )}
         </section>
       ) : null}
 

@@ -45,7 +45,7 @@ export default async function JoinPage({
         description={
           inviteMode
             ? "You have a personal invite. Create your account with the email your organizer used, or sign in if you already have one — then we will open your bracket."
-            : `Enter your join code, sign in, then create or claim your leaderboard name. Share link: /join?code=… (sample demo code: ${SAMPLE_POOL_JOIN_CODE}).`
+            : `Enter your join code, sign in, then create or claim your leaderboard name. Share links: /join/your-code or /join?code=… (sample demo code: ${SAMPLE_POOL_JOIN_CODE}).`
         }
       />
       <JoinPoolForm

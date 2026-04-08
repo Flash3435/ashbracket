@@ -78,7 +78,24 @@ export async function registerInPool(
   });
 
   if (error) {
-    return { ok: false, message: error.message };
+    const msg = error.message ?? "";
+    if (msg.includes("already registered in this pool")) {
+      const { data: existing } = await supabase
+        .from("participants")
+        .select("id")
+        .eq("pool_id", poolId)
+        .eq("user_id", user.id)
+        .maybeSingle();
+      const existingId = existing?.id as string | undefined;
+      if (existingId) {
+        revalidatePath("/account");
+        revalidatePath("/join");
+        revalidatePath(`/join/${joinCode.trim()}`);
+        revalidatePath("/account/activity");
+        return { ok: true, participantId: existingId };
+      }
+    }
+    return { ok: false, message: msg };
   }
 
   const participantId = data as string | null;
@@ -95,6 +112,7 @@ export async function registerInPool(
 
   revalidatePath("/account");
   revalidatePath("/join");
+  revalidatePath(`/join/${joinCode.trim()}`);
   revalidatePath("/account/activity");
   return { ok: true, participantId };
 }
@@ -119,7 +137,24 @@ export async function claimPoolParticipant(
   });
 
   if (error) {
-    return { ok: false, message: error.message };
+    const msg = error.message ?? "";
+    if (msg.includes("already registered in this pool")) {
+      const { data: existing } = await supabase
+        .from("participants")
+        .select("id")
+        .eq("pool_id", poolId)
+        .eq("user_id", user.id)
+        .maybeSingle();
+      const existingId = existing?.id as string | undefined;
+      if (existingId) {
+        revalidatePath("/account");
+        revalidatePath("/join");
+        revalidatePath(`/join/${joinCode.trim()}`);
+        revalidatePath("/account/activity");
+        return { ok: true, participantId: existingId };
+      }
+    }
+    return { ok: false, message: msg };
   }
 
   const participantId = data as string | null;
@@ -136,6 +171,7 @@ export async function claimPoolParticipant(
 
   revalidatePath("/account");
   revalidatePath("/join");
+  revalidatePath(`/join/${joinCode.trim()}`);
   revalidatePath("/account/activity");
   return { ok: true, participantId };
 }

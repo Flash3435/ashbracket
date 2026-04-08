@@ -51,3 +51,10 @@ export function joinInviteUrl(inviteToken: string): string {
   const q = new URLSearchParams({ invite: inviteToken });
   return `${base}/join?${q.toString()}`;
 }
+
+/** Stable share link for open join via pool join code (path segment; code is alphanumeric + _-). */
+export function poolShareJoinUrl(joinCode: string): string {
+  const base = getSiteUrl();
+  const seg = encodeURIComponent(joinCode.trim());
+  return `${base}/join/${seg}`;
+}
