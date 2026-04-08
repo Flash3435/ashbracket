@@ -18,6 +18,7 @@ import {
 } from "../../lib/communications/recipientResolve";
 
 type PoolCommunicationsFormProps = {
+  poolId: string;
   poolName: string;
   lockAtIso: string | null;
   participants: PoolCommunicationParticipant[];
@@ -82,6 +83,7 @@ function initialDrafts(): Record<MessageKind, { subject: string; body: string }>
 }
 
 export function PoolCommunicationsForm({
+  poolId,
   poolName,
   lockAtIso,
   participants,
@@ -161,6 +163,7 @@ export function PoolCommunicationsForm({
     setSendResult(null);
     startTransition(async () => {
       const res = await sendPoolCommunicationsAction({
+        poolId,
         preset,
         selectedParticipantIds: [...selectedIds],
         subjectTemplate: draft.subject,
@@ -194,6 +197,7 @@ export function PoolCommunicationsForm({
     setSendResult(null);
     startTransition(async () => {
       const res = await sendPoolCommunicationsTestAction({
+        poolId,
         subjectTemplate: draft.subject,
         bodyTemplate: draft.body,
       });

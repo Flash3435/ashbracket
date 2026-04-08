@@ -1,5 +1,6 @@
 import { revalidatePath } from "next/cache";
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { revalidatePoolAdminPaths } from "@/lib/admin/revalidatePoolAdminPaths";
 import { createClient } from "@/lib/supabase/server";
 import { computePoolScores } from "./computePoolScores";
 import {
@@ -104,18 +105,10 @@ export async function recomputePoolLedgerWithClient(
 
   if (rpcErr) return { error: rpcErr.message };
 
-  revalidatePath("/");
-  revalidatePath("/rules");
-  revalidatePath("/account");
-  revalidatePath("/account/picks");
-  revalidatePath("/admin");
-  revalidatePath("/admin/participants");
-  revalidatePath("/admin/picks");
+  revalidatePoolAdminPaths(poolId);
   revalidatePath("/admin/results");
-  revalidatePath("/admin/settings");
   revalidatePath("/admin/tournament");
   revalidatePath("/admin/tournament/status");
-  revalidatePath("/participant/[id]", "layout");
 
   return {};
 }

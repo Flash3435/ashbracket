@@ -12,6 +12,7 @@ import {
 import type { Participant } from "../../types/participant";
 
 type ParticipantsManagerProps = {
+  poolId: string;
   initialParticipants: Participant[];
   disabled?: boolean;
 };
@@ -46,6 +47,7 @@ type InviteFeedback = {
 };
 
 export function ParticipantsManager({
+  poolId,
   initialParticipants,
   disabled = false,
 }: ParticipantsManagerProps) {
@@ -104,6 +106,7 @@ export function ParticipantsManager({
     setCopyDone(false);
     startTransition(async () => {
       const res = await inviteParticipantAction({
+        poolId,
         displayName: name,
         email,
         paid: inviteForm.paid,
@@ -145,6 +148,7 @@ export function ParticipantsManager({
     setInviteFeedback(null);
     startTransition(async () => {
       const res = await createParticipantAction({
+        poolId,
         displayName: name,
         email,
         paid: manualForm.paid,
@@ -171,7 +175,7 @@ export function ParticipantsManager({
     setInviteFeedback(null);
     setCopyDone(false);
     startTransition(async () => {
-      const res = await sendParticipantInviteAction(id);
+      const res = await sendParticipantInviteAction({ poolId, participantId: id });
       if (!res.ok) {
         setActionError(res.error);
         return;
@@ -217,6 +221,7 @@ export function ParticipantsManager({
     const id = editingId;
     startTransition(async () => {
       const res = await updateParticipantAction({
+        poolId,
         id,
         displayName: name,
         email,
@@ -244,7 +249,7 @@ export function ParticipantsManager({
     }
     setActionError(null);
     startTransition(async () => {
-      const res = await deleteParticipantAction(id);
+      const res = await deleteParticipantAction({ poolId, id });
       if (!res.ok) {
         setActionError(res.error);
         return;

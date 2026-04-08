@@ -1,11 +1,11 @@
 "use server";
 
+import { assertCanManagePool } from "@/lib/admin/assertCanManagePool";
 import { createClient } from "@/lib/supabase/server";
+import { recomputePoolLedgerForPool } from "@/lib/scoring/recomputePoolLedger";
 import { applyParticipantPickSlots } from "../../../lib/predictions/applyParticipantPickSlots";
 import { validateKnockoutPickSaveInput } from "../../../lib/predictions/validateKnockoutPickPayload";
-import { recomputePoolLedgerForPool } from "@/lib/scoring/recomputePoolLedger";
 import { revalidatePath } from "next/cache";
-import { SAMPLE_POOL_ID } from "../../../lib/config/sample-pool";
 import type {
   ParticipantPickSlotPayload,
   SaveKnockoutPicksResult,
@@ -16,20 +16,28 @@ function messageFromUnknown(e: unknown): string {
 }
 
 export async function saveParticipantKnockoutPicksAction(input: {
+  poolId: string;
   participantId: string;
   slots: ParticipantPickSlotPayload[];
 }): Promise<SaveKnockoutPicksResult> {
-  const invalid = validateKnockoutPickSaveInput(input);
+  const invalid = validateKnockoutPickSaveInput({
+    participantId: input.participantId,
+    slots: input.slots,
+  });
   if (invalid) return invalid;
 
   try {
     const supabase = await createClient();
+    const gate = await assertCanManagePool(supabase, input.poolId);
+    if (!gate.ok) return { ok: false, error: gate.error };
+
+    const poolId = input.poolId.trim();
 
     const { data: participant, error: parErr } = await supabase
       .from("participants")
       .select("id")
       .eq("id", input.participantId)
-      .eq("pool_id", SAMPLE_POOL_ID)
+      .eq("pool_id", poolId)
       .maybeSingle();
 
     if (parErr) return { ok: false, error: parErr.message };
@@ -38,13 +46,13 @@ export async function saveParticipantKnockoutPicksAction(input: {
     }
 
     const applied = await applyParticipantPickSlots(supabase, {
-      poolId: SAMPLE_POOL_ID,
+      poolId,
       participantId: input.participantId,
       slots: input.slots,
     });
     if (!applied.ok) return applied;
 
-    const ledger = await recomputePoolLedgerForPool(SAMPLE_POOL_ID);
+    const ledger = await recomputePoolLedgerForPool(poolId);
     if (ledger.error) {
       return {
         ok: false,
@@ -52,7 +60,7 @@ export async function saveParticipantKnockoutPicksAction(input: {
       };
     }
 
-    revalidatePath("/admin/picks");
+    revalidatePath(`/admin/pools/${poolId}/picks`);
     revalidatePath(`/participant/${input.participantId}`);
 
     return { ok: true };

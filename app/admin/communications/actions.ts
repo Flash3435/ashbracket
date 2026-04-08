@@ -1,9 +1,8 @@
 "use server";
 
+import { assertCanManagePool } from "@/lib/admin/assertCanManagePool";
 import { createClient } from "@/lib/supabase/server";
 import { getSiteUrl } from "@/lib/site-url";
-import { isAppAdmin } from "../../../lib/auth/isAppAdmin";
-import { SAMPLE_POOL_ID } from "../../../lib/config/sample-pool";
 import { renderTemplatedPoolEmail } from "../../../lib/communications/messageTemplates";
 import { loadParticipantIdsWithIncompletePicks } from "../../../lib/communications/picksCompleteness";
 import {
@@ -33,11 +32,12 @@ export type SendPoolCommunicationsResult =
 
 async function loadPoolMeta(
   supabase: Awaited<ReturnType<typeof createClient>>,
+  poolId: string,
 ): Promise<{ name: string; lockAt: string | null }> {
   const { data } = await supabase
     .from("pools")
     .select("name, lock_at")
-    .eq("id", SAMPLE_POOL_ID)
+    .eq("id", poolId)
     .maybeSingle();
   return {
     name: (data?.name as string | undefined)?.trim() || "Your pool",
@@ -47,11 +47,12 @@ async function loadPoolMeta(
 
 async function loadCommunicationParticipants(
   supabase: Awaited<ReturnType<typeof createClient>>,
+  poolId: string,
 ): Promise<PoolCommunicationParticipant[]> {
   const { data, error } = await supabase
     .from("participants")
     .select("id, display_name, email, is_paid")
-    .eq("pool_id", SAMPLE_POOL_ID)
+    .eq("pool_id", poolId)
     .order("display_name", { ascending: true });
 
   if (error) throw new Error(error.message);
@@ -66,7 +67,7 @@ async function loadCommunicationParticipants(
   const ids = rows.map((r) => r.id);
   const incomplete = await loadParticipantIdsWithIncompletePicks(
     supabase,
-    SAMPLE_POOL_ID,
+    poolId,
     ids,
   );
 
@@ -88,6 +89,7 @@ function validateTemplates(subjectTemplate: string, bodyTemplate: string): strin
 }
 
 export async function sendPoolCommunicationsAction(input: {
+  poolId: string;
   preset: RecipientPreset;
   selectedParticipantIds: string[];
   subjectTemplate: string;
@@ -101,9 +103,11 @@ export async function sendPoolCommunicationsAction(input: {
     if (!user) {
       return { ok: false, error: "You must be signed in." };
     }
-    if (!(await isAppAdmin(supabase, user.id))) {
-      return { ok: false, error: "Not allowed." };
-    }
+
+    const gate = await assertCanManagePool(supabase, input.poolId);
+    if (!gate.ok) return { ok: false, error: gate.error };
+
+    const poolId = input.poolId.trim();
 
     const err = validateTemplates(input.subjectTemplate, input.bodyTemplate);
     if (err) return { ok: false, error: err };
@@ -119,7 +123,7 @@ export async function sendPoolCommunicationsAction(input: {
       }
     }
 
-    const participants = await loadCommunicationParticipants(supabase);
+    const participants = await loadCommunicationParticipants(supabase, poolId);
     const { targets } = resolvePoolEmailTargets(
       participants,
       input.preset,
@@ -134,7 +138,7 @@ export async function sendPoolCommunicationsAction(input: {
       };
     }
 
-    const pool = await loadPoolMeta(supabase);
+    const pool = await loadPoolMeta(supabase, poolId);
     const configured = getResendMailerConfig() !== null;
     const failures: { email: string; error: string }[] = [];
     let emailsAccepted = 0;
@@ -191,11 +195,8 @@ export async function sendPoolCommunicationsAction(input: {
   }
 }
 
-/**
- * Sends one email to the signed-in admin using the same templates as bulk send,
- * with personalization as for the first pool participant (or a sample name).
- */
 export async function sendPoolCommunicationsTestAction(input: {
+  poolId: string;
   subjectTemplate: string;
   bodyTemplate: string;
 }): Promise<SendPoolCommunicationsResult> {
@@ -207,9 +208,11 @@ export async function sendPoolCommunicationsTestAction(input: {
     if (!user) {
       return { ok: false, error: "You must be signed in." };
     }
-    if (!(await isAppAdmin(supabase, user.id))) {
-      return { ok: false, error: "Not allowed." };
-    }
+
+    const gate = await assertCanManagePool(supabase, input.poolId);
+    if (!gate.ok) return { ok: false, error: gate.error };
+
+    const poolId = input.poolId.trim();
 
     const err = validateTemplates(input.subjectTemplate, input.bodyTemplate);
     if (err) return { ok: false, error: err };
@@ -223,8 +226,8 @@ export async function sendPoolCommunicationsTestAction(input: {
       };
     }
 
-    const participants = await loadCommunicationParticipants(supabase);
-    const pool = await loadPoolMeta(supabase);
+    const participants = await loadCommunicationParticipants(supabase, poolId);
+    const pool = await loadPoolMeta(supabase, poolId);
     const siteUrl = getSiteUrl();
 
     const sampleName =

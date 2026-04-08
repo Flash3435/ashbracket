@@ -1,8 +1,9 @@
 "use server";
 
+import { assertCanManagePool } from "@/lib/admin/assertCanManagePool";
+import { revalidatePoolAdminPaths } from "@/lib/admin/revalidatePoolAdminPaths";
 import { createClient } from "@/lib/supabase/server";
 import { revalidatePath } from "next/cache";
-import { SAMPLE_POOL_ID } from "../../../lib/config/sample-pool";
 import {
   mapPoolSettingsRow,
   type PoolSettingsEditable,
@@ -17,7 +18,8 @@ function messageFromUnknown(e: unknown): string {
   return e instanceof Error ? e.message : "Something went wrong.";
 }
 
-export async function updateSamplePoolSettingsAction(input: {
+export async function updatePoolSettingsAction(input: {
+  poolId: string;
   name: string;
   isPublic: boolean;
   lockAt: string | null;
@@ -29,6 +31,9 @@ export async function updateSamplePoolSettingsAction(input: {
     }
 
     const supabase = await createClient();
+    const gate = await assertCanManagePool(supabase, input.poolId);
+    if (!gate.ok) return { ok: false, error: gate.error };
+
     const { data, error } = await supabase
       .from("pools")
       .update({
@@ -36,17 +41,15 @@ export async function updateSamplePoolSettingsAction(input: {
         is_public: input.isPublic,
         lock_at: input.lockAt,
       })
-      .eq("id", SAMPLE_POOL_ID)
+      .eq("id", input.poolId.trim())
       .select("id, name, is_public, lock_at")
       .single();
 
     if (error) return { ok: false, error: error.message };
     if (!data) return { ok: false, error: "Pool not found." };
 
-    revalidatePath("/");
+    revalidatePoolAdminPaths(input.poolId.trim());
     revalidatePath("/rules");
-    revalidatePath("/admin");
-    revalidatePath("/admin/settings");
 
     return { ok: true, pool: mapPoolSettingsRow(data as PoolSettingsRow) };
   } catch (e) {

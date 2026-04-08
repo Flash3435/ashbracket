@@ -1,5 +1,6 @@
-import { createClient } from "@/lib/supabase/server";
 import { PageContainer } from "@/components/ui/PageContainer";
+import { requireGlobalAdminPage } from "@/lib/admin/requireGlobalAdmin";
+import { createClient } from "@/lib/supabase/server";
 import { PageTitle } from "@/components/ui/PageTitle";
 import Link from "next/link";
 import { OFFICIAL_EDITION_CODE } from "../../../lib/config/officialTournament";
@@ -8,6 +9,8 @@ import { runTournamentSyncAction } from "./actions";
 export const dynamic = "force-dynamic";
 
 export default async function AdminTournamentPage() {
+  await requireGlobalAdminPage("/admin/tournament");
+
   const supabase = await createClient();
 
   const { data: edition } = await supabase

@@ -1,5 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
-import { isAppAdmin } from "../../lib/auth/isAppAdmin";
+import { canAccessAdminDashboard } from "../../lib/auth/permissions";
 import { SiteHeaderClient } from "./SiteHeaderClient";
 
 export async function SiteHeader() {
@@ -7,7 +7,9 @@ export async function SiteHeader() {
   const {
     data: { user },
   } = await supabase.auth.getUser();
-  const isAdmin = user ? await isAppAdmin(supabase, user.id) : false;
+  const isAdmin = user
+    ? await canAccessAdminDashboard(supabase, user.id)
+    : false;
 
   let showActivityNav = false;
   if (user) {

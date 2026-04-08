@@ -33,6 +33,18 @@ export interface Pool {
   lockAt: string | null;
   /** Included in `leaderboard_public` when true. */
   isPublic: boolean;
+  /** Auth user who created the pool (`pools.created_by_user_id`); null if unknown or legacy. */
+  createdByUserId?: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/** Pool-scoped admin membership (`pool_admins`). */
+export interface PoolAdminMembership {
+  id: string;
+  poolId: string;
+  userId: string;
+  role: "owner" | "admin";
   createdAt: string;
   updatedAt: string;
 }

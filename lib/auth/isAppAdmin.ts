@@ -1,14 +1,14 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { isGlobalAdmin } from "./permissions";
 
-/** True when `user_id` exists in `public.app_admins` (RLS: row visible only to that user). */
+/** True when `user_id` exists in `public.app_admins` (global admin only). */
 export async function isAppAdmin(
   supabase: SupabaseClient,
   userId: string,
 ): Promise<boolean> {
-  const { data } = await supabase
-    .from("app_admins")
-    .select("user_id")
-    .eq("user_id", userId)
-    .maybeSingle();
-  return data != null;
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user || user.id !== userId) return false;
+  return isGlobalAdmin(supabase);
 }

@@ -1,6 +1,6 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
-import { isAppAdmin } from "../auth/isAppAdmin";
+import { canAccessAdminDashboard } from "../auth/permissions";
 import mwKeys from "./middleware-keys.json";
 
 function copyAuthCookies(from: NextResponse, to: NextResponse) {
@@ -84,6 +84,22 @@ async function runSession(request: NextRequest): Promise<NextResponse> {
     data: { user },
   } = await supabase.auth.getUser();
 
+  if (user) {
+    const path = request.nextUrl.pathname;
+    const isProbablyStatic =
+      path.startsWith("/_next") ||
+      path === "/favicon.ico" ||
+      /\.[a-z0-9]+$/i.test(path.split("/").pop() ?? "");
+    if (!isProbablyStatic) {
+      const { error: claimErr } = await supabase.rpc(
+        "ashbracket_claim_pending_pool_admin_invites_for_user",
+      );
+      if (claimErr) {
+        console.error("[claim pool admin invites]", claimErr.message);
+      }
+    }
+  }
+
   if (request.nextUrl.pathname.startsWith("/admin")) {
     if (!user) {
       const loginUrl = request.nextUrl.clone();
@@ -97,8 +113,8 @@ async function runSession(request: NextRequest): Promise<NextResponse> {
       return redirect;
     }
 
-    const admin = await isAppAdmin(supabase, user.id);
-    if (!admin) {
+    const allowed = await canAccessAdminDashboard(supabase, user.id);
+    if (!allowed) {
       const forbiddenUrl = request.nextUrl.clone();
       forbiddenUrl.pathname = "/login";
       forbiddenUrl.searchParams.set("error", "forbidden");

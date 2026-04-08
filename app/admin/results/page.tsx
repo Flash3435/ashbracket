@@ -1,15 +1,16 @@
 import { KnockoutResultsEditor } from "@/components/admin/KnockoutResultsEditor";
-import { RecomputeStandingsPanel } from "@/components/admin/RecomputeStandingsPanel";
+import { RecomputeAllPoolsPanel } from "@/components/admin/RecomputeAllPoolsPanel";
 import { PageContainer } from "@/components/ui/PageContainer";
 import { PageTitle } from "@/components/ui/PageTitle";
+import { requireGlobalAdminPage } from "@/lib/admin/requireGlobalAdmin";
 import { createClient } from "@/lib/supabase/server";
-import { ALL_BRACKET_PICK_SECTIONS } from "../../../lib/admin/knockoutResultsConfig";
+import { ALL_BRACKET_PICK_SECTIONS } from "@/lib/admin/knockoutResultsConfig";
 import {
   mapResultRow,
   mapTeamRow,
   mapTournamentStageRow,
-} from "../../../lib/results/mapRows";
-import { TEAM_TABLE_SELECT } from "../../../lib/teams/teamDbSelect";
+} from "@/lib/results/mapRows";
+import { TEAM_TABLE_SELECT } from "@/lib/teams/teamDbSelect";
 import type { Result, Team, TournamentStage } from "../../../src/types/domain";
 
 export const dynamic = "force-dynamic";
@@ -22,6 +23,8 @@ const RESULT_KINDS = Array.from(
 );
 
 export default async function AdminResultsPage() {
+  await requireGlobalAdminPage("/admin/results");
+
   let teams: Team[] = [];
   let stages: TournamentStage[] = [];
   let results: Result[] = [];
@@ -81,7 +84,7 @@ export default async function AdminResultsPage() {
     <PageContainer>
       <PageTitle
         title="Tournament results"
-        description="Enter official outcomes: group finishes, best third-place advancers, then the real Round of 32 bracket through champion. When all 32 Round of 32 slots have teams, participant Stage 3 picks unlock. Scoring uses pool rules (knockout points once per team by furthest round reached). Each save updates results, recalculates points, and refreshes the leaderboard."
+        description="Enter official outcomes: group finishes, best third-place advancers, then the real Round of 32 bracket through champion. When all 32 Round of 32 slots have teams, participant Stage 3 picks unlock. Scoring uses pool rules (knockout points once per team by furthest round reached). Each save updates results, recalculates points for every pool, and refreshes leaderboards."
       />
       {loadError ? (
         <p className="mb-4 rounded-md border border-red-800/80 bg-red-950/40 px-3 py-2 text-sm text-red-200">
@@ -89,7 +92,7 @@ export default async function AdminResultsPage() {
         </p>
       ) : null}
       <div className="mb-8">
-        <RecomputeStandingsPanel />
+        <RecomputeAllPoolsPanel />
       </div>
       {!loadError && teams.length === 0 ? (
         <p className="rounded-md border border-amber-700/50 bg-amber-950/30 px-3 py-2 text-sm text-amber-100">

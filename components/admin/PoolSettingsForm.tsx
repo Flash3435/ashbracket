@@ -2,10 +2,11 @@
 
 import { useRouter } from "next/navigation";
 import { useEffect, useState, useTransition } from "react";
-import { updateSamplePoolSettingsAction } from "../../app/admin/settings/actions";
+import { updatePoolSettingsAction } from "../../app/admin/settings/actions";
 import type { PoolSettingsEditable } from "../../lib/pools/poolSettingsDb";
 
 type PoolSettingsFormProps = {
+  poolId: string;
   initial: PoolSettingsEditable;
   disabled?: boolean;
 };
@@ -27,6 +28,7 @@ function fromDatetimeLocalToIso(local: string): string | null {
 }
 
 export function PoolSettingsForm({
+  poolId,
   initial,
   disabled = false,
 }: PoolSettingsFormProps) {
@@ -60,7 +62,8 @@ export function PoolSettingsForm({
     const lockAt = fromDatetimeLocalToIso(lockLocal);
 
     startTransition(async () => {
-      const res = await updateSamplePoolSettingsAction({
+      const res = await updatePoolSettingsAction({
+        poolId,
         name,
         isPublic,
         lockAt,

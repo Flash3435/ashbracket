@@ -4,7 +4,7 @@ import { PageContainer } from "@/components/ui/PageContainer";
 import { PageTitle } from "@/components/ui/PageTitle";
 import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
-import { isAppAdmin } from "../../lib/auth/isAppAdmin";
+import { canAccessAdminDashboard } from "../../lib/auth/permissions";
 import { safeRedirectPath } from "../../lib/auth/safeRedirectPath";
 import { peekParticipantInvite } from "../../lib/join/actions";
 
@@ -26,8 +26,8 @@ export default async function SignupPage({
   );
 
   if (user) {
-    const admin = await isAppAdmin(supabase, user.id);
-    if (admin) {
+    const canAdmin = await canAccessAdminDashboard(supabase, user.id);
+    if (canAdmin) {
       redirect(redirectAfterSignup);
     }
     redirect(safeRedirectPath(sp.next, "/account"));

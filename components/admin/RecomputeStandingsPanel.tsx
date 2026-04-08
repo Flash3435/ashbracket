@@ -2,13 +2,14 @@
 
 import { useRouter } from "next/navigation";
 import { useEffect, useState, useTransition } from "react";
-import { recomputeStandingsForSamplePoolAction } from "../../app/admin/results/actions";
+import { recomputeStandingsForPoolAction } from "../../app/admin/results/actions";
 
 type Props = {
+  poolId: string;
   disabled?: boolean;
 };
 
-export function RecomputeStandingsPanel({ disabled = false }: Props) {
+export function RecomputeStandingsPanel({ poolId, disabled = false }: Props) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
@@ -19,7 +20,7 @@ export function RecomputeStandingsPanel({ disabled = false }: Props) {
     setError(null);
     setSuccess(false);
     startTransition(async () => {
-      const res = await recomputeStandingsForSamplePoolAction();
+      const res = await recomputeStandingsForPoolAction(poolId);
       if (!res.ok) {
         setError(res.error);
         return;

@@ -1,8 +1,8 @@
 import { PageContainer } from "@/components/ui/PageContainer";
 import { PageTitle } from "@/components/ui/PageTitle";
+import { requireGlobalAdminPage } from "@/lib/admin/requireGlobalAdmin";
 import { createClient } from "@/lib/supabase/server";
 import { OFFICIAL_EDITION_CODE } from "../../../../lib/config/officialTournament";
-import { SAMPLE_POOL_ID } from "../../../../lib/config/sample-pool";
 import { computeStandingsFreshness } from "../../../../lib/tournament/standingsFreshness";
 import Link from "next/link";
 
@@ -23,6 +23,8 @@ type PageProps = {
 };
 
 export default async function AdminTournamentStatusPage({ searchParams }: PageProps) {
+  await requireGlobalAdminPage("/admin/tournament/status");
+
   const sp = await searchParams;
   const supabase = await createClient();
 
@@ -60,7 +62,6 @@ export default async function AdminTournamentStatusPage({ searchParams }: PagePr
   const ledgerMaxRes = await supabase
     .from("points_ledger")
     .select("created_at")
-    .eq("pool_id", SAMPLE_POOL_ID)
     .order("created_at", { ascending: false })
     .limit(1)
     .maybeSingle();
@@ -68,7 +69,6 @@ export default async function AdminTournamentStatusPage({ searchParams }: PagePr
   const predMaxRes = await supabase
     .from("predictions")
     .select("updated_at")
-    .eq("pool_id", SAMPLE_POOL_ID)
     .order("updated_at", { ascending: false })
     .limit(1)
     .maybeSingle();
@@ -253,8 +253,8 @@ export default async function AdminTournamentStatusPage({ searchParams }: PagePr
               <Link href="/admin/tournament" className="ash-link">
                 Tournament sync
               </Link>{" "}
-              or use <strong className="font-medium text-ash-text">Recalculate leaderboard</strong>{" "}
-              on the admin home page.
+              or use <strong className="font-medium text-ash-text">Recalculate</strong>{" "}
+              on each pool&apos;s Standings page (or Recalculate all pools on Tournament results).
             </p>
           ) : freshness.appearsCurrent ? (
             <p className="mt-2 text-ash-accent">
@@ -270,7 +270,7 @@ export default async function AdminTournamentStatusPage({ searchParams }: PagePr
               <Link href="/admin/tournament" className="ash-link">
                 Tournament sync
               </Link>{" "}
-              or recalculate the leaderboard from the admin home page.
+              or recalculate from a pool&apos;s admin Standings page.
             </p>
           )}
           <p className="mt-2 text-xs text-ash-muted">

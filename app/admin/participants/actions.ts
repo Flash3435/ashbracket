@@ -1,11 +1,11 @@
 "use server";
 
+import { assertCanManagePool } from "@/lib/admin/assertCanManagePool";
+import { revalidatePoolAdminPaths } from "@/lib/admin/revalidatePoolAdminPaths";
 import { createClient } from "@/lib/supabase/server";
 import { joinInviteUrl } from "@/lib/site-url";
 import { generateInviteToken } from "../../../lib/invites/generateInviteToken";
 import { sendParticipantInviteEmail } from "../../../lib/invites/sendParticipantInviteEmail";
-import { revalidatePath } from "next/cache";
-import { SAMPLE_POOL_ID } from "../../../lib/config/sample-pool";
 import {
   mapParticipantRow,
   paidAtForInsert,
@@ -27,29 +27,39 @@ function messageFromUnknown(e: unknown): string {
   return e instanceof Error ? e.message : "Something went wrong.";
 }
 
-async function poolNameForSamplePool(
+async function poolNameForPool(
   supabase: Awaited<ReturnType<typeof createClient>>,
+  poolId: string,
 ): Promise<string> {
   const { data } = await supabase
     .from("pools")
     .select("name")
-    .eq("id", SAMPLE_POOL_ID)
+    .eq("id", poolId)
     .maybeSingle();
   return (data?.name as string | undefined)?.trim() || "your pool";
 }
 
+function revalidateParticipants(poolId: string) {
+  revalidatePoolAdminPaths(poolId);
+}
+
 export async function createParticipantAction(input: {
+  poolId: string;
   displayName: string;
   email: string;
   paid: boolean;
 }): Promise<ParticipantActionResult> {
   try {
     const supabase = await createClient();
+    const gate = await assertCanManagePool(supabase, input.poolId);
+    if (!gate.ok) return { ok: false, error: gate.error };
+
+    const pid = input.poolId.trim();
     const paidAt = paidAtForInsert(input.paid);
     const { data, error } = await supabase
       .from("participants")
       .insert({
-        pool_id: SAMPLE_POOL_ID,
+        pool_id: pid,
         display_name: input.displayName.trim(),
         email: input.email.trim(),
         is_paid: input.paid,
@@ -61,9 +71,7 @@ export async function createParticipantAction(input: {
       .single();
 
     if (error) return { ok: false, error: error.message };
-    revalidatePath("/admin/participants");
-    revalidatePath("/admin/payments");
-    revalidatePath("/");
+    revalidateParticipants(pid);
     return {
       ok: true,
       participant: mapParticipantRow(data as ParticipantRow),
@@ -73,23 +81,25 @@ export async function createParticipantAction(input: {
   }
 }
 
-/**
- * Create a participant row with an active invite link and send the invite email when configured.
- */
 export async function inviteParticipantAction(input: {
+  poolId: string;
   displayName: string;
   email: string;
   paid: boolean;
 }): Promise<ParticipantActionResult> {
   try {
     const supabase = await createClient();
+    const gate = await assertCanManagePool(supabase, input.poolId);
+    if (!gate.ok) return { ok: false, error: gate.error };
+
+    const pid = input.poolId.trim();
     const paidAt = paidAtForInsert(input.paid);
     const token = generateInviteToken();
     const sentAt = new Date().toISOString();
     const { data, error } = await supabase
       .from("participants")
       .insert({
-        pool_id: SAMPLE_POOL_ID,
+        pool_id: pid,
         display_name: input.displayName.trim(),
         email: input.email.trim(),
         is_paid: input.paid,
@@ -104,7 +114,7 @@ export async function inviteParticipantAction(input: {
 
     if (error) return { ok: false, error: error.message };
 
-    const poolName = await poolNameForSamplePool(supabase);
+    const poolName = await poolNameForPool(supabase, pid);
     const inviteUrl = joinInviteUrl(token);
     const mail = await sendParticipantInviteEmail({
       to: input.email.trim(),
@@ -113,9 +123,7 @@ export async function inviteParticipantAction(input: {
       inviteUrl,
     });
 
-    revalidatePath("/admin/participants");
-    revalidatePath("/admin/payments");
-    revalidatePath("/");
+    revalidateParticipants(pid);
 
     let emailMessage: string | undefined;
     if (!mail.ok) {
@@ -136,21 +144,25 @@ export async function inviteParticipantAction(input: {
   }
 }
 
-/**
- * Send or resend the invite for an unclaimed row. Creates a token if this was a manual entry.
- */
-export async function sendParticipantInviteAction(
-  participantId: string,
-): Promise<ParticipantActionResult> {
+export async function sendParticipantInviteAction(input: {
+  poolId: string;
+  participantId: string;
+}): Promise<ParticipantActionResult> {
   try {
     const supabase = await createClient();
+    const gate = await assertCanManagePool(supabase, input.poolId);
+    if (!gate.ok) return { ok: false, error: gate.error };
+
+    const pid = input.poolId.trim();
+    const participantId = input.participantId.trim();
+
     const { data: row, error: fetchErr } = await supabase
       .from("participants")
       .select(
         "id, pool_id, display_name, email, user_id, invite_token, invite_last_sent_at",
       )
       .eq("id", participantId)
-      .eq("pool_id", SAMPLE_POOL_ID)
+      .eq("pool_id", pid)
       .maybeSingle();
 
     if (fetchErr) return { ok: false, error: fetchErr.message };
@@ -180,18 +192,18 @@ export async function sendParticipantInviteAction(
           invite_last_sent_at: now,
         })
         .eq("id", participantId)
-        .eq("pool_id", SAMPLE_POOL_ID);
+        .eq("pool_id", pid);
       if (upErr) return { ok: false, error: upErr.message };
     } else {
       const { error: upErr } = await supabase
         .from("participants")
         .update({ invite_last_sent_at: now })
         .eq("id", participantId)
-        .eq("pool_id", SAMPLE_POOL_ID);
+        .eq("pool_id", pid);
       if (upErr) return { ok: false, error: upErr.message };
     }
 
-    const poolName = await poolNameForSamplePool(supabase);
+    const poolName = await poolNameForPool(supabase, pid);
     const inviteUrl = joinInviteUrl(token);
     const displayName = String(row.display_name ?? "").trim();
     const mail = await sendParticipantInviteEmail({
@@ -201,9 +213,7 @@ export async function sendParticipantInviteAction(
       inviteUrl,
     });
 
-    revalidatePath("/admin/participants");
-    revalidatePath("/admin/payments");
-    revalidatePath("/");
+    revalidateParticipants(pid);
 
     const { data: fresh, error: freshErr } = await supabase
       .from("participants")
@@ -211,7 +221,7 @@ export async function sendParticipantInviteAction(
         "id, pool_id, display_name, email, is_paid, paid_at, user_id, invite_pending, invite_last_sent_at",
       )
       .eq("id", participantId)
-      .eq("pool_id", SAMPLE_POOL_ID)
+      .eq("pool_id", pid)
       .single();
 
     if (freshErr) return { ok: false, error: freshErr.message };
@@ -236,6 +246,7 @@ export async function sendParticipantInviteAction(
 }
 
 export async function updateParticipantAction(input: {
+  poolId: string;
   id: string;
   displayName: string;
   email: string;
@@ -243,11 +254,16 @@ export async function updateParticipantAction(input: {
 }): Promise<ParticipantActionResult> {
   try {
     const supabase = await createClient();
+    const gate = await assertCanManagePool(supabase, input.poolId);
+    if (!gate.ok) return { ok: false, error: gate.error };
+
+    const pid = input.poolId.trim();
+
     const { data: existing, error: fetchErr } = await supabase
       .from("participants")
       .select("is_paid, paid_at")
       .eq("id", input.id)
-      .eq("pool_id", SAMPLE_POOL_ID)
+      .eq("pool_id", pid)
       .maybeSingle();
 
     if (fetchErr) return { ok: false, error: fetchErr.message };
@@ -272,16 +288,14 @@ export async function updateParticipantAction(input: {
         paid_at: paidAt,
       })
       .eq("id", input.id)
-      .eq("pool_id", SAMPLE_POOL_ID)
+      .eq("pool_id", pid)
       .select(
         "id, pool_id, display_name, email, is_paid, paid_at, user_id, invite_pending, invite_last_sent_at",
       )
       .single();
 
     if (error) return { ok: false, error: error.message };
-    revalidatePath("/admin/participants");
-    revalidatePath("/admin/payments");
-    revalidatePath("/");
+    revalidateParticipants(pid);
     return {
       ok: true,
       participant: mapParticipantRow(data as ParticipantRow),
@@ -291,21 +305,24 @@ export async function updateParticipantAction(input: {
   }
 }
 
-export async function deleteParticipantAction(
-  id: string,
-): Promise<ParticipantActionResult> {
+export async function deleteParticipantAction(input: {
+  poolId: string;
+  id: string;
+}): Promise<ParticipantActionResult> {
   try {
     const supabase = await createClient();
+    const gate = await assertCanManagePool(supabase, input.poolId);
+    if (!gate.ok) return { ok: false, error: gate.error };
+
+    const pid = input.poolId.trim();
     const { error } = await supabase
       .from("participants")
       .delete()
-      .eq("id", id)
-      .eq("pool_id", SAMPLE_POOL_ID);
+      .eq("id", input.id)
+      .eq("pool_id", pid);
 
     if (error) return { ok: false, error: error.message };
-    revalidatePath("/admin/participants");
-    revalidatePath("/admin/payments");
-    revalidatePath("/");
+    revalidateParticipants(pid);
     return { ok: true };
   } catch (e) {
     return { ok: false, error: messageFromUnknown(e) };

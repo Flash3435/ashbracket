@@ -8,6 +8,8 @@ type Filter = "all" | "paid" | "unpaid";
 
 type PaymentsOverviewProps = {
   rows: ParticipantPaymentView[];
+  /** Link to the Participants admin page for this pool */
+  participantsHref?: string;
 };
 
 function formatPaidAt(iso: string | null): string {
@@ -27,7 +29,10 @@ function filterClass(active: boolean): string {
     : "rounded-full bg-ash-body px-3 py-1 text-xs font-medium text-ash-muted ring-1 ring-ash-border hover:text-ash-text";
 }
 
-export function PaymentsOverview({ rows }: PaymentsOverviewProps) {
+export function PaymentsOverview({
+  rows,
+  participantsHref = "/admin",
+}: PaymentsOverviewProps) {
   const [filter, setFilter] = useState<Filter>("all");
 
   const sorted = useMemo(
@@ -106,7 +111,7 @@ export function PaymentsOverview({ rows }: PaymentsOverviewProps) {
 
       <p className="text-sm text-ash-muted">
         To change payment status, edit a participant on{" "}
-        <Link href="/admin/participants" className="ash-link">
+        <Link href={participantsHref} className="ash-link">
           Participants
         </Link>
         .

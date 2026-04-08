@@ -1,8 +1,10 @@
 "use server";
 
+import { assertCanManagePool } from "@/lib/admin/assertCanManagePool";
 import { createClient } from "@/lib/supabase/server";
+import { isGlobalAdmin } from "../../../lib/auth/permissions";
 import { recomputePoolLedgerForPool } from "@/lib/scoring/recomputePoolLedger";
-import { SAMPLE_POOL_ID } from "../../../lib/config/sample-pool";
+import { revalidatePath } from "next/cache";
 
 const KNOCKOUT_KINDS = [
   "round_of_32",
@@ -28,21 +30,22 @@ function isKnockoutKind(k: string): k is KnockoutResultKind {
   return (KNOCKOUT_KINDS as readonly string[]).includes(k);
 }
 
-/**
- * Saves or clears one knockout result row (snake_case at Supabase), then reruns
- * deterministic scoring for the configured pool and replaces `points_ledger` via RPC.
- */
 export type RecomputeStandingsResult =
   | { ok: true }
   | { ok: false; error: string };
 
 /**
- * Re-runs deterministic scoring for the sample pool and replaces `points_ledger`
- * via RPC (same path as after saving a result). Use when data looks out of sync.
+ * Re-runs deterministic scoring for one pool (global or pool admin for that pool).
  */
-export async function recomputeStandingsForSamplePoolAction(): Promise<RecomputeStandingsResult> {
+export async function recomputeStandingsForPoolAction(
+  poolId: string,
+): Promise<RecomputeStandingsResult> {
   try {
-    const ledger = await recomputePoolLedgerForPool(SAMPLE_POOL_ID);
+    const supabase = await createClient();
+    const gate = await assertCanManagePool(supabase, poolId);
+    if (!gate.ok) return { ok: false, error: gate.error };
+
+    const ledger = await recomputePoolLedgerForPool(poolId.trim());
     if (ledger.error) {
       return { ok: false, error: ledger.error };
     }
@@ -52,6 +55,45 @@ export async function recomputeStandingsForSamplePoolAction(): Promise<Recompute
   }
 }
 
+/**
+ * Recomputes ledger for every pool (after editing shared results). Global admins only.
+ */
+export async function recomputeAllPoolsLedgerAction(): Promise<RecomputeStandingsResult> {
+  try {
+    const supabase = await createClient();
+    if (!(await isGlobalAdmin(supabase))) {
+      return {
+        ok: false,
+        error: "Only global administrators can refresh all pool leaderboards.",
+      };
+    }
+
+    const { data: poolRows, error: poolErr } = await supabase
+      .from("pools")
+      .select("id");
+
+    if (poolErr) {
+      return { ok: false, error: poolErr.message };
+    }
+
+    for (const row of poolRows ?? []) {
+      const ledger = await recomputePoolLedgerForPool(row.id as string);
+      if (ledger.error) {
+        return { ok: false, error: ledger.error };
+      }
+    }
+
+    revalidatePath("/admin/results");
+    return { ok: true };
+  } catch (e) {
+    return { ok: false, error: messageFromUnknown(e) };
+  }
+}
+
+/**
+ * Saves knockout result rows (shared tournament data). **Global admins only.**
+ * Recomputes ledger for **all** pools after each save.
+ */
 export async function setKnockoutResultAction(input: {
   tournamentStageId: string;
   kind: string;
@@ -64,6 +106,12 @@ export async function setKnockoutResultAction(input: {
 
   try {
     const supabase = await createClient();
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (!user || !(await isGlobalAdmin(supabase))) {
+      return { ok: false, error: "Only global administrators can edit tournament results." };
+    }
 
     if (!input.teamId) {
       let q = supabase
@@ -101,14 +149,29 @@ export async function setKnockoutResultAction(input: {
       if (error) return { ok: false, error: error.message };
     }
 
-    const ledger = await recomputePoolLedgerForPool(SAMPLE_POOL_ID);
-    if (ledger.error) {
+    const { data: poolRows, error: poolErr } = await supabase
+      .from("pools")
+      .select("id");
+
+    if (poolErr) {
       return {
         ok: false,
-        error: `Result saved, but the leaderboard could not be updated: ${ledger.error}`,
+        error: `Result saved, but pools could not be listed to refresh scores: ${poolErr.message}`,
       };
     }
 
+    for (const row of poolRows ?? []) {
+      const id = row.id as string;
+      const ledger = await recomputePoolLedgerForPool(id);
+      if (ledger.error) {
+        return {
+          ok: false,
+          error: `Result saved, but the leaderboard could not be updated for a pool: ${ledger.error}`,
+        };
+      }
+    }
+
+    revalidatePath("/admin/results");
     return { ok: true };
   } catch (e) {
     return { ok: false, error: messageFromUnknown(e) };

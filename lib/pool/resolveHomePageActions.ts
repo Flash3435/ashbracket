@@ -1,5 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { isAppAdmin } from "../auth/isAppAdmin";
+import { canAccessAdminDashboard } from "../auth/permissions";
 
 export type HomePrimaryCta = {
   href: string;
@@ -43,7 +43,7 @@ export async function resolveHomePageActions(
     };
   }
 
-  if (await isAppAdmin(supabase, user.id)) {
+  if (await canAccessAdminDashboard(supabase, user.id)) {
     return {
       primaryCta: { href: "/admin", label: "Go to Admin" },
       poolCard: {
