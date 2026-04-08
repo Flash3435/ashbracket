@@ -5,6 +5,7 @@ import { PageTitle } from "@/components/ui/PageTitle";
 import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
 import { canAccessAdminDashboard } from "../../lib/auth/permissions";
+import { buildEmailConfirmRedirectUrl } from "../../lib/auth/buildEmailConfirmRedirectUrl";
 import { safeRedirectPath } from "../../lib/auth/safeRedirectPath";
 import { peekParticipantInvite } from "../../lib/join/actions";
 
@@ -52,6 +53,8 @@ export default async function SignupPage({
       ? `/login?next=${encodeURIComponent(`/join?invite=${encodeURIComponent(inviteParam)}`)}`
       : "/login";
 
+  const emailConfirmRedirectUrl = buildEmailConfirmRedirectUrl(redirectAfterSignup);
+
   return (
     <PageContainer>
       <PageTitle
@@ -64,6 +67,7 @@ export default async function SignupPage({
       />
       <SignupForm
         redirectAfterSignup={redirectAfterSignup}
+        emailConfirmRedirectUrl={emailConfirmRedirectUrl}
         inviteContext={inviteContext}
         loginHref={resolvedLoginHref}
       />

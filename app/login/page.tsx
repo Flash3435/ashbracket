@@ -18,6 +18,7 @@ export default async function LoginPage({
   } = await supabase.auth.getUser();
 
   const showForbidden = sp.error === "forbidden";
+  const showEmailConfirmFailed = sp.error === "auth_confirm";
   const wantsAdminDest = sp.next?.startsWith("/admin") ?? false;
   const redirectAfterLogin = safeRedirectPath(
     sp.next,
@@ -54,6 +55,7 @@ export default async function LoginPage({
         signupHref={`/signup?next=${encodeURIComponent(redirectAfterLogin)}`}
         blockedEmail={blockedEmail}
         showForbiddenMessage={showForbidden}
+        showEmailConfirmFailed={showEmailConfirmFailed}
         variant={variant}
       />
     </PageContainer>

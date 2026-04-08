@@ -13,6 +13,8 @@ type AdminLoginFormProps = {
   /** Shown when already signed in but not in `app_admins` (or after a protected-route redirect). */
   blockedEmail?: string | null;
   showForbiddenMessage: boolean;
+  /** Invalid or expired Supabase email confirmation link. */
+  showEmailConfirmFailed?: boolean;
   /** Participant vs organizer copy and links. */
   variant: "participant" | "organizer";
 };
@@ -22,6 +24,7 @@ export function AdminLoginForm({
   signupHref,
   blockedEmail,
   showForbiddenMessage,
+  showEmailConfirmFailed,
   variant,
 }: AdminLoginFormProps) {
   const router = useRouter();
@@ -87,6 +90,13 @@ export function AdminLoginForm({
 
   return (
     <div className="space-y-4">
+      {showEmailConfirmFailed ? (
+        <p className="rounded-md border border-red-800/60 bg-red-950/40 px-3 py-2 text-sm text-red-100">
+          That confirmation link is invalid or has expired. Sign in below if you
+          already finished setup, or sign up again to get a new confirmation email
+          from AshBracket.
+        </p>
+      ) : null}
       <SignInWithEmailForm redirectAfterLogin={redirectAfterLogin} />
       {variant === "participant" ? (
         <p className="text-center text-sm text-ash-muted">

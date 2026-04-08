@@ -14,6 +14,8 @@ export type SignupInviteContext = {
 type SignupFormProps = {
   /** Validated server-side (see `safeRedirectPath`). */
   redirectAfterSignup: string;
+  /** Supabase `emailRedirectTo`: must match an entry in Supabase Redirect URLs. */
+  emailConfirmRedirectUrl: string;
   /** Set only after server-side invite + email validation; signup uses this email, not user-editable input. */
   inviteContext?: SignupInviteContext | null;
   /** Login URL preserving post-auth return path (e.g. back to join with invite). */
@@ -32,6 +34,7 @@ function looksLikeExistingUserError(message: string): boolean {
 
 export function SignupForm({
   redirectAfterSignup,
+  emailConfirmRedirectUrl,
   inviteContext,
   loginHref,
 }: SignupFormProps) {
@@ -65,6 +68,9 @@ export function SignupForm({
     const { data, error: signErr } = await supabase.auth.signUp({
       email: signUpEmail,
       password,
+      options: {
+        emailRedirectTo: emailConfirmRedirectUrl,
+      },
     });
     setLoading(false);
 
