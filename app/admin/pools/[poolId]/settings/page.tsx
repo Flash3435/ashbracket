@@ -32,7 +32,12 @@ export default async function AdminPoolSettingsPage({
         description="Set your pool’s name, whether the leaderboard and rules are visible to the public, and when picks must be in by."
       />
 
-      <PoolShareInvitePanel joinCode={jc} shareUrl={shareUrl} />
+      <PoolShareInvitePanel
+        joinCode={jc}
+        shareUrl={shareUrl}
+        variant="compact"
+        participantsHref={`/admin/pools/${poolId}/participants`}
+      />
 
       <PoolSettingsForm poolId={poolId} initial={initial} />
     </PageContainer>

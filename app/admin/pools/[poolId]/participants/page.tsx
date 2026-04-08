@@ -2,6 +2,7 @@ import { ParticipantsManager } from "@/components/admin/ParticipantsManager";
 import { PageContainer } from "@/components/ui/PageContainer";
 import { PageTitle } from "@/components/ui/PageTitle";
 import { requireManagedPool } from "@/lib/admin/requireManagedPool";
+import { poolShareJoinUrl } from "@/lib/site-url";
 import {
   mapParticipantRow,
   type ParticipantRow,
@@ -16,7 +17,9 @@ export default async function AdminPoolParticipantsPage({
   params: Promise<{ poolId: string }>;
 }) {
   const { poolId } = await params;
-  const { supabase } = await requireManagedPool(poolId);
+  const { supabase, pool } = await requireManagedPool(poolId);
+  const jc = pool.join_code?.trim() ?? null;
+  const shareUrl = jc ? poolShareJoinUrl(jc) : null;
 
   let initialParticipants: Participant[] = [];
   let loadError: string | null = null;
@@ -43,7 +46,7 @@ export default async function AdminPoolParticipantsPage({
     <PageContainer>
       <PageTitle
         title="Participants"
-        description="Invite people by email (they get a private link), or add names manually for your own records. Changes apply right away."
+        description="Invite by email, share an open join link with your group, or add names manually for your records. Changes apply right away."
       />
       {loadError ? (
         <p className="mb-4 rounded-md border border-red-800/80 bg-red-950/40 px-3 py-2 text-sm text-red-200">
@@ -53,6 +56,8 @@ export default async function AdminPoolParticipantsPage({
       <ParticipantsManager
         poolId={poolId}
         initialParticipants={initialParticipants}
+        joinCode={jc}
+        shareUrl={shareUrl}
         disabled={Boolean(loadError)}
       />
     </PageContainer>

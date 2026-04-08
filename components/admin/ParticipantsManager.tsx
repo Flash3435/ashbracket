@@ -10,10 +10,14 @@ import {
   updateParticipantAction,
 } from "../../app/admin/participants/actions";
 import type { Participant } from "../../types/participant";
+import { PoolShareInvitePanel } from "./PoolShareInvitePanel";
 
 type ParticipantsManagerProps = {
   poolId: string;
   initialParticipants: Participant[];
+  /** Pool open-join code and URL; from server via `poolShareJoinUrl` */
+  joinCode: string | null;
+  shareUrl: string | null;
   disabled?: boolean;
 };
 
@@ -49,6 +53,8 @@ type InviteFeedback = {
 export function ParticipantsManager({
   poolId,
   initialParticipants,
+  joinCode,
+  shareUrl,
   disabled = false,
 }: ParticipantsManagerProps) {
   const router = useRouter();
@@ -296,12 +302,31 @@ export function ParticipantsManager({
         </div>
       ) : null}
 
-      <div className="flex flex-wrap items-center justify-between gap-3">
+      <div className="space-y-4 rounded-md border border-ash-accent/20 bg-ash-accent/5 p-4">
+        <div className="flex flex-wrap items-baseline justify-between gap-2">
+          <h2 className="text-base font-bold text-ash-text">Add participants</h2>
+          <p className="text-sm text-ash-muted">
+            {participants.length} participant
+            {participants.length === 1 ? "" : "s"}
+            {isPending ? " · saving…" : ""}
+          </p>
+        </div>
         <p className="text-sm text-ash-muted">
-          {participants.length} participant
-          {participants.length === 1 ? "" : "s"}
-          {isPending ? " · saving…" : ""}
+          Invite specific people by email, or post one shareable link in your
+          group chat.
         </p>
+        <ul className="list-disc space-y-1 pl-5 text-xs text-ash-muted">
+          <li>
+            <span className="font-semibold text-ash-text">Invite participant</span>{" "}
+            sends a direct email.
+          </li>
+          <li>
+            <span className="font-semibold text-ash-text">Copy invite link</span>{" "}
+            lets anyone with the link sign in and join as a participant.
+          </li>
+          <li>This does not grant organizer/admin access.</li>
+        </ul>
+        <PoolShareInvitePanel joinCode={joinCode} shareUrl={shareUrl} variant="primary" />
         <div className="flex flex-wrap gap-2">
           <button
             type="button"
@@ -337,8 +362,6 @@ export function ParticipantsManager({
       </div>
 
       <p className="text-xs text-ash-muted">
-        <span className="font-semibold text-ash-text">Invite participant</span>{" "}
-        emails a private link so they can sign in and open picks.{" "}
         <span className="font-semibold text-ash-text">Add manually</span> only
         updates your list (for example cash tracking) — they are not notified.
       </p>
