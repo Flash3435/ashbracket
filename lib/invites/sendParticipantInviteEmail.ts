@@ -28,11 +28,11 @@ export async function sendParticipantInviteEmail(args: {
   const text = [
     `Hi ${invitee},`,
     "",
-    `${inviter} invited you to join the pool "${pool}" on AshBracket.`,
+    `${inviter} invited you to join the pool ${pool} on AshBracket.`,
     "",
     "This is a World Cup bracket pool where you can make your picks and follow the standings.",
     "",
-    `Open the link below, then sign in or create an account using this same email address (${emailForAccount}). You'll be connected to the pool automatically.`,
+    `Open the link below, then sign in or create an account using ${emailForAccount}. You'll be connected to the pool automatically.`,
     "",
     args.inviteUrl,
     "",
