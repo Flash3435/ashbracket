@@ -23,7 +23,10 @@ export default async function AdminHomePage() {
 
   const global = await isGlobalAdmin(supabase);
 
-  if (!error && list.length === 1 && !global) {
+  // Single-pool organizers (including global admins) go straight to the pool
+  // dashboard with Participants, Settings, etc. Global tournament tools stay on
+  // /admin — use "All pools" in the pool header to return here.
+  if (!error && list.length === 1) {
     redirect(`/admin/pools/${list[0].id}`);
   }
 
