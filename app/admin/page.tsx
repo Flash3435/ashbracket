@@ -47,9 +47,11 @@ export default async function AdminHomePage() {
         </p>
       ) : null}
 
-      {!error && list.length > 1 ? (
+      {!error && list.length > 0 ? (
         <div className="space-y-2">
-          <h2 className="text-sm font-semibold text-ash-text">Your pools</h2>
+          <h2 className="text-sm font-semibold text-ash-text">
+            {list.length === 1 ? "Your pool" : "Your pools"}
+          </h2>
           <ul className="list-inside list-disc space-y-1 text-sm text-ash-muted">
             {list.map((p) => (
               <li key={p.id}>
