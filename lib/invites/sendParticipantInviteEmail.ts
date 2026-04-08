@@ -17,13 +17,22 @@ export async function sendParticipantInviteEmail(args: {
   poolName: string;
   displayName: string;
   inviteUrl: string;
+  inviterLabel: string;
 }): Promise<SendInviteEmailResult> {
-  const subject = `You're invited to ${args.poolName}`;
+  const pool = args.poolName.trim() || "a pool";
+  const inviter = args.inviterLabel.trim() || "Your pool organizer";
+  const invitee = args.displayName.trim() || "there";
+  const emailForAccount = args.to.trim();
+
+  const subject = `You're invited to join ${pool} on AshBracket`;
   const text = [
-    `Hi ${args.displayName},`,
+    `Hi ${invitee},`,
     "",
-    `You've been invited to join the pool "${args.poolName}" on AshBracket.`,
-    "Open the link below, sign in with this same email address, and you'll be connected to your bracket automatically.",
+    `${inviter} invited you to join the pool "${pool}" on AshBracket.`,
+    "",
+    "This is a World Cup bracket pool where you can make your picks and follow the standings.",
+    "",
+    `Open the link below, then sign in or create an account using this same email address (${emailForAccount}). You'll be connected to the pool automatically.`,
     "",
     args.inviteUrl,
     "",
@@ -31,9 +40,10 @@ export async function sendParticipantInviteEmail(args: {
   ].join("\n");
 
   const html = `
-    <p>Hi ${escapeHtml(args.displayName)},</p>
-    <p>You've been invited to join the pool <strong>${escapeHtml(args.poolName)}</strong> on AshBracket.</p>
-    <p>Open the link below, sign in with <strong>this same email address</strong>, and you'll be connected to your bracket automatically.</p>
+    <p>Hi ${escapeHtml(invitee)},</p>
+    <p>${escapeHtml(inviter)} invited you to join the pool <strong>${escapeHtml(pool)}</strong> on AshBracket.</p>
+    <p>This is a World Cup bracket pool where you can make your picks and follow the standings.</p>
+    <p>Open the link below, then sign in or create an account using <strong>${escapeHtml(emailForAccount)}</strong>. You'll be connected to the pool automatically.</p>
     <p><a href="${escapeHtml(args.inviteUrl)}">Join your pool</a></p>
     <p style="color:#666;font-size:12px;">If you did not expect this message, you can ignore it.</p>
   `.trim();

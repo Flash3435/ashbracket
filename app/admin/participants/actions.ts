@@ -5,6 +5,7 @@ import { revalidatePoolAdminPaths } from "@/lib/admin/revalidatePoolAdminPaths";
 import { createClient } from "@/lib/supabase/server";
 import { joinInviteUrl } from "@/lib/site-url";
 import { generateInviteToken } from "../../../lib/invites/generateInviteToken";
+import { resolveInviterLabelForPoolInvite } from "../../../lib/invites/resolveInviterLabelForPoolInvite";
 import { sendParticipantInviteEmail } from "../../../lib/invites/sendParticipantInviteEmail";
 import {
   mapParticipantRow,
@@ -116,11 +117,18 @@ export async function inviteParticipantAction(input: {
 
     const poolName = await poolNameForPool(supabase, pid);
     const inviteUrl = joinInviteUrl(token);
+    const {
+      data: { user: inviter },
+    } = await supabase.auth.getUser();
+    const inviterLabel = inviter
+      ? await resolveInviterLabelForPoolInvite(supabase, pid, inviter)
+      : "Your pool organizer";
     const mail = await sendParticipantInviteEmail({
       to: input.email.trim(),
       poolName,
       displayName: input.displayName.trim(),
       inviteUrl,
+      inviterLabel,
     });
 
     revalidateParticipants(pid);
@@ -206,11 +214,18 @@ export async function sendParticipantInviteAction(input: {
     const poolName = await poolNameForPool(supabase, pid);
     const inviteUrl = joinInviteUrl(token);
     const displayName = String(row.display_name ?? "").trim();
+    const {
+      data: { user: inviter },
+    } = await supabase.auth.getUser();
+    const inviterLabel = inviter
+      ? await resolveInviterLabelForPoolInvite(supabase, pid, inviter)
+      : "Your pool organizer";
     const mail = await sendParticipantInviteEmail({
       to: email,
       poolName,
       displayName,
       inviteUrl,
+      inviterLabel,
     });
 
     revalidateParticipants(pid);
