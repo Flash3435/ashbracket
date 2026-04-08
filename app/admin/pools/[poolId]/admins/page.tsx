@@ -3,7 +3,10 @@ import { PageContainer } from "@/components/ui/PageContainer";
 import { PageTitle } from "@/components/ui/PageTitle";
 import { requireManagedPool } from "@/lib/admin/requireManagedPool";
 import { canManagePoolAdmins } from "@/lib/auth/permissions";
-import { listPoolAdminInvites } from "@/lib/pools/listPoolAdminInvites";
+import {
+  listPoolAdminInvites,
+  partitionPoolAdminInvites,
+} from "@/lib/pools/listPoolAdminInvites";
 import { listPoolAdmins } from "@/lib/pools/listPoolAdmins";
 import { getSiteUrl } from "@/lib/site-url";
 import Link from "next/link";
@@ -37,9 +40,13 @@ export default async function AdminPoolAdminsPage({
       e instanceof Error ? e.message : "Failed to load pool administrators.";
   }
 
+  const { pending: pendingInvites, history: inviteHistory } =
+    partitionPoolAdminInvites(inviteRows);
+
   const poolAdminsManagerKey = [
     ...rows.map((r) => `${r.membershipId}:${r.role}`),
-    ...inviteRows.map(
+    ...pendingInvites.map((i) => `${i.id}:${i.inviteLastSentAt ?? ""}`),
+    ...inviteHistory.map(
       (i) => `${i.id}:${i.claimedAt ?? ""}:${i.revokedAt ?? ""}`,
     ),
   ].join("|");
@@ -74,7 +81,8 @@ export default async function AdminPoolAdminsPage({
           key={poolAdminsManagerKey}
           poolId={poolId}
           initialRows={rows}
-          initialInvites={inviteRows}
+          initialPendingInvites={pendingInvites}
+          initialInviteHistory={inviteHistory}
           loginUrl={loginUrl}
           canManageMembership={canManageMembership}
           viewerUserId={viewerUserId}

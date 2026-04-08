@@ -5,6 +5,7 @@ import { formatPoolAdminListEntryLabel } from "@/lib/pools/formatPoolAdminIdenti
 import {
   type PoolAdminInviteListEntry,
   poolAdminInviteStatus,
+  poolAdminInviteStatusLabel,
 } from "@/lib/pools/listPoolAdminInvites";
 import {
   resendPoolAdminInviteAction,
@@ -23,7 +24,8 @@ import {
 type Props = {
   poolId: string;
   initialRows: PoolAdminListEntry[];
-  initialInvites: PoolAdminInviteListEntry[];
+  initialPendingInvites: PoolAdminInviteListEntry[];
+  initialInviteHistory: PoolAdminInviteListEntry[];
   loginUrl: string;
   canManageMembership: boolean;
   viewerUserId: string;
@@ -49,7 +51,8 @@ function formatWhen(iso: string): string {
 export function PoolAdminsManager({
   poolId,
   initialRows,
-  initialInvites,
+  initialPendingInvites,
+  initialInviteHistory,
   loginUrl,
   canManageMembership,
   viewerUserId,
@@ -416,7 +419,9 @@ export function PoolAdminsManager({
           <span className="text-ash-text">
             Pending invites are not pool admins (or owners)
           </span>{" "}
-          until accepted.
+          until accepted. After someone accepts, they appear under{" "}
+          <span className="text-ash-text">Current admins</span> and in{" "}
+          <span className="text-ash-text">Invite history</span> below.
         </p>
         {canManageMembership ? (
           <p className="mb-2 text-xs text-ash-muted">
@@ -439,7 +444,6 @@ export function PoolAdminsManager({
               <tr>
                 <th className="px-3 py-2 font-medium">Email</th>
                 <th className="px-3 py-2 font-medium">Role</th>
-                <th className="px-3 py-2 font-medium">Status</th>
                 <th className="px-3 py-2 font-medium">Created</th>
                 {canManageMembership ? (
                   <th className="px-3 py-2 font-medium">Actions</th>
@@ -447,24 +451,121 @@ export function PoolAdminsManager({
               </tr>
             </thead>
             <tbody>
-              {initialInvites.length === 0 ? (
+              {initialPendingInvites.length === 0 ? (
                 <tr>
                   <td
-                    colSpan={canManageMembership ? 5 : 4}
+                    colSpan={canManageMembership ? 4 : 3}
                     className="px-3 py-4 text-ash-muted"
                   >
-                    No invitations yet.
+                    No pending invitations.
                   </td>
                 </tr>
               ) : (
-                initialInvites.map((inv) => {
+                initialPendingInvites.map((inv) => (
+                  <tr
+                    key={inv.id}
+                    className="border-b border-ash-border/80"
+                  >
+                    <td className="px-3 py-3 align-top text-sm text-ash-text">
+                      {inv.invitedEmail}
+                    </td>
+                    <td className="px-3 py-3 align-top">
+                      <span
+                        className={
+                          inv.role === "owner"
+                            ? "rounded bg-amber-950/50 px-2 py-0.5 text-xs font-medium text-amber-200"
+                            : "rounded bg-ash-body px-2 py-0.5 text-xs font-medium text-ash-muted"
+                        }
+                      >
+                        {inv.role === "owner" ? "Owner" : "Admin"}
+                      </span>
+                    </td>
+                    <td className="px-3 py-3 align-top text-xs text-ash-muted">
+                      {formatWhen(inv.createdAt)}
+                    </td>
+                    {canManageMembership ? (
+                      <td className="px-3 py-3 align-top">
+                        <div className="flex flex-wrap gap-2">
+                          <button
+                            type="button"
+                            className="rounded-md border border-ash-border px-2 py-1 text-xs text-ash-text hover:bg-ash-body disabled:opacity-40"
+                            disabled={pending}
+                            onClick={() =>
+                              runAction(() =>
+                                resendPoolAdminInviteAction({
+                                  poolId,
+                                  inviteId: inv.id,
+                                }),
+                              )
+                            }
+                          >
+                            Resend email
+                          </button>
+                          <button
+                            type="button"
+                            className="rounded-md border border-red-900/60 px-2 py-1 text-xs text-red-200 hover:bg-red-950/40 disabled:opacity-40"
+                            disabled={pending}
+                            onClick={() => {
+                              if (
+                                !window.confirm(
+                                  "Revoke this invitation? The email will no longer receive access when they sign in.",
+                                )
+                              ) {
+                                return;
+                              }
+                              runAction(() =>
+                                revokePoolAdminInviteAction({
+                                  poolId,
+                                  inviteId: inv.id,
+                                }),
+                              );
+                            }}
+                          >
+                            Revoke
+                          </button>
+                        </div>
+                      </td>
+                    ) : null}
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div>
+        <h2 className="mb-2 text-sm font-medium text-ash-text">
+          Invite history
+        </h2>
+        <p className="mb-2 text-xs text-ash-muted">
+          Accepted invites (the person signed in and became a pool admin or
+          owner). Revoked invites no longer grant access if that email signs in
+          later.
+        </p>
+        <div className="overflow-x-auto rounded-md border border-ash-border">
+          <table className="w-full min-w-[36rem] text-left text-sm">
+            <thead className="border-b border-ash-border bg-ash-body/60 text-xs uppercase text-ash-muted">
+              <tr>
+                <th className="px-3 py-2 font-medium">Email</th>
+                <th className="px-3 py-2 font-medium">Role</th>
+                <th className="px-3 py-2 font-medium">Status</th>
+                <th className="px-3 py-2 font-medium">Created</th>
+              </tr>
+            </thead>
+            <tbody>
+              {initialInviteHistory.length === 0 ? (
+                <tr>
+                  <td
+                    colSpan={4}
+                    className="px-3 py-4 text-ash-muted"
+                  >
+                    No accepted or revoked invites yet.
+                  </td>
+                </tr>
+              ) : (
+                initialInviteHistory.map((inv) => {
                   const status = poolAdminInviteStatus(inv);
-                  const label =
-                    status === "pending"
-                      ? "Pending"
-                      : status === "claimed"
-                        ? "Claimed"
-                        : "Revoked";
                   return (
                     <tr
                       key={inv.id}
@@ -485,58 +586,11 @@ export function PoolAdminsManager({
                         </span>
                       </td>
                       <td className="px-3 py-3 align-top text-ash-text">
-                        {label}
+                        {poolAdminInviteStatusLabel(status)}
                       </td>
                       <td className="px-3 py-3 align-top text-xs text-ash-muted">
                         {formatWhen(inv.createdAt)}
                       </td>
-                      {canManageMembership ? (
-                        <td className="px-3 py-3 align-top">
-                          {status === "pending" ? (
-                            <div className="flex flex-wrap gap-2">
-                              <button
-                                type="button"
-                                className="rounded-md border border-ash-border px-2 py-1 text-xs text-ash-text hover:bg-ash-body disabled:opacity-40"
-                                disabled={pending}
-                                onClick={() =>
-                                  runAction(() =>
-                                    resendPoolAdminInviteAction({
-                                      poolId,
-                                      inviteId: inv.id,
-                                    }),
-                                  )
-                                }
-                              >
-                                Resend email
-                              </button>
-                              <button
-                                type="button"
-                                className="rounded-md border border-red-900/60 px-2 py-1 text-xs text-red-200 hover:bg-red-950/40 disabled:opacity-40"
-                                disabled={pending}
-                                onClick={() => {
-                                  if (
-                                    !window.confirm(
-                                      "Revoke this invitation? The email will no longer receive access when they sign in.",
-                                    )
-                                  ) {
-                                    return;
-                                  }
-                                  runAction(() =>
-                                    revokePoolAdminInviteAction({
-                                      poolId,
-                                      inviteId: inv.id,
-                                    }),
-                                  );
-                                }}
-                              >
-                                Revoke
-                              </button>
-                            </div>
-                          ) : (
-                            <span className="text-xs text-ash-muted">—</span>
-                          )}
-                        </td>
-                      ) : null}
                     </tr>
                   );
                 })

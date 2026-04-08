@@ -25,6 +25,41 @@ export function poolAdminInviteStatus(
   return "pending";
 }
 
+/** User-facing status copy (claimed invites are completed acceptances, not “pending”). */
+export function poolAdminInviteStatusLabel(
+  status: PoolAdminInviteStatus,
+): string {
+  switch (status) {
+    case "pending":
+      return "Pending";
+    case "claimed":
+      return "Accepted";
+    case "revoked":
+      return "Revoked";
+  }
+}
+
+export type PartitionedPoolAdminInvites = {
+  pending: PoolAdminInviteListEntry[];
+  history: PoolAdminInviteListEntry[];
+};
+
+/**
+ * Splits invites for the admin UI: actionable pending vs completed (accepted or revoked).
+ * Preserves each group in the same order as the input (e.g. newest first from the query).
+ */
+export function partitionPoolAdminInvites(
+  entries: PoolAdminInviteListEntry[],
+): PartitionedPoolAdminInvites {
+  const pending: PoolAdminInviteListEntry[] = [];
+  const history: PoolAdminInviteListEntry[] = [];
+  for (const inv of entries) {
+    if (poolAdminInviteStatus(inv) === "pending") pending.push(inv);
+    else history.push(inv);
+  }
+  return { pending, history };
+}
+
 /**
  * Lists pool admin invites for a pool (all states). Call after access checks.
  */
