@@ -101,6 +101,45 @@ function isFinishedWithScores(m: TournamentMatchPublicRow): boolean {
   return true;
 }
 
+/** True when at least one group-stage match is finished with scores (same basis as standings stats). */
+export function hasAnyFinishedGroupStageMatch(
+  matches: TournamentMatchPublicRow[],
+): boolean {
+  for (const m of matches) {
+    if (m.stage_code !== "group") continue;
+    const g = normGroupCode(m.group_code);
+    if (!g || !GROUP_LETTERS.includes(g as (typeof GROUP_LETTERS)[number])) {
+      continue;
+    }
+    if (isFinishedWithScores(m)) return true;
+  }
+  return false;
+}
+
+export type PublicGroupPreviewTeam = {
+  countryCode: string;
+  teamName: string;
+};
+
+/** Official draw-order rosters for group preview (no match results). */
+export function buildPublicGroupPreviewTables(): Array<{
+  groupCode: string;
+  teams: PublicGroupPreviewTeam[];
+}> {
+  const out: Array<{ groupCode: string; teams: PublicGroupPreviewTeam[] }> = [];
+  for (const letter of GROUP_LETTERS) {
+    const roster = rosterForGroup(letter);
+    out.push({
+      groupCode: letter,
+      teams: roster.map((r) => ({
+        countryCode: r.countryCode,
+        teamName: r.teamName,
+      })),
+    });
+  }
+  return out;
+}
+
 /**
  * Official group tables for the public tournament page: canonical WC2026 rosters
  * plus stats from finished group-stage matches only (same ordering rules as sync).

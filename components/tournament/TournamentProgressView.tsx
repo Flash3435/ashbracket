@@ -6,7 +6,10 @@ import type { KnockoutPickSlotDraft } from "../../types/adminKnockoutPicks";
 import type { Team } from "../../src/types/domain";
 import { formatKickoffAmericaEdmonton } from "../../lib/datetime/scheduleDisplay";
 import { countMatchesInvolvingPicks } from "../../lib/participant/participantPickHighlights";
-import { buildPublicGroupStandingsTables } from "../../lib/tournament/buildPublicGroupStandings";
+import {
+  buildPublicGroupStandingsTables,
+  hasAnyFinishedGroupStageMatch,
+} from "../../lib/tournament/buildPublicGroupStandings";
 import {
   knockoutAdvancementByStage,
   summarizeTournamentStage,
@@ -137,6 +140,7 @@ export function TournamentProgressView({ payload, schedulePickContext }: Props) 
       : 0;
 
   const groupStandingsTables = buildPublicGroupStandingsTables(matches);
+  const groupStandingsMode = hasAnyFinishedGroupStageMatch(matches);
   const pickedCountryCodes = pickedCountryCodesFromContext(schedulePickContext);
 
   return (
@@ -197,6 +201,7 @@ export function TournamentProgressView({ payload, schedulePickContext }: Props) 
 
       <GroupStandingsGrid
         tables={groupStandingsTables}
+        standingsMode={groupStandingsMode}
         pickedCountryCodes={pickedCountryCodes}
       />
 
