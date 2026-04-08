@@ -127,11 +127,12 @@ export default async function RulesPage() {
         />
         <div className="ash-surface px-4 py-10 text-center">
           <p className="text-sm font-medium text-ash-text">
-            No public pool rules yet
+            No public pool rules available yet
           </p>
           <p className="mt-2 text-sm text-ash-muted">
-            The sample pool may not be marked public, or the host has not
-            published rules yet. Check with the organizer.
+            The organizer has not published public rules for this pool, or they
+            are still being set up. Check with the organizer if you expected to
+            see them here.
           </p>
         </div>
         <p className="text-sm text-ash-muted">

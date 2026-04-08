@@ -8,7 +8,7 @@ export type PoolPrizeTier = {
   remainder?: boolean;
 };
 
-/** One row from `scoring_rules_public` after mapping (sample pool page). */
+/** One row from `scoring_rules_public` after mapping (/rules; gated by `show_public_rules`). */
 export type PublicScoringRuleRow = {
   predictionKind: string;
   bonusKey: string | null;

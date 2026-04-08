@@ -3,7 +3,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 /**
  * If `scoring_rules_public` rows all belong to exactly one pool, returns that
  * `pool_id`. Used when `NEXT_PUBLIC_SAMPLE_POOL_ID` still points at the local
- * seed but production only has a different public pool.
+ * seed but production only has a different pool with published public rules.
  */
 export async function solePublicPoolIdFromScoringView(
   supabase: SupabaseClient,

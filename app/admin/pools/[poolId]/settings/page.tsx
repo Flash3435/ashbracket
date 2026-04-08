@@ -20,6 +20,7 @@ export default async function AdminPoolSettingsPage({
     id: pool.id,
     name: pool.name,
     is_public: pool.is_public,
+    show_public_rules: pool.show_public_rules,
     lock_at: pool.lock_at,
   });
   const jc = pool.join_code?.trim() ?? null;
@@ -29,7 +30,7 @@ export default async function AdminPoolSettingsPage({
     <PageContainer>
       <PageTitle
         title="Pool settings"
-        description="Set your pool’s name, whether the leaderboard and rules are visible to the public, and when picks must be in by."
+        description="Set your pool’s name, public leaderboard visibility, whether pool rules are visible to visitors, and when picks must be in by."
       />
 
       <PoolShareInvitePanel

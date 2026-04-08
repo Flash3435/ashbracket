@@ -22,7 +22,7 @@ export function AdminPoolHeader({ pool, showAuditLogLink = false }: Props) {
         </p>
         <h1 className="text-xl font-semibold text-ash-text">{pool.name}</h1>
         <p className="mt-1 text-sm text-ash-muted">
-          {pool.is_public ? "Public" : "Private"}
+          {pool.is_public ? "Public leaderboard" : "Private leaderboard"}
           {code ? (
             <>
               {" "}

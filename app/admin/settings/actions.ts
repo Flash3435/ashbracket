@@ -22,6 +22,7 @@ export async function updatePoolSettingsAction(input: {
   poolId: string;
   name: string;
   isPublic: boolean;
+  showPublicRules: boolean;
   lockAt: string | null;
 }): Promise<PoolSettingsActionResult> {
   try {
@@ -39,10 +40,11 @@ export async function updatePoolSettingsAction(input: {
       .update({
         name,
         is_public: input.isPublic,
+        show_public_rules: input.showPublicRules,
         lock_at: input.lockAt,
       })
       .eq("id", input.poolId.trim())
-      .select("id, name, is_public, lock_at")
+      .select("id, name, is_public, show_public_rules, lock_at")
       .single();
 
     if (error) return { ok: false, error: error.message };

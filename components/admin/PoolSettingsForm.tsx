@@ -36,6 +36,9 @@ export function PoolSettingsForm({
   const [isPending, startTransition] = useTransition();
   const [name, setName] = useState(initial.name);
   const [isPublic, setIsPublic] = useState(initial.isPublic);
+  const [showPublicRules, setShowPublicRules] = useState(
+    initial.showPublicRules,
+  );
   const [lockLocal, setLockLocal] = useState(() =>
     toDatetimeLocalFromIso(initial.lockAt),
   );
@@ -45,6 +48,7 @@ export function PoolSettingsForm({
   useEffect(() => {
     setName(initial.name);
     setIsPublic(initial.isPublic);
+    setShowPublicRules(initial.showPublicRules);
     setLockLocal(toDatetimeLocalFromIso(initial.lockAt));
   }, [initial]);
 
@@ -66,6 +70,7 @@ export function PoolSettingsForm({
         poolId,
         name,
         isPublic,
+        showPublicRules,
         lockAt,
       });
       if (!res.ok) {
@@ -74,6 +79,7 @@ export function PoolSettingsForm({
       }
       setName(res.pool.name);
       setIsPublic(res.pool.isPublic);
+      setShowPublicRules(res.pool.showPublicRules);
       setLockLocal(toDatetimeLocalFromIso(res.pool.lockAt));
       setSuccess(true);
       router.refresh();
@@ -95,8 +101,8 @@ export function PoolSettingsForm({
           className="rounded-md border border-ash-accent/40 bg-ash-accent/10 px-3 py-2 text-sm text-ash-muted"
           role="status"
         >
-          Saved. Public pages will show updated name, visibility, and lock time
-          after refresh.
+          Saved. Updated name, leaderboard visibility, public rules, and lock
+          time apply after refresh.
         </p>
       ) : null}
 
@@ -118,18 +124,56 @@ export function PoolSettingsForm({
         />
       </div>
 
-      <div className="flex items-center gap-2">
-        <input
-          id="pool-public"
-          type="checkbox"
-          checked={isPublic}
-          onChange={(e) => setIsPublic(e.target.checked)}
-          disabled={disabled || isPending}
-          className="h-4 w-4 rounded border-ash-border text-ash-accent focus:ring-ash-accent"
-        />
-        <label htmlFor="pool-public" className="text-sm text-ash-muted">
-          Public pool (leaderboard and rules visible without admin sign-in)
-        </label>
+      <div className="space-y-2">
+        <p className="text-xs font-medium uppercase tracking-wide text-ash-muted">
+          Pool visibility
+        </p>
+        <div className="flex items-start gap-2">
+          <input
+            id="pool-public"
+            type="checkbox"
+            checked={isPublic}
+            onChange={(e) => setIsPublic(e.target.checked)}
+            disabled={disabled || isPending}
+            className="mt-0.5 h-4 w-4 shrink-0 rounded border-ash-border text-ash-accent focus:ring-ash-accent"
+          />
+          <div>
+            <label htmlFor="pool-public" className="text-sm text-ash-text">
+              Public leaderboard
+            </label>
+            <p className="mt-1 text-xs text-ash-muted">
+              When on, anyone can view aggregate standings and the public score
+              ledger without signing in. Participant names and member-only data
+              stay restricted the same way as today.
+            </p>
+          </div>
+        </div>
+      </div>
+
+      <div className="space-y-2">
+        <p className="text-xs font-medium uppercase tracking-wide text-ash-muted">
+          Public rules visibility
+        </p>
+        <div className="flex items-start gap-2">
+          <input
+            id="pool-public-rules"
+            type="checkbox"
+            checked={showPublicRules}
+            onChange={(e) => setShowPublicRules(e.target.checked)}
+            disabled={disabled || isPending}
+            className="mt-0.5 h-4 w-4 shrink-0 rounded border-ash-border text-ash-accent focus:ring-ash-accent"
+          />
+          <div>
+            <label htmlFor="pool-public-rules" className="text-sm text-ash-text">
+              Show pool rules publicly
+            </label>
+            <p className="mt-1 text-xs text-ash-muted">
+              Allows visitors and invited users to read the pool rules page
+              before joining. You can keep the leaderboard private and still
+              publish rules.
+            </p>
+          </div>
+        </div>
       </div>
 
       <div className="space-y-2">

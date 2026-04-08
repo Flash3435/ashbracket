@@ -256,7 +256,8 @@ export type FetchSamplePoolScoringRulesResult =
   | { ok: false; kind: "error"; message: string };
 
 /**
- * Loads public pool rules (anon-safe `scoring_rules_public`).
+ * Loads pool rules exposed via `scoring_rules_public` (anon-safe; gated by
+ * `pools.show_public_rules`, not `is_public`).
  *
  * **Scoring values** (knockout / bonus points, etc.) always come from `scoring_rules` rows.
  * **Display-only fields** (prize copy, tie-break wording, default entry fee, group-stage

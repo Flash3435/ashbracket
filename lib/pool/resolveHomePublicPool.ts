@@ -8,8 +8,10 @@ export type ResolvedHomePublicPool = {
 };
 
 /**
- * Same public pool as the home leaderboard: configured sample id, or the sole
- * public pool from scoring rules when the sample id has no rows.
+ * Pool id/label for the home leaderboard: configured sample id, or when that id
+ * has no `leaderboard_public` rows, the sole pool id appearing in
+ * `scoring_rules_public` (pools with public rules — not necessarily a public
+ * leaderboard).
  */
 export async function resolveHomePublicPool(
   supabase: SupabaseClient,

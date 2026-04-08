@@ -34,7 +34,7 @@ export async function requireManagedPool(
   const { data, error } = await supabase
     .from("pools")
     .select(
-      "id, name, created_at, updated_at, lock_at, is_public, join_code, created_by_user_id, entry_fee_cents, prize_distribution_json, group_advance_exact_points, group_advance_wrong_slot_points, tie_break_note",
+      "id, name, created_at, updated_at, lock_at, is_public, show_public_rules, join_code, created_by_user_id, entry_fee_cents, prize_distribution_json, group_advance_exact_points, group_advance_wrong_slot_points, tie_break_note",
     )
     .eq("id", trimmed)
     .single();

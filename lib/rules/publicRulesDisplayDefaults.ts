@@ -1,7 +1,8 @@
 /**
  * Public /rules page: display copy and fallback values for the **configured sample pool**
- * (`SAMPLE_POOL_ID` from `lib/config/sample-pool.ts`, or the sole public pool when
- * the configured id has no scoring rows — see fetcher `solePublicPoolFallback`).
+ * (`SAMPLE_POOL_ID` from `lib/config/sample-pool.ts`, or the sole pool with
+ * published public rules when the configured id has no scoring rows — see fetcher
+ * `solePublicPoolFallback`).
  *
  * ## Workflow for future edits
  * - **Wording** (ties / prize split text, prize intro, section blurbs): edit `PUBLIC_RULES_PAGE_COPY` below.
@@ -112,8 +113,8 @@ export const PUBLIC_RULES_PAGE_COPY = {
 
 export type PublicRulesDisplayDefaultsOptions = {
   /**
-   * Set when the fetcher had no rows for `SAMPLE_POOL_ID` and loaded the only public
-   * pool from `scoring_rules_public` instead. That pool is what /rules is showing, so
+   * Set when the fetcher had no rows for `SAMPLE_POOL_ID` and loaded the only pool
+   * with rows in `scoring_rules_public` instead. That pool is what /rules is showing, so
    * empty display fields (e.g. prize JSON) should still get app defaults.
    */
   solePublicPoolFallback?: boolean;

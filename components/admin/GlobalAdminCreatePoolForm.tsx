@@ -109,7 +109,8 @@ export function GlobalAdminCreatePoolForm() {
             className="h-4 w-4 rounded border-ash-border text-ash-accent focus:ring-ash-accent"
           />
           <label htmlFor="new-pool-public" className="text-sm text-ash-muted">
-            Public pool (leaderboard and rules visible without admin sign-in)
+            Public leaderboard (aggregate standings visible without sign-in).
+            Pool rules can be shown or hidden separately in Pool settings.
           </label>
         </div>
       </div>
