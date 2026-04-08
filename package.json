@@ -18,6 +18,7 @@
     "icons": "node scripts/generate-favicons.mjs",
     "test:scoring": "tsx src/lib/scoring/computePoolScores.selftest.ts",
     "test:pick-consistency": "tsx lib/predictions/knockoutPickConsistency.selftest.ts",
+    "test:quick-pick": "tsx lib/predictions/knockoutQuickPickStrategies.selftest.ts",
     "test:bonus-keys": "tsx lib/predictions/participantBonusKeys.selftest.ts",
     "seed:wc2026": "tsx scripts/seed-official-wc2026.ts",
     "seed:fifa-ranks": "tsx scripts/seed-fifa-ranks.ts"

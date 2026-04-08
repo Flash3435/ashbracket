@@ -591,6 +591,7 @@ export function KnockoutPicksWizard({
     setSlots((prev) =>
       applyQuickPickToSlots(prev, teams, mode, {
         fillKnockoutProgression: knockoutBracketPicksUnlocked,
+        groupTeamCountryCodesByLetter,
       }),
     );
     setQuickHint(

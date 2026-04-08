@@ -141,9 +141,115 @@ function favoritesOrderedPool(teams: Team[]): Team[] {
 }
 
 function orderedTeamsForMode(teams: Team[], mode: QuickPickMode): Team[] {
+  if (teams.length === 0) return [];
   if (mode === "random") return shuffleInPlace([...teams]);
   if (mode === "balanced") return balancedPick(teams, teams.length);
   return favoritesOrderedPool(teams);
+}
+
+function scheduleGroupRostersLoaded(
+  groupTeamCountryCodesByLetter: Record<string, string[]> | undefined,
+): boolean {
+  return Boolean(
+    groupTeamCountryCodesByLetter &&
+      Object.keys(groupTeamCountryCodesByLetter).length > 0,
+  );
+}
+
+function teamsInScheduleGroup(
+  letter: string,
+  allTeams: Team[],
+  groupTeamCountryCodesByLetter: Record<string, string[]>,
+): Team[] {
+  const codes = groupTeamCountryCodesByLetter[letter.toUpperCase()];
+  if (!codes?.length) return [];
+  const set = new Set(codes.map((c) => c.toUpperCase()));
+  return allTeams.filter((t) => set.has(t.countryCode.toUpperCase()));
+}
+
+function groupLetterForCountryCode(
+  countryCode: string,
+  groupTeamCountryCodesByLetter: Record<string, string[]>,
+): string | null {
+  const u = countryCode.toUpperCase();
+  for (const letter of WC2026_GROUP_CODES) {
+    const codes = groupTeamCountryCodesByLetter[letter];
+    if (!codes?.length) continue;
+    if (codes.some((c) => c.toUpperCase() === u)) return letter;
+  }
+  return null;
+}
+
+/** Picks 1st / 2nd for one group using the same personality, only from `pickSource`. */
+function pickWinnerAndRunnerForGroup(
+  mode: QuickPickMode,
+  pickSource: Team[],
+): { winnerId: string; runnerId: string } {
+  if (pickSource.length === 0) return { winnerId: "", runnerId: "" };
+  if (pickSource.length === 1) {
+    const id = pickSource[0]!.id;
+    return { winnerId: id, runnerId: "" };
+  }
+  if (mode === "random") {
+    const two = pickDistinctTeams(pickSource, 2);
+    return {
+      winnerId: two[0]?.id ?? "",
+      runnerId: two[1]?.id ?? "",
+    };
+  }
+  if (mode === "balanced") {
+    const two = balancedPick(pickSource, 2);
+    return {
+      winnerId: two[0]?.id ?? "",
+      runnerId: two[1]?.id ?? "",
+    };
+  }
+  const fav = favoritesOrderedPool(pickSource);
+  return {
+    winnerId: fav[0]?.id ?? "",
+    runnerId: fav[1]?.id ?? "",
+  };
+}
+
+/**
+ * Ensures quick-start never assigns a team to a group slot outside that group's
+ * official roster (when the schedule map is loaded).
+ */
+export function assertQuickPickGroupScheduleIntegrity(
+  groupWinnerByLetter: Map<string, string>,
+  groupRunnerByLetter: Map<string, string>,
+  teams: Team[],
+  groupTeamCountryCodesByLetter: Record<string, string[]>,
+): void {
+  const byId = new Map(teams.map((t) => [t.id, t]));
+  for (const letter of WC2026_GROUP_CODES) {
+    const codes = new Set(
+      (groupTeamCountryCodesByLetter[letter] ?? []).map((c) => c.toUpperCase()),
+    );
+    if (codes.size === 0) continue;
+
+    const w = groupWinnerByLetter.get(letter) ?? "";
+    const r = groupRunnerByLetter.get(letter) ?? "";
+    if (w && w === r) {
+      throw new Error(
+        `Quick pick invariant: Group ${letter} has the same team for 1st and 2nd.`,
+      );
+    }
+    for (const id of [w, r]) {
+      if (!id) continue;
+      const t = byId.get(id);
+      if (!t) {
+        throw new Error(
+          `Quick pick invariant: unknown team id "${id}" for Group ${letter}.`,
+        );
+      }
+      if (!codes.has(t.countryCode.toUpperCase())) {
+        throw new Error(
+          `Quick pick invariant: team ${t.countryCode} is assigned to Group ${letter} but is not on that group's schedule roster.`,
+        );
+      }
+    }
+  }
 }
 
 function pickNTeamIdsFromPool(pool: Team[], n: number): string[] {
@@ -163,15 +269,27 @@ export type QuickPickMode = "random" | "favorites" | "balanced";
 /**
  * Fills group through champion with a coherent story (later rounds ⊆ earlier).
  * Bonus picks are left unchanged so participants choose those themselves.
+ *
+ * When `groupTeamCountryCodesByLetter` is provided (same source as the picks UI
+ * and `fetchGroupTeamCountryCodesByLetter`), group 1st/2nd picks are chosen only
+ * from that group's roster; third-place candidates are teams still in a group
+ * after removing those 1st/2nd picks. When it is omitted or empty, behavior falls
+ * back to the legacy global pool (all teams) for group slots.
  */
 export function applyQuickPickToSlots(
   slots: KnockoutPickSlotDraft[],
   teams: Team[],
   mode: QuickPickMode,
-  options?: { fillKnockoutProgression?: boolean },
+  options?: {
+    fillKnockoutProgression?: boolean;
+    groupTeamCountryCodesByLetter?: Record<string, string[]>;
+  },
 ): KnockoutPickSlotDraft[] {
   if (teams.length === 0) return slots;
   const fillKnockoutProgression = options?.fillKnockoutProgression !== false;
+  const groupTeamCountryCodesByLetter = options?.groupTeamCountryCodesByLetter;
+  const scheduleLoaded = scheduleGroupRostersLoaded(groupTeamCountryCodesByLetter);
+  const groupMap = scheduleLoaded ? groupTeamCountryCodesByLetter! : null;
 
   const pool = orderedTeamsForMode(teams, mode);
   const used = new Set<string>();
@@ -180,22 +298,58 @@ export function applyQuickPickToSlots(
   const groupRunnerByLetter = new Map<string, string>();
 
   for (const letter of WC2026_GROUP_CODES) {
-    const avail = pool.filter((t) => !used.has(t.id));
-    const pickSource = avail.length >= 2 ? avail : pool;
-    const two = pickDistinctTeams(pickSource, 2);
-    let a = two[0]?.id ?? "";
-    let b = two[1]?.id ?? a;
-    if (a && !used.has(a)) used.add(a);
-    if (b && b !== a && !used.has(b)) used.add(b);
-    if (!a && pool[0]) a = pool[0].id;
-    if (!b && pool[1]) b = pool[1]!.id;
-    groupWinnerByLetter.set(letter, a);
-    groupRunnerByLetter.set(letter, b);
+    if (scheduleLoaded && groupMap) {
+      const groupTeams = teamsInScheduleGroup(letter, teams, groupMap);
+      const avail = groupTeams.filter((t) => !used.has(t.id));
+      const pickSource = avail.length >= 2 ? avail : groupTeams;
+      const { winnerId: a, runnerId: b } = pickWinnerAndRunnerForGroup(
+        mode,
+        pickSource,
+      );
+      if (a && !used.has(a)) used.add(a);
+      if (b && b !== a && !used.has(b)) used.add(b);
+      groupWinnerByLetter.set(letter, a);
+      groupRunnerByLetter.set(letter, b);
+    } else {
+      const avail = pool.filter((t) => !used.has(t.id));
+      const pickSource = avail.length >= 2 ? avail : pool;
+      const two = pickDistinctTeams(pickSource, 2);
+      let a = two[0]?.id ?? "";
+      let b = two[1]?.id ?? a;
+      if (a && !used.has(a)) used.add(a);
+      if (b && b !== a && !used.has(b)) used.add(b);
+      if (!a && pool[0]) a = pool[0].id;
+      if (!b && pool[1]) b = pool[1]!.id;
+      groupWinnerByLetter.set(letter, a);
+      groupRunnerByLetter.set(letter, b);
+    }
   }
 
-  const thirdPool = pool.filter((t) => !used.has(t.id));
+  if (scheduleLoaded && groupMap) {
+    assertQuickPickGroupScheduleIntegrity(
+      groupWinnerByLetter,
+      groupRunnerByLetter,
+      teams,
+      groupMap,
+    );
+  }
+
+  let thirdPoolTeams: Team[];
+  if (scheduleLoaded && groupMap) {
+    thirdPoolTeams = teams.filter((t) => {
+      const gl = groupLetterForCountryCode(t.countryCode, groupMap);
+      if (!gl) return false;
+      const w = groupWinnerByLetter.get(gl) ?? "";
+      const r = groupRunnerByLetter.get(gl) ?? "";
+      return t.id !== w && t.id !== r;
+    });
+  } else {
+    thirdPoolTeams = pool.filter((t) => !used.has(t.id));
+  }
+
+  const thirdOrdered = orderedTeamsForMode(thirdPoolTeams, mode);
   const thirdIds = pickNTeamIdsFromPool(
-    thirdPool.length > 0 ? thirdPool : pool,
+    thirdOrdered.length > 0 ? thirdOrdered : pool.filter((t) => !used.has(t.id)),
     8,
   );
   for (const id of thirdIds) used.add(id);
@@ -276,12 +430,13 @@ export function applyQuickPickToSlots(
   let fi = 0;
 
   const mapped = slots.map((row) => {
-    if (row.predictionKind === "group_winner" && row.groupCode) {
-      const id = groupWinnerByLetter.get(row.groupCode) ?? "";
+    const gc = row.groupCode ? row.groupCode.toUpperCase() : "";
+    if (row.predictionKind === "group_winner" && gc) {
+      const id = groupWinnerByLetter.get(gc) ?? "";
       return { ...row, teamId: id };
     }
-    if (row.predictionKind === "group_runner_up" && row.groupCode) {
-      const id = groupRunnerByLetter.get(row.groupCode) ?? "";
+    if (row.predictionKind === "group_runner_up" && gc) {
+      const id = groupRunnerByLetter.get(gc) ?? "";
       return { ...row, teamId: id };
     }
     if (row.predictionKind === "third_place_qualifier") {
