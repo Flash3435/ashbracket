@@ -12,7 +12,7 @@ type Props = {
 export function TeamFlagName({
   countryCode,
   teamName,
-  className = "inline-flex min-w-0 items-center gap-1.5",
+  className = "flex w-full min-w-0 items-center gap-1.5",
   nameClassName = "",
 }: Props) {
   const flag = flagEmojiForFifaCountryCode(countryCode);
@@ -21,7 +21,10 @@ export function TeamFlagName({
       <span className="shrink-0 text-[13px] leading-none" aria-hidden>
         {flag || "🌍"}
       </span>
-      <span className={`min-w-0 truncate ${nameClassName}`} title={teamName}>
+      <span
+        className={`min-w-0 flex-1 truncate ${nameClassName}`}
+        title={teamName}
+      >
         {teamName}
       </span>
     </span>

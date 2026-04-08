@@ -27,7 +27,7 @@ function GroupCardFrame({
   children: React.ReactNode;
 }) {
   return (
-    <div className="rounded-lg border border-ash-border bg-ash-body/35 p-3 shadow-sm">
+    <div className="min-w-0 rounded-lg border border-ash-border bg-ash-body/35 p-3 shadow-sm">
       <h3 className="border-b border-ash-border pb-2 text-sm font-semibold text-ash-text">
         Group {groupCode}
       </h3>
@@ -107,7 +107,7 @@ export function GroupStandingsGrid({
                         }
                         return (
                           <tr key={r.countryCode} className={rowClass}>
-                            <td className="py-1.5 pr-1">
+                            <td className="min-w-0 py-1.5 pr-1">
                               <span className="flex min-w-0 flex-col gap-0.5">
                                 <TeamFlagName
                                   countryCode={r.countryCode}
@@ -168,7 +168,7 @@ export function GroupStandingsGrid({
                     return (
                       <li
                         key={t.countryCode}
-                        className="flex items-start gap-2 text-sm text-ash-muted"
+                        className="flex min-w-0 items-start gap-2 text-sm text-ash-muted"
                       >
                         <span
                           className="mt-0.5 w-4 shrink-0 text-center text-[10px] font-medium tabular-nums text-ash-border-hover"
@@ -176,11 +176,10 @@ export function GroupStandingsGrid({
                         >
                           {i + 1}
                         </span>
-                        <span className="min-w-0 flex-1">
+                        <span className="flex min-w-0 flex-1 flex-col overflow-hidden">
                           <TeamFlagName
                             countryCode={t.countryCode}
                             teamName={t.teamName}
-                            className="inline-flex min-w-0 items-center gap-1.5"
                             nameClassName={
                               picked
                                 ? "font-medium text-ash-accent"
