@@ -1,3 +1,4 @@
+import { GlobalAdminCreatePoolForm } from "@/components/admin/GlobalAdminCreatePoolForm";
 import { PageContainer } from "@/components/ui/PageContainer";
 import { PageTitle } from "@/components/ui/PageTitle";
 import { createClient } from "@/lib/supabase/server";
@@ -23,10 +24,9 @@ export default async function AdminHomePage() {
 
   const global = await isGlobalAdmin(supabase);
 
-  // Single-pool organizers (including global admins) go straight to the pool
-  // dashboard with Participants, Settings, etc. Global tournament tools stay on
-  // /admin — use "All pools" in the pool header to return here.
-  if (!error && list.length === 1) {
+  // Single-pool organizers go straight to the pool dashboard. Global admins
+  // stay here so they can create additional pools and use tournament tools.
+  if (!error && list.length === 1 && !global) {
     redirect(`/admin/pools/${list[0].id}`);
   }
 
@@ -43,7 +43,13 @@ export default async function AdminHomePage() {
         </p>
       ) : null}
 
-      {!error && list.length === 0 ? (
+      {global ? (
+        <section className="mb-8">
+          <GlobalAdminCreatePoolForm />
+        </section>
+      ) : null}
+
+      {!error && list.length === 0 && !global ? (
         <p className="text-sm text-ash-muted">
           You do not have any pools yet. When a pool is created and you are
           assigned as an organizer, it will appear here.
