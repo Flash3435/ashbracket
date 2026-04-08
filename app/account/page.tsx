@@ -1,11 +1,16 @@
 import Link from "next/link";
+import { AccountNextMatchesSection } from "@/components/account/AccountNextMatchesSection";
+import { AccountPicksProfileLinks } from "@/components/account/AccountPicksProfileLinks";
 import { SignOutButton } from "@/components/auth/SignOutButton";
-import { ParticipantPicksNextMatches } from "@/components/picks/ParticipantPicksNextMatches";
+import { MyKnockoutPicksSummary } from "@/components/picks/MyKnockoutPicksSummary";
 import { PageContainer } from "@/components/ui/PageContainer";
 import { PageTitle } from "@/components/ui/PageTitle";
 import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
-import { loadAccountKnockoutSelection } from "../../lib/account/loadAccountKnockoutSelection";
+import {
+  loadAccountKnockoutSelection,
+  poolLocked,
+} from "../../lib/account/loadAccountKnockoutSelection";
 import { resolveAccountParticipantId } from "../../lib/account/resolveAccountParticipantId";
 import {
   countryCodesFromKnockoutSlots,
@@ -43,18 +48,18 @@ export default async function AccountPage({ searchParams }: PageProps) {
     list,
     sp.participant,
   );
+
   const picksCtx =
-    !error && preferredParticipantId
+    !error && list.length > 0 && preferredParticipantId
       ? await loadAccountKnockoutSelection(user.id, preferredParticipantId)
       : null;
 
   let accountNextMatches: TournamentMatchPublicRow[] = [];
-  let accountNextCodes = new Set<string>();
   let accountTournamentErr: string | null = null;
 
   if (picksCtx && !picksCtx.loadError && picksCtx.initialSlots.length > 0) {
     const teamById = new Map(picksCtx.teams.map((t) => [t.id, t]));
-    accountNextCodes = countryCodesFromKnockoutSlots(
+    const codes = countryCodesFromKnockoutSlots(
       picksCtx.initialSlots,
       teamById,
     );
@@ -63,21 +68,37 @@ export default async function AccountPage({ searchParams }: PageProps) {
     if (tp?.matches && !te) {
       accountNextMatches = nextMatchesForTeamCountryCodes(
         tp.matches,
-        accountNextCodes,
+        codes,
         8,
       );
     }
   }
 
+  const locked = picksCtx ? poolLocked(picksCtx.selectedLockAt) : false;
+  const lockHint =
+    picksCtx && locked && picksCtx.selectedLockAt
+      ? `Group stage, third-place advancers, and bonus picks locked ${new Intl.DateTimeFormat(undefined, {
+          dateStyle: "medium",
+          timeStyle: "short",
+        }).format(new Date(picksCtx.selectedLockAt))}. Knockout bracket may still be editable after the official Round of 32 is published.`
+      : picksCtx && locked
+        ? "Pre‑knockout picks are locked; knockout bracket may still be open."
+        : null;
+
+  const picksHref =
+    list.length === 1
+      ? `/account/picks?participant=${list[0].id}`
+      : "/account/picks";
+
   return (
     <PageContainer>
       <div className="mb-8 flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
         <PageTitle
-          title="Your account"
+          title="My bracket"
           description={
             user.email
-              ? `Signed in as ${user.email}. Use Edit picks to update your bracket.`
-              : "Your pool profiles are listed below."
+              ? `Signed in as ${user.email}. Below is your bracket snapshot for the selected pool profile — use Edit picks to continue or change picks.`
+              : "Your bracket overview for the selected pool profile. Use Edit picks to update your picks."
           }
         />
         <SignOutButton className="btn-ghost shrink-0 self-start text-sm disabled:opacity-50" />
@@ -102,101 +123,132 @@ export default async function AccountPage({ searchParams }: PageProps) {
       ) : null}
 
       {!error && list.length > 0 ? (
-        <div className="mb-4 flex flex-wrap gap-3">
-          <Link
-            href={
-              list.length === 1
-                ? `/account/picks?participant=${list[0].id}`
-                : "/account/picks"
-            }
-            className="btn-primary inline-flex"
-          >
-            {list.length === 1 ? "Enter your picks" : "Your picks"}
-          </Link>
-          <Link
-            href={
-              list.length === 1
-                ? `/account/activity?participant=${list[0].id}`
-                : "/account/activity"
-            }
-            className="btn-ghost inline-flex ring-1 ring-ash-border"
-          >
-            Activity
-          </Link>
-        </div>
-      ) : null}
-
-      {!error &&
-      list.length > 0 &&
-      picksCtx &&
-      !picksCtx.loadError &&
-      picksCtx.initialSlots.length > 0 ? (
-        <section className="mb-6 rounded-xl border border-ash-border bg-ash-surface p-4">
-          <h2 className="text-base font-bold text-ash-text">
-            Upcoming matches for your bracket
-          </h2>
-          <p className="mt-1 text-xs text-ash-muted">
-            Highlights use your saved picks for{" "}
-            <span className="font-medium text-ash-text">
-              {picksCtx.selectedPoolName}
-            </span>
-            . Times are America/Edmonton (Calgary). If you are in several pools,
-            open Account from that profile’s row below so the schedule matches
-            that bracket.{" "}
-            <Link
-              href={`/account/picks/summary?participant=${preferredParticipantId}`}
-              className="ash-link"
-            >
-              Full snapshot
+        <>
+          <div className="mb-4 flex flex-wrap gap-3">
+            <Link href={picksHref} className="btn-primary inline-flex">
+              Edit picks
             </Link>
-          </p>
-          {accountTournamentErr ? (
-            <p className="mt-3 text-sm text-amber-200" role="status">
-              Schedule could not be loaded ({accountTournamentErr}).
+            <Link
+              href={
+                list.length === 1
+                  ? `/account/activity?participant=${list[0].id}`
+                  : "/account/activity"
+              }
+              className="btn-ghost inline-flex ring-1 ring-ash-border"
+            >
+              Activity
+            </Link>
+          </div>
+
+          {picksCtx && picksCtx.profileLinkItems.length > 1 ? (
+            <AccountPicksProfileLinks
+              profiles={picksCtx.profileLinkItems}
+              selectedId={picksCtx.selectedId}
+              summaryBasePath="/account/picks/summary"
+              activityBasePath="/account/activity"
+              multiProfileHeading="Choose profile"
+            />
+          ) : null}
+
+          {picksCtx?.loadError ? (
+            <p
+              className="mb-4 rounded-md border border-red-800/80 bg-red-950/40 px-3 py-2 text-sm text-red-200"
+              role="alert"
+            >
+              {picksCtx.loadError}
             </p>
-          ) : (
-            <div className="mt-3">
-              <ParticipantPicksNextMatches
+          ) : null}
+
+          {picksCtx &&
+          picksCtx.selectedId &&
+          picksCtx.selectedParticipant &&
+          !picksCtx.loadError &&
+          picksCtx.initialSlots.length > 0 ? (
+            <div className="space-y-6">
+              <MyKnockoutPicksSummary
+                slots={picksCtx.initialSlots}
+                teams={picksCtx.teams}
+                participantId={picksCtx.selectedParticipant.id}
+                poolName={picksCtx.selectedPoolName}
+                locked={locked}
+                lockHint={lockHint}
+                showSavedBanner={false}
+                knockoutBracketPicksUnlocked={
+                  picksCtx.knockoutBracketPicksUnlocked
+                }
+                showCompactStageProgress
+              />
+
+              <AccountNextMatchesSection
+                className="rounded-xl border border-ash-border bg-ash-surface p-4"
+                title="Upcoming matches for your bracket"
+                description={
+                  <>
+                    Highlights use your saved picks for{" "}
+                    <span className="font-medium text-ash-text">
+                      {picksCtx.selectedPoolName}
+                    </span>
+                    . Times are America/Edmonton (Calgary). If you are in several
+                    pools, choose the profile above so the schedule matches that
+                    bracket.
+                  </>
+                }
+                tournamentErr={accountTournamentErr}
                 matches={accountNextMatches}
                 initialSlots={picksCtx.initialSlots}
                 teams={picksCtx.teams}
               />
             </div>
-          )}
-        </section>
-      ) : null}
+          ) : null}
 
-      {!error && list.length > 0 ? (
-        <ul className="space-y-3">
-          {list.map((p) => (
-            <li
-              key={p.id}
-              className="ash-surface p-4"
-            >
-              <p className="font-medium text-ash-text">{p.display_name}</p>
-              <div className="mt-2 flex flex-wrap gap-3 text-sm">
-                <Link
-                  href={`/participant/${p.id}`}
-                  className="ash-link"
-                >
-                  Public profile
-                </Link>
-                <Link href={`/account/picks?participant=${p.id}`} className="ash-link">
-                  Edit picks
-                </Link>
-                <Link
-                  href={`/account/activity?participant=${p.id}`}
-                  className="ash-link"
-                >
-                  Activity
-                </Link>
-                <Link href={`/account?participant=${p.id}`} className="ash-link">
-                  Dashboard schedule for this pool
-                </Link>
-              </div>
-            </li>
-          ))}
-        </ul>
+          {picksCtx &&
+          picksCtx.selectedId &&
+          picksCtx.selectedParticipant &&
+          !picksCtx.loadError &&
+          picksCtx.initialSlots.length === 0 ? (
+            <div className="mb-6 rounded-xl border border-amber-700/50 bg-amber-950/25 p-6 shadow-[0_4px_12px_rgba(0,0,0,0.3)]">
+              <p className="text-sm text-amber-100">
+                Knockout stages are not set up in the database yet, so we
+                can’t show a bracket snapshot. Ask your organizer or check
+                tournament seeds.
+              </p>
+              <Link
+                href={`/account/picks?participant=${picksCtx.selectedParticipant.id}`}
+                className="btn-ghost mt-4 inline-flex border-amber-700/50 text-amber-50 hover:bg-amber-950/40"
+              >
+                Edit picks
+              </Link>
+            </div>
+          ) : null}
+
+          <ul className="mt-8 space-y-3">
+            {list.map((p) => (
+              <li key={p.id} className="ash-surface p-4">
+                <p className="font-medium text-ash-text">{p.display_name}</p>
+                <div className="mt-2 flex flex-wrap gap-3 text-sm">
+                  <Link href={`/participant/${p.id}`} className="ash-link">
+                    Public profile
+                  </Link>
+                  <Link
+                    href={`/account/picks?participant=${p.id}`}
+                    className="ash-link"
+                  >
+                    Edit picks
+                  </Link>
+                  <Link
+                    href={`/account/activity?participant=${p.id}`}
+                    className="ash-link"
+                  >
+                    Activity
+                  </Link>
+                  <Link href={`/account?participant=${p.id}`} className="ash-link">
+                    This pool on My bracket
+                  </Link>
+                </div>
+              </li>
+            ))}
+          </ul>
+        </>
       ) : null}
     </PageContainer>
   );

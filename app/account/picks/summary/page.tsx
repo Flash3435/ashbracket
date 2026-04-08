@@ -1,6 +1,6 @@
+import { AccountNextMatchesSection } from "@/components/account/AccountNextMatchesSection";
 import { AccountPicksProfileLinks } from "@/components/account/AccountPicksProfileLinks";
 import { MyKnockoutPicksSummary } from "@/components/picks/MyKnockoutPicksSummary";
-import { ParticipantPicksNextMatches } from "@/components/picks/ParticipantPicksNextMatches";
 import { PageContainer } from "@/components/ui/PageContainer";
 import { PageTitle } from "@/components/ui/PageTitle";
 import { createClient } from "@/lib/supabase/server";
@@ -153,32 +153,25 @@ export default async function AccountPicksSummaryPage({ searchParams }: PageProp
                 lockHint={lockHint}
                 showSavedBanner={showSavedBanner}
                 knockoutBracketPicksUnlocked={ctx.knockoutBracketPicksUnlocked}
+                showCompactStageProgress
               />
 
-              <section className="ash-surface p-4">
-                <h2 className="text-base font-bold text-ash-text">
-                  Next matches for your teams
-                </h2>
-                <p className="mt-1 text-xs text-ash-muted">
-                  From the official group schedule in the app (FIFA country
-                  codes). Date and time use America/Edmonton (Calgary). Live and
-                  upcoming fixtures for teams in your bracket are listed first.
-                </p>
-                {tournamentErr ? (
-                  <p className="mt-3 text-sm text-amber-200" role="status">
-                    Schedule could not be loaded ({tournamentErr}). Your picks
-                    above are still saved.
-                  </p>
-                ) : (
-                  <div className="mt-3">
-                    <ParticipantPicksNextMatches
-                      matches={nextMatches}
-                      initialSlots={ctx.initialSlots}
-                      teams={ctx.teams}
-                    />
-                  </div>
-                )}
-              </section>
+              <AccountNextMatchesSection
+                title="Next matches for your teams"
+                description={
+                  <>
+                    From the official group schedule in the app (FIFA country
+                    codes). Date and time use America/Edmonton (Calgary). Live
+                    and upcoming fixtures for teams in your bracket are listed
+                    first.
+                  </>
+                }
+                tournamentErr={tournamentErr}
+                tournamentErrorSuffix="Your picks above are still saved."
+                matches={nextMatches}
+                initialSlots={ctx.initialSlots}
+                teams={ctx.teams}
+              />
 
               <p className="text-center text-sm text-ash-muted">
                 <Link

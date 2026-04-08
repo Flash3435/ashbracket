@@ -1,4 +1,3 @@
-import Link from "next/link";
 import { PublicLeaderboard } from "@/components/leaderboard/PublicLeaderboard";
 import { PoolRecentActivitySection } from "@/components/poolActivity/PoolRecentActivitySection";
 import { PoolPublicStatsSummary } from "@/components/pool/PoolPublicStatsSummary";
@@ -42,7 +41,7 @@ export default async function HomePage() {
         primaryCtaHref={actions.primaryCta.href}
         primaryCtaLabel={actions.primaryCta.label}
       />
-      <PageContainer>
+      <PageContainer compactBottom>
         <div className="space-y-2">
           <p className="text-base font-normal leading-relaxed text-ash-muted">
             World Cup pool standings for the sample pool. Rankings use totals
@@ -75,26 +74,6 @@ export default async function HomePage() {
             showWhenEmpty
           />
         ) : null}
-
-        <div className="grid gap-4 sm:grid-cols-2">
-          <Link href="/rules" className="ash-surface-interactive block p-4">
-            <h2 className="text-lg font-bold text-ash-text">Pool rules</h2>
-            <p className="mt-1 text-sm font-normal leading-relaxed text-ash-muted">
-              Three-stage flow, scoring from live pool settings, prizes, and tie-breaks.
-            </p>
-          </Link>
-          <Link
-            href={actions.poolCard.href}
-            className="ash-surface-interactive block p-4"
-          >
-            <h2 className="text-lg font-bold text-ash-text">
-              {actions.poolCard.title}
-            </h2>
-            <p className="mt-1 text-sm font-normal leading-relaxed text-ash-muted">
-              {actions.poolCard.description}
-            </p>
-          </Link>
-        </div>
       </PageContainer>
     </>
   );

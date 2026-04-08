@@ -87,6 +87,8 @@ type Props = {
   lockHint: string | null;
   showSavedBanner: boolean;
   knockoutBracketPicksUnlocked?: boolean;
+  /** One-line progress by stage (group, third-place, knockout, bonus). */
+  showCompactStageProgress?: boolean;
 };
 
 function sortGroupRows(rows: KnockoutPickSlotDraft[]): KnockoutPickSlotDraft[] {
@@ -99,6 +101,12 @@ function sortGroupRows(rows: KnockoutPickSlotDraft[]): KnockoutPickSlotDraft[] {
   });
 }
 
+function filledOfTotal(rows: KnockoutPickSlotDraft[]): { filled: number; total: number } {
+  const total = rows.length;
+  const filled = rows.filter((s) => s.teamId.trim() !== "").length;
+  return { filled, total };
+}
+
 export function MyKnockoutPicksSummary({
   slots,
   teams,
@@ -108,6 +116,7 @@ export function MyKnockoutPicksSummary({
   lockHint,
   showSavedBanner,
   knockoutBracketPicksUnlocked = true,
+  showCompactStageProgress = false,
 }: Props) {
   const teamById = new Map(teams.map((t) => [t.id, t]));
   const group = sortGroupRows(
@@ -125,6 +134,7 @@ export function MyKnockoutPicksSummary({
   const fin = slots.filter((s) => s.predictionKind === "finalist");
   const champ = slots.filter((s) => s.predictionKind === "champion");
   const bonus = slots.filter((s) => s.predictionKind === "bonus_pick");
+  const knockoutRows = [...r32, ...r16, ...qf, ...sf, ...fin, ...champ];
 
   const filledCount = slots.filter((s) => s.teamId.trim() !== "").length;
   const hasLegacyKnockoutPicks = slots.some(
@@ -132,6 +142,21 @@ export function MyKnockoutPicksSummary({
   );
 
   const editHref = `/account/picks?participant=${participantId}`;
+
+  const groupProg = filledOfTotal(group);
+  const thirdProg = filledOfTotal(third);
+  const bonusProg = filledOfTotal(bonus);
+  const knockoutProg = filledOfTotal(knockoutRows);
+  const compactStageProgressLine = showCompactStageProgress
+    ? [
+        `Group stage: ${groupProg.filled} / ${groupProg.total}`,
+        `Third-place advancers: ${thirdProg.filled} / ${thirdProg.total}`,
+        knockoutBracketPicksUnlocked
+          ? `Knockout picks: ${knockoutProg.filled} / ${knockoutProg.total}`
+          : "Knockout picks: open when Round of 32 is set",
+        `Bonus picks: ${bonusProg.filled} / ${bonusProg.total}`,
+      ].join(" · ")
+    : null;
 
   return (
     <div className="space-y-6">
@@ -168,6 +193,11 @@ export function MyKnockoutPicksSummary({
               {filledCount} of {slots.length} slots filled
             </span>
           </div>
+          {compactStageProgressLine ? (
+            <p className="mt-2 text-xs leading-relaxed text-ash-muted">
+              <span className="text-ash-text/90">{compactStageProgressLine}</span>
+            </p>
+          ) : null}
           {lockHint ? (
             <p className="mt-2 text-sm text-amber-100">{lockHint}</p>
           ) : null}
