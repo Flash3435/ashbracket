@@ -6,10 +6,12 @@ import type { KnockoutPickSlotDraft } from "../../types/adminKnockoutPicks";
 import type { Team } from "../../src/types/domain";
 import { formatKickoffAmericaEdmonton } from "../../lib/datetime/scheduleDisplay";
 import { countMatchesInvolvingPicks } from "../../lib/participant/participantPickHighlights";
+import { buildPublicGroupStandingsTables } from "../../lib/tournament/buildPublicGroupStandings";
 import {
   knockoutAdvancementByStage,
   summarizeTournamentStage,
 } from "../../lib/tournament/publicTournamentSummary";
+import { GroupStandingsGrid } from "./GroupStandingsGrid";
 import { ScheduleMatchPickTeams } from "./ScheduleMatchPickTeams";
 
 function formatWhen(iso: string | null | undefined): string {
@@ -32,6 +34,22 @@ function scoreLine(m: TournamentMatchPublicRow): string {
     s += ` (${m.home_penalties}–${m.away_penalties} pens)`;
   }
   return s;
+}
+
+function pickedCountryCodesFromContext(
+  ctx: { slots: KnockoutPickSlotDraft[]; teams: Team[] } | null | undefined,
+): Set<string> | null {
+  if (!ctx || ctx.slots.length === 0) return null;
+  const teamById = new Map(ctx.teams.map((t) => [t.id, t]));
+  const out = new Set<string>();
+  for (const s of ctx.slots) {
+    const id = s.teamId?.trim();
+    if (!id) continue;
+    const t = teamById.get(id);
+    const c = t?.countryCode?.trim().toUpperCase();
+    if (c) out.add(c);
+  }
+  return out;
 }
 
 function statusPill(status: string): string {
@@ -118,6 +136,9 @@ export function TournamentProgressView({ payload, schedulePickContext }: Props) 
         )
       : 0;
 
+  const groupStandingsTables = buildPublicGroupStandingsTables(matches);
+  const pickedCountryCodes = pickedCountryCodesFromContext(schedulePickContext);
+
   return (
     <div className="space-y-6">
       <section className="ash-surface p-4">
@@ -173,6 +194,11 @@ export function TournamentProgressView({ payload, schedulePickContext }: Props) 
           </p>
         ) : null}
       </section>
+
+      <GroupStandingsGrid
+        tables={groupStandingsTables}
+        pickedCountryCodes={pickedCountryCodes}
+      />
 
       {koAdvance.length > 0 ? (
         <section className="ash-surface p-4">

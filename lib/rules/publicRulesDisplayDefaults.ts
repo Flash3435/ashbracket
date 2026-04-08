@@ -42,6 +42,9 @@ export const DEFAULT_PUBLIC_RULES_GROUP_ADVANCE = {
   wrongSlotPoints: 1,
 } as const;
 
+/** Default Stage 2 points per correct best third-place advancer when the pool has no `third_place` scoring rows. */
+export const DEFAULT_PUBLIC_RULES_STAGE2_CORRECT = 5;
+
 /** Fallback knockout table only when `scoring_rules` has no knockout rows. */
 export const PUBLIC_RULES_KNOCKOUT_ROWS: readonly {
   label: string;
@@ -71,7 +74,11 @@ export const PUBLIC_RULES_PAGE_COPY = {
     "Pick the team that finishes 1st and the team that finishes 2nd in every group.",
   stage2Title: "Stage 2 — Best third-place teams",
   stage2Body:
-    "Pick the eight national teams you think will advance as the best third-place finishers. Order does not matter — you are only choosing who qualifies. FIFA places those teams into the real bracket; your picks do not set matchups. You cannot pick the same nation twice across Stage 1 and Stage 2 (a group top-two team cannot also be one of your eight third-place advancers).",
+    "Pick eight teams you think will advance as the best third-place finishers. Order does not matter — you are only predicting who qualifies, not which bracket slot each lands in. FIFA places those teams into the real Round of 32; your list does not set matchups. You cannot pick the same nation twice across Stage 1 and Stage 2 (a group top-two pick cannot also be one of your eight third-place advancers).",
+  stage2ScoringIntro:
+    "Pick eight teams that advance as the best third-place finishers. You are not placing them into bracket positions — only predicting who qualifies.",
+  stage2ScoringFollow:
+    "After the group stage, FIFA assigns those sides to real knockout slots. You cannot pick the same nation twice across Stage 1 and Stage 2 (a group top-two pick cannot also be one of your eight third-place advancers).",
   stage3Title: "Stage 3 — Knockout bracket",
   stage3Body:
     "After the group stage, organizers publish the official Round of 32 bracket with real FIFA matchups. Once that bracket is live in the app, you fill Round of 32 through champion using those slots. Knockout scoring counts once per team you picked, based on how far that team actually goes in the tournament.",
@@ -101,8 +108,6 @@ export const PUBLIC_RULES_PAGE_COPY = {
     "0 points if the team does not finish in the top two in the group.",
   bonusIntro:
     "Tournament-wide picks — one team per category. Scoring values come from the table below (or from the database for this pool).",
-  thirdPlaceIntroFallback:
-    "Pick eight teams that advance as the best third-place finishers. You are not placing them into bracket positions — only predicting who qualifies.",
 } as const;
 
 export type PublicRulesDisplayDefaultsOptions = {

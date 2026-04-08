@@ -7,6 +7,7 @@ import { fetchSamplePoolScoringRules } from "../../lib/rules/fetchSamplePoolScor
 import { knockoutRulesTableRowsFromPublicRules } from "../../lib/rules/knockoutRulesTableRows";
 import { partitionPublicRulesForDisplay } from "../../lib/rules/partitionPublicRulesForDisplay";
 import {
+  DEFAULT_PUBLIC_RULES_STAGE2_CORRECT,
   PUBLIC_RULES_DEFAULT_TIE_BREAK,
   PUBLIC_RULES_PAGE_COPY,
   describePrizeTier,
@@ -153,10 +154,10 @@ export default async function RulesPage() {
     knockoutRulesTableRowsFromPublicRules(knockoutRules);
   const bonusTableRows = bonusRulesTableRowsFromPublicRules(bonusRules);
 
-  const thirdPlacePoints =
+  const stage2PointsPerCorrect =
     thirdPlaceRules.length > 0
       ? Math.max(...thirdPlaceRules.map((r) => r.points))
-      : null;
+      : DEFAULT_PUBLIC_RULES_STAGE2_CORRECT;
 
   const pageTitle = data.poolName.trim() || "Pool rules";
   const pageDescription = lockLabel
@@ -315,28 +316,28 @@ export default async function RulesPage() {
           <h2 className="text-sm font-semibold uppercase tracking-wide text-ash-muted">
             Stage 2 — Best third-place teams
           </h2>
-          <p className="mt-2 text-sm text-ash-muted">
-            {c.thirdPlaceIntroFallback}
-          </p>
-          <p className="mt-2 text-sm text-ash-muted">
-            {thirdPlacePoints != null ? (
-              <>
+          <div className="mt-3 rounded-lg border border-ash-border bg-ash-body/40 px-3 py-3">
+            <p className="text-sm leading-relaxed text-ash-muted">
+              {c.stage2ScoringIntro}
+            </p>
+            <p className="mt-2 text-sm leading-relaxed text-ash-muted">
+              {c.stage2ScoringFollow}
+            </p>
+            <ul className="mt-3 list-inside list-disc space-y-1.5 text-sm text-ash-muted">
+              <li>
                 <span className="font-medium text-ash-text">
-                  {formatPoolPoints(thirdPlacePoints)} points
+                  {formatPoolPoints(stage2PointsPerCorrect)} points
                 </span>{" "}
-                for each correct team (from this pool’s scoring rules).{" "}
-                <span className="text-ash-muted">
-                  0 points if that team does not advance as a best third-place
-                  qualifier.
-                </span>
-              </>
-            ) : (
-              <>
-                Points per correct advancer are set in this pool’s scoring rules
-                when published.
-              </>
-            )}
-          </p>
+                for each correctly picked team that advances as a best third-place
+                qualifier
+              </li>
+              <li>
+                <span className="font-medium text-ash-text">0 points</span> for
+                each incorrect team
+              </li>
+              <li className="text-ash-muted">Order does not matter.</li>
+            </ul>
+          </div>
         </section>
 
         <section className="ash-surface px-4 py-4">
