@@ -35,7 +35,7 @@ export default async function SignupPage({
   }
 
   if (wantsAdminDest) {
-    redirect("/login?next=/admin");
+    redirect("/login");
   }
 
   const inviteParam = sp.invite?.trim() ?? "";

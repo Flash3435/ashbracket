@@ -88,7 +88,7 @@ export function SiteHeaderClient({
               <Link
                 href="/login"
                 className={
-                  pathname === "/login"
+                  pathname === "/login" || pathname.startsWith("/login/")
                     ? "btn-ghost text-sm ring-1 ring-ash-accent/35 rounded-lg"
                     : "btn-ghost text-sm"
                 }

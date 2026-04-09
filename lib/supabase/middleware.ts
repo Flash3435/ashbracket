@@ -117,6 +117,10 @@ async function runSession(request: NextRequest): Promise<NextResponse> {
     if (!allowed) {
       const forbiddenUrl = request.nextUrl.clone();
       forbiddenUrl.pathname = "/login";
+      forbiddenUrl.searchParams.set(
+        "next",
+        `${request.nextUrl.pathname}${request.nextUrl.search}`,
+      );
       forbiddenUrl.searchParams.set("error", "forbidden");
       const redirect = NextResponse.redirect(forbiddenUrl);
       copyAuthCookies(supabaseResponse, redirect);
