@@ -20,6 +20,10 @@ function sanitizeRequestedNext(raw: string | undefined): string | null {
   if (LOGIN_LOOP_PATHS.has(pathOnly)) {
     return null;
   }
+  // Marketing homepage is not a useful post-auth destination; use default account/admin landing.
+  if (pathOnly === "/") {
+    return null;
+  }
   return raw;
 }
 

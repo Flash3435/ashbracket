@@ -53,9 +53,9 @@ export function SiteHeaderClient({
     <header className="sticky top-0 z-50 w-full border-b border-ash-border bg-ash-body">
       <div className="mx-auto flex h-14 w-full max-w-3xl items-center justify-between gap-4 px-4">
         <Link
-          href="/"
+          href={isSignedIn ? "/account" : "/"}
           className="flex shrink-0 items-center focus-visible:rounded focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ash-accent"
-          aria-label="Ash Bracket — home"
+          aria-label={isSignedIn ? "Ash Bracket — dashboard" : "Ash Bracket — home"}
         >
           <Image
             src="/ash-bracket-logo.png"
@@ -70,9 +70,15 @@ export function SiteHeaderClient({
           className="flex flex-wrap items-center justify-end gap-x-4 gap-y-1 text-right sm:gap-x-6"
           aria-label="Main"
         >
-          <TextNavLink href="/" pathname={pathname} match="exact">
-            Home
-          </TextNavLink>
+          {!isSignedIn ? (
+            <TextNavLink href="/" pathname={pathname} match="exact">
+              Home
+            </TextNavLink>
+          ) : (
+            <TextNavLink href="/account" pathname={pathname} match="prefix">
+              Dashboard
+            </TextNavLink>
+          )}
           <TextNavLink href="/tournament" pathname={pathname}>
             Tournament
           </TextNavLink>
@@ -110,9 +116,6 @@ export function SiteHeaderClient({
 
           {isSignedIn && (
             <>
-              <TextNavLink href="/account" pathname={pathname} match="prefix">
-                Account
-              </TextNavLink>
               {showActivityNav ? (
                 <TextNavLink
                   href="/account/activity"

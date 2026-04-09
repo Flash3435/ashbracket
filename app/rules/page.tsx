@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { createClient } from "@/lib/supabase/server";
 import { formatPoolPoints } from "@/lib/format/poolPoints";
 import { PageContainer } from "@/components/ui/PageContainer";
 import { PageTitle } from "@/components/ui/PageTitle";
@@ -97,6 +98,10 @@ function PointsLabelTable({
 }
 
 export default async function RulesPage() {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
   const result = await fetchSamplePoolScoringRules();
 
   if (!result.ok && result.kind === "error") {
@@ -110,8 +115,8 @@ export default async function RulesPage() {
           Could not load pool rules: {result.message}
         </p>
         <p className="text-sm text-ash-muted">
-          <Link href="/" className="ash-link">
-            ← Back to standings
+          <Link href={user ? "/account" : "/"} className="ash-link">
+            {user ? "← Dashboard" : "← Back to standings"}
           </Link>
         </p>
       </PageContainer>
@@ -136,8 +141,8 @@ export default async function RulesPage() {
           </p>
         </div>
         <p className="text-sm text-ash-muted">
-          <Link href="/" className="ash-link">
-            ← Back to standings
+          <Link href={user ? "/account" : "/"} className="ash-link">
+            {user ? "← Dashboard" : "← Back to standings"}
           </Link>
         </p>
       </PageContainer>
@@ -371,8 +376,8 @@ export default async function RulesPage() {
       </div>
 
       <p className="mt-8 text-sm text-ash-muted">
-        <Link href="/" className="ash-link">
-          ← Back to standings
+        <Link href={user ? "/account" : "/"} className="ash-link">
+          {user ? "← Dashboard" : "← Back to standings"}
         </Link>
       </p>
     </PageContainer>

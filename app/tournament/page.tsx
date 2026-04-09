@@ -95,8 +95,8 @@ export default async function TournamentProgressPage() {
       ) : null}
 
       <p className="mt-8 text-sm text-ash-muted">
-        <Link href="/" className="ash-link">
-          Home
+        <Link href={user ? "/account" : "/"} className="ash-link">
+          {user ? "Dashboard" : "Home"}
         </Link>
         {" · "}
         <Link href="/rules" className="ash-link">

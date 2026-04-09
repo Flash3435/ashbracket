@@ -49,14 +49,8 @@ export default async function AccountActivityPage({ searchParams }: PageProps) {
   return (
     <PageContainer>
       <div className="mb-6 flex flex-wrap items-center gap-3">
-        <Link href="/" className="ash-link text-sm">
-          ← Home
-        </Link>
-        <span className="text-ash-border" aria-hidden>
-          |
-        </span>
         <Link href="/account" className="ash-link text-sm">
-          Account
+          ← Dashboard
         </Link>
         {ctx.selectedId && !ctx.loadError ? (
           <>
