@@ -6,7 +6,7 @@ import Link from "next/link";
 import { SignInWithEmailForm } from "./SignInWithEmailForm";
 
 type LoginFormProps = {
-  /** After password sign-in, client navigates here (e.g. `/login/continue?next=…`). */
+  /** After password sign-in, client navigates here; server resolves `next` and redirects (e.g. `/account` or `/admin`). */
   postLoginHref: string;
   /** Sign-up URL (preserves `next` when the user opened login with a return path). */
   signupHref: string;

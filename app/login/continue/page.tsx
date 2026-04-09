@@ -76,29 +76,4 @@ export default async function LoginContinuePage({ searchParams }: PageProps) {
       </PageContainer>
     );
   }
-
-  return (
-    <PageContainer>
-      <PageTitle
-        title="Where to next?"
-        description="You have organizer access and a participant account. Choose a destination."
-      />
-      <div className="ash-surface space-y-4 p-6">
-        <div className="flex flex-col gap-3 sm:flex-row">
-          <Link
-            href={result.organizerPath}
-            className="btn-primary inline-flex flex-1 items-center justify-center px-4 py-2.5 text-sm font-medium"
-          >
-            Organizer dashboard
-          </Link>
-          <Link
-            href={result.participantPath}
-            className="btn-ghost inline-flex flex-1 items-center justify-center px-4 py-2.5 text-sm font-medium ring-1 ring-ash-border"
-          >
-            My picks & account
-          </Link>
-        </div>
-      </div>
-    </PageContainer>
-  );
 }

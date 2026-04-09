@@ -5,12 +5,7 @@ const LOGIN_LOOP_PATHS = new Set(["/login", "/login/continue"]);
 
 export type PostLoginDestination =
   | { kind: "redirect"; path: string }
-  | { kind: "blocked_admin"; email: string | null }
-  | {
-      kind: "choose";
-      organizerPath: string;
-      participantPath: string;
-    };
+  | { kind: "blocked_admin"; email: string | null };
 
 function pathnameOnly(pathWithQuery: string): string {
   const i = pathWithQuery.indexOf("?");
@@ -65,16 +60,6 @@ export async function resolvePostLoginDestination(
 
   if (canAdmin && !isParticipant) {
     return { kind: "redirect", path: "/admin" };
-  }
-  if (!canAdmin && isParticipant) {
-    return { kind: "redirect", path: "/account" };
-  }
-  if (canAdmin && isParticipant) {
-    return {
-      kind: "choose",
-      organizerPath: "/admin",
-      participantPath: "/account",
-    };
   }
   return { kind: "redirect", path: "/account" };
 }

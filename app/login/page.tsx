@@ -77,7 +77,6 @@ export default async function LoginPage({
         </PageContainer>
       );
     }
-    redirect("/login/continue");
   }
 
   return (
