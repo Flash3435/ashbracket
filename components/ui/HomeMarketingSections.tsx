@@ -135,7 +135,7 @@ export function HomeMarketingSections() {
           Set up your private World Cup pool and invite your group in minutes.
         </p>
         <div className="mt-8 flex flex-wrap items-center justify-center gap-3">
-          <Link href="/admin" className="btn-primary">
+          <Link href="/signup/organizer" className="btn-primary">
             Create a Pool
           </Link>
           <Link href="/join" className="btn-ghost">

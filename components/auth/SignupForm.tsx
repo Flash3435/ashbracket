@@ -20,6 +20,8 @@ type SignupFormProps = {
   inviteContext?: SignupInviteContext | null;
   /** Login URL preserving post-auth return path (e.g. back to join with invite). */
   loginHref: string;
+  /** When true (non-invite flows), show confirm password and require a match before submit. */
+  requirePasswordConfirmation?: boolean;
 };
 
 function looksLikeExistingUserError(message: string): boolean {
@@ -37,9 +39,11 @@ export function SignupForm({
   emailConfirmRedirectUrl,
   inviteContext,
   loginHref,
+  requirePasswordConfirmation = false,
 }: SignupFormProps) {
   const router = useRouter();
   const inviteMode = Boolean(inviteContext);
+  const confirmPasswordRequired = inviteMode || requirePasswordConfirmation;
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
@@ -58,7 +62,7 @@ export function SignupForm({
       ? (inviteContext!.email as string)
       : email.trim();
 
-    if (inviteMode && password !== confirmPassword) {
+    if (confirmPasswordRequired && password !== confirmPassword) {
       setError("Passwords do not match.");
       return;
     }
@@ -78,7 +82,9 @@ export function SignupForm({
       if (looksLikeExistingUserError(signErr.message)) {
         setShowSignInInstead(true);
         setError(
-          "An account already exists for this email. Sign in with that account to accept your invite.",
+          inviteMode
+            ? "An account already exists for this email. Sign in with that account to accept your invite."
+            : "An account already exists for this email. Sign in with that account.",
         );
         return;
       }
@@ -112,7 +118,9 @@ export function SignupForm({
     setInfo(
       inviteContext
         ? "Check your email to confirm your address, then sign in — we will bring you back to finish joining your pool."
-        : "Check your email to confirm your address, then return here to sign in.",
+        : requirePasswordConfirmation
+          ? "Check your email to confirm your address, then sign in to open the organizer dashboard."
+          : "Check your email to confirm your address, then return here to sign in.",
     );
   }
 
@@ -160,7 +168,7 @@ export function SignupForm({
           className="w-full rounded-md border border-ash-border bg-ash-body px-3 py-2 text-sm text-ash-text shadow-sm outline-none ring-ash-accent/20 focus:border-ash-accent focus:ring-2"
         />
       </label>
-      {inviteMode ? (
+      {confirmPasswordRequired ? (
         <label className="block space-y-1.5">
           <span className="text-xs font-medium uppercase tracking-wide text-ash-muted">
             Confirm password

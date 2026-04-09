@@ -39,6 +39,8 @@ export default async function LoginPage({
   }
 
   const variant = wantsAdminDest ? "organizer" : "participant";
+  const organizerSignupHref = `/signup/organizer?next=${encodeURIComponent(redirectAfterLogin)}`;
+  const participantSignupHref = `/signup?next=${encodeURIComponent(redirectAfterLogin)}`;
 
   return (
     <PageContainer>
@@ -52,7 +54,9 @@ export default async function LoginPage({
       />
       <AdminLoginForm
         redirectAfterLogin={redirectAfterLogin}
-        signupHref={`/signup?next=${encodeURIComponent(redirectAfterLogin)}`}
+        signupHref={
+          variant === "organizer" ? organizerSignupHref : participantSignupHref
+        }
         blockedEmail={blockedEmail}
         showForbiddenMessage={showForbidden}
         showEmailConfirmFailed={showEmailConfirmFailed}

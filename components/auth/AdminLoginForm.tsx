@@ -105,7 +105,14 @@ export function AdminLoginForm({
             Sign up
           </Link>
         </p>
-      ) : null}
+      ) : (
+        <p className="text-center text-sm text-ash-muted">
+          New organizer?{" "}
+          <Link href={signupHref} className="ash-link">
+            Create an account
+          </Link>
+        </p>
+      )}
       {variant === "participant" ? (
         <p className="text-center text-sm text-ash-muted">
           Running the pool?{" "}
