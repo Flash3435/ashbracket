@@ -21,7 +21,9 @@ import { TEAM_TABLE_SELECT } from "../../../../../lib/teams/teamDbSelect";
 import { mapPredictionRow } from "../../../../../src/lib/scoring/mapSupabaseRows";
 import type { Prediction, Team, TournamentStage } from "../../../../../src/types/domain";
 import type { Participant } from "../../../../../types/participant";
-import { saveParticipantKnockoutPicksAction } from "../../../picks/actions";
+import Link from "next/link";
+import { saveParticipantKnockoutPicksForPoolAction } from "../../../picks/actions";
+import type { KnockoutPickSlotDraft } from "../../../../../types/adminKnockoutPicks";
 
 export const dynamic = "force-dynamic";
 
@@ -30,17 +32,27 @@ const STAGE_CODES_NEEDED = [...ACCOUNT_TOURNAMENT_STAGE_CODES];
 const UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
+/** Defensive logging for production diagnosis (Vercel / server logs). */
+function logAdminPicks(event: string, payload: Record<string, unknown>) {
+  try {
+    console.warn(`[admin/picks] ${event}`, JSON.stringify(payload));
+  } catch {
+    console.warn(`[admin/picks] ${event}`, payload);
+  }
+}
+
 type PageProps = {
   params: Promise<{ poolId: string }>;
-  searchParams: Promise<{ participant?: string }>;
+  searchParams?: Promise<{ participant?: string }>;
 };
 
 export default async function AdminPoolPicksPage({ params, searchParams }: PageProps) {
   const { poolId } = await params;
   const { supabase } = await requireManagedPool(poolId);
 
-  const sp = await searchParams;
-  const participantParam = sp.participant?.trim() ?? "";
+  const sp = searchParams != null ? await searchParams : {};
+  const participantParam =
+    typeof sp.participant === "string" ? sp.participant.trim() : "";
   const selectedId =
     participantParam && UUID_RE.test(participantParam)
       ? participantParam
@@ -54,6 +66,7 @@ export default async function AdminPoolPicksPage({ params, searchParams }: PageP
   let groupTeamCountryCodesByLetter: Record<string, string[]> = {};
   let loadError: string | null = null;
   let selectedParticipant: Participant | null = null;
+  let initialSlots: KnockoutPickSlotDraft[] = [];
 
   try {
     const [participantsRes, teamsRes, stagesRes, groupCodes] = await Promise.all([
@@ -105,7 +118,13 @@ export default async function AdminPoolPicksPage({ params, searchParams }: PageP
 
       if (!selectedParticipant) {
         loadError =
-          "That person is not in this pool, or the link you used is invalid.";
+          "That participant is not in this pool. Choose someone from the list or clear the link.";
+        logAdminPicks("participant_not_in_pool", {
+          poolId,
+          participantId: selectedId,
+          participantInPool: false,
+          poolParticipantCount: participants.length,
+        });
       } else {
         const [{ data: predData, error: predErr }, { data: ruleRows, error: ruleErr }] =
           await Promise.all([
@@ -124,38 +143,104 @@ export default async function AdminPoolPicksPage({ params, searchParams }: PageP
               .order("bonus_key", { ascending: true }),
           ]);
 
-        if (predErr) loadError = predErr.message;
-        else if (ruleErr) loadError = ruleErr.message;
-        else {
+        if (predErr) {
+          console.error("[admin/picks] predictions query error", {
+            poolId,
+            participantId: selectedId,
+            message: predErr.message,
+            code: predErr.code,
+          });
+          loadError =
+            "We couldn't load picks for this participant. Please try again.";
+        } else if (ruleErr) {
+          console.error("[admin/picks] scoring_rules query error", {
+            poolId,
+            participantId: selectedId,
+            message: ruleErr.message,
+            code: ruleErr.code,
+          });
+          loadError =
+            "We couldn't load picks for this participant. Please try again.";
+        } else {
           type PredRow = Parameters<typeof mapPredictionRow>[0];
-          predictions = (predData ?? []).map((row) =>
-            mapPredictionRow(row as PredRow),
-          );
+          const rawPreds = predData ?? [];
+          predictions = [];
+          for (const row of rawPreds) {
+            if (!row || typeof row !== "object") continue;
+            try {
+              predictions.push(mapPredictionRow(row as PredRow));
+            } catch (mapErr) {
+              console.error("[admin/picks] skip malformed prediction row", {
+                poolId,
+                participantId: selectedId,
+                rowId: (row as { id?: string }).id,
+                message:
+                  mapErr instanceof Error ? mapErr.message : String(mapErr),
+              });
+            }
+          }
           const fromDb = (ruleRows ?? [])
             .map((r) => r.bonus_key as string | null)
             .filter((k): k is string => Boolean(k && k.trim()));
           bonusKeysOrdered = participantBonusKeysForPool(fromDb);
+          logAdminPicks("predictions_loaded", {
+            poolId,
+            participantId: selectedId,
+            participantInPool: true,
+            rawPredictionRows: rawPreds.length,
+            mappedPredictions: predictions.length,
+            bonusRuleRows: (ruleRows ?? []).length,
+          });
         }
       }
     }
   } catch (e) {
-    loadError =
-      e instanceof Error ? e.message : "Failed to load participant picks.";
+    const message = e instanceof Error ? e.message : "Failed to load participant picks.";
+    console.error("[admin/picks] unexpected loader error", {
+      poolId,
+      participantId: selectedId,
+      message,
+    });
+    loadError = message;
   }
 
-  const stageByCode = Object.fromEntries(
-    stages.map((s) => [s.code, s]),
-  ) as Partial<Record<TournamentStage["code"], TournamentStage>>;
+  if (selectedParticipant && !loadError) {
+    const stageByCode = Object.fromEntries(
+      stages.map((s) => [s.code, s]),
+    ) as Partial<Record<TournamentStage["code"], TournamentStage>>;
+    try {
+      initialSlots = buildAllParticipantPickDrafts({
+        stageByCode,
+        predictions,
+        participantId: selectedParticipant.id,
+        bonusKeys: bonusKeysOrdered,
+      });
+    } catch (slotErr) {
+      const message =
+        slotErr instanceof Error ? slotErr.message : String(slotErr);
+      console.error("[admin/picks] buildAllParticipantPickDrafts failed", {
+        poolId,
+        participantId: selectedParticipant.id,
+        message,
+        predictionsCount: predictions.length,
+        stageCodes: stages.map((s) => s.code),
+      });
+      loadError =
+        "We couldn't load picks for this participant. Try again, or contact support if this continues.";
+      initialSlots = [];
+    }
+  }
 
-  const initialSlots =
-    selectedParticipant && !loadError
-      ? buildAllParticipantPickDrafts({
-          stageByCode,
-          predictions,
-          participantId: selectedParticipant.id,
-          bonusKeys: bonusKeysOrdered,
-        })
-      : [];
+  if (selectedId) {
+    logAdminPicks("request_snapshot", {
+      poolId,
+      participantId: selectedId,
+      participantResolved: Boolean(selectedParticipant),
+      loadError,
+      predictionsCount: predictions.length,
+      initialSlotCount: initialSlots.length,
+    });
+  }
 
   const invalidQuery =
     Boolean(participantParam) && !UUID_RE.test(participantParam);
@@ -193,6 +278,14 @@ export default async function AdminPoolPicksPage({ params, searchParams }: PageP
         </p>
       ) : null}
 
+      {invalidQuery || (selectedId && loadError) ? (
+        <p className="mb-6 text-sm">
+          <Link href={picksBase} className="ash-link">
+            Clear selection and return to the pool picks page
+          </Link>
+        </p>
+      ) : null}
+
       {!loadError && participants.length === 0 ? (
         <div className="ash-surface px-4 py-8 text-center">
           <p className="text-sm font-medium text-ash-text">
@@ -224,8 +317,8 @@ export default async function AdminPoolPicksPage({ params, searchParams }: PageP
             <>
               {predictions.length === 0 ? (
                 <p className="mb-6 rounded-md border border-ash-border bg-ash-surface px-3 py-2 text-sm text-ash-muted">
-                  No saved picks yet for this participant — all slots start
-                  empty.
+                  This participant has not made any picks yet. Every slot
+                  starts empty until you save.
                 </p>
               ) : null}
               <ParticipantKnockoutPicksForm
@@ -235,9 +328,10 @@ export default async function AdminPoolPicksPage({ params, searchParams }: PageP
                 teams={teams}
                 groupTeamCountryCodesByLetter={groupTeamCountryCodesByLetter}
                 disabled={teams.length === 0}
-                savePicks={(input) =>
-                  saveParticipantKnockoutPicksAction({ ...input, poolId })
-                }
+                savePicks={saveParticipantKnockoutPicksForPoolAction.bind(
+                  null,
+                  poolId,
+                )}
               />
               {teams.length === 0 ? (
                 <p className="mt-4 text-sm text-amber-200">

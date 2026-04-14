@@ -15,6 +15,25 @@ function messageFromUnknown(e: unknown): string {
   return e instanceof Error ? e.message : "Something went wrong.";
 }
 
+/**
+ * Use from pool-scoped admin UI with `.bind(null, poolId)` so the client wizard
+ * receives a serializable server action (do not wrap the save action in an
+ * inline arrow in a Server Component).
+ */
+export async function saveParticipantKnockoutPicksForPoolAction(
+  poolId: string,
+  input: {
+    participantId: string;
+    slots: ParticipantPickSlotPayload[];
+  },
+): Promise<SaveKnockoutPicksResult> {
+  return saveParticipantKnockoutPicksAction({
+    poolId,
+    participantId: input.participantId,
+    slots: input.slots,
+  });
+}
+
 export async function saveParticipantKnockoutPicksAction(input: {
   poolId: string;
   participantId: string;

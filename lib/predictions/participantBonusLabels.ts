@@ -7,8 +7,9 @@ export const PARTICIPANT_BONUS_LABELS: Record<string, string> = {
 };
 
 export function labelParticipantBonusPick(bonusKey: string): string {
+  const key = (bonusKey ?? "").trim();
+  if (!key) return "Bonus pick";
   return (
-    PARTICIPANT_BONUS_LABELS[bonusKey] ??
-    bonusKey.replace(/_/g, " ")
+    PARTICIPANT_BONUS_LABELS[key] ?? key.replace(/_/g, " ")
   );
 }
