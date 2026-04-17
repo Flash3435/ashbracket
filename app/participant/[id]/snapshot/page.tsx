@@ -1,5 +1,7 @@
 import { AccountNextMatchesSection } from "@/components/account/AccountNextMatchesSection";
+import { ParticipantBracketView } from "@/components/bracket/ParticipantBracketView";
 import { MyKnockoutPicksSummary } from "@/components/picks/MyKnockoutPicksSummary";
+import { PicksViewToggle } from "@/components/picks/PicksViewToggle";
 import { PageContainer } from "@/components/ui/PageContainer";
 import { PageTitle } from "@/components/ui/PageTitle";
 import { createClient } from "@/lib/supabase/server";
@@ -17,7 +19,7 @@ export const dynamic = "force-dynamic";
 
 type PageProps = {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ from?: string }>;
+  searchParams: Promise<{ from?: string; view?: string }>;
 };
 
 function possessiveTitle(displayName: string): string {
@@ -31,7 +33,9 @@ export default async function ParticipantBracketSnapshotPage({
 }: PageProps) {
   const { id } = await params;
   const sp = await searchParams;
-  const from = (sp.from ?? "").trim().toLowerCase();
+  const fromRaw = (sp.from ?? "").trim();
+  const from = fromRaw.toLowerCase();
+  const view = sp.view === "bracket" ? "bracket" : "list";
 
   const result = await loadParticipantBracketSnapshot(id);
 
@@ -97,6 +101,16 @@ export default async function ParticipantBracketSnapshotPage({
 
   const showOwnerEditLink = isSelf;
 
+  const snapshotListQs = new URLSearchParams();
+  if (fromRaw) snapshotListQs.set("from", fromRaw);
+  const snapshotBracketQs = new URLSearchParams(snapshotListQs);
+  snapshotBracketQs.set("view", "bracket");
+  const snapshotListHref = `/participant/${result.participantId}/snapshot${
+    snapshotListQs.toString() ? `?${snapshotListQs}` : ""
+  }`;
+  const snapshotBracketHref = `/participant/${result.participantId}/snapshot?${snapshotBracketQs}`;
+  const snapshotEditPicksHref = `/account/picks?participant=${result.participantId}`;
+
   return (
     <PageContainer>
       <div className="mb-6 flex flex-wrap items-center gap-3">
@@ -138,18 +152,54 @@ export default async function ParticipantBracketSnapshotPage({
         </div>
       ) : (
         <>
-          <MyKnockoutPicksSummary
-            slots={result.initialSlots}
-            teams={result.teams}
-            participantId={result.participantId}
-            poolName={result.header.poolName}
-            locked={locked}
-            lockHint={isSelf ? lockHintSelf : lockHintPeer}
-            showSavedBanner={false}
-            knockoutBracketPicksUnlocked={result.knockoutBracketPicksUnlocked}
-            showCompactStageProgress
-            readOnly={!isSelf}
-          />
+          <div className="mb-6">
+            <PicksViewToggle
+              current={view}
+              listHref={snapshotListHref}
+              bracketHref={snapshotBracketHref}
+            />
+          </div>
+
+          {view === "list" ? (
+            <MyKnockoutPicksSummary
+              slots={result.initialSlots}
+              teams={result.teams}
+              participantId={result.participantId}
+              poolName={result.header.poolName}
+              locked={locked}
+              lockHint={isSelf ? lockHintSelf : lockHintPeer}
+              showSavedBanner={false}
+              knockoutBracketPicksUnlocked={result.knockoutBracketPicksUnlocked}
+              showCompactStageProgress
+              readOnly={!isSelf}
+            />
+          ) : (
+            <>
+              <MyKnockoutPicksSummary
+                slots={result.initialSlots}
+                teams={result.teams}
+                participantId={result.participantId}
+                poolName={result.header.poolName}
+                locked={locked}
+                lockHint={isSelf ? lockHintSelf : lockHintPeer}
+                showSavedBanner={false}
+                knockoutBracketPicksUnlocked={result.knockoutBracketPicksUnlocked}
+                showCompactStageProgress
+                readOnly={!isSelf}
+                sections="toolbar_only"
+              />
+              <div className="mt-6">
+                <ParticipantBracketView
+                  slots={result.initialSlots}
+                  teams={result.teams}
+                  groupTeamCountryCodesByLetter={result.groupTeamCountryCodesByLetter}
+                  knockoutBracketPicksUnlocked={result.knockoutBracketPicksUnlocked}
+                  editPicksHref={isSelf ? snapshotEditPicksHref : null}
+                  readOnly={!isSelf}
+                />
+              </div>
+            </>
+          )}
 
           <div className="mt-8">
             <AccountNextMatchesSection

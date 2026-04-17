@@ -10,6 +10,7 @@ import { mapPredictionRow } from "../../src/lib/scoring/mapSupabaseRows";
 import type { Prediction, Team, TournamentStage } from "../../src/types/domain";
 import type { KnockoutPickSlotDraft } from "../../types/adminKnockoutPicks";
 import { fetchOfficialRoundOf32Complete } from "../tournament/fetchOfficialRoundOf32Complete";
+import { fetchGroupTeamCountryCodesByLetter } from "../tournament/fetchGroupTeamCountryCodesByLetter";
 import type { PredictionsPublicRowDb } from "./mapPublicParticipantRows";
 import { predictionsFromPublicViewRows } from "./predictionsFromPublicView";
 
@@ -32,6 +33,8 @@ export type ParticipantBracketSnapshotOk = {
   stages: TournamentStage[];
   initialSlots: KnockoutPickSlotDraft[];
   knockoutBracketPicksUnlocked: boolean;
+  /** Group letter → FIFA codes from official fixtures (for third-place routing). */
+  groupTeamCountryCodesByLetter: Record<string, string[]>;
 };
 
 export type ParticipantBracketSnapshotErr = {
@@ -94,7 +97,7 @@ export async function loadParticipantBracketSnapshot(
       isPublic: Boolean(h.is_public),
     };
 
-    const [teamsRes, stagesRes] = await Promise.all([
+    const [teamsRes, stagesRes, groupTeamCountryCodesByLetter] = await Promise.all([
       supabase
         .from("teams")
         .select(TEAM_TABLE_SELECT)
@@ -106,6 +109,7 @@ export async function loadParticipantBracketSnapshot(
         )
         .in("code", [...ACCOUNT_TOURNAMENT_STAGE_CODES])
         .order("sort_order", { ascending: true }),
+      fetchGroupTeamCountryCodesByLetter(supabase),
     ]);
 
     if (teamsRes.error) {
@@ -230,6 +234,7 @@ export async function loadParticipantBracketSnapshot(
       stages,
       initialSlots,
       knockoutBracketPicksUnlocked,
+      groupTeamCountryCodesByLetter,
     };
   } catch (e) {
     return {

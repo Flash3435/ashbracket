@@ -91,6 +91,11 @@ type Props = {
   showCompactStageProgress?: boolean;
   /** When true, hide edit CTA and use neutral copy (another participant’s bracket). */
   readOnly?: boolean;
+  /**
+   * `toolbar_only` renders the banner (when enabled) and pool / lock / edit header only — used
+   * with Bracket View so list grids stay hidden.
+   */
+  sections?: "all" | "toolbar_only";
 };
 
 function sortGroupRows(rows: KnockoutPickSlotDraft[]): KnockoutPickSlotDraft[] {
@@ -120,6 +125,7 @@ export function MyKnockoutPicksSummary({
   knockoutBracketPicksUnlocked = true,
   showCompactStageProgress = false,
   readOnly = false,
+  sections = "all",
 }: Props) {
   const teamById = new Map(teams.map((t) => [t.id, t]));
   const group = sortGroupRows(
@@ -213,6 +219,7 @@ export function MyKnockoutPicksSummary({
         ) : null}
       </div>
 
+      {sections === "toolbar_only" ? null : (
       <div className="grid gap-4 lg:grid-cols-2">
         <StageBlock
           title="Group stage"
@@ -297,6 +304,7 @@ export function MyKnockoutPicksSummary({
           teamById={teamById}
         />
       </div>
+      )}
     </div>
   );
 }

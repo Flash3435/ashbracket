@@ -1,6 +1,8 @@
 import { AccountNextMatchesSection } from "@/components/account/AccountNextMatchesSection";
 import { AccountPicksProfileLinks } from "@/components/account/AccountPicksProfileLinks";
+import { ParticipantBracketView } from "@/components/bracket/ParticipantBracketView";
 import { MyKnockoutPicksSummary } from "@/components/picks/MyKnockoutPicksSummary";
+import { PicksViewToggle } from "@/components/picks/PicksViewToggle";
 import { PageContainer } from "@/components/ui/PageContainer";
 import { PageTitle } from "@/components/ui/PageTitle";
 import { createClient } from "@/lib/supabase/server";
@@ -19,7 +21,7 @@ import { redirect } from "next/navigation";
 export const dynamic = "force-dynamic";
 
 type PageProps = {
-  searchParams: Promise<{ participant?: string; saved?: string }>;
+  searchParams: Promise<{ participant?: string; saved?: string; view?: string }>;
 };
 
 export default async function AccountPicksSummaryPage({ searchParams }: PageProps) {
@@ -35,6 +37,7 @@ export default async function AccountPicksSummaryPage({ searchParams }: PageProp
 
   const participantParam = sp.participant?.trim() ?? "";
   const showSavedBanner = sp.saved === "1" || sp.saved === "true";
+  const view = sp.view === "bracket" ? "bracket" : "list";
 
   const ctx = await loadAccountKnockoutSelection(user.id, participantParam);
 
@@ -57,6 +60,16 @@ export default async function AccountPicksSummaryPage({ searchParams }: PageProp
     tournamentPayload?.matches && !tournamentErr
       ? nextMatchesForTeamCountryCodes(tournamentPayload.matches, codes, 8)
       : [];
+
+  const pid = ctx.selectedParticipant?.id;
+  const listQs = new URLSearchParams();
+  if (pid) listQs.set("participant", pid);
+  if (showSavedBanner) listQs.set("saved", "1");
+  const bracketQs = new URLSearchParams(listQs);
+  bracketQs.set("view", "bracket");
+  const listHref = `/account/picks/summary${listQs.toString() ? `?${listQs}` : ""}`;
+  const bracketHref = `/account/picks/summary?${bracketQs}`;
+  const editPicksHref = pid ? `/account/picks?participant=${pid}` : "/account/picks";
 
   return (
     <PageContainer>
@@ -144,17 +157,48 @@ export default async function AccountPicksSummaryPage({ searchParams }: PageProp
           !ctx.loadError &&
           ctx.initialSlots.length > 0 ? (
             <>
-              <MyKnockoutPicksSummary
-                slots={ctx.initialSlots}
-                teams={ctx.teams}
-                participantId={ctx.selectedParticipant.id}
-                poolName={ctx.selectedPoolName}
-                locked={locked}
-                lockHint={lockHint}
-                showSavedBanner={showSavedBanner}
-                knockoutBracketPicksUnlocked={ctx.knockoutBracketPicksUnlocked}
-                showCompactStageProgress
-              />
+              <div className="mb-6">
+                <PicksViewToggle current={view} listHref={listHref} bracketHref={bracketHref} />
+              </div>
+
+              {view === "list" ? (
+                <MyKnockoutPicksSummary
+                  slots={ctx.initialSlots}
+                  teams={ctx.teams}
+                  participantId={ctx.selectedParticipant.id}
+                  poolName={ctx.selectedPoolName}
+                  locked={locked}
+                  lockHint={lockHint}
+                  showSavedBanner={showSavedBanner}
+                  knockoutBracketPicksUnlocked={ctx.knockoutBracketPicksUnlocked}
+                  showCompactStageProgress
+                />
+              ) : (
+                <>
+                  <MyKnockoutPicksSummary
+                    slots={ctx.initialSlots}
+                    teams={ctx.teams}
+                    participantId={ctx.selectedParticipant.id}
+                    poolName={ctx.selectedPoolName}
+                    locked={locked}
+                    lockHint={lockHint}
+                    showSavedBanner={showSavedBanner}
+                    knockoutBracketPicksUnlocked={ctx.knockoutBracketPicksUnlocked}
+                    showCompactStageProgress
+                    sections="toolbar_only"
+                  />
+                  <div className="mt-6">
+                    <ParticipantBracketView
+                      slots={ctx.initialSlots}
+                      teams={ctx.teams}
+                      groupTeamCountryCodesByLetter={ctx.groupTeamCountryCodesByLetter}
+                      knockoutBracketPicksUnlocked={ctx.knockoutBracketPicksUnlocked}
+                      editPicksHref={editPicksHref}
+                      readOnly={false}
+                    />
+                  </div>
+                </>
+              )}
 
               <AccountNextMatchesSection
                 title="Next matches for your teams"

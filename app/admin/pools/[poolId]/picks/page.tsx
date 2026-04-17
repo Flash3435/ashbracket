@@ -1,5 +1,7 @@
 import { AdminParticipantPicker } from "@/components/admin/AdminParticipantPicker";
 import { ParticipantKnockoutPicksForm } from "@/components/admin/ParticipantKnockoutPicksForm";
+import { ParticipantBracketView } from "@/components/bracket/ParticipantBracketView";
+import { PicksViewToggle } from "@/components/picks/PicksViewToggle";
 import { PageContainer } from "@/components/ui/PageContainer";
 import { PageTitle } from "@/components/ui/PageTitle";
 import { requireManagedPool } from "@/lib/admin/requireManagedPool";
@@ -24,6 +26,7 @@ import type { Participant } from "../../../../../types/participant";
 import Link from "next/link";
 import { saveParticipantKnockoutPicksForPoolAction } from "../../../picks/actions";
 import type { KnockoutPickSlotDraft } from "../../../../../types/adminKnockoutPicks";
+import { fetchOfficialRoundOf32Complete } from "../../../../../lib/tournament/fetchOfficialRoundOf32Complete";
 
 export const dynamic = "force-dynamic";
 
@@ -43,7 +46,7 @@ function logAdminPicks(event: string, payload: Record<string, unknown>) {
 
 type PageProps = {
   params: Promise<{ poolId: string }>;
-  searchParams?: Promise<{ participant?: string }>;
+  searchParams?: Promise<{ participant?: string; view?: string }>;
 };
 
 export default async function AdminPoolPicksPage({ params, searchParams }: PageProps) {
@@ -51,6 +54,7 @@ export default async function AdminPoolPicksPage({ params, searchParams }: PageP
   const { supabase } = await requireManagedPool(poolId);
 
   const sp = searchParams != null ? await searchParams : {};
+  const view = sp.view === "bracket" ? "bracket" : "list";
   const participantParam =
     typeof sp.participant === "string" ? sp.participant.trim() : "";
   const selectedId =
@@ -242,6 +246,17 @@ export default async function AdminPoolPicksPage({ params, searchParams }: PageP
     });
   }
 
+  let knockoutBracketPicksUnlocked = true;
+  if (!loadError && stages.length > 0) {
+    const r32Stage = stages.find((s) => s.code === "round_of_32");
+    if (r32Stage) {
+      knockoutBracketPicksUnlocked = await fetchOfficialRoundOf32Complete(
+        supabase,
+        r32Stage.id,
+      );
+    }
+  }
+
   const invalidQuery =
     Boolean(participantParam) && !UUID_RE.test(participantParam);
 
@@ -251,6 +266,13 @@ export default async function AdminPoolPicksPage({ params, searchParams }: PageP
       : "";
 
   const picksBase = `/admin/pools/${poolId}/picks`;
+
+  const adminListQs = new URLSearchParams();
+  if (pickerSelectedId) adminListQs.set("participant", pickerSelectedId);
+  const adminBracketQs = new URLSearchParams(adminListQs);
+  adminBracketQs.set("view", "bracket");
+  const adminListHref = `${picksBase}${adminListQs.toString() ? `?${adminListQs}` : ""}`;
+  const adminBracketHref = `${picksBase}?${adminBracketQs}`;
 
   return (
     <PageContainer>
@@ -321,24 +343,45 @@ export default async function AdminPoolPicksPage({ params, searchParams }: PageP
                   starts empty until you save.
                 </p>
               ) : null}
-              <ParticipantKnockoutPicksForm
-                participantId={selectedParticipant.id}
-                participantDisplayName={selectedParticipant.displayName}
-                initialSlots={initialSlots}
-                teams={teams}
-                groupTeamCountryCodesByLetter={groupTeamCountryCodesByLetter}
-                disabled={teams.length === 0}
-                savePicks={saveParticipantKnockoutPicksForPoolAction.bind(
-                  null,
-                  poolId,
-                )}
-              />
-              {teams.length === 0 ? (
-                <p className="mt-4 text-sm text-amber-200">
-                  No teams are available yet. Ask your site host to load the
-                  team list before you assign picks.
-                </p>
-              ) : null}
+              <div className="mb-6">
+                <PicksViewToggle
+                  current={view}
+                  listHref={adminListHref}
+                  bracketHref={adminBracketHref}
+                  listLabel="Pick wizard"
+                  bracketLabel="Bracket view"
+                />
+              </div>
+              {view === "list" ? (
+                <>
+                  <ParticipantKnockoutPicksForm
+                    participantId={selectedParticipant.id}
+                    participantDisplayName={selectedParticipant.displayName}
+                    initialSlots={initialSlots}
+                    teams={teams}
+                    groupTeamCountryCodesByLetter={groupTeamCountryCodesByLetter}
+                    disabled={teams.length === 0}
+                    savePicks={saveParticipantKnockoutPicksForPoolAction.bind(
+                      null,
+                      poolId,
+                    )}
+                  />
+                  {teams.length === 0 ? (
+                    <p className="mt-4 text-sm text-amber-200">
+                      No teams are available yet. Ask your site host to load the
+                      team list before you assign picks.
+                    </p>
+                  ) : null}
+                </>
+              ) : (
+                <ParticipantBracketView
+                  slots={initialSlots}
+                  teams={teams}
+                  groupTeamCountryCodesByLetter={groupTeamCountryCodesByLetter}
+                  knockoutBracketPicksUnlocked={knockoutBracketPicksUnlocked}
+                  readOnly
+                />
+              )}
             </>
           ) : null}
         </>
