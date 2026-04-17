@@ -188,7 +188,7 @@ export async function saveMyKnockoutPicksAction(input: {
     if (completeAfter) {
       try {
         const displayName = String(row.display_name ?? "").trim() || "Someone";
-        const summaryPath = `/account/picks/summary?participant=${input.participantId}`;
+        const snapshotPath = `/participant/${input.participantId}/snapshot?from=activity`;
         if (!hadFirstSubmittedAt) {
           await supabase
             .from("participants")
@@ -207,7 +207,7 @@ export async function saveMyKnockoutPicksAction(input: {
                 first_submission: true,
                 display_name: displayName,
               },
-              relatedPath: summaryPath,
+              relatedPath: snapshotPath,
             });
           }
         } else if (fpBefore !== fpAfter) {
@@ -218,7 +218,7 @@ export async function saveMyKnockoutPicksAction(input: {
             type: "participant_updated_picks",
             bodyText: `${displayName} updated their picks.`,
             metadataJson: { display_name: displayName },
-            relatedPath: summaryPath,
+            relatedPath: snapshotPath,
           });
         }
       } catch (e) {
@@ -228,6 +228,7 @@ export async function saveMyKnockoutPicksAction(input: {
 
     revalidatePath("/account/picks");
     revalidatePath("/account/picks/summary");
+    revalidatePath(`/participant/${input.participantId}/snapshot`);
     revalidatePath("/account");
     revalidatePath("/account/activity");
     revalidatePath(`/participant/${input.participantId}`);

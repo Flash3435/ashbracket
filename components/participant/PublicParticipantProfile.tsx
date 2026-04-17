@@ -27,9 +27,15 @@ export function PublicParticipantProfile({ detail }: Props) {
 
   return (
     <div className="space-y-10">
-      <div>
+      <div className="flex flex-wrap gap-x-4 gap-y-2">
         <Link href="/" className="ash-link text-sm">
           ← Standings
+        </Link>
+        <Link
+          href={`/participant/${detail.participantId}/snapshot`}
+          className="ash-link text-sm"
+        >
+          Bracket snapshot
         </Link>
       </div>
 

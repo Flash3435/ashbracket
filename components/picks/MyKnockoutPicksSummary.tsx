@@ -89,6 +89,8 @@ type Props = {
   knockoutBracketPicksUnlocked?: boolean;
   /** One-line progress by stage (group, third-place, knockout, bonus). */
   showCompactStageProgress?: boolean;
+  /** When true, hide edit CTA and use neutral copy (another participant’s bracket). */
+  readOnly?: boolean;
 };
 
 function sortGroupRows(rows: KnockoutPickSlotDraft[]): KnockoutPickSlotDraft[] {
@@ -117,6 +119,7 @@ export function MyKnockoutPicksSummary({
   showSavedBanner,
   knockoutBracketPicksUnlocked = true,
   showCompactStageProgress = false,
+  readOnly = false,
 }: Props) {
   const teamById = new Map(teams.map((t) => [t.id, t]));
   const group = sortGroupRows(
@@ -142,6 +145,7 @@ export function MyKnockoutPicksSummary({
   );
 
   const editHref = `/account/picks?participant=${participantId}`;
+  const showEditButton = !readOnly;
 
   const groupProg = filledOfTotal(group);
   const thirdProg = filledOfTotal(third);
@@ -186,7 +190,7 @@ export function MyKnockoutPicksSummary({
               </span>
             ) : (
               <span className="rounded-full bg-ash-accent/20 px-2.5 py-0.5 text-xs font-medium text-ash-accent">
-                Open — you can edit picks
+                {readOnly ? "Open — picks not locked yet" : "Open — you can edit picks"}
               </span>
             )}
             <span className="text-xs text-ash-muted">
@@ -202,9 +206,11 @@ export function MyKnockoutPicksSummary({
             <p className="mt-2 text-sm text-amber-100">{lockHint}</p>
           ) : null}
         </div>
-        <Link href={editHref} className="btn-primary inline-flex shrink-0">
-          {locked ? "View edit screen" : "Edit picks"}
-        </Link>
+        {showEditButton ? (
+          <Link href={editHref} className="btn-primary inline-flex shrink-0">
+            {locked ? "View edit screen" : "Edit picks"}
+          </Link>
+        ) : null}
       </div>
 
       <div className="grid gap-4 lg:grid-cols-2">
@@ -216,7 +222,11 @@ export function MyKnockoutPicksSummary({
         />
         <StageBlock
           title="Third-place advancers"
-          subtitle="Eight teams you predict will qualify from third place (not their bracket slots)"
+          subtitle={
+            readOnly
+              ? "Eight teams they predict will qualify from third place (not their bracket slots)"
+              : "Eight teams you predict will qualify from third place (not their bracket slots)"
+          }
           rows={third}
           teamById={teamById}
         />
@@ -248,7 +258,7 @@ export function MyKnockoutPicksSummary({
             />
             <StageBlock
               title="Finalists"
-              subtitle="Your predicted finalists"
+              subtitle={readOnly ? "Their predicted finalists" : "Your predicted finalists"}
               rows={fin}
               teamById={teamById}
             />
@@ -266,8 +276,10 @@ export function MyKnockoutPicksSummary({
             </h2>
             <p className="mt-1 text-xs text-ash-muted">
               This section opens after organizers enter the full official Round of
-              32 lineup. You are not missing a step — the pool intentionally waits
-              for real FIFA bracket slots before knockout picks and scoring.
+              32 lineup.{" "}
+              {readOnly
+                ? "The pool intentionally waits for real FIFA bracket slots before knockout picks and scoring."
+                : "You are not missing a step — the pool intentionally waits for real FIFA bracket slots before knockout picks and scoring."}
             </p>
             {hasLegacyKnockoutPicks ? (
               <p className="mt-3 text-xs text-amber-100">
