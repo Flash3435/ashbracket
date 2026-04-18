@@ -2,7 +2,9 @@ import Link from "next/link";
 import { AccountNextMatchesSection } from "@/components/account/AccountNextMatchesSection";
 import { AccountPicksProfileLinks } from "@/components/account/AccountPicksProfileLinks";
 import { SignOutButton } from "@/components/auth/SignOutButton";
+import { ParticipantBracketView } from "@/components/bracket/ParticipantBracketView";
 import { MyKnockoutPicksSummary } from "@/components/picks/MyKnockoutPicksSummary";
+import { PicksViewToggle } from "@/components/picks/PicksViewToggle";
 import { PageContainer } from "@/components/ui/PageContainer";
 import { PageTitle } from "@/components/ui/PageTitle";
 import { createClient } from "@/lib/supabase/server";
@@ -22,11 +24,12 @@ import type { TournamentMatchPublicRow } from "../../types/tournamentPublic";
 export const dynamic = "force-dynamic";
 
 type PageProps = {
-  searchParams: Promise<{ participant?: string }>;
+  searchParams: Promise<{ participant?: string; view?: string }>;
 };
 
 export default async function AccountPage({ searchParams }: PageProps) {
   const sp = await searchParams;
+  const view = sp.view === "bracket" ? "bracket" : "list";
   const supabase = await createClient();
   const {
     data: { user },
@@ -89,6 +92,16 @@ export default async function AccountPage({ searchParams }: PageProps) {
     list.length === 1
       ? `/account/picks?participant=${list[0].id}`
       : "/account/picks";
+
+  const dashListQs = new URLSearchParams();
+  if (picksCtx?.selectedId) dashListQs.set("participant", picksCtx.selectedId);
+  const dashBracketQs = new URLSearchParams(dashListQs);
+  dashBracketQs.set("view", "bracket");
+  const dashboardListHref = `/account${dashListQs.toString() ? `?${dashListQs}` : ""}`;
+  const dashboardBracketHref = `/account?${dashBracketQs}`;
+  const editPicksFromDashboardHref = picksCtx?.selectedParticipant?.id
+    ? `/account/picks?participant=${picksCtx.selectedParticipant.id}`
+    : picksHref;
 
   return (
     <PageContainer>
@@ -165,19 +178,60 @@ export default async function AccountPage({ searchParams }: PageProps) {
           !picksCtx.loadError &&
           picksCtx.initialSlots.length > 0 ? (
             <div className="space-y-6">
-              <MyKnockoutPicksSummary
-                slots={picksCtx.initialSlots}
-                teams={picksCtx.teams}
-                participantId={picksCtx.selectedParticipant.id}
-                poolName={picksCtx.selectedPoolName}
-                locked={locked}
-                lockHint={lockHint}
-                showSavedBanner={false}
-                knockoutBracketPicksUnlocked={
-                  picksCtx.knockoutBracketPicksUnlocked
-                }
-                showCompactStageProgress
-              />
+              <div className="mb-2">
+                <PicksViewToggle
+                  current={view}
+                  listHref={dashboardListHref}
+                  bracketHref={dashboardBracketHref}
+                />
+              </div>
+
+              {view === "list" ? (
+                <MyKnockoutPicksSummary
+                  slots={picksCtx.initialSlots}
+                  teams={picksCtx.teams}
+                  participantId={picksCtx.selectedParticipant.id}
+                  poolName={picksCtx.selectedPoolName}
+                  locked={locked}
+                  lockHint={lockHint}
+                  showSavedBanner={false}
+                  knockoutBracketPicksUnlocked={
+                    picksCtx.knockoutBracketPicksUnlocked
+                  }
+                  showCompactStageProgress
+                />
+              ) : (
+                <>
+                  <MyKnockoutPicksSummary
+                    slots={picksCtx.initialSlots}
+                    teams={picksCtx.teams}
+                    participantId={picksCtx.selectedParticipant.id}
+                    poolName={picksCtx.selectedPoolName}
+                    locked={locked}
+                    lockHint={lockHint}
+                    showSavedBanner={false}
+                    knockoutBracketPicksUnlocked={
+                      picksCtx.knockoutBracketPicksUnlocked
+                    }
+                    showCompactStageProgress
+                    sections="toolbar_only"
+                  />
+                  <div className="mt-6">
+                    <ParticipantBracketView
+                      slots={picksCtx.initialSlots}
+                      teams={picksCtx.teams}
+                      groupTeamCountryCodesByLetter={
+                        picksCtx.groupTeamCountryCodesByLetter
+                      }
+                      knockoutBracketPicksUnlocked={
+                        picksCtx.knockoutBracketPicksUnlocked
+                      }
+                      editPicksHref={editPicksFromDashboardHref}
+                      readOnly={false}
+                    />
+                  </div>
+                </>
+              )}
 
               <AccountNextMatchesSection
                 className="rounded-xl border border-ash-border bg-ash-surface p-4"
