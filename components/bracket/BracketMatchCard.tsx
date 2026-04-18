@@ -41,8 +41,8 @@ function SideRow({
         </p>
         {picked ? (
           <p className="truncate text-[10px] text-ash-muted">{team!.countryCode}</p>
-        ) : side.undeterminedThird ? (
-          <p className="text-[10px] text-ash-muted/90">Routing not fully determined</p>
+        ) : side.placeholderSubtext ? (
+          <p className="text-[10px] leading-snug text-ash-muted/90">{side.placeholderSubtext}</p>
         ) : null}
       </div>
     </div>

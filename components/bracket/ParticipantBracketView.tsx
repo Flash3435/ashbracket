@@ -52,17 +52,23 @@ function RoundColumn({
   );
 }
 
+const CHAMPION_STAGE3_LABEL = "Opens in Stage 3";
+const CHAMPION_STAGE3_SUB = "Knockout picks open after group stage.";
+
 function ChampionCell({
   champion,
   teamById,
+  knockoutBracketPicksUnlocked,
 }: {
   champion: ParticipantBracketModel["champion"];
   teamById: Map<string, Team>;
+  knockoutBracketPicksUnlocked: boolean;
 }) {
   const tid = champion.teamId?.trim() || null;
   const team = tid ? teamById.get(tid) : undefined;
   const picked = Boolean(tid && team);
   const flag = team ? flagEmojiForFifaCountryCode(team.countryCode) : "";
+  const stage3Placeholder = !picked && !knockoutBracketPicksUnlocked;
 
   return (
     <div
@@ -78,9 +84,13 @@ function ChampionCell({
       <p
         className={`mt-2 text-sm font-semibold ${picked ? "text-ash-text" : "text-ash-muted"}`}
       >
-        {picked ? team!.name : "TBD"}
+        {picked ? team!.name : stage3Placeholder ? CHAMPION_STAGE3_LABEL : "TBD"}
       </p>
-      {picked ? <p className="text-[11px] text-ash-muted">{team!.countryCode}</p> : null}
+      {picked ? (
+        <p className="text-[11px] text-ash-muted">{team!.countryCode}</p>
+      ) : stage3Placeholder ? (
+        <p className="mt-1 text-[10px] leading-snug text-ash-muted/90">{CHAMPION_STAGE3_SUB}</p>
+      ) : null}
     </div>
   );
 }
@@ -128,6 +138,13 @@ export function ParticipantBracketView({
         </ul>
       ) : null}
 
+      {!knockoutBracketPicksUnlocked ? (
+        <p className="text-xs leading-relaxed text-ash-muted">
+          Third-place qualifiers are assigned to official Round of 32 slots only after the group
+          stage is complete. You&apos;ll make knockout picks in Stage 3.
+        </p>
+      ) : null}
+
       <div
         className="overflow-x-auto rounded-xl border border-ash-border bg-ash-body/20 p-2 sm:p-4"
         role="region"
@@ -173,7 +190,11 @@ export function ParticipantBracketView({
             <h3 className="mb-2 text-center text-[10px] font-semibold uppercase tracking-wide text-ash-muted sm:text-xs">
               Champion
             </h3>
-            <ChampionCell champion={bracket.champion} teamById={teamById} />
+            <ChampionCell
+              champion={bracket.champion}
+              teamById={teamById}
+              knockoutBracketPicksUnlocked={knockoutBracketPicksUnlocked}
+            />
           </div>
         </div>
       </div>

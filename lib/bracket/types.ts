@@ -9,8 +9,10 @@ export type BracketSideResolved = {
   slotKey: string | null;
   pickRowKey: string | null;
   teamId: string | null;
-  /** Short label for placeholders (e.g. "1A", "Best 3rd (undetermined)", "TBD"). */
+  /** Short label for placeholders (e.g. "1A", "Third-place qualifier", "TBD"). */
   displayLabel: string;
+  /** Optional second line for placeholder slots (UX copy only). */
+  placeholderSubtext?: string;
   /** True when the side is a third-place / official R32 slot not yet filled in Stage 3. */
   undeterminedThird?: boolean;
 };

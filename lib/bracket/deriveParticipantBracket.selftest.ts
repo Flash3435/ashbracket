@@ -82,8 +82,20 @@ void (async function main() {
     m74.away.teamId === null && m74.away.undeterminedThird,
     "M74 away must not use Stage 2 third picks when Stage 3 closed",
   );
+  assert(m74.away.displayLabel === "Third-place qualifier", "M74 away third placeholder label");
+  assert(
+    m74.away.placeholderSubtext === "Official slot assigned after group stage.",
+    "M74 away third placeholder subtext",
+  );
   assert(m74.winnerTeamId === null, "no R32 winner inference when Stage 3 closed");
-  assert(locked.roundOf16[0]?.home.displayLabel === "Stage 3", "R16 placeholder when locked");
+  assert(
+    locked.roundOf16[0]?.home.displayLabel === "Opens in Stage 3",
+    "R16 placeholder when locked",
+  );
+  assert(
+    locked.roundOf16[0]?.home.placeholderSubtext === "Knockout picks open after group stage.",
+    "R16 placeholder subtext when locked",
+  );
   assert(locked.champion.teamId === null, "champion cleared when locked");
 
   const sk = r32SlotKeysForMatchIndex(1);

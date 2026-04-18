@@ -55,15 +55,16 @@ function idsForKind(slots: KnockoutPickSlotDraft[], kind: string): Set<string> {
   return s;
 }
 
-const THIRD_LOCKED_LABEL = "TBD — third-place (Stage 3)";
-const STAGE3_PLACEHOLDER = "Stage 3";
+const LATE_ROUND_PLACEHOLDER_LABEL = "Opens in Stage 3";
+const LATE_ROUND_PLACEHOLDER_SUB = "Knockout picks open after group stage.";
 
 function placeholderSides(): { home: BracketSideResolved; away: BracketSideResolved } {
   const side = (): BracketSideResolved => ({
     slotKey: null,
     pickRowKey: null,
     teamId: null,
-    displayLabel: STAGE3_PLACEHOLDER,
+    displayLabel: LATE_ROUND_PLACEHOLDER_LABEL,
+    placeholderSubtext: LATE_ROUND_PLACEHOLDER_SUB,
   });
   const home = side();
   const away = side();
@@ -146,7 +147,10 @@ function resolveR32Side(
     slotKey,
     pickRowKey: rowKey,
     teamId: null,
-    displayLabel: knockoutBracketPicksUnlocked ? "TBD" : THIRD_LOCKED_LABEL,
+    displayLabel: knockoutBracketPicksUnlocked ? "TBD" : "Third-place qualifier",
+    placeholderSubtext: knockoutBracketPicksUnlocked
+      ? undefined
+      : "Official slot assigned after group stage.",
     undeterminedThird: true,
   };
 }
