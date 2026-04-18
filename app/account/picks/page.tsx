@@ -31,6 +31,10 @@ export default async function AccountPicksPage({ searchParams }: PageProps) {
   const participantParam = sp.participant?.trim() ?? "";
   const ctx = await loadAccountKnockoutSelection(user.id, participantParam);
 
+  if (ctx.invalidOtherProfile && ctx.paramId) {
+    redirect(`/participant/${ctx.paramId}/snapshot?from=account`);
+  }
+
   const locked = poolLocked(ctx.selectedLockAt);
   const lockHint =
     locked && ctx.selectedLockAt

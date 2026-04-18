@@ -41,6 +41,14 @@ export default async function AccountPicksSummaryPage({ searchParams }: PageProp
 
   const ctx = await loadAccountKnockoutSelection(user.id, participantParam);
 
+  if (ctx.invalidOtherProfile && ctx.paramId) {
+    const redirectQs = new URLSearchParams();
+    redirectQs.set("from", "account");
+    if (showSavedBanner) redirectQs.set("saved", "1");
+    if (view === "bracket") redirectQs.set("view", "bracket");
+    redirect(`/participant/${ctx.paramId}/snapshot?${redirectQs}`);
+  }
+
   const locked = poolLocked(ctx.selectedLockAt);
   const lockHint =
     locked && ctx.selectedLockAt
