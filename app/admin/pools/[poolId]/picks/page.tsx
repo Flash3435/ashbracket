@@ -377,7 +377,6 @@ export default async function AdminPoolPicksPage({ params, searchParams }: PageP
                 <ParticipantBracketView
                   slots={initialSlots}
                   teams={teams}
-                  groupTeamCountryCodesByLetter={groupTeamCountryCodesByLetter}
                   knockoutBracketPicksUnlocked={knockoutBracketPicksUnlocked}
                   readOnly
                 />

@@ -7,13 +7,6 @@ import type {
   ParticipantBracketModel,
 } from "./types";
 import {
-  buildCountryCodeToGroupLetter,
-  thirdAdvancingGroupKeyFromSlots,
-  thirdGroupRoutedToWinnerSlot,
-  thirdPickTeamIdForGroup,
-} from "./thirdPlaceRouting";
-import { wc2026ThirdComboPlacementByKey } from "./wc2026ThirdPlaceCombinations";
-import {
   r32SlotKeysForMatchIndex,
   roundOf32RowKeyBySlot,
   WC2026_R32_MATCH_DEFS,
@@ -62,20 +55,63 @@ function idsForKind(slots: KnockoutPickSlotDraft[], kind: string): Set<string> {
   return s;
 }
 
+const THIRD_LOCKED_LABEL = "TBD — third-place (Stage 3)";
+const STAGE3_PLACEHOLDER = "Stage 3";
+
+function placeholderSides(): { home: BracketSideResolved; away: BracketSideResolved } {
+  const side = (): BracketSideResolved => ({
+    slotKey: null,
+    pickRowKey: null,
+    teamId: null,
+    displayLabel: STAGE3_PLACEHOLDER,
+  });
+  const home = side();
+  const away = side();
+  return { home, away };
+}
+
+function buildLaterRoundPlaceholders(): Pick<
+  ParticipantBracketModel,
+  "roundOf16" | "quarterfinals" | "semifinals" | "final"
+> {
+  const mk = (count: number, prefix: string): BracketMatchResolved[] =>
+    Array.from({ length: count }, (_, i) => {
+      const { home, away } = placeholderSides();
+      return {
+        matchKey: `${prefix}-${i + 1}`,
+        fifaMatchNo: 0,
+        home,
+        away,
+        winnerTeamId: null,
+      };
+    });
+
+  return {
+    roundOf16: mk(8, "r16"),
+    quarterfinals: mk(4, "qf"),
+    semifinals: mk(2, "sf"),
+    final: mk(1, "final"),
+  };
+}
+
+/**
+ * Resolves one side of an R32 match.
+ * - Stage 1 (group) sides always come from group picks when empty in R32.
+ * - Third-place-dependent sides never pull from Stage 2 lists or Annex C; they only show
+ *   saved `round_of_32` picks when Stage 3 is open (`knockoutBracketPicksUnlocked`).
+ */
 function resolveR32Side(
   spec: Wc2026R32SideSpec,
   slots: KnockoutPickSlotDraft[],
   teamById: Map<string, Team>,
-  countryToGroup: Map<string, string>,
-  /** Sorted eight-letter key only when Annex C resolves (`wc2026ThirdComboPlacementByKey` hit). */
-  sortedEightThirdKeyForRouting: string | null,
+  knockoutBracketPicksUnlocked: boolean,
   slotKey: string,
 ): BracketSideResolved {
   const saved = slots.find((s) => s.predictionKind === "round_of_32" && s.slotKey === slotKey);
   const savedId = saved?.teamId.trim() || null;
   const rowKey = saved?.rowKey ?? roundOf32RowKeyBySlot(slots, slotKey);
 
-  if (savedId) {
+  if (knockoutBracketPicksUnlocked && savedId) {
     return {
       slotKey,
       pickRowKey: rowKey,
@@ -106,41 +142,12 @@ function resolveR32Side(
     };
   }
 
-  const w = spec.winnerSlot;
-  if (!sortedEightThirdKeyForRouting) {
-    return {
-      slotKey,
-      pickRowKey: rowKey,
-      teamId: null,
-      displayLabel: "Best 3rd (undetermined)",
-      undeterminedThird: true,
-    };
-  }
-  const routedGroup = thirdGroupRoutedToWinnerSlot(sortedEightThirdKeyForRouting, w);
-  if (!routedGroup) {
-    return {
-      slotKey,
-      pickRowKey: rowKey,
-      teamId: null,
-      displayLabel: "Best 3rd (undetermined)",
-      undeterminedThird: true,
-    };
-  }
-  const tid = thirdPickTeamIdForGroup(slots, routedGroup, teamById, countryToGroup);
-  if (!tid) {
-    return {
-      slotKey,
-      pickRowKey: rowKey,
-      teamId: null,
-      displayLabel: `Best 3rd (group ${routedGroup})`,
-      undeterminedThird: true,
-    };
-  }
   return {
     slotKey,
     pickRowKey: rowKey,
-    teamId: tid,
-    displayLabel: teamLabel(teamById, tid),
+    teamId: null,
+    displayLabel: knockoutBracketPicksUnlocked ? "TBD" : THIRD_LOCKED_LABEL,
+    undeterminedThird: true,
   };
 }
 
@@ -187,56 +194,48 @@ function buildKnockoutColumn(
 export type DeriveParticipantBracketInput = {
   slots: KnockoutPickSlotDraft[];
   teams: Team[];
-  groupTeamCountryCodesByLetter: Record<string, string[]>;
+  /**
+   * True when organizers have entered all 32 official R32 teams and participant Stage 3
+   * knockout picks are active (`fetchOfficialRoundOf32Complete`).
+   */
   knockoutBracketPicksUnlocked: boolean;
 };
 
 export function deriveParticipantBracket(input: DeriveParticipantBracketInput): ParticipantBracketModel {
-  const { slots, teams, groupTeamCountryCodesByLetter, knockoutBracketPicksUnlocked } = input;
+  const { slots, teams, knockoutBracketPicksUnlocked } = input;
   const teamById = new Map(teams.map((t) => [t.id, t]));
-  const countryToGroup = buildCountryCodeToGroupLetter(groupTeamCountryCodesByLetter);
-  const sortedEightKey = thirdAdvancingGroupKeyFromSlots(slots, teamById, countryToGroup);
-  const thirdPlacementRow = sortedEightKey ? wc2026ThirdComboPlacementByKey(sortedEightKey) : null;
-  const sortedEightKeyForRouting = thirdPlacementRow ? sortedEightKey : null;
-  const thirdComboResolved = Boolean(thirdPlacementRow);
 
   const notes: string[] = [];
+  notes.push(
+    "Third-place qualifiers are not placed into the Round of 32 bracket until the group stage is complete and organizers publish the official knockout field.",
+  );
+  notes.push(
+    "Your Stage 2 picks only name which eight teams you think advance as best third-place finishers — not FIFA bracket positions. You will complete the full knockout bracket in Stage 3 after the official Round of 32 is set.",
+  );
+
   if (!knockoutBracketPicksUnlocked) {
     notes.push(
-      "Knockout picks may still be closed until organizers publish all 32 official Round of 32 teams.",
-    );
-  }
-  if (!thirdComboResolved) {
-    notes.push(
-      "Some Round of 32 slots depend on which third-place groups qualify — pick all eight third-place advancers to resolve routing.",
-    );
-  }
-  if (sortedEightKey && !thirdPlacementRow) {
-    notes.push(
-      "Eight third-place advancers are filled but their group letters do not match any Annex C combination — third routing stays undetermined.",
+      "Below: fixed Round of 32 sides from your group picks where applicable; third-place slots stay TBD. Later rounds open in Stage 3.",
     );
   }
 
   const roundOf32: BracketMatchResolved[] = WC2026_R32_MATCH_DEFS.map((def, i) => {
     const { top: topSk, bottom: botSk } = r32SlotKeysForMatchIndex(i);
-    const home = resolveR32Side(
-      def.top,
-      slots,
-      teamById,
-      countryToGroup,
-      sortedEightKeyForRouting,
-      topSk,
-    );
+    const home = resolveR32Side(def.top, slots, teamById, knockoutBracketPicksUnlocked, topSk);
     const away = resolveR32Side(
       def.bottom,
       slots,
       teamById,
-      countryToGroup,
-      sortedEightKeyForRouting,
+      knockoutBracketPicksUnlocked,
       botSk,
     );
-    const r16 = idsForKind(slots, "round_of_16");
-    const winnerTeamId = pickWinnerFromNextRound(home.teamId, away.teamId, r16);
+
+    let winnerTeamId: string | null = null;
+    if (knockoutBracketPicksUnlocked) {
+      const r16 = idsForKind(slots, "round_of_16");
+      winnerTeamId = pickWinnerFromNextRound(home.teamId, away.teamId, r16);
+    }
+
     return {
       matchKey: `M${def.fifaMatchNo}`,
       fifaMatchNo: def.fifaMatchNo,
@@ -246,48 +245,68 @@ export function deriveParticipantBracket(input: DeriveParticipantBracketInput): 
     };
   });
 
-  const qfIds = idsForKind(slots, "quarterfinalist");
-  const sfIds = idsForKind(slots, "semifinalist");
-  const finIds = idsForKind(slots, "finalist");
-  const champRow = slots.find((s) => s.predictionKind === "champion");
-  const champId = champRow?.teamId.trim() || null;
+  let roundOf16: BracketMatchResolved[];
+  let quarterfinals: BracketMatchResolved[];
+  let semifinals: BracketMatchResolved[];
+  let final: BracketMatchResolved[];
+  let champion: { teamId: string | null; pickRowKey: string | null };
 
-  const roundOf16 = buildKnockoutColumn(slots, "round_of_16", teamById, "quarterfinalist", qfIds);
-  const quarterfinals = buildKnockoutColumn(
-    slots,
-    "quarterfinalist",
-    teamById,
-    "semifinalist",
-    sfIds,
-  );
-  const semifinals = buildKnockoutColumn(slots, "semifinalist", teamById, "finalist", finIds);
+  if (!knockoutBracketPicksUnlocked) {
+    const ph = buildLaterRoundPlaceholders();
+    roundOf16 = ph.roundOf16;
+    quarterfinals = ph.quarterfinals;
+    semifinals = ph.semifinals;
+    final = ph.final;
+    champion = { teamId: null, pickRowKey: null };
+  } else {
+    const qfIds = idsForKind(slots, "quarterfinalist");
+    const sfIds = idsForKind(slots, "semifinalist");
+    const finIds = idsForKind(slots, "finalist");
+    const champRow = slots.find((s) => s.predictionKind === "champion");
+    const champId = champRow?.teamId.trim() || null;
 
-  const finPairs = pairKnockoutSlots(filterKnockoutSlots(slots, "finalist"));
-  const final: BracketMatchResolved[] = finPairs.map((p, idx) => {
-    const topId = p.top?.teamId?.trim() || null;
-    const botId = p.bottom?.teamId?.trim() || null;
-    const winnerTeamId =
-      champId && (champId === topId || champId === botId)
-        ? champId
-        : pickWinnerFromNextRound(topId, botId, champId ? new Set([champId]) : new Set());
-    return {
-      matchKey: `final-${idx + 1}`,
-      fifaMatchNo: 0,
-      home: {
-        slotKey: p.top?.slotKey ?? null,
-        pickRowKey: p.top?.rowKey ?? null,
-        teamId: topId,
-        displayLabel: topId ? teamLabel(teamById, topId) : "TBD",
-      },
-      away: {
-        slotKey: p.bottom?.slotKey ?? null,
-        pickRowKey: p.bottom?.rowKey ?? null,
-        teamId: botId,
-        displayLabel: botId ? teamLabel(teamById, botId) : "TBD",
-      },
-      winnerTeamId,
+    roundOf16 = buildKnockoutColumn(slots, "round_of_16", teamById, "quarterfinalist", qfIds);
+    quarterfinals = buildKnockoutColumn(
+      slots,
+      "quarterfinalist",
+      teamById,
+      "semifinalist",
+      sfIds,
+    );
+    semifinals = buildKnockoutColumn(slots, "semifinalist", teamById, "finalist", finIds);
+
+    const finPairs = pairKnockoutSlots(filterKnockoutSlots(slots, "finalist"));
+    final = finPairs.map((p, idx) => {
+      const topId = p.top?.teamId?.trim() || null;
+      const botId = p.bottom?.teamId?.trim() || null;
+      const winnerTeamId =
+        champId && (champId === topId || champId === botId)
+          ? champId
+          : pickWinnerFromNextRound(topId, botId, champId ? new Set([champId]) : new Set());
+      return {
+        matchKey: `final-${idx + 1}`,
+        fifaMatchNo: 0,
+        home: {
+          slotKey: p.top?.slotKey ?? null,
+          pickRowKey: p.top?.rowKey ?? null,
+          teamId: topId,
+          displayLabel: topId ? teamLabel(teamById, topId) : "TBD",
+        },
+        away: {
+          slotKey: p.bottom?.slotKey ?? null,
+          pickRowKey: p.bottom?.rowKey ?? null,
+          teamId: botId,
+          displayLabel: botId ? teamLabel(teamById, botId) : "TBD",
+        },
+        winnerTeamId,
+      };
+    });
+
+    champion = {
+      teamId: champId,
+      pickRowKey: champRow?.rowKey ?? null,
     };
-  });
+  }
 
   const hasAnyPicks = slots.some((s) => s.teamId.trim() !== "");
 
@@ -297,13 +316,10 @@ export function deriveParticipantBracket(input: DeriveParticipantBracketInput): 
     quarterfinals,
     semifinals,
     final,
-    champion: {
-      teamId: champId,
-      pickRowKey: champRow?.rowKey ?? null,
-    },
+    champion,
     meta: {
       hasAnyPicks,
-      thirdComboResolved,
+      knockoutBracketUnlocked: knockoutBracketPicksUnlocked,
       notes,
     },
   };

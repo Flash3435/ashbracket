@@ -220,9 +220,6 @@ export default async function AccountPage({ searchParams }: PageProps) {
                     <ParticipantBracketView
                       slots={picksCtx.initialSlots}
                       teams={picksCtx.teams}
-                      groupTeamCountryCodesByLetter={
-                        picksCtx.groupTeamCountryCodesByLetter
-                      }
                       knockoutBracketPicksUnlocked={
                         picksCtx.knockoutBracketPicksUnlocked
                       }

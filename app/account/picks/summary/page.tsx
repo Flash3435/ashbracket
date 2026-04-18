@@ -199,7 +199,6 @@ export default async function AccountPicksSummaryPage({ searchParams }: PageProp
                     <ParticipantBracketView
                       slots={ctx.initialSlots}
                       teams={ctx.teams}
-                      groupTeamCountryCodesByLetter={ctx.groupTeamCountryCodesByLetter}
                       knockoutBracketPicksUnlocked={ctx.knockoutBracketPicksUnlocked}
                       editPicksHref={editPicksHref}
                       readOnly={false}

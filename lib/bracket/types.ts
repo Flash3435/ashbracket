@@ -11,7 +11,7 @@ export type BracketSideResolved = {
   teamId: string | null;
   /** Short label for placeholders (e.g. "1A", "Best 3rd (undetermined)", "TBD"). */
   displayLabel: string;
-  /** True when the side depends on Annex C routing and we could not resolve it. */
+  /** True when the side is a third-place / official R32 slot not yet filled in Stage 3. */
   undeterminedThird?: boolean;
 };
 
@@ -35,9 +35,9 @@ export type ParticipantBracketModel = {
   };
   meta: {
     hasAnyPicks: boolean;
-    /** Annex C row found for the eight advancing third-place groups. */
-    thirdComboResolved: boolean;
-    /** Short hints for UI (e.g. third-place routing). */
+    /** Mirrors `knockoutBracketPicksUnlocked` (Stage 3 / official R32 gate). */
+    knockoutBracketUnlocked: boolean;
+    /** Pool rules and stage guidance for the bracket view. */
     notes: readonly string[];
   };
 };

@@ -46,9 +46,9 @@ export function PicksViewToggle({
         </div>
       </div>
       <p className="max-w-2xl text-xs leading-relaxed text-ash-muted">
-        Bracket View shows how your picks fit together across the tournament. Some Round of 32
-        slots depend on which third-place groups qualify — fill all eight third-place advancers so
-        we can apply the official Annex C routing.
+        Bracket View shows how your picks line up with the tournament. Third-place qualifiers are
+        not placed into the Round of 32 until the official knockout field exists; you complete the
+        full knockout path in Stage 3 after organizers publish the Round of 32.
       </p>
     </div>
   );

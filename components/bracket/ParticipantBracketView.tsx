@@ -9,7 +9,6 @@ import { flagEmojiForFifaCountryCode } from "../../lib/teams/fifaToIso2ForFlag";
 type Props = {
   slots: KnockoutPickSlotDraft[];
   teams: Team[];
-  groupTeamCountryCodesByLetter: Record<string, string[]>;
   knockoutBracketPicksUnlocked: boolean;
   /** Optional: link to `/account/picks?participant=…` for the owner. */
   editPicksHref?: string | null;
@@ -89,7 +88,6 @@ function ChampionCell({
 export function ParticipantBracketView({
   slots,
   teams,
-  groupTeamCountryCodesByLetter,
   knockoutBracketPicksUnlocked,
   editPicksHref = null,
   readOnly = false,
@@ -97,7 +95,6 @@ export function ParticipantBracketView({
   const bracket = deriveParticipantBracket({
     slots,
     teams,
-    groupTeamCountryCodesByLetter,
     knockoutBracketPicksUnlocked,
   });
   const teamById = new Map(teams.map((t) => [t.id, t]));
@@ -120,8 +117,8 @@ export function ParticipantBracketView({
     <div className="space-y-4">
       {bracket.meta.notes.length > 0 ? (
         <ul className="space-y-1 text-xs text-ash-muted">
-          {bracket.meta.notes.map((n) => (
-            <li key={n} className="flex gap-2">
+          {bracket.meta.notes.map((n, i) => (
+            <li key={i} className="flex gap-2">
               <span className="text-ash-accent" aria-hidden>
                 •
               </span>

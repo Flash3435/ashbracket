@@ -3,6 +3,9 @@
  * Wikipedia template `Template:2026 FIFA World Cup third-place table` (April 2026).
  * Each row: sorted key of the eight advancing third-place groups →
  * which third-place group is routed to each winner slot (order A,B,D,E,G,I,K,L).
+ *
+ * Participant bracket display does not assign Stage 2 third picks into R32; this table is
+ * reserved for future official-bracket / admin tooling (see `scripts/build-wc2026-third-combinations.mjs`).
  */
 
 export const WC2026_THIRD_COMBO_KEYS: readonly string[] = [

@@ -4,7 +4,6 @@
 import type { KnockoutPickSlotDraft } from "../../types/adminKnockoutPicks";
 import type { Team } from "../../src/types/domain";
 import { deriveParticipantBracket } from "./deriveParticipantBracket";
-import { wc2026ThirdComboPlacementByKey } from "./wc2026ThirdPlaceCombinations";
 import { r32SlotKeysForMatchIndex } from "./wc2026RoundOf32";
 
 function assert(cond: unknown, msg: string): void {
@@ -44,92 +43,75 @@ function slot(
   };
 }
 
-const groups: Record<string, string[]> = {
-  A: ["RAA"],
-  B: ["RBB"],
-  C: ["CCC"],
-  D: ["DDD"],
-  E: ["EWG", "ETH"],
-  F: ["FFF"],
-  G: ["GGG"],
-  H: ["HHH"],
-  I: ["III"],
-  J: ["JJJ"],
-  K: ["KKK"],
-  L: ["LLL"],
-};
-
 void (async function main() {
   const empty = deriveParticipantBracket({
     slots: [],
     teams: [],
-    groupTeamCountryCodesByLetter: groups,
-    knockoutBracketPicksUnlocked: true,
+    knockoutBracketPicksUnlocked: false,
   });
   assert(!empty.meta.hasAnyPicks, "empty slots => no picks");
-
-  const key = "EFGHIJKL";
-  const placement = wc2026ThirdComboPlacementByKey(key);
-  assert(placement && placement[3] === "F", "Annex row 1 maps 1E slot to third group F");
+  assert(empty.meta.knockoutBracketUnlocked === false, "meta reflects lock");
 
   const teams = [
-    team("tE", "E-third", "ETH"),
-    team("tJ", "J-land", "JJJ"),
-    team("tI", "I-land", "III"),
-    team("tF", "F-land", "FFF"),
-    team("tH", "H-land", "HHH"),
-    team("tG", "G-land", "GGG"),
-    team("tL", "L-land", "LLL"),
-    team("tK", "K-land", "KKK"),
+    team("tF", "F-third", "FFF"),
     team("wE", "E-winner", "EWG"),
     team("rA", "A-runner", "RAA"),
     team("rB", "B-runner", "RBB"),
+    ...[1, 2, 3, 4, 5, 6, 7, 8].map((i) => team(`tx${i}`, `X${i}`, `XX${i}`)),
   ];
 
   const thirdSlots: KnockoutPickSlotDraft[] = [1, 2, 3, 4, 5, 6, 7, 8].map((n) =>
-    slot(`third|${n}`, "third_place_qualifier", String(n), teams[n - 1]!.id),
+    slot(`third|${n}`, "third_place_qualifier", String(n), n === 4 ? "tF" : `tx${n}`),
   );
-
   const groupSlots: KnockoutPickSlotDraft[] = [
     slot("gw:E", "group_winner", null, "wE", "E"),
     slot("gr:A", "group_runner_up", null, "rA", "A"),
     slot("gr:B", "group_runner_up", null, "rB", "B"),
   ];
-
   const slots = [...groupSlots, ...thirdSlots];
 
-  const b = deriveParticipantBracket({
+  const locked = deriveParticipantBracket({
     slots,
     teams,
-    groupTeamCountryCodesByLetter: groups,
-    knockoutBracketPicksUnlocked: true,
+    knockoutBracketPicksUnlocked: false,
   });
-  assert(b.meta.thirdComboResolved, "combo resolves for EFGHIJKL");
-  const m73 = b.roundOf32[0];
-  assert(m73.fifaMatchNo === 73, "first match M73");
-  assert(m73.home.teamId === "rA" && m73.away.teamId === "rB", "M73 runners from groups");
+  assert(locked.roundOf32[0]?.home.teamId === "rA", "M73 home from group when locked");
+  const m74 = locked.roundOf32[1]!;
+  assert(m74.home.teamId === "wE", "M74 home 1E from group when locked");
+  assert(
+    m74.away.teamId === null && m74.away.undeterminedThird,
+    "M74 away must not use Stage 2 third picks when Stage 3 closed",
+  );
+  assert(m74.winnerTeamId === null, "no R32 winner inference when Stage 3 closed");
+  assert(locked.roundOf16[0]?.home.displayLabel === "Stage 3", "R16 placeholder when locked");
+  assert(locked.champion.teamId === null, "champion cleared when locked");
 
-  const m74 = b.roundOf32[1];
   const sk = r32SlotKeysForMatchIndex(1);
-  assert(m74.home.teamId === "wE", "M74 home is group E winner");
-  assert(m74.away.teamId === "tF", `M74 away third is group F pick (slot ${sk.bottom})`);
-
-  const r32Slots: KnockoutPickSlotDraft[] = [];
-  for (let i = 1; i <= 32; i++) {
-    r32Slots.push(slot(`r32|${i}`, "round_of_32", String(i), "", null));
-  }
-  const r16Slots: KnockoutPickSlotDraft[] = [];
-  for (let i = 1; i <= 16; i++) {
-    r16Slots.push(slot(`r16|${i}`, "round_of_16", String(i), i === 1 ? "rA" : "", null));
-  }
-
-  const b2 = deriveParticipantBracket({
-    slots: [...slots, ...r32Slots, ...r16Slots],
+  const withR32 = [
+    ...slots,
+    slot("r32-3", "round_of_32", sk.top, "wE"),
+    slot("r32-4", "round_of_32", sk.bottom, "tF"),
+  ];
+  const unlocked = deriveParticipantBracket({
+    slots: withR32,
     teams,
-    groupTeamCountryCodesByLetter: groups,
     knockoutBracketPicksUnlocked: true,
   });
-  assert(b2.roundOf32[0]?.winnerTeamId === "rA", "R16 contains rA => M73 winner rA");
+  const m74u = unlocked.roundOf32[1]!;
+  assert(m74u.home.teamId === "wE" && m74u.away.teamId === "tF", "saved R32 used when Stage 3 open");
+
+  const r16Slots = Array.from({ length: 16 }, (_, i) =>
+    slot(`r16|${i + 1}`, "round_of_16", String(i + 1), i === 0 ? "rA" : "", null),
+  );
+  const unlocked2 = deriveParticipantBracket({
+    slots: [...withR32, ...r16Slots],
+    teams,
+    knockoutBracketPicksUnlocked: true,
+  });
+  assert(
+    unlocked2.roundOf32[0]?.winnerTeamId === "rA",
+    "R16 pick can highlight R32 winner when Stage 3 open",
+  );
 
   console.log("deriveParticipantBracket selftest: ok");
 })();

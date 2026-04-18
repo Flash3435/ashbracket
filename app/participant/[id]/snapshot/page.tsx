@@ -196,7 +196,6 @@ export default async function ParticipantBracketSnapshotPage({
                 <ParticipantBracketView
                   slots={result.initialSlots}
                   teams={result.teams}
-                  groupTeamCountryCodesByLetter={result.groupTeamCountryCodesByLetter}
                   knockoutBracketPicksUnlocked={result.knockoutBracketPicksUnlocked}
                   editPicksHref={isSelf ? snapshotEditPicksHref : null}
                   readOnly={!isSelf}
