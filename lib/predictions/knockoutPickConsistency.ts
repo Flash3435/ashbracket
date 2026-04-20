@@ -1,6 +1,7 @@
 import type { Team } from "../../src/types/domain";
 import type { KnockoutPickSlotDraft } from "../../types/adminKnockoutPicks";
 import type { ParticipantPickSlotPayload } from "../../types/knockoutPicksSave";
+import { WC2026_GROUP_CODES } from "../tournament/wc2026GroupCodes";
 import { isKnockoutProgressionKind } from "./knockoutProgressionKinds";
 
 /** Shown in the third-place team chooser when a team is not eligible. */
@@ -16,6 +17,52 @@ export type ThirdPlacePickChooserEntry = {
   disabled?: boolean;
   disabledReason?: string;
 };
+
+/** Third-place chooser section: one tournament group and its candidate teams. */
+export type ThirdPlacePickChooserGroup = {
+  /** Uppercase group letter, or `"_"` when the schedule map is not loaded. */
+  groupLetter: string;
+  /** e.g. "Group A" */
+  heading: string;
+  entries: ThirdPlacePickChooserEntry[];
+};
+
+/** True when official group rosters are available (same signal as the group-stage pickers). */
+export function isGroupScheduleLoaded(
+  groupTeamCountryCodesByLetter: Record<string, string[]> | undefined,
+): boolean {
+  return Boolean(
+    groupTeamCountryCodesByLetter &&
+      Object.keys(groupTeamCountryCodesByLetter).length > 0,
+  );
+}
+
+function countryCodeToGroupLetter(
+  groupTeamCountryCodesByLetter: Record<string, string[]>,
+): Map<string, string> {
+  const m = new Map<string, string>();
+  for (const [letter, codes] of Object.entries(groupTeamCountryCodesByLetter)) {
+    const L = letter.toUpperCase();
+    for (const c of codes) {
+      m.set(c.toUpperCase(), L);
+    }
+  }
+  return m;
+}
+
+function makeThirdPlacePickChooserEntries(
+  row: KnockoutPickSlotDraft,
+  slots: KnockoutPickSlotDraft[],
+  allTeams: Team[],
+): ThirdPlacePickChooserEntry[] {
+  return allTeams.map((team) => {
+    const reason = thirdPlacePickDisabledReason(team.id, row, slots);
+    if (reason) {
+      return { team, disabled: true, disabledReason: reason };
+    }
+    return { team };
+  });
+}
 
 const BRACKET_DEDUPE_KINDS = new Set([
   "round_of_32",
@@ -98,20 +145,80 @@ export function thirdPlacePickDisabledReason(
   return null;
 }
 
-/** Sorted list of all teams with disabled flags for the third-place advancer chooser. */
+/** Flat list of all teams with disabled flags, sorted alphabetically by name. */
 export function buildThirdPlacePickChooserOptions(
   row: KnockoutPickSlotDraft,
   slots: KnockoutPickSlotDraft[],
   allTeams: Team[],
 ): ThirdPlacePickChooserEntry[] {
-  const pool = [...allTeams].sort((a, b) => a.name.localeCompare(b.name));
-  return pool.map((team) => {
-    const reason = thirdPlacePickDisabledReason(team.id, row, slots);
-    if (reason) {
-      return { team, disabled: true, disabledReason: reason };
-    }
-    return { team };
-  });
+  const entries = makeThirdPlacePickChooserEntries(row, slots, allTeams);
+  return [...entries].sort((a, b) =>
+    a.team.name.localeCompare(b.team.name),
+  );
+}
+
+/**
+ * Third-place candidates grouped by group-stage letter (A–L), then name within each group.
+ * When the official group schedule is not loaded, returns a single "All teams" section
+ * (same members as {@link buildThirdPlacePickChooserOptions}, alphabetical).
+ */
+export function buildThirdPlacePickChooserOptionGroups(
+  row: KnockoutPickSlotDraft,
+  slots: KnockoutPickSlotDraft[],
+  allTeams: Team[],
+  groupTeamCountryCodesByLetter?: Record<string, string[]>,
+): ThirdPlacePickChooserGroup[] {
+  const entries = makeThirdPlacePickChooserEntries(row, slots, allTeams);
+  if (!isGroupScheduleLoaded(groupTeamCountryCodesByLetter)) {
+    return [
+      {
+        groupLetter: "_",
+        heading: "All teams",
+        entries: [...entries].sort((a, b) =>
+          a.team.name.localeCompare(b.team.name),
+        ),
+      },
+    ];
+  }
+
+  const map = groupTeamCountryCodesByLetter!;
+  const codeToLetter = countryCodeToGroupLetter(map);
+  const assigned = new Set<string>();
+  const wcPresent = WC2026_GROUP_CODES.filter(
+    (L) => (map[L]?.length ?? 0) > 0,
+  );
+  const extraLetters = Object.keys(map)
+    .map((k) => k.toUpperCase())
+    .filter((k) => !(WC2026_GROUP_CODES as readonly string[]).includes(k));
+  extraLetters.sort((a, b) => a.localeCompare(b));
+  const letterOrder = [...wcPresent, ...extraLetters];
+
+  const groups: ThirdPlacePickChooserGroup[] = [];
+  for (const letter of letterOrder) {
+    const upper = letter.toUpperCase();
+    const groupEntries = entries.filter(
+      (e) => codeToLetter.get(e.team.countryCode.toUpperCase()) === upper,
+    );
+    groupEntries.sort((a, b) => a.team.name.localeCompare(b.team.name));
+    for (const e of groupEntries) assigned.add(e.team.id);
+    groups.push({
+      groupLetter: upper,
+      heading: `Group ${upper}`,
+      entries: groupEntries,
+    });
+  }
+
+  const other = entries
+    .filter((e) => !assigned.has(e.team.id))
+    .sort((a, b) => a.team.name.localeCompare(b.team.name));
+  if (other.length > 0) {
+    groups.push({
+      groupLetter: "__OTHER__",
+      heading: "Other teams",
+      entries: other,
+    });
+  }
+  return groups;
 }
 
 /**

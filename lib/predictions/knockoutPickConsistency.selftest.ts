@@ -5,6 +5,7 @@ import {
   THIRD_PLACE_DISABLED_OTHER_SLOT,
   THIRD_PLACE_DISABLED_RUNNER,
   THIRD_PLACE_DISABLED_WINNER,
+  buildThirdPlacePickChooserOptionGroups,
   buildThirdPlacePickChooserOptions,
   pruneParticipantPicks,
   thirdPlacePickDisabledReason,
@@ -140,6 +141,30 @@ if (!o1?.disabled || o1.disabledReason !== THIRD_PLACE_DISABLED_WINNER) {
 }
 const o2 = opts.find((x) => x.team.id === t2.id);
 if (o2?.disabled) throw new Error("t2 should be eligible");
+
+// --- buildThirdPlacePickChooserOptionGroups: tournament group order A then B ---
+const groupMap: Record<string, string[]> = {
+  B: ["BBB"],
+  A: ["AAA", "CCC"],
+};
+const grouped = buildThirdPlacePickChooserOptionGroups(
+  thirdRow,
+  slotsWithWinner,
+  [t1, t2, t3],
+  groupMap,
+);
+if (grouped[0]?.heading !== "Group A") {
+  throw new Error(`expected Group A first, got ${grouped[0]?.heading}`);
+}
+if (grouped[1]?.heading !== "Group B") {
+  throw new Error(`expected Group B second, got ${grouped[1]?.heading}`);
+}
+const groupAEntryOrder = grouped[0]!.entries.map((e) => e.team.name);
+if (groupAEntryOrder.join(",") !== "Alpha,Gamma") {
+  throw new Error(
+    `expected name sort within group A, got ${groupAEntryOrder.join(",")}`,
+  );
+}
 
 // --- pruneParticipantPicks clears third when team is group advancer ---
 const beforePrune: KnockoutPickSlotDraft[] = [
