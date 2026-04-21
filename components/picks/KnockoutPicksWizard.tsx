@@ -14,7 +14,7 @@ import {
   thirdPlaceSlotInvalidReason,
 } from "../../lib/predictions/knockoutPickConsistency";
 import { applyQuickPickToSlots } from "../../lib/predictions/knockoutQuickPickStrategies";
-import { flagEmojiForFifaCountryCode } from "../../lib/teams/fifaToIso2ForFlag";
+import { CountryFlagIcon } from "../tournament/Flag";
 import {
   fifaRankSnapshotTitle,
   teamPickMetaLine,
@@ -1027,9 +1027,6 @@ export function KnockoutPicksWizard({
           <ul className="mt-4 space-y-3">
             {stepRows.map((row) => {
               const team = row.teamId ? teamById.get(row.teamId) : undefined;
-              const flag = team
-                ? flagEmojiForFifaCountryCode(team.countryCode)
-                : "";
               const strength = team
                 ? teamStrengthLabel(team.countryCode)
                 : null;
@@ -1128,9 +1125,10 @@ export function KnockoutPicksWizard({
                         {heading}
                       </p>
                       <div className="mt-1 flex items-center gap-2">
-                        <span className="text-2xl leading-none" aria-hidden>
-                          {flag || "🌍"}
-                        </span>
+                        <CountryFlagIcon
+                          countryCode={team?.countryCode ?? ""}
+                          size="lg"
+                        />
                         <div>
                           <p className="text-sm font-medium text-ash-text">
                             {team?.name ?? "No team selected"}
@@ -1218,8 +1216,6 @@ export function KnockoutPicksWizard({
                           <ul className="mt-2 max-h-52 overflow-y-auto rounded-md border border-ash-border bg-ash-body p-1 sm:grid sm:max-h-64 sm:grid-cols-2 sm:gap-1">
                             {filteredChooserEntries!.map(
                               ({ team: t, disabled: optDisabled, disabledReason }) => {
-                                const f =
-                                  flagEmojiForFifaCountryCode(t.countryCode);
                                 const st = teamStrengthLabel(t.countryCode);
                                 const meta = teamPickMetaLine(t, st);
                                 const blocked = Boolean(optDisabled);
@@ -1241,9 +1237,11 @@ export function KnockoutPicksWizard({
                                           : "hover:bg-ash-accent/15"
                                       }`}
                                     >
-                                      <span className="text-xl" aria-hidden>
-                                        {f || "🌍"}
-                                      </span>
+                                      <CountryFlagIcon
+                                        countryCode={t.countryCode}
+                                        size="md"
+                                        className="self-center"
+                                      />
                                       <span className="min-w-0 flex-1">
                                         <span
                                           className={`block font-medium ${
@@ -1324,10 +1322,6 @@ export function KnockoutPicksWizard({
                                       disabled: optDisabled,
                                       disabledReason,
                                     }) => {
-                                      const f =
-                                        flagEmojiForFifaCountryCode(
-                                          t.countryCode,
-                                        );
                                       const st = teamStrengthLabel(t.countryCode);
                                       const meta = teamPickMetaLine(t, st);
                                       const blocked = Boolean(optDisabled);
@@ -1359,9 +1353,11 @@ export function KnockoutPicksWizard({
                                                 : ""
                                             }`}
                                           >
-                                            <span className="text-xl" aria-hidden>
-                                              {f || "🌍"}
-                                            </span>
+                                            <CountryFlagIcon
+                                              countryCode={t.countryCode}
+                                              size="md"
+                                              className="self-center"
+                                            />
                                             <span className="min-w-0 flex-1">
                                               <span
                                                 className={`block font-medium ${
@@ -1414,8 +1410,6 @@ export function KnockoutPicksWizard({
                         ) : (
                           <ul className="mt-2 max-h-52 overflow-y-auto rounded-md border border-ash-border bg-ash-body p-1 sm:grid sm:max-h-64 sm:grid-cols-2 sm:gap-1">
                             {filteredFlat!.map((t) => {
-                              const f =
-                                flagEmojiForFifaCountryCode(t.countryCode);
                               const st = teamStrengthLabel(t.countryCode);
                               const meta = teamPickMetaLine(t, st);
                               return (
@@ -1430,9 +1424,11 @@ export function KnockoutPicksWizard({
                                     }}
                                     className="flex w-full items-center gap-2 rounded px-2 py-2 text-left text-sm hover:bg-ash-accent/15 disabled:cursor-not-allowed disabled:opacity-50"
                                   >
-                                    <span className="text-xl" aria-hidden>
-                                      {f || "🌍"}
-                                    </span>
+                                    <CountryFlagIcon
+                                      countryCode={t.countryCode}
+                                      size="md"
+                                      className="self-center"
+                                    />
                                     <span className="min-w-0 flex-1">
                                       <span className="block font-medium text-ash-text">
                                         {t.name}

@@ -4,7 +4,7 @@ import type { ParticipantBracketModel } from "../../lib/bracket/types";
 import type { KnockoutPickSlotDraft } from "../../types/adminKnockoutPicks";
 import type { Team } from "../../src/types/domain";
 import { BracketMatchCard } from "./BracketMatchCard";
-import { flagEmojiForFifaCountryCode } from "../../lib/teams/fifaToIso2ForFlag";
+import { CountryFlagIcon } from "../tournament/Flag";
 
 type Props = {
   slots: KnockoutPickSlotDraft[];
@@ -67,7 +67,6 @@ function ChampionCell({
   const tid = champion.teamId?.trim() || null;
   const team = tid ? teamById.get(tid) : undefined;
   const picked = Boolean(tid && team);
-  const flag = team ? flagEmojiForFifaCountryCode(team.countryCode) : "";
   const stage3Placeholder = !picked && !knockoutBracketPicksUnlocked;
 
   return (
@@ -78,8 +77,12 @@ function ChampionCell({
           : "border-ash-border/70 bg-ash-body/30"
       }`}
     >
-      <span className="text-2xl" aria-hidden>
-        {picked ? flag : "🏆"}
+      <span className="inline-flex justify-center" aria-hidden>
+        {picked ? (
+          <CountryFlagIcon countryCode={team!.countryCode} size="lg" />
+        ) : (
+          <span className="text-2xl leading-none">🏆</span>
+        )}
       </span>
       <p
         className={`mt-2 text-sm font-semibold ${picked ? "text-ash-text" : "text-ash-muted"}`}

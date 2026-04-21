@@ -1,5 +1,8 @@
 import Link from "next/link";
-import { flagEmojiForFifaCountryCode } from "../../lib/teams/fifaToIso2ForFlag";
+import {
+  CountryFlagIcon,
+  CountryFlagPlaceholder,
+} from "../tournament/Flag";
 import type { BracketMatchResolved, BracketSideResolved } from "../../lib/bracket/types";
 import type { Team } from "../../src/types/domain";
 
@@ -15,7 +18,6 @@ function SideRow({
   const tid = side.teamId?.trim() || null;
   const team = tid ? teamById.get(tid) : undefined;
   const picked = Boolean(tid && team);
-  const flag = team ? flagEmojiForFifaCountryCode(team.countryCode) : "";
   const isWinner = Boolean(winnerTeamId && tid && winnerTeamId === tid);
 
   return (
@@ -28,9 +30,11 @@ function SideRow({
             : "border-ash-border/50 bg-ash-body/20"
       }`}
     >
-      <span className="text-lg leading-none" aria-hidden>
-        {picked ? flag : "🌍"}
-      </span>
+      {picked ? (
+        <CountryFlagIcon countryCode={team!.countryCode} size="md" />
+      ) : (
+        <CountryFlagPlaceholder size="md" />
+      )}
       <div className="min-w-0 flex-1">
         <p
           className={`truncate text-xs font-medium ${

@@ -3,7 +3,7 @@ import {
   fifaRankSnapshotTitle,
   teamPickMetaLine,
 } from "../../lib/teams/fifaRankDisplay";
-import { flagEmojiForFifaCountryCode } from "../../lib/teams/fifaToIso2ForFlag";
+import { CountryFlagIcon, CountryFlagPlaceholder } from "../tournament/Flag";
 import {
   strengthLabelHint,
   teamStrengthLabel,
@@ -28,9 +28,6 @@ function StageBlock({ title, subtitle, rows, teamById }: StageBlockProps) {
         {rows.map((row) => {
           const tid = row.teamId.trim();
           const team = tid ? teamById.get(tid) : undefined;
-          const flag = team
-            ? flagEmojiForFifaCountryCode(team.countryCode)
-            : "";
           const strength = team
             ? teamStrengthLabel(team.countryCode)
             : null;
@@ -44,9 +41,11 @@ function StageBlock({ title, subtitle, rows, teamById }: StageBlockProps) {
               key={row.rowKey}
               className="flex items-center gap-2 rounded-md border border-ash-border bg-ash-body/40 px-3 py-2 text-sm"
             >
-              <span className="text-xl leading-none" aria-hidden>
-                {flag || "🌍"}
-              </span>
+              {team ? (
+                <CountryFlagIcon countryCode={team.countryCode} size="md" />
+              ) : (
+                <CountryFlagPlaceholder size="md" />
+              )}
               <div className="min-w-0 flex-1">
                 <p className="text-xs font-medium uppercase tracking-wide text-ash-muted">
                   {lineLabel}

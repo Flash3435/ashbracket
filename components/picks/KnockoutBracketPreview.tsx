@@ -1,7 +1,10 @@
 "use client";
 
 import { useMemo } from "react";
-import { flagEmojiForFifaCountryCode } from "../../lib/teams/fifaToIso2ForFlag";
+import {
+  CountryFlagIcon,
+  CountryFlagPlaceholder,
+} from "../tournament/Flag";
 import {
   filterKnockoutSlots,
   pairKnockoutSlots,
@@ -36,9 +39,6 @@ function TeamCell({
   const tid = side.teamId.trim();
   const team = tid ? teamById.get(tid) : undefined;
   const picked = Boolean(tid && team);
-  const flag = team
-    ? flagEmojiForFifaCountryCode(team.countryCode)
-    : "";
 
   return (
     <div
@@ -48,9 +48,11 @@ function TeamCell({
           : "border-ash-border/70 bg-ash-body/30"
       }`}
     >
-      <span className="text-lg leading-none" aria-hidden>
-        {picked ? flag : "🌍"}
-      </span>
+      {picked ? (
+        <CountryFlagIcon countryCode={team!.countryCode} size="md" />
+      ) : (
+        <CountryFlagPlaceholder size="md" />
+      )}
       <div className="min-w-0 flex-1">
         <p
           className={`truncate text-xs font-medium ${
@@ -143,9 +145,6 @@ function ThirdPlaceStrip({
           const tid = row.teamId.trim();
           const team = tid ? teamById.get(tid) : undefined;
           const picked = Boolean(tid && team);
-          const flag = team
-            ? flagEmojiForFifaCountryCode(team.countryCode)
-            : "";
           const conflict = thirdPlaceSlotInvalidReason(row, allSlots);
           return (
             <li
@@ -159,7 +158,11 @@ function ThirdPlaceStrip({
               }`}
             >
               <span className="inline-flex items-center gap-1.5">
-                <span aria-hidden>{picked ? flag : "○"}</span>
+                {picked ? (
+                  <CountryFlagIcon countryCode={team!.countryCode} size="xs" />
+                ) : (
+                  <span aria-hidden>○</span>
+                )}
                 <span className="truncate font-medium">
                   {picked ? team!.name : "Not picked"}
                 </span>
@@ -235,9 +238,6 @@ export function KnockoutBracketPreview({
   const champTid = champRow?.teamId.trim() ?? "";
   const champTeam = champTid ? teamById.get(champTid) : undefined;
   const champPicked = Boolean(champTid && champTeam);
-  const champFlag = champTeam
-    ? flagEmojiForFifaCountryCode(champTeam.countryCode)
-    : "";
 
   return (
     <div className="space-y-3">
@@ -308,8 +308,15 @@ export function KnockoutBracketPreview({
                       : "border-ash-border/70 bg-ash-body/30"
                   }`}
                 >
-                  <span className="text-2xl" aria-hidden>
-                    {champPicked ? champFlag : "🏆"}
+                  <span className="inline-flex justify-center" aria-hidden>
+                    {champPicked ? (
+                      <CountryFlagIcon
+                        countryCode={champTeam!.countryCode}
+                        size="lg"
+                      />
+                    ) : (
+                      <span className="text-2xl leading-none">🏆</span>
+                    )}
                   </span>
                   <p
                     className={`mt-2 text-sm font-semibold ${
