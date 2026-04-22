@@ -4,7 +4,10 @@ import { useRouter } from "next/navigation";
 import { useEffect, useState, useTransition } from "react";
 import { setKnockoutResultAction } from "../../app/admin/results/actions";
 import { fifaRankShort } from "../../lib/teams/fifaRankDisplay";
-import type { KnockoutEditorSection } from "../../lib/admin/knockoutResultsConfig";
+import type {
+  KnockoutEditorSection,
+  KnockoutResultsSlotBinding,
+} from "../../lib/admin/knockoutResultsConfig";
 import { resultRowKey } from "../../lib/admin/knockoutResultsConfig";
 import type { Result, Team, TournamentStage } from "../../src/types/domain";
 
@@ -20,8 +23,12 @@ type KnockoutResultsEditorProps = {
   disabled?: boolean;
 };
 
-function slotLabel(slotKey: string | null): string {
+function slotLabel(
+  slotKey: string | null,
+  binding: KnockoutResultsSlotBinding,
+): string {
   if (slotKey === null) return "Champion";
+  if (binding === "group_finish") return `Group ${slotKey}`;
   return `Slot ${slotKey}`;
 }
 
@@ -30,10 +37,14 @@ function matchesSlot(
   tournamentStageId: string,
   kind: string,
   slotKey: string | null,
+  binding: KnockoutResultsSlotBinding,
 ): boolean {
+  if (r.tournamentStageId !== tournamentStageId || r.kind !== kind) return false;
+  if (binding === "group_finish") {
+    const letter = (slotKey ?? "").toUpperCase();
+    return (r.groupCode ?? "").toUpperCase() === letter && r.slotKey == null;
+  }
   return (
-    r.tournamentStageId === tournamentStageId &&
-    r.kind === kind &&
     r.groupCode === null &&
     (r.slotKey === slotKey || (r.slotKey === null && slotKey === null))
   );
@@ -60,9 +71,10 @@ export function KnockoutResultsEditor({
     tournamentStageId: string,
     kind: string,
     slotKey: string | null,
+    binding: KnockoutResultsSlotBinding,
   ): string {
     const row = results.find((r) =>
-      matchesSlot(r, tournamentStageId, kind, slotKey),
+      matchesSlot(r, tournamentStageId, kind, slotKey, binding),
     );
     return row?.teamId ?? "";
   }
@@ -72,16 +84,21 @@ export function KnockoutResultsEditor({
     kind: string,
     slotKey: string | null,
     teamId: string,
+    binding: KnockoutResultsSlotBinding,
   ) {
     if (disabled) return;
-    const key = resultRowKey(kind, slotKey);
+    const rowKeyUi =
+      binding === "group_finish" && slotKey
+        ? `${kind}|g:${slotKey}`
+        : resultRowKey(kind, slotKey);
     setActionError(null);
-    setSavingKey(key);
+    setSavingKey(rowKeyUi);
     startTransition(async () => {
       const res = await setKnockoutResultAction({
         tournamentStageId,
         kind,
-        slotKey,
+        slotKey: binding === "group_finish" ? null : slotKey,
+        groupCode: binding === "group_finish" ? slotKey : null,
         teamId: teamId || null,
       });
       setSavingKey(null);
@@ -137,15 +154,20 @@ export function KnockoutResultsEditor({
             </div>
             <ul className="grid gap-3 sm:grid-cols-2">
               {section.slotKeys.map((slotKey) => {
-                const rowKey = resultRowKey(section.kind, slotKey);
-                const value = teamIdForSlot(stage.id, section.kind, slotKey);
+                const binding: KnockoutResultsSlotBinding =
+                  section.slotBinding ?? "bracket";
+                const rowKey =
+                  binding === "group_finish" && slotKey
+                    ? `${section.kind}|g:${slotKey}`
+                    : resultRowKey(section.kind, slotKey);
+                const value = teamIdForSlot(stage.id, section.kind, slotKey, binding);
                 const saving = savingKey === rowKey && isPending;
 
                 return (
                   <li key={rowKey}>
                     <label className="block space-y-1.5">
                       <span className="text-xs font-medium uppercase tracking-wide text-ash-muted">
-                        {slotLabel(slotKey)}
+                        {slotLabel(slotKey, binding)}
                         {saving ? (
                           <span className="ml-2 font-normal normal-case text-ash-accent">
                             Saving…
@@ -161,6 +183,7 @@ export function KnockoutResultsEditor({
                             section.kind,
                             slotKey,
                             e.target.value,
+                            binding,
                           )
                         }
                         className="w-full rounded-md border border-ash-border bg-ash-body px-3 py-2 text-sm text-ash-text shadow-sm outline-none ring-ash-accent/20 focus:border-ash-accent focus:ring-2 disabled:cursor-not-allowed disabled:opacity-50"

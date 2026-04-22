@@ -82,9 +82,10 @@ void (async function main() {
     m74.away.teamId === null && m74.away.undeterminedThird,
     "M74 away must not use Stage 2 third picks when Stage 3 closed",
   );
-  assert(m74.away.displayLabel === "Third-place qualifier", "M74 away third placeholder label");
+  assert(m74.away.displayLabel === "3 ABCDF", "M74 away FIFA third-route label (slot E)");
   assert(
-    m74.away.placeholderSubtext === "Official slot assigned after group stage.",
+    m74.away.placeholderSubtext ===
+      "FIFA assigns this spot from Annex C after the group stage — your Stage 2 picks do not place a team here.",
     "M74 away third placeholder subtext",
   );
   assert(m74.winnerTeamId === null, "no R32 winner inference when Stage 3 closed");

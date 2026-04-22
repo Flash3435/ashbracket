@@ -1,4 +1,8 @@
 import type { PredictionKind } from "../../src/types/domain";
+import { WC2026_GROUP_CODES } from "../tournament/wc2026GroupCodes";
+
+/** How a section row maps into `results.slot_key` / `results.group_code`. */
+export type KnockoutResultsSlotBinding = "bracket" | "group_finish";
 
 /** Maps editor sections to `tournament_stages.code` and `results.kind`. */
 export type KnockoutEditorSection = {
@@ -7,11 +11,34 @@ export type KnockoutEditorSection = {
   label: string;
   /** Slot keys stored in `results.slot_key` (null = single row like champion). */
   slotKeys: (string | null)[];
+  /**
+   * `bracket` (default): `slot_key` = key, `group_code` null.
+   * `group_finish`: key is the group letter; `group_code` = key, `slot_key` null.
+   */
+  slotBinding?: KnockoutResultsSlotBinding;
 };
 
 const ROUND_OF_32_SLOT_KEYS: string[] = Array.from({ length: 32 }, (_, i) =>
   String(i + 1),
 );
+
+/** Official 1st / 2nd per letter group (`results.group_code` = A–L, `slot_key` null). */
+export const GROUP_STAGE_FINISH_SECTIONS: KnockoutEditorSection[] = [
+  {
+    kind: "group_winner",
+    stageCode: "group",
+    label: "Group stage — 1st place",
+    slotKeys: [...WC2026_GROUP_CODES],
+    slotBinding: "group_finish",
+  },
+  {
+    kind: "group_runner_up",
+    stageCode: "group",
+    label: "Group stage — 2nd place",
+    slotKeys: [...WC2026_GROUP_CODES],
+    slotBinding: "group_finish",
+  },
+];
 
 /** Third-place teams that advance into the Round of 32 (8 slots on `round_of_32` stage). */
 export const THIRD_PLACE_QUALIFIER_SECTIONS: KnockoutEditorSection[] = [
@@ -92,6 +119,7 @@ export const KNOCKOUT_EDITOR_SECTIONS = KNOCKOUT_PROGRESSION_SECTIONS;
  * Group stage picks are built separately from `WC2026_GROUP_CODES`.
  */
 export const ALL_BRACKET_PICK_SECTIONS: KnockoutEditorSection[] = [
+  ...GROUP_STAGE_FINISH_SECTIONS,
   ...THIRD_PLACE_QUALIFIER_SECTIONS,
   ...ROUND_OF_32_SECTIONS,
   ...KNOCKOUT_PROGRESSION_SECTIONS,

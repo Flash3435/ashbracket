@@ -21,6 +21,7 @@
     "test:quick-pick": "tsx lib/predictions/knockoutQuickPickStrategies.selftest.ts",
     "test:bonus-keys": "tsx lib/predictions/participantBonusKeys.selftest.ts",
     "test:bracket": "tsx lib/bracket/deriveParticipantBracket.selftest.ts",
+    "test:r32-hardening": "tsx lib/admin/r32OfficialHardening.selftest.ts",
     "seed:wc2026": "tsx scripts/seed-official-wc2026.ts",
     "seed:fifa-ranks": "tsx scripts/seed-fifa-ranks.ts"
   },

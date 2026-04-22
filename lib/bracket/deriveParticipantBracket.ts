@@ -12,6 +12,7 @@ import {
   WC2026_R32_MATCH_DEFS,
   type Wc2026R32SideSpec,
 } from "./wc2026RoundOf32";
+import { wc2026ThirdRoutedSideDisplayLabel } from "../tournament/worldcup2026ThirdPlaceMapping";
 
 function teamLabel(teamById: Map<string, Team>, teamId: string | null): string {
   if (!teamId?.trim()) return "TBD";
@@ -147,10 +148,12 @@ function resolveR32Side(
     slotKey,
     pickRowKey: rowKey,
     teamId: null,
-    displayLabel: knockoutBracketPicksUnlocked ? "TBD" : "Third-place qualifier",
+    displayLabel: knockoutBracketPicksUnlocked
+      ? "TBD"
+      : wc2026ThirdRoutedSideDisplayLabel(spec.winnerSlot),
     placeholderSubtext: knockoutBracketPicksUnlocked
       ? undefined
-      : "Official slot assigned after group stage.",
+      : "FIFA assigns this spot from Annex C after the group stage — your Stage 2 picks do not place a team here.",
     undeterminedThird: true,
   };
 }
@@ -219,7 +222,7 @@ export function deriveParticipantBracket(input: DeriveParticipantBracketInput): 
 
   if (!knockoutBracketPicksUnlocked) {
     notes.push(
-      "Below: fixed Round of 32 sides from your group picks where applicable; third-place slots stay TBD. Later rounds open in Stage 3.",
+      "Below: fixed Round of 32 sides from your group picks where applicable. Third-route sides show FIFA-style labels (e.g. 3 ABCDF) until Stage 3; later rounds open in Stage 3.",
     );
   }
 

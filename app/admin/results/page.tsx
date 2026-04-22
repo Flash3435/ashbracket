@@ -1,10 +1,17 @@
+import { AdminResultsR32StatusSummary } from "@/components/admin/AdminResultsR32StatusSummary";
+import { ApplyOfficialRoundOf32Panel } from "@/components/admin/ApplyOfficialRoundOf32Panel";
 import { KnockoutResultsEditor } from "@/components/admin/KnockoutResultsEditor";
 import { RecomputeAllPoolsPanel } from "@/components/admin/RecomputeAllPoolsPanel";
 import { PageContainer } from "@/components/ui/PageContainer";
 import { PageTitle } from "@/components/ui/PageTitle";
+import {
+  getOfficialR32ReadinessSummary,
+  type OfficialR32ReadinessSummary,
+} from "@/lib/admin/officialRoundOf32Readiness";
 import { requireGlobalAdminPage } from "@/lib/admin/requireGlobalAdmin";
 import { createClient } from "@/lib/supabase/server";
 import { ALL_BRACKET_PICK_SECTIONS } from "@/lib/admin/knockoutResultsConfig";
+import { fetchGroupTeamCountryCodesByLetter } from "@/lib/tournament/fetchGroupTeamCountryCodesByLetter";
 import {
   mapResultRow,
   mapTeamRow,
@@ -29,6 +36,12 @@ export default async function AdminResultsPage() {
   let stages: TournamentStage[] = [];
   let results: Result[] = [];
   let loadError: string | null = null;
+  let r32Summary: OfficialR32ReadinessSummary = {
+    groupsComplete: 0,
+    thirdPlaceQualifiersEntered: 0,
+    officialR32Resolvable: false,
+    resolvableHint: null,
+  };
 
   try {
     const supabase = await createClient();
@@ -70,6 +83,19 @@ export default async function AdminResultsPage() {
         }
       }
     }
+
+    if (!loadError && teams.length > 0) {
+      const groupStage = stages.find((s) => s.code === "group");
+      const r32Stage = stages.find((s) => s.code === "round_of_32");
+      const groupMap = await fetchGroupTeamCountryCodesByLetter(supabase);
+      r32Summary = getOfficialR32ReadinessSummary({
+        results,
+        groupStageId: groupStage?.id ?? null,
+        roundOf32StageId: r32Stage?.id ?? null,
+        teams,
+        groupTeamCountryCodesByLetter: groupMap,
+      });
+    }
   } catch (e) {
     loadError =
       e instanceof Error ? e.message : "Failed to load results editor data.";
@@ -84,16 +110,18 @@ export default async function AdminResultsPage() {
     <PageContainer>
       <PageTitle
         title="Tournament results"
-        description="Enter official outcomes: group finishes, best third-place advancers, then the real Round of 32 bracket through champion. When all 32 Round of 32 slots have teams, participant Stage 3 picks unlock. Scoring uses pool rules (knockout points once per team by furthest round reached). Each save updates results, recalculates points for every pool, and refreshes leaderboards."
+        description="Enter official group 1st/2nd, eight third-place advancers, and either use “Apply FIFA Round of 32” (Annex C) or set all 32 bracket slots manually. When every Round of 32 slot has a team, participant Stage 3 picks unlock. Scoring follows pool rules (including Stage 1–2 rules from settings). Saves refresh all pool leaderboards."
       />
       {loadError ? (
         <p className="mb-4 rounded-md border border-red-800/80 bg-red-950/40 px-3 py-2 text-sm text-red-200">
           {loadError}
         </p>
       ) : null}
+      {!loadError && teams.length > 0 ? <AdminResultsR32StatusSummary summary={r32Summary} /> : null}
       <div className="mb-8">
         <RecomputeAllPoolsPanel />
       </div>
+      {!loadError && teams.length > 0 ? <ApplyOfficialRoundOf32Panel /> : null}
       {!loadError && teams.length === 0 ? (
         <p className="rounded-md border border-amber-700/50 bg-amber-950/30 px-3 py-2 text-sm text-amber-100">
           No teams found. Ask your site host to load the team list before you

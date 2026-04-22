@@ -124,8 +124,8 @@ function participantWizardSteps(
       bracketKind: "third_place_qualifier",
       title: "Best third-place teams",
       intro:
-        "Continue from the group stage: under each Group A–L heading you’ll see that group’s nations. Choose the eight teams you think will advance as the best third-place finishers. Order does not matter — you are only predicting who qualifies, not where FIFA slots them in the real bracket.",
-      hint: "A team cannot appear here if you already have them finishing 1st or 2nd in a group. All eight slots must be different teams. FIFA decides matchups; your list does not place teams into bracket positions.",
+        "Continue from the group stage: under each Group A–L heading you’ll see that group’s nations. Pick any eight teams you think will advance as the best third-place finishers. Slot order does not matter for scoring or FIFA routing — you are only naming who qualifies, not where they play in the Round of 32.",
+      hint: "A team cannot appear here if you already have them finishing 1st or 2nd in a group. All eight choices must be different nations. FIFA decides bracket placement via Annex C; your Stage 2 list never assigns a team to a specific R32 slot.",
     },
   ];
 
@@ -137,7 +137,7 @@ function participantWizardSteps(
           bracketKind: "round_of_32",
           title: "Round of 32",
           intro:
-            "After organizers publish the official Round of 32, pick all 32 teams in their real FIFA slots. Your Stage 2 list only predicted which third-place sides qualify — it does not control where they land in the bracket.",
+            "This step only appears after organizers publish the official Round of 32 (all 32 teams in their real FIFA slots). Pick the nation in each slot using the real pairings — your Stage 2 list only predicted which third-place teams qualify, not where FIFA placed them.",
           hint: "Eligible teams usually match your group top-two and third-place advancers; we highlight that pool when earlier steps are filled. Knockout points count once per team by furthest round reached (see pool rules).",
         },
         {
@@ -778,10 +778,10 @@ export function KnockoutPicksWizard({
           className="rounded-md border border-sky-800/50 bg-sky-950/25 px-3 py-2 text-sm text-sky-100"
           role="status"
         >
-          Round of 32 through champion stay closed until organizers publish the
-          full official Round of 32 bracket (all 32 teams in their slots). Until
-          then, enter your group finishes, your eight third-place advancers, and
-          bonus picks — then save.
+          Round of 32 through champion stay closed until the real group stage is
+          finished and organizers publish the official Round of 32 pairings (all
+          32 teams in FIFA slots). Until then, enter your group finishes, your eight
+          third-place advancers, and bonus picks — then save.
         </p>
       ) : null}
 

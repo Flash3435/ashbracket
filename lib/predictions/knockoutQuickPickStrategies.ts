@@ -1,6 +1,10 @@
 import type { Team } from "../../src/types/domain";
 import type { KnockoutPickSlotDraft } from "../../types/adminKnockoutPicks";
 import { WC2026_GROUP_CODES } from "../tournament/wc2026GroupCodes";
+import {
+  buildThirdPlaceTeamIdByGroupLetterFromTeamIds,
+  resolveWc2026RoundOf32SlotTeamIds,
+} from "../tournament/worldcup2026ThirdPlaceMapping";
 import { teamStrengthLabel } from "../teams/teamStrengthLabel";
 import { isKnockoutProgressionKind } from "./knockoutProgressionKinds";
 
@@ -354,21 +358,39 @@ export function applyQuickPickToSlots(
   );
   for (const id of thirdIds) used.add(id);
 
-  const r32List: string[] = [];
-  for (const letter of WC2026_GROUP_CODES) {
-    const w = groupWinnerByLetter.get(letter) ?? "";
-    const r = groupRunnerByLetter.get(letter) ?? "";
-    if (w) r32List.push(w);
-    if (r) r32List.push(r);
+  /** FIFA slot keys `"1"`…`"32"` → team id; only when Annex C resolution succeeds. */
+  let r32BySlotKey: Record<string, string> = {};
+  if (fillKnockoutProgression && scheduleLoaded && groupMap) {
+    const thirdByGroup = buildThirdPlaceTeamIdByGroupLetterFromTeamIds(
+      thirdIds,
+      teams,
+      groupMap,
+    );
+    if (thirdByGroup) {
+      const gw: Record<string, string> = {};
+      const gr: Record<string, string> = {};
+      for (const letter of WC2026_GROUP_CODES) {
+        const L = letter.toUpperCase();
+        const w = groupWinnerByLetter.get(letter) ?? "";
+        const r = groupRunnerByLetter.get(letter) ?? "";
+        if (w.trim()) gw[L] = w.trim();
+        if (r.trim()) gr[L] = r.trim();
+      }
+      const resolved = resolveWc2026RoundOf32SlotTeamIds({
+        groupWinnerTeamIdByLetter: gw,
+        groupRunnerUpTeamIdByLetter: gr,
+        thirdPlaceTeamIdByGroupLetter: thirdByGroup,
+      });
+      if (resolved.ok) r32BySlotKey = { ...resolved.slotTeamIdByKey };
+    }
   }
-  for (const id of thirdIds) r32List.push(id);
-  while (r32List.length < 32) {
-    const t = pool[r32List.length % pool.length]!;
-    r32List.push(t.id);
-  }
-  r32List.splice(32);
 
-  const r32Set = new Set(r32List);
+  const r32OrderedTeamIds = Array.from({ length: 32 }, (_, i) => {
+    const id = r32BySlotKey[String(i + 1)] ?? "";
+    return id.trim();
+  }).filter(Boolean);
+
+  const r32Set = new Set(r32OrderedTeamIds);
   const r16PoolTeams = pool.filter((t) => r32Set.has(t.id));
   const r16Pick = pickDistinctTeams(
     r16PoolTeams.length > 0 ? r16PoolTeams : pool,
@@ -376,7 +398,7 @@ export function applyQuickPickToSlots(
   );
   let r16Ids = r16Pick.map((t) => t.id);
   if (r16Ids.length < 16) {
-    const extra = r32List.filter((id) => !r16Ids.includes(id));
+    const extra = r32OrderedTeamIds.filter((id) => !r16Ids.includes(id));
     shuffleInPlace(extra);
     for (const id of extra) {
       if (r16Ids.length >= 16) break;
@@ -423,7 +445,6 @@ export function applyQuickPickToSlots(
   );
   const cId = cTeams[0]?.id ?? fIds[0] ?? "";
 
-  let r32i = 0;
   let r16i = 0;
   let qi = 0;
   let si = 0;
@@ -449,8 +470,8 @@ export function applyQuickPickToSlots(
       return { ...row, teamId: "" };
     }
     if (row.predictionKind === "round_of_32") {
-      const id = r32List[r32i] ?? "";
-      r32i += 1;
+      const sk = row.slotKey ?? "";
+      const id = sk ? r32BySlotKey[sk] ?? "" : "";
       return { ...row, teamId: id };
     }
     if (row.predictionKind === "round_of_16") {

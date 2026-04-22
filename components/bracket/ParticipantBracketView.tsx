@@ -143,8 +143,10 @@ export function ParticipantBracketView({
 
       {!knockoutBracketPicksUnlocked ? (
         <p className="text-xs leading-relaxed text-ash-muted">
-          Third-place qualifiers are assigned to official Round of 32 slots only after the group
-          stage is complete. You&apos;ll make knockout picks in Stage 3.
+          Sides that depend on FIFA&apos;s third-place routing show labels like{" "}
+          <span className="text-ash-text/90">3 ABCDF</span> (Annex C), not teams from your
+          Stage 2 list. After organizers publish the official Round of 32, Stage 3 opens and
+          you pick from those real pairings.
         </p>
       ) : null}
 
