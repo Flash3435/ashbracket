@@ -4,8 +4,25 @@ export type RecapFacts = {
   participantCount: number;
   submittedCount: number;
   topChampionTeamName: string | null;
+  /** Present when known (live facts + newer recap metadata). */
+  topChampionTeamId?: string | null;
   topChampionPickCount: number;
+  /**
+   * True iff a single team strictly leads champion picks among complete brackets.
+   * Omitted on legacy recap metadata rows.
+   */
+  championUniqueLeader?: boolean;
 };
+
+/** Champion “headline” line only when stats make it informative (not misleading). */
+export function shouldShowChampionInsight(facts: RecapFacts): boolean {
+  if (!facts.topChampionTeamName) return false;
+  if (facts.submittedCount < 2 || facts.topChampionPickCount < 2) return false;
+  if (facts.championUniqueLeader === false) return false;
+  if (facts.championUniqueLeader === true) return true;
+  // Legacy metadata without champion_unique_leader: keep counts-only guard (hides 1-pick noise).
+  return facts.topChampionPickCount >= 2 && facts.submittedCount >= 2;
+}
 
 function jsonFiniteNumber(v: unknown): number | null {
   if (typeof v === "number" && Number.isFinite(v)) return v;
@@ -27,13 +44,20 @@ export function recapFactsFromActivityMetadata(
   const sc = jsonFiniteNumber(metadata.submitted_count);
   if (pc === null || sc === null) return null;
   const topTeam = metadata.top_champion_team;
+  const topTeamId = metadata.top_champion_team_id;
   const topPk = jsonFiniteNumber(metadata.top_champion_pick_count);
+  let championUniqueLeader: boolean | undefined;
+  if (metadata.champion_unique_leader === true) championUniqueLeader = true;
+  else if (metadata.champion_unique_leader === false) championUniqueLeader = false;
   return {
     participantCount: pc,
     submittedCount: sc,
     topChampionTeamName:
       typeof topTeam === "string" && topTeam.trim() ? topTeam.trim() : null,
+    topChampionTeamId:
+      typeof topTeamId === "string" && topTeamId.trim() ? topTeamId.trim() : null,
     topChampionPickCount: topPk ?? 0,
+    championUniqueLeader,
   };
 }
 
@@ -88,8 +112,8 @@ export function buildDeterministicRecapBody(facts: RecapFacts): string {
     return "Ash's daily recap: this pool is warming up - no participants yet, so the bracket gossip can wait.";
   }
   let line = `Ash's daily recap: ${submittedCount} of ${participantCount} participant${participantCount === 1 ? "" : "s"} ha${submittedCount === 1 ? "s" : "ve"} completed their bracket`;
-  if (topChampionTeamName && topChampionPickCount > 0) {
-    line += `. Among them, ${topChampionTeamName} is the top champion pick (${topChampionPickCount} pick${topChampionPickCount === 1 ? "" : "s"})`;
+  if (shouldShowChampionInsight(facts)) {
+    line += `. Among them, ${topChampionTeamName} is the most popular champion pick (${topChampionPickCount} pick${topChampionPickCount === 1 ? "" : "s"})`;
   }
   line += ".";
   return line;

@@ -14,7 +14,7 @@ export type PoolActivityForViewerResult = {
 };
 
 /**
- * Loads feed rows with optional lazy daily recap (idempotent per pool/day).
+ * Loads feed rows with optional lazy Ash recap (per pool/day cap + skip if pool stats unchanged).
  * Use from server components after the viewer is known to be a pool member.
  */
 export async function loadPoolActivityForViewer(

@@ -70,7 +70,7 @@ export default async function AccountActivityPage({ searchParams }: PageProps) {
 
       <PageTitle
         title="Activity"
-        description="A read-only timeline for your pool: joins, pick milestones, and one Ash recap per day."
+        description="A read-only timeline for your pool: joins, pick milestones, and Ash recaps when the pool picture changes."
       />
 
       {ctx.loadError ? (

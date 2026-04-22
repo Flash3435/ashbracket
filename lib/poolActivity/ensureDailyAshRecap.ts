@@ -5,18 +5,24 @@ import {
   RECAP_METADATA_COMPLETION_DIAGNOSTICS_KEY,
 } from "../communications/bracketCompletionDiagnostics";
 import { generateAshDailyRecapOpenAI } from "../ash/generateAshDailyRecapOpenAI";
-import { buildDeterministicRecapBody, type RecapFacts } from "./buildDeterministicRecapBody";
+import {
+  buildDeterministicRecapBody,
+  shouldShowChampionInsight,
+  type RecapFacts,
+} from "./buildDeterministicRecapBody";
 import { loadRecapFacts } from "./loadRecapFacts";
 import { recapCalendarDateYmdEdmonton } from "./recapCalendarDate";
 
 function recapFlavorPrompt(facts: RecapFacts, recapDate: string): string {
+  const championHeadline =
+    shouldShowChampionInsight(facts) && facts.topChampionTeamName
+      ? `headline_will_include_unique_champion_leader=${facts.topChampionTeamName} (${facts.topChampionPickCount} picks among complete brackets)`
+      : "headline_will_omit_champion_leader_detail (not enough complete brackets, tied leader, or counts too small to headline)";
   const factsBlock = [
     `calendar_date=${recapDate} (America/Edmonton)`,
     `participant_count=${facts.participantCount}`,
     `participants_with_complete_brackets=${facts.submittedCount}`,
-    facts.topChampionTeamName
-      ? `most_common_champion_among_complete_brackets=${facts.topChampionTeamName} (${facts.topChampionPickCount} picks)`
-      : "most_common_champion_among_complete_brackets=not available in data",
+    championHeadline,
   ].join("\n");
 
   return `You are Ash, the voice of the AshBracket pool app — witty, sports-radio-ish, office-safe, lightly opinionated, never mean.
@@ -35,8 +41,8 @@ Stay under about 60 words. No abusive or insulting language.`;
 }
 
 /**
- * Idempotent: creates at most one ash_daily_recap per pool per calendar day (Edmonton).
- * Call only after the requester is authorized to view this pool’s activity.
+ * Idempotent: at most one ash_daily_recap per pool per calendar day (Edmonton), and
+ * skips creating a new row when pool-level recap stats are unchanged since the last recap.
  */
 export async function ensureDailyAshRecapForPool(poolId: string): Promise<void> {
   const recapDate = recapCalendarDateYmdEdmonton();
@@ -56,7 +62,33 @@ export async function ensureDailyAshRecapForPool(poolId: string): Promise<void> 
   }
   if (existing?.id) return;
 
-  const { facts, participantRows } = await loadRecapFacts(supabase, poolId);
+  const { data: latestRecap, error: latestErr } = await supabase
+    .from("pool_activity")
+    .select("metadata_json")
+    .eq("pool_id", poolId)
+    .eq("type", "ash_daily_recap")
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (latestErr) {
+    throw new Error(latestErr.message);
+  }
+
+  const { facts, participantRows, recapMaterialKeyV1 } = await loadRecapFacts(
+    supabase,
+    poolId,
+  );
+
+  const prevMeta = latestRecap?.metadata_json as Record<string, unknown> | undefined;
+  const prevMaterialKey =
+    prevMeta && typeof prevMeta.recap_material_key_v1 === "string"
+      ? prevMeta.recap_material_key_v1
+      : null;
+  if (prevMaterialKey !== null && prevMaterialKey === recapMaterialKeyV1) {
+    return;
+  }
+
   const baseline = buildDeterministicRecapBody(facts);
   const aiFlavor = (
     await generateAshDailyRecapOpenAI(recapFlavorPrompt(facts, recapDate))
@@ -73,10 +105,14 @@ export async function ensureDailyAshRecapForPool(poolId: string): Promise<void> 
 
   const metadataJson: Record<string, unknown> = {
     recap_date: recapDate,
+    recap_material_key_v1: recapMaterialKeyV1,
     participant_count: facts.participantCount,
     submitted_count: facts.submittedCount,
     top_champion_team: facts.topChampionTeamName,
+    top_champion_team_id: facts.topChampionTeamId ?? null,
     top_champion_pick_count: facts.topChampionPickCount,
+    champion_unique_leader: facts.championUniqueLeader ?? null,
+    champion_insight_eligible: shouldShowChampionInsight(facts),
   };
 
   if (recapCompletionDiagnosticsEnabled() && participantRows.length > 0) {

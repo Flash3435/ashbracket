@@ -1,6 +1,10 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { loadParticipantIdsWithIncompletePicks } from "../communications/picksCompleteness";
 import type { RecapFacts } from "./buildDeterministicRecapBody";
+import {
+  buildChampionDistributionKey,
+  recapMaterialKeyV1,
+} from "./recapMaterialKey";
 
 /**
  * Participant counts and champion mode among complete brackets — same logic as
@@ -13,6 +17,7 @@ export async function loadRecapFacts(
 ): Promise<{
   facts: RecapFacts;
   participantRows: Array<{ id: string; display_name: string | null }>;
+  recapMaterialKeyV1: string;
 }> {
   const { data: parRows, error: pErr } = await supabase
     .from("participants")
@@ -55,14 +60,17 @@ export async function loadRecapFacts(
     byTeam.set(tid, (byTeam.get(tid) ?? 0) + 1);
   }
 
-  let topTeamId: string | null = null;
-  let topCount = 0;
-  for (const [tid, n] of byTeam) {
-    if (n > topCount) {
-      topCount = n;
-      topTeamId = tid;
-    }
+  let maxChampionCount = 0;
+  for (const n of byTeam.values()) {
+    if (n > maxChampionCount) maxChampionCount = n;
   }
+  const coLeaders = [...byTeam.entries()]
+    .filter(([, n]) => n === maxChampionCount)
+    .sort(([a], [b]) => a.localeCompare(b));
+  const topTeamId = coLeaders[0]?.[0] ?? null;
+  const topCount = maxChampionCount;
+  const championUniqueLeader = coLeaders.length === 1;
+  const championDistributionKey = buildChampionDistributionKey(byTeam);
 
   let topChampionTeamName: string | null = null;
   if (topTeamId) {
@@ -76,13 +84,22 @@ export async function loadRecapFacts(
     }
   }
 
+  const facts: RecapFacts = {
+    participantCount: participantCount ?? 0,
+    submittedCount: submittedCount ?? 0,
+    topChampionTeamName,
+    topChampionTeamId: topTeamId,
+    topChampionPickCount: topCount,
+    championUniqueLeader,
+  };
+
   return {
-    facts: {
-      participantCount: participantCount ?? 0,
-      submittedCount: submittedCount ?? 0,
-      topChampionTeamName,
-      topChampionPickCount: topCount,
-    },
+    facts,
     participantRows,
+    recapMaterialKeyV1: recapMaterialKeyV1(
+      facts.participantCount,
+      facts.submittedCount,
+      championDistributionKey,
+    ),
   };
 }

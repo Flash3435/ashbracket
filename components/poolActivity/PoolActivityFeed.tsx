@@ -64,7 +64,7 @@ export function PoolActivityFeed({
       >
         <p className="text-sm text-ash-muted">
           No activity yet. Join events and pick milestones will show up here, plus
-          one Ash recap per day once the pool is rolling.
+          Ash recaps when the pool picture changes.
         </p>
       </div>
     );
