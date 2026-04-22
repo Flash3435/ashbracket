@@ -1,16 +1,16 @@
 /**
- * Bootstrap NHL Phase 2 data (edition + official 2026 playoff field + bracket skeleton
- * + Round 1 wiring when possible) using the
- * service role key — bypasses RLS. Intended for local/dev after migrations.
+ * Idempotent repair: active NHL edition → official 2026 playoff field + Round 1 wiring.
+ * Uses the Supabase service role (bypasses RLS). Intended for local/staging/prod fixes.
  *
  * Usage (from ashbracket/):
- *   npm run seed:nhl-phase2
+ *   npm run repair:nhl-2026-official
  *
- * Requires `NEXT_PUBLIC_SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` (see seed-official-wc2026.ts).
+ * Requires `NEXT_PUBLIC_SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY`.
  */
 
 import { createClient } from "@supabase/supabase-js";
-import { runNhlPhase2ServiceSeed } from "../lib/nhl/serviceSeedPhase2";
+import { repairEditionToOfficial2026Field } from "../lib/nhl/official2026Edition";
+import { fetchActiveNhlEdition } from "../lib/nhl/queries";
 import { loadEnvLocal } from "./loadEnvLocal";
 
 function validateSupabaseEnv(url: string, key: string): void {
@@ -58,7 +58,17 @@ async function main() {
   validateSupabaseEnv(url, key);
 
   const supabase = createClient(url, key);
-  const out = await runNhlPhase2ServiceSeed(supabase);
+  const { edition, error: edErr } = await fetchActiveNhlEdition(supabase);
+  if (edErr) {
+    console.error("Could not load active edition:", edErr);
+    process.exit(1);
+  }
+  if (!edition) {
+    console.error("No active NHL edition. Create one from /nhl/admin first.");
+    process.exit(1);
+  }
+
+  const out = await repairEditionToOfficial2026Field(supabase, edition.id);
   for (const m of out.messages) {
     console.log(m);
   }
@@ -66,11 +76,11 @@ async function main() {
     console.error(out.error ?? "Unknown error");
     process.exit(1);
   }
-  console.log("OK: NHL Phase 2 seed finished.");
+  console.log("OK: NHL official 2026 repair finished.");
 }
 
 main().catch((err: unknown) => {
   const msg = err instanceof Error ? err.message : String(err);
-  console.error("Seed failed:", msg);
+  console.error("Repair failed:", msg);
   process.exit(1);
 });

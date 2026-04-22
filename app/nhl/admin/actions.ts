@@ -8,8 +8,16 @@ import {
   DEFAULT_NHL_EDITION_SLUG,
   DEFAULT_NHL_SEASON_LABEL,
 } from "@/lib/nhl/constants";
-import { fetchActiveNhlEdition } from "@/lib/nhl/queries";
-import { NHL_STARTER_TEAMS } from "@/lib/nhl/starterTeams";
+import { NHL_2026_PLAYOFF_TEAMS } from "@/lib/nhl/nhl2026PlayoffField";
+import {
+  getOfficial2026EditionTeamStatus,
+  repairEditionToOfficial2026Field,
+  syncOfficial2026Round1ForEdition,
+} from "@/lib/nhl/official2026Edition";
+import {
+  fetchActiveNhlEdition,
+  fetchNhlTeamSlugsForEdition,
+} from "@/lib/nhl/queries";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 
@@ -77,9 +85,11 @@ export async function createNhlInitialEditionAction() {
 }
 
 /**
- * Inserts the Phase 2 starter team set for the active edition (skips if any team rows exist).
+ * Inserts the official 2026 Stanley Cup Playoffs 16-team field for the active edition
+ * when no team rows exist yet. Use {@link repairOfficial2026NhlEditionAction} to replace
+ * an older demo or incorrect team set in place.
  */
-export async function seedNhlStarterTeamsAction() {
+export async function loadOfficial2026PlayoffTeamsAction() {
   const supabase = await guardGlobalAdmin();
 
   const { edition, error: edErr } = await fetchActiveNhlEdition(supabase);
@@ -99,7 +109,7 @@ export async function seedNhlStarterTeamsAction() {
     redirect("/nhl/admin?err=teams_already_seeded");
   }
 
-  const rows = NHL_STARTER_TEAMS.map((t) => ({
+  const rows = NHL_2026_PLAYOFF_TEAMS.map((t) => ({
     edition_id: edition.id,
     team_name: t.team_name,
     team_slug: t.team_slug,
@@ -114,12 +124,49 @@ export async function seedNhlStarterTeamsAction() {
     redirect(`/nhl/admin?err=${encodeURIComponent(insErr.message)}`);
   }
 
+  const { count: seriesCount } = await supabase
+    .from("nhl_series")
+    .select("id", { count: "exact", head: true })
+    .eq("edition_id", edition.id);
+
+  if ((seriesCount ?? 0) > 0) {
+    const wired = await syncOfficial2026Round1ForEdition(supabase, edition.id);
+    if (!wired.ok) {
+      redirect(`/nhl/admin?err=${encodeURIComponent(wired.error)}`);
+    }
+  }
+
   revalidateNhlAdmin();
   redirect("/nhl/admin?ok=teams_seeded");
 }
 
 /**
- * Creates empty R1/R2/CF/SCF series rows for the active edition if none exist yet.
+ * Deletes all teams for the active edition, inserts the official 2026 field, ensures
+ * the bracket skeleton exists, and assigns Round 1 matchups. Safe when replacing
+ * Phase 2 demo data: series team FKs are cleared automatically on team delete.
+ */
+export async function repairOfficial2026NhlEditionAction() {
+  const supabase = await guardGlobalAdmin();
+
+  const { edition, error: edErr } = await fetchActiveNhlEdition(supabase);
+  if (edErr || !edition) {
+    redirect(`/nhl/admin?err=${encodeURIComponent("no_active_edition")}`);
+  }
+
+  const out = await repairEditionToOfficial2026Field(supabase, edition.id);
+  if (!out.ok) {
+    redirect(
+      `/nhl/admin?err=${encodeURIComponent(out.error ?? "repair_failed")}`,
+    );
+  }
+
+  revalidateNhlAdmin();
+  redirect("/nhl/admin?ok=edition_repaired_official_2026");
+}
+
+/**
+ * Creates empty R1/R2/CF/SCF series rows for the active edition if none exist yet,
+ * then wires Round 1 when the edition already has the official 2026 team slugs.
  */
 export async function createNhlBracketSkeletonAction() {
   const supabase = await guardGlobalAdmin();
@@ -155,6 +202,30 @@ export async function createNhlBracketSkeletonAction() {
     redirect(`/nhl/admin?err=${encodeURIComponent(insErr.message)}`);
   }
 
+  const { slugs, error: slugErr } = await fetchNhlTeamSlugsForEdition(
+    supabase,
+    edition.id,
+  );
+  if (slugErr) {
+    redirect(`/nhl/admin?err=${encodeURIComponent(slugErr)}`);
+  }
+  const teamStatus = getOfficial2026EditionTeamStatus(
+    slugs.map((team_slug) => ({ team_slug })),
+  );
+  if (teamStatus === "official_2026") {
+    const wired = await syncOfficial2026Round1ForEdition(supabase, edition.id);
+    if (!wired.ok) {
+      redirect(`/nhl/admin?err=${encodeURIComponent(wired.error)}`);
+    }
+  }
+
   revalidateNhlAdmin();
-  redirect("/nhl/admin?ok=skeleton_created");
+  redirect(
+    teamStatus === "official_2026"
+      ? "/nhl/admin?ok=skeleton_created"
+      : "/nhl/admin?ok=skeleton_created_needs_teams",
+  );
 }
+
+/** @deprecated Use {@link loadOfficial2026PlayoffTeamsAction} — name kept for any stale imports. */
+export const seedNhlStarterTeamsAction = loadOfficial2026PlayoffTeamsAction;

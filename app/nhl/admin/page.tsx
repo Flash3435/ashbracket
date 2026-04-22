@@ -1,15 +1,18 @@
 import {
   createNhlBracketSkeletonAction,
   createNhlInitialEditionAction,
-  seedNhlStarterTeamsAction,
+  loadOfficial2026PlayoffTeamsAction,
+  repairOfficial2026NhlEditionAction,
 } from "./actions";
 import { PageContainer } from "@/components/ui/PageContainer";
 import { PageTitle } from "@/components/ui/PageTitle";
 import { createClient } from "@/lib/supabase/server";
+import { getOfficial2026EditionTeamStatus } from "@/lib/nhl/official2026Edition";
 import {
   countNhlSeriesForEdition,
   countNhlTeamsForEdition,
   fetchActiveNhlEdition,
+  fetchNhlTeamSlugsForEdition,
 } from "@/lib/nhl/queries";
 import Link from "next/link";
 
@@ -21,15 +24,22 @@ type PageProps = {
 
 const OK_MESSAGES: Record<string, string> = {
   edition_created: "Created the default NHL playoff edition and set it active.",
-  teams_seeded: "Inserted starter NHL teams for the active edition.",
-  skeleton_created: "Created empty bracket series rows (R1 → Stanley Cup Final).",
+  teams_seeded:
+    "Inserted the official 2026 Stanley Cup Playoffs 16-team field for the active edition.",
+  edition_repaired_official_2026:
+    "Replaced teams with the official 2026 playoff field, ensured the bracket skeleton, and wired Round 1 matchups.",
+  skeleton_created:
+    "Created bracket series rows (R1 → Stanley Cup Final) and wired Round 1 to the official 2026 matchups.",
+  skeleton_created_needs_teams:
+    "Created the bracket skeleton. Load the official 2026 playoff teams next, then use “Repair…” if Round 1 stays empty.",
 };
 
 const ERR_MESSAGES: Record<string, string> = {
   edition_slug_exists:
     "An edition with the default slug already exists. Use the Editions page or SQL if you need a different setup.",
   no_active_edition: "No active NHL edition. Create an edition first.",
-  teams_already_seeded: "This edition already has team rows; starter seed was skipped.",
+  teams_already_seeded:
+    "This edition already has team rows. Use “Repair active edition to official 2026 field” to replace demo or incorrect clubs.",
   skeleton_already_exists:
     "Series rows already exist for the active edition; skeleton create was skipped.",
 };
@@ -63,17 +73,22 @@ export default async function NhlAdminPage({ searchParams }: PageProps) {
   let teamCount = 0;
   let seriesCount = 0;
   let countErr: string | null = null;
+  let fieldStatus: ReturnType<typeof getOfficial2026EditionTeamStatus> | null = null;
 
   if (edition) {
-    const [tc, sc] = await Promise.all([
+    const [tc, sc, slugRes] = await Promise.all([
       countNhlTeamsForEdition(supabase, edition.id),
       countNhlSeriesForEdition(supabase, edition.id),
+      fetchNhlTeamSlugsForEdition(supabase, edition.id),
     ]);
-    if (tc.error || sc.error) {
-      countErr = tc.error ?? sc.error ?? null;
+    if (tc.error || sc.error || slugRes.error) {
+      countErr = tc.error ?? sc.error ?? slugRes.error ?? null;
     } else {
       teamCount = tc.count;
       seriesCount = sc.count;
+      fieldStatus = getOfficial2026EditionTeamStatus(
+        slugRes.slugs.map((team_slug) => ({ team_slug })),
+      );
     }
   }
 
@@ -108,6 +123,24 @@ export default async function NhlAdminPage({ searchParams }: PageProps) {
           }`}
         >
           {flash}
+        </p>
+      ) : null}
+
+      {edition && fieldStatus ? (
+        <p
+          className={`rounded-md border px-3 py-2 text-sm ${
+            fieldStatus === "official_2026"
+              ? "border-emerald-800/60 bg-emerald-950/30 text-emerald-100"
+              : fieldStatus === "empty"
+                ? "border-slate-600/60 bg-slate-950/50 text-slate-300"
+                : "border-amber-800/70 bg-amber-950/35 text-amber-100"
+          }`}
+        >
+          {fieldStatus === "official_2026"
+            ? "Active edition uses the official 2026 Stanley Cup Playoffs 16-team field."
+            : fieldStatus === "empty"
+              ? "No teams loaded yet for the active edition."
+              : "Active edition does not match the official 2026 playoff field (wrong count or unknown slugs). Use repair below."}
         </p>
       ) : null}
 
@@ -183,10 +216,14 @@ export default async function NhlAdminPage({ searchParams }: PageProps) {
       <section className="space-y-4">
         <h2 className="text-sm font-semibold text-ash-text">Setup actions</h2>
         <p className="text-sm text-ash-muted">
-          Run these in order for a blank bracket: edition → starter teams → skeleton.
-          Alternatively, from <code className="text-ash-text">ashbracket/</code> run{" "}
-          <code className="text-ash-text">npm run seed:nhl-phase2</code> with a service
-          role key (bypasses RLS; useful locally).
+          For a fresh environment: create the edition → load the official 2026 playoff
+          teams → create the bracket skeleton. If you already have old demo data, skip
+          straight to{" "}
+          <span className="text-ash-text">Repair active edition to official 2026 field</span>
+          . From <code className="text-ash-text">ashbracket/</code> you can also run{" "}
+          <code className="text-ash-text">npm run seed:nhl-phase2</code> or{" "}
+          <code className="text-ash-text">npm run repair:nhl-2026-official</code> with a
+          service role key (bypasses RLS; useful locally).
         </p>
         <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap">
           <form action={createNhlInitialEditionAction}>
@@ -197,12 +234,12 @@ export default async function NhlAdminPage({ searchParams }: PageProps) {
               Create initial NHL playoff edition
             </button>
           </form>
-          <form action={seedNhlStarterTeamsAction}>
+          <form action={loadOfficial2026PlayoffTeamsAction}>
             <button
               type="submit"
               className="rounded-md border border-blue-500/40 bg-slate-800/80 px-4 py-2 text-sm font-medium text-slate-100 hover:bg-slate-700/80"
             >
-              Load starter NHL teams
+              Load official 2026 playoff teams
             </button>
           </form>
           <form action={createNhlBracketSkeletonAction}>
@@ -210,7 +247,15 @@ export default async function NhlAdminPage({ searchParams }: PageProps) {
               type="submit"
               className="rounded-md border border-blue-500/40 bg-slate-800/80 px-4 py-2 text-sm font-medium text-slate-100 hover:bg-slate-700/80"
             >
-              Create empty bracket skeleton
+              Create bracket skeleton
+            </button>
+          </form>
+          <form action={repairOfficial2026NhlEditionAction}>
+            <button
+              type="submit"
+              className="rounded-md border border-amber-500/50 bg-amber-900/30 px-4 py-2 text-sm font-medium text-amber-50 hover:bg-amber-900/45"
+            >
+              Repair active edition to official 2026 field
             </button>
           </form>
         </div>

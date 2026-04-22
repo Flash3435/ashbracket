@@ -5,7 +5,11 @@ import {
   DEFAULT_NHL_EDITION_SLUG,
   DEFAULT_NHL_SEASON_LABEL,
 } from "./constants";
-import { NHL_STARTER_TEAMS } from "./starterTeams";
+import {
+  getOfficial2026EditionTeamStatus,
+  syncOfficial2026Round1ForEdition,
+} from "./official2026Edition";
+import { NHL_2026_PLAYOFF_TEAMS } from "./nhl2026PlayoffField";
 
 export type ServiceSeedPhase2Result = {
   ok: boolean;
@@ -87,7 +91,7 @@ export async function runNhlPhase2ServiceSeed(
   }
 
   if ((teamCount ?? 0) === 0) {
-    const rows = NHL_STARTER_TEAMS.map((t) => ({
+    const rows = NHL_2026_PLAYOFF_TEAMS.map((t) => ({
       edition_id: editionId,
       team_name: t.team_name,
       team_slug: t.team_slug,
@@ -100,7 +104,7 @@ export async function runNhlPhase2ServiceSeed(
     if (tIns) {
       return { ok: false, messages, error: tIns.message };
     }
-    messages.push(`Inserted ${rows.length} starter teams.`);
+    messages.push(`Inserted ${rows.length} official 2026 playoff teams.`);
   } else {
     messages.push(`Teams already present (${teamCount}); skipped team insert.`);
   }
@@ -129,6 +133,27 @@ export async function runNhlPhase2ServiceSeed(
     messages.push(`Inserted ${insertRows.length} empty series rows.`);
   } else {
     messages.push(`Series already present (${seriesCount}); skipped skeleton.`);
+  }
+
+  const { data: slugRows } = await supabase
+    .from("nhl_teams")
+    .select("team_slug")
+    .eq("edition_id", editionId);
+  const teamStatus = getOfficial2026EditionTeamStatus(
+    (slugRows ?? []) as { team_slug: string }[],
+  );
+  const { count: finalSeriesCount } = await supabase
+    .from("nhl_series")
+    .select("id", { count: "exact", head: true })
+    .eq("edition_id", editionId);
+
+  if (teamStatus === "official_2026" && (finalSeriesCount ?? 0) > 0) {
+    const wired = await syncOfficial2026Round1ForEdition(supabase, editionId);
+    if (!wired.ok) {
+      messages.push(`Round 1 sync skipped: ${wired.error}`);
+    } else {
+      messages.push("Round 1 series wired to official 2026 matchups.");
+    }
   }
 
   return { ok: true, messages };

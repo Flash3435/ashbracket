@@ -36,6 +36,21 @@ export async function fetchAllNhlEditions(
   return { editions: (data ?? []) as NhlEdition[], error: null };
 }
 
+export async function fetchNhlTeamSlugsForEdition(
+  supabase: SupabaseClient,
+  editionId: string,
+): Promise<{ slugs: string[]; error: string | null }> {
+  const { data, error } = await supabase
+    .from("nhl_teams")
+    .select("team_slug")
+    .eq("edition_id", editionId);
+
+  if (error) {
+    return { slugs: [], error: error.message };
+  }
+  return { slugs: (data ?? []).map((r) => (r as { team_slug: string }).team_slug), error: null };
+}
+
 export async function countNhlTeamsForEdition(
   supabase: SupabaseClient,
   editionId: string,

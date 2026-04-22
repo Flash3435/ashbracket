@@ -1,6 +1,7 @@
 import { PageContainer } from "@/components/ui/PageContainer";
 import { PageTitle } from "@/components/ui/PageTitle";
 import { createClient } from "@/lib/supabase/server";
+import { getOfficial2026EditionTeamStatus } from "@/lib/nhl/official2026Edition";
 import { fetchActiveNhlEdition, fetchNhlTeamsForEdition } from "@/lib/nhl/queries";
 import Link from "next/link";
 
@@ -15,11 +16,18 @@ export default async function NhlAdminTeamsPage() {
       ? await fetchNhlTeamsForEdition(supabase, edition.id)
       : { teams: [], error: null as string | null };
 
+  const fieldStatus =
+    edition && !edErr && !teamsRes.error
+      ? teamsRes.teams.length > 0
+        ? getOfficial2026EditionTeamStatus(teamsRes.teams)
+        : "empty"
+      : null;
+
   return (
     <PageContainer compactBottom>
       <PageTitle
         title="NHL teams"
-        description="Teams belong to the active edition. Starter seed is illustrative, not official league data."
+        description="Clubs for the active NHL edition — Phase 2 uses the official 2026 Stanley Cup Playoffs field."
       />
 
       <p className="text-sm text-ash-muted">
@@ -57,9 +65,26 @@ export default async function NhlAdminTeamsPage() {
             <span className="font-medium text-ash-text">{edition.season_label}</span> (
             <code className="text-xs">{edition.slug}</code>)
           </p>
+          {fieldStatus ? (
+            <p
+              className={`mt-2 rounded-md border px-3 py-2 text-sm ${
+                fieldStatus === "official_2026"
+                  ? "border-emerald-800/60 bg-emerald-950/30 text-emerald-100"
+                  : fieldStatus === "empty"
+                    ? "border-slate-600/60 bg-slate-950/50 text-slate-300"
+                    : "border-amber-800/70 bg-amber-950/35 text-amber-100"
+              }`}
+            >
+              {fieldStatus === "official_2026"
+                ? "Using the official 2026 Stanley Cup Playoffs 16-team field."
+                : fieldStatus === "empty"
+                  ? "No teams yet — use “Load official 2026 playoff teams” on the admin overview (or Repair if you are replacing old data)."
+                  : "This edition does not match the official 2026 field. Use “Repair active edition to official 2026 field” on the overview."}
+            </p>
+          ) : null}
           {teamsRes.teams.length === 0 ? (
             <p className="text-sm text-ash-muted">
-              No teams yet. Run “Load starter NHL teams” on the overview.
+              No team rows yet.
             </p>
           ) : (
             <div className="overflow-x-auto rounded-lg border border-blue-500/20">
