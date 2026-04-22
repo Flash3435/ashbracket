@@ -62,8 +62,10 @@ export function recapFactsFromActivityMetadata(
 }
 
 /**
- * Activity timeline copy: prefer facts from metadata; keep stored body only when it
- * extends the deterministic opening (baseline + Ash flavor) or matches baseline.
+ * Activity timeline copy: prefer facts from metadata; keep stored body only when the
+ * first paragraph exactly matches the current deterministic baseline (so older rows
+ * whose stored opening was a strict prefix of today’s baseline cannot keep stale
+ * champion sentences in the same paragraph).
  */
 export function recapActivityDisplayBody(
   bodyText: string,
@@ -73,7 +75,20 @@ export function recapActivityDisplayBody(
   if (!facts) return bodyText;
   const baseline = buildDeterministicRecapBody(facts);
   const raw = bodyText.trim();
-  if (raw.startsWith(baseline)) return bodyText;
+  if (raw === baseline) return bodyText;
+
+  const parts = raw.split(/\n\n+/);
+  const firstPart = parts[0]?.trim() ?? "";
+  const flavorBlocks = parts.length > 1 ? parts.slice(1).join("\n\n").trim() : "";
+
+  if (firstPart === baseline) {
+    return flavorBlocks ? `${baseline}\n\n${flavorBlocks}` : bodyText;
+  }
+
+  if (firstPart.startsWith(baseline)) {
+    return flavorBlocks ? `${baseline}\n\n${flavorBlocks}` : baseline;
+  }
+
   return baseline;
 }
 

@@ -12,6 +12,7 @@ import {
 } from "./buildDeterministicRecapBody";
 import { loadRecapFacts } from "./loadRecapFacts";
 import { recapCalendarDateYmdEdmonton } from "./recapCalendarDate";
+import { recapMaterialUnchangedSincePrevious } from "./recapMaterialKey";
 
 function recapFlavorPrompt(facts: RecapFacts, recapDate: string): string {
   const championHeadline =
@@ -81,11 +82,7 @@ export async function ensureDailyAshRecapForPool(poolId: string): Promise<void> 
   );
 
   const prevMeta = latestRecap?.metadata_json as Record<string, unknown> | undefined;
-  const prevMaterialKey =
-    prevMeta && typeof prevMeta.recap_material_key_v1 === "string"
-      ? prevMeta.recap_material_key_v1
-      : null;
-  if (prevMaterialKey !== null && prevMaterialKey === recapMaterialKeyV1) {
+  if (recapMaterialUnchangedSincePrevious(prevMeta, recapMaterialKeyV1, facts)) {
     return;
   }
 
