@@ -1,14 +1,43 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { ACCOUNT_TOURNAMENT_STAGE_CODES } from "../account/loadAccountKnockoutSelection";
-import { buildAllParticipantPickDrafts } from "../predictions/buildParticipantPickDrafts";
+import {
+  buildAllParticipantPickDrafts,
+  participantBonusKeysForPool,
+} from "../predictions/buildParticipantPickDrafts";
 import { mapPredictionRow } from "../../src/lib/scoring/mapSupabaseRows";
 import type { Prediction, TournamentStage } from "../../src/types/domain";
-import { participantBonusKeysForPool } from "../predictions/buildParticipantPickDrafts";
 import { mapTournamentStageRow } from "../results/mapRows";
 import { isKnockoutProgressionKind } from "../predictions/knockoutProgressionKinds";
 import { fetchOfficialRoundOf32Complete } from "../tournament/fetchOfficialRoundOf32Complete";
 
 type PredRow = Parameters<typeof mapPredictionRow>[0];
+
+/** Canonical description of how “bracket complete” is evaluated in app code. */
+export const BRACKET_COMPLETION_RULES_SOURCE =
+  "lib/communications/picksCompleteness.ts::participantPicksCompleteFromDrafts + " +
+  "lib/predictions/buildParticipantPickDrafts.ts::buildAllParticipantPickDrafts " +
+  "(group rows + PARTICIPANT_BRACKET_PICK_SECTIONS from knockoutResultsConfig + bonus keys)";
+
+export type PicksCompletenessInputs = {
+  stageByCode: Partial<Record<TournamentStage["code"], TournamentStage>>;
+  predictions: Prediction[];
+  bonusKeys: string[];
+  knockoutBracketPicksUnlocked: boolean;
+};
+
+export type BracketCompletionDiagnosticRow = {
+  participant_id: string;
+  display_name: string | null;
+  pool_id: string;
+  saved_predictions_by_kind: Record<string, number>;
+  required_prediction_kinds: string[];
+  missing_required_kinds: string[];
+  picks_complete: boolean;
+  knockout_bracket_picks_unlocked: boolean;
+  relevant_slot_count: number;
+  empty_relevant_slot_count: number;
+  rules_source: string;
+};
 
 /**
  * Whether every required pick slot has a team chosen. When the official Round of 32 is
@@ -28,16 +57,46 @@ export function participantPicksCompleteFromDrafts(
   return relevant.every((s) => s.teamId.trim() !== "");
 }
 
+export function relevantSlotsForCompleteness(
+  slots: ReturnType<typeof buildAllParticipantPickDrafts>,
+  knockoutBracketPicksUnlocked: boolean,
+): ReturnType<typeof buildAllParticipantPickDrafts> {
+  const unlocked = knockoutBracketPicksUnlocked !== false;
+  return unlocked
+    ? slots
+    : slots.filter((s) => !isKnockoutProgressionKind(s.predictionKind));
+}
+
+function countSavedPredictionsByKindForParticipant(
+  predictions: Prediction[],
+  participantId: string,
+): Record<string, number> {
+  const m = new Map<string, number>();
+  for (const p of predictions) {
+    if (p.participantId !== participantId) continue;
+    if (!p.teamId || !String(p.teamId).trim()) continue;
+    m.set(p.predictionKind, (m.get(p.predictionKind) ?? 0) + 1);
+  }
+  return Object.fromEntries([...m.entries()].sort((a, b) => a[0].localeCompare(b[0])));
+}
+
 /**
- * Loads predictions + stages once, returns participant ids in the pool whose picks are incomplete.
+ * Shared fetch for completeness, diagnostics, and recaps (single round-trip + RPC).
+ * Returns null if any underlying query failed (callers should treat all participants incomplete).
  */
-export async function loadParticipantIdsWithIncompletePicks(
+export async function loadPicksCompletenessInputsForPool(
   supabase: SupabaseClient,
   poolId: string,
   participantIds: string[],
-): Promise<Set<string>> {
-  const incomplete = new Set<string>();
-  if (participantIds.length === 0) return incomplete;
+): Promise<PicksCompletenessInputs | null> {
+  if (participantIds.length === 0) {
+    return {
+      stageByCode: {},
+      predictions: [],
+      bonusKeys: participantBonusKeysForPool([]),
+      knockoutBracketPicksUnlocked: true,
+    };
+  }
 
   const stageCodes = [...ACCOUNT_TOURNAMENT_STAGE_CODES];
   const [{ data: stageRows, error: stageErr }, { data: predRows, error: predErr }, { data: ruleRows, error: ruleErr }] =
@@ -65,8 +124,7 @@ export async function loadParticipantIdsWithIncompletePicks(
     ]);
 
   if (stageErr || predErr || ruleErr) {
-    participantIds.forEach((id) => incomplete.add(id));
-    return incomplete;
+    return null;
   }
 
   const stages = (stageRows ?? []).map((r) =>
@@ -101,16 +159,92 @@ export async function loadParticipantIdsWithIncompletePicks(
     ? await fetchOfficialRoundOf32Complete(supabase, r32Stage.id)
     : true;
 
+  return {
+    stageByCode,
+    predictions,
+    bonusKeys,
+    knockoutBracketPicksUnlocked,
+  };
+}
+
+export function buildCompletionDiagnosticRows(
+  inputs: PicksCompletenessInputs,
+  poolId: string,
+  participantRows: Array<{ id: string; display_name: string | null }>,
+): BracketCompletionDiagnosticRow[] {
+  return participantRows.map((row) => {
+    const slots = buildAllParticipantPickDrafts({
+      stageByCode: inputs.stageByCode,
+      predictions: inputs.predictions,
+      participantId: row.id,
+      bonusKeys: inputs.bonusKeys,
+    });
+    const relevant = relevantSlotsForCompleteness(
+      slots,
+      inputs.knockoutBracketPicksUnlocked,
+    );
+    const requiredKinds = [...new Set(relevant.map((s) => s.predictionKind))];
+    const missingKinds = new Set<string>();
+    for (const s of relevant) {
+      if (!s.teamId.trim()) {
+        missingKinds.add(s.predictionKind);
+      }
+    }
+    const picksComplete = participantPicksCompleteFromDrafts(slots, {
+      knockoutBracketPicksUnlocked: inputs.knockoutBracketPicksUnlocked,
+    });
+    const emptyRelevant = relevant.filter((s) => !s.teamId.trim()).length;
+
+    return {
+      participant_id: row.id,
+      display_name: row.display_name,
+      pool_id: poolId,
+      saved_predictions_by_kind: countSavedPredictionsByKindForParticipant(
+        inputs.predictions,
+        row.id,
+      ),
+      required_prediction_kinds: requiredKinds,
+      missing_required_kinds: [...missingKinds].sort((a, b) => a.localeCompare(b)),
+      picks_complete: picksComplete,
+      knockout_bracket_picks_unlocked: inputs.knockoutBracketPicksUnlocked,
+      relevant_slot_count: relevant.length,
+      empty_relevant_slot_count: emptyRelevant,
+      rules_source: BRACKET_COMPLETION_RULES_SOURCE,
+    };
+  });
+}
+
+/**
+ * Loads predictions + stages once, returns participant ids in the pool whose picks are incomplete.
+ */
+export async function loadParticipantIdsWithIncompletePicks(
+  supabase: SupabaseClient,
+  poolId: string,
+  participantIds: string[],
+): Promise<Set<string>> {
+  const incomplete = new Set<string>();
+  if (participantIds.length === 0) return incomplete;
+
+  const inputs = await loadPicksCompletenessInputsForPool(
+    supabase,
+    poolId,
+    participantIds,
+  );
+  if (!inputs) {
+    participantIds.forEach((id) => incomplete.add(id));
+    return incomplete;
+  }
+
   for (const pid of participantIds) {
     const slots = buildAllParticipantPickDrafts({
-      stageByCode,
-      predictions,
+      stageByCode: inputs.stageByCode,
+      predictions: inputs.predictions,
       participantId: pid,
-      bonusKeys,
+      bonusKeys: inputs.bonusKeys,
     });
     if (
       !participantPicksCompleteFromDrafts(slots, {
-        knockoutBracketPicksUnlocked,
+        knockoutBracketPicksUnlocked: inputs.knockoutBracketPicksUnlocked,
       })
     ) {
       incomplete.add(pid);

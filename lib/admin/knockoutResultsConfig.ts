@@ -125,6 +125,19 @@ export const ALL_BRACKET_PICK_SECTIONS: KnockoutEditorSection[] = [
   ...KNOCKOUT_PROGRESSION_SECTIONS,
 ];
 
+/**
+ * Participant knockout bracket rows only. `GROUP_STAGE_FINISH_SECTIONS` stay in
+ * `ALL_BRACKET_PICK_SECTIONS` for the admin results editor (`slotBinding: group_finish`),
+ * but participant predictions store group 1st/2nd on `group_code`, not `slot_key`, so
+ * those sections must not be merged again in `buildBracketPickSlotDrafts` (that would
+ * duplicate empty slots and break completeness checks).
+ */
+export const PARTICIPANT_BRACKET_PICK_SECTIONS: KnockoutEditorSection[] = [
+  ...THIRD_PLACE_QUALIFIER_SECTIONS,
+  ...ROUND_OF_32_SECTIONS,
+  ...KNOCKOUT_PROGRESSION_SECTIONS,
+];
+
 export function resultRowKey(kind: string, slotKey: string | null): string {
   return `${kind}|${slotKey === null ? "" : slotKey}`;
 }

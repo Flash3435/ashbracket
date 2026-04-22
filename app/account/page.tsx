@@ -1,7 +1,6 @@
 import Link from "next/link";
 import { AccountNextMatchesSection } from "@/components/account/AccountNextMatchesSection";
 import { AccountPicksProfileLinks } from "@/components/account/AccountPicksProfileLinks";
-import { SignOutButton } from "@/components/auth/SignOutButton";
 import { ParticipantBracketView } from "@/components/bracket/ParticipantBracketView";
 import { MyKnockoutPicksSummary } from "@/components/picks/MyKnockoutPicksSummary";
 import { PicksViewToggle } from "@/components/picks/PicksViewToggle";
@@ -105,7 +104,7 @@ export default async function AccountPage({ searchParams }: PageProps) {
 
   return (
     <PageContainer>
-      <div className="mb-8 flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+      <div className="mb-8">
         <PageTitle
           title="My bracket"
           description={
@@ -114,7 +113,6 @@ export default async function AccountPage({ searchParams }: PageProps) {
               : "Your bracket overview for the selected pool profile. Use Edit picks to update your picks."
           }
         />
-        <SignOutButton className="btn-ghost shrink-0 self-start text-sm disabled:opacity-50" />
       </div>
 
       {error ? (

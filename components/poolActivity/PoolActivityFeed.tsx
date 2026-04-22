@@ -23,6 +23,12 @@ function typeLabel(type: PoolActivityFeedRow["type"]): string {
   }
 }
 
+function isCompletionDiagnostics(
+  v: unknown,
+): v is Array<Record<string, unknown>> {
+  return Array.isArray(v) && v.every((x) => x !== null && typeof x === "object");
+}
+
 function typeIcon(type: PoolActivityFeedRow["type"]): string {
   switch (type) {
     case "participant_joined":
@@ -56,6 +62,8 @@ export function PoolActivityFeed({ items, compact }: PoolActivityFeedProps) {
     <ul className={`flex flex-col ${compact ? "gap-2" : "gap-3"}`}>
       {items.map((item) => {
         const isRecap = item.type === "ash_daily_recap";
+        const rawDiag = item.metadata_json.completion_diagnostics;
+        const completionDiag = isCompletionDiagnostics(rawDiag) ? rawDiag : null;
         const rel = formatRelativeTimeEn(item.created_at);
         return (
           <li key={item.id}>
@@ -88,6 +96,16 @@ export function PoolActivityFeed({ items, compact }: PoolActivityFeedProps) {
                   <p className="mt-1 whitespace-pre-wrap text-sm text-ash-text">
                     {item.body_text}
                   </p>
+                  {isRecap && completionDiag && completionDiag.length > 0 ? (
+                    <details className="mt-2 text-xs text-ash-muted">
+                      <summary className="cursor-pointer select-none font-medium text-ash-text/80">
+                        Bracket completion diagnostics (debug)
+                      </summary>
+                      <pre className="mt-2 max-h-64 overflow-auto rounded border border-ash-border bg-ash-body/50 p-2 text-[11px] leading-snug">
+                        {JSON.stringify(completionDiag, null, 2)}
+                      </pre>
+                    </details>
+                  ) : null}
                   {item.related_path &&
                   item.related_path.startsWith("/") &&
                   (item.type === "participant_submitted_picks" ||

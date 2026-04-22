@@ -1,4 +1,7 @@
-import { ALL_BRACKET_PICK_SECTIONS, resultRowKey } from "../admin/knockoutResultsConfig";
+import {
+  PARTICIPANT_BRACKET_PICK_SECTIONS,
+  resultRowKey,
+} from "../admin/knockoutResultsConfig";
 import { WC2026_GROUP_CODES } from "../tournament/wc2026GroupCodes";
 import type { Prediction, TournamentStage } from "../../src/types/domain";
 import type { KnockoutPickSlotDraft } from "../../types/adminKnockoutPicks";
@@ -103,7 +106,8 @@ export function buildGroupPickDrafts(
 }
 
 /**
- * Third-place qualifiers, Round of 32, and knockout rounds (no group / bonus).
+ * Third-place qualifiers, Round of 32, and knockout progression (group picks and
+ * bonuses are built separately).
  */
 export function buildBracketPickSlotDrafts(
   stageByCode: Partial<Record<TournamentStage["code"], TournamentStage>>,
@@ -112,7 +116,7 @@ export function buildBracketPickSlotDrafts(
 ): KnockoutPickSlotDraft[] {
   const drafts: KnockoutPickSlotDraft[] = [];
 
-  for (const section of ALL_BRACKET_PICK_SECTIONS) {
+  for (const section of PARTICIPANT_BRACKET_PICK_SECTIONS) {
     const stage = stageByCode[section.stageCode as TournamentStage["code"]];
     if (!stage) continue;
 

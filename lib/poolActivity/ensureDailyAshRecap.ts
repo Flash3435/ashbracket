@@ -1,20 +1,34 @@
 import { createServiceRoleClient } from "../../src/lib/supabase/service";
+import {
+  loadBracketCompletionDiagnosticsForPool,
+  recapCompletionDiagnosticsEnabled,
+  RECAP_METADATA_COMPLETION_DIAGNOSTICS_KEY,
+} from "../communications/bracketCompletionDiagnostics";
 import { loadParticipantIdsWithIncompletePicks } from "../communications/picksCompleteness";
 import { generateAshDailyRecapOpenAI } from "../ash/generateAshDailyRecapOpenAI";
 import { buildDeterministicRecapBody, type RecapFacts } from "./buildDeterministicRecapBody";
 import { recapCalendarDateYmdEdmonton } from "./recapCalendarDate";
+import type { SupabaseClient } from "@supabase/supabase-js";
 
-async function loadRecapFacts(poolId: string): Promise<RecapFacts> {
-  const supabase = createServiceRoleClient();
-
+async function loadRecapFacts(
+  supabase: SupabaseClient,
+  poolId: string,
+): Promise<{
+  facts: RecapFacts;
+  participantRows: Array<{ id: string; display_name: string | null }>;
+}> {
   const { data: parRows, error: pErr } = await supabase
     .from("participants")
-    .select("id")
+    .select("id, display_name")
     .eq("pool_id", poolId);
 
   if (pErr) throw new Error(pErr.message);
 
-  const participantIds = (parRows ?? []).map((r) => r.id as string);
+  const participantRows = (parRows ?? []).map((r) => ({
+    id: r.id as string,
+    display_name: (r.display_name as string | null) ?? null,
+  }));
+  const participantIds = participantRows.map((r) => r.id);
   const participantCount = participantIds.length;
 
   /**
@@ -72,10 +86,13 @@ async function loadRecapFacts(poolId: string): Promise<RecapFacts> {
   }
 
   return {
-    participantCount: participantCount ?? 0,
-    submittedCount: submittedCount ?? 0,
-    topChampionTeamName,
-    topChampionPickCount: topCount,
+    facts: {
+      participantCount: participantCount ?? 0,
+      submittedCount: submittedCount ?? 0,
+      topChampionTeamName,
+      topChampionPickCount: topCount,
+    },
+    participantRows,
   };
 }
 
@@ -121,11 +138,24 @@ export async function ensureDailyAshRecapForPool(poolId: string): Promise<void> 
   }
   if (existing?.id) return;
 
-  const facts = await loadRecapFacts(poolId);
+  const { facts, participantRows } = await loadRecapFacts(supabase, poolId);
   const fallback = buildDeterministicRecapBody(facts);
   const aiText = await generateAshDailyRecapOpenAI(recapPrompt(facts, recapDate));
   const bodyText = (aiText && aiText.length > 0 ? aiText : fallback).trim();
   const isAi = Boolean(aiText && aiText.length > 0);
+
+  const metadataJson: Record<string, unknown> = {
+    recap_date: recapDate,
+    participant_count: facts.participantCount,
+    submitted_count: facts.submittedCount,
+    top_champion_team: facts.topChampionTeamName,
+    top_champion_pick_count: facts.topChampionPickCount,
+  };
+
+  if (recapCompletionDiagnosticsEnabled() && participantRows.length > 0) {
+    metadataJson[RECAP_METADATA_COMPLETION_DIAGNOSTICS_KEY] =
+      await loadBracketCompletionDiagnosticsForPool(supabase, poolId, participantRows);
+  }
 
   const { error: insErr } = await supabase.from("pool_activity").insert({
     pool_id: poolId,
@@ -133,13 +163,7 @@ export async function ensureDailyAshRecapForPool(poolId: string): Promise<void> 
     actor_user_id: null,
     type: "ash_daily_recap",
     body_text: bodyText,
-    metadata_json: {
-      recap_date: recapDate,
-      participant_count: facts.participantCount,
-      submitted_count: facts.submittedCount,
-      top_champion_team: facts.topChampionTeamName,
-      top_champion_pick_count: facts.topChampionPickCount,
-    },
+    metadata_json: metadataJson,
     related_path: null,
     is_ai_generated: isAi,
   });
