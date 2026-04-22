@@ -37,6 +37,7 @@ function revalidateNhlAdmin() {
   revalidatePath("/nhl/admin/editions");
   revalidatePath("/nhl/admin/teams");
   revalidatePath("/nhl/admin/series");
+  revalidatePath("/nhl/admin/bracket");
 }
 
 /**

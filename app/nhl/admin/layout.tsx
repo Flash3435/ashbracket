@@ -6,6 +6,7 @@ const SUBNAV = [
   { href: "/nhl/admin/editions", label: "Editions" },
   { href: "/nhl/admin/teams", label: "Teams" },
   { href: "/nhl/admin/series", label: "Series" },
+  { href: "/nhl/admin/bracket", label: "Bracket" },
 ];
 
 export default async function NhlAdminLayout({

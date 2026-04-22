@@ -13,13 +13,17 @@ export default async function NhlAdminEditionsPage() {
   return (
     <PageContainer compactBottom>
       <PageTitle
-        title="NHL editions"
-        description="Playoff product editions (one active row is used for setup and future bracket display)."
+        title="Editions"
+        description="Which playoff season is active for NHL admin data. Exactly one edition should be active at a time."
       />
 
       <p className="text-sm text-ash-muted">
         <Link href="/nhl/admin" className="ash-link">
-          ← NHL admin overview
+          ← Overview
+        </Link>
+        {" · "}
+        <Link href="/nhl/admin/bracket" className="ash-link">
+          Bracket
         </Link>
       </p>
 

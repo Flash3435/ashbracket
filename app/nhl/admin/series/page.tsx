@@ -41,13 +41,17 @@ export default async function NhlAdminSeriesPage() {
   return (
     <PageContainer compactBottom>
       <PageTitle
-        title="NHL series"
-        description="Bracket slots (R1 → Stanley Cup Final). Round 1 uses the official 2026 matchups when the edition field is official; later rounds stay unassigned until winners exist."
+        title="Series"
+        description="All bracket slots from Round 1 through the Stanley Cup Final. For a conference layout, use the bracket view; this table is for detailed inspection."
       />
 
       <p className="text-sm text-ash-muted">
         <Link href="/nhl/admin" className="ash-link">
-          ← NHL admin overview
+          ← Overview
+        </Link>
+        {" · "}
+        <Link href="/nhl/admin/bracket" className="ash-link font-medium text-blue-200">
+          Bracket (visual overview)
         </Link>
       </p>
 
@@ -96,15 +100,16 @@ export default async function NhlAdminSeriesPage() {
               }`}
             >
               {fieldStatus === "official_2026"
-                ? "Round 1 should list the official 2026 pairings when the bracket skeleton exists."
+                ? "Round 1 lists the official 2026 pairings for this edition."
                 : fieldStatus === "empty"
-                  ? "Load teams and skeleton from the admin overview; Round 1 stays empty until then."
-                  : "Team field is not the official 2026 set — repair from the admin overview to fix Round 1 labels."}
+                  ? "Load teams and bracket rows from Overview → Maintenance when this edition is new."
+                  : "Team set does not match the official 2026 field — run Repair from Overview → Maintenance."}
             </p>
           ) : null}
           {seriesRes.rows.length === 0 ? (
             <p className="text-sm text-ash-muted">
-              No series rows yet. Run “Create bracket skeleton” on the overview.
+              No series rows yet. Use Overview → Maintenance → Create bracket skeleton if you need to
+              initialize slots.
             </p>
           ) : (
             <div className="overflow-x-auto rounded-lg border border-blue-500/20">

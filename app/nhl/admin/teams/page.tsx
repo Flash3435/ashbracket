@@ -26,13 +26,17 @@ export default async function NhlAdminTeamsPage() {
   return (
     <PageContainer compactBottom>
       <PageTitle
-        title="NHL teams"
-        description="Clubs for the active NHL edition — Phase 2 uses the official 2026 Stanley Cup Playoffs field."
+        title="Teams"
+        description="Clubs attached to the active NHL edition (official 2026 Stanley Cup Playoffs field when repaired)."
       />
 
       <p className="text-sm text-ash-muted">
         <Link href="/nhl/admin" className="ash-link">
-          ← NHL admin overview
+          ← Overview
+        </Link>
+        {" · "}
+        <Link href="/nhl/admin/bracket" className="ash-link">
+          Bracket
         </Link>
       </p>
 
@@ -78,8 +82,8 @@ export default async function NhlAdminTeamsPage() {
               {fieldStatus === "official_2026"
                 ? "Using the official 2026 Stanley Cup Playoffs 16-team field."
                 : fieldStatus === "empty"
-                  ? "No teams yet — use “Load official 2026 playoff teams” on the admin overview (or Repair if you are replacing old data)."
-                  : "This edition does not match the official 2026 field. Use “Repair active edition to official 2026 field” on the overview."}
+                  ? "No teams yet — use Overview → Maintenance to load or repair the official 2026 field."
+                  : "This edition does not match the official 2026 field — use Overview → Maintenance → Repair."}
             </p>
           ) : null}
           {teamsRes.teams.length === 0 ? (
