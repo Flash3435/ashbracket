@@ -8,7 +8,7 @@ import {
   inviteParticipantAction,
   sendParticipantInviteAction,
   updateParticipantAction,
-} from "../../app/admin/participants/actions";
+} from "../../app/(worldcup)/admin/participants/actions";
 import type { Participant } from "../../types/participant";
 import { PoolShareInvitePanel } from "./PoolShareInvitePanel";
 

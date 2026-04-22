@@ -2,7 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useEffect, useState, useTransition } from "react";
-import { recomputeAllPoolsLedgerAction } from "../../app/admin/results/actions";
+import { recomputeAllPoolsLedgerAction } from "../../app/(worldcup)/admin/results/actions";
 
 type Props = {
   disabled?: boolean;

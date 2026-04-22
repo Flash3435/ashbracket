@@ -2,7 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useEffect, useState, useTransition } from "react";
-import { updatePoolSettingsAction } from "../../app/admin/settings/actions";
+import { updatePoolSettingsAction } from "../../app/(worldcup)/admin/settings/actions";
 import type { PoolSettingsEditable } from "../../lib/pools/poolSettingsDb";
 
 type PoolSettingsFormProps = {

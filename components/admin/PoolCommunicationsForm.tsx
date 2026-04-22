@@ -5,7 +5,7 @@ import {
   sendPoolCommunicationsAction,
   sendPoolCommunicationsTestAction,
   type MessageKind,
-} from "../../app/admin/communications/actions";
+} from "../../app/(worldcup)/admin/communications/actions";
 import {
   formatPoolLockSummary,
   getEmailTemplateDefaults,

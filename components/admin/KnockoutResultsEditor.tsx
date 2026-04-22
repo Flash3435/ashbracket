@@ -2,7 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useEffect, useState, useTransition } from "react";
-import { setKnockoutResultAction } from "../../app/admin/results/actions";
+import { setKnockoutResultAction } from "../../app/(worldcup)/admin/results/actions";
 import { fifaRankShort } from "../../lib/teams/fifaRankDisplay";
 import type {
   KnockoutEditorSection,

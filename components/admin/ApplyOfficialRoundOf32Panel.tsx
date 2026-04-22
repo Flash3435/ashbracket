@@ -4,7 +4,7 @@ import { useState, useTransition } from "react";
 import {
   applyOfficialRoundOf32FromEnteredResultsAction,
   previewOfficialRoundOf32FromEnteredResultsAction,
-} from "../../app/admin/results/actions";
+} from "../../app/(worldcup)/admin/results/actions";
 import type { OfficialR32PreviewMatch } from "../../lib/admin/officialRoundOf32FromResults";
 
 export function ApplyOfficialRoundOf32Panel() {

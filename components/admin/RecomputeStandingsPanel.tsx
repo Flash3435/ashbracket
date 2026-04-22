@@ -2,7 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useEffect, useState, useTransition } from "react";
-import { recomputeStandingsForPoolAction } from "../../app/admin/results/actions";
+import { recomputeStandingsForPoolAction } from "../../app/(worldcup)/admin/results/actions";
 
 type Props = {
   poolId: string;
