@@ -1,12 +1,18 @@
 import Link from "next/link";
 import { formatRelativeTimeEn } from "../../lib/datetime/formatRelativeTimeEn";
-import { recapActivityDisplayBody } from "../../lib/poolActivity/buildDeterministicRecapBody";
+import {
+  ashDailyRecapDisplayBody,
+  type RecapFacts,
+} from "../../lib/poolActivity/buildDeterministicRecapBody";
 import type { PoolActivityFeedRow } from "../../lib/poolActivity/poolActivityTypes";
 
 type PoolActivityFeedProps = {
   items: PoolActivityFeedRow[];
   /** When true, omit pool title and use tighter spacing (dashboard preview). */
   compact?: boolean;
+  /** Recomputed on each load so today’s recap cannot show stale completion counts. */
+  liveRecapFacts?: RecapFacts | null;
+  liveRecapDateYmd?: string | null;
 };
 
 function typeLabel(type: PoolActivityFeedRow["type"]): string {
@@ -45,7 +51,12 @@ function typeIcon(type: PoolActivityFeedRow["type"]): string {
   }
 }
 
-export function PoolActivityFeed({ items, compact }: PoolActivityFeedProps) {
+export function PoolActivityFeed({
+  items,
+  compact,
+  liveRecapFacts = null,
+  liveRecapDateYmd = null,
+}: PoolActivityFeedProps) {
   if (items.length === 0) {
     return (
       <div
@@ -67,7 +78,7 @@ export function PoolActivityFeed({ items, compact }: PoolActivityFeedProps) {
         const completionDiag = isCompletionDiagnostics(rawDiag) ? rawDiag : null;
         const recapBody =
           item.type === "ash_daily_recap"
-            ? recapActivityDisplayBody(item.body_text, item.metadata_json)
+            ? ashDailyRecapDisplayBody(item, liveRecapFacts, liveRecapDateYmd)
             : item.body_text;
         const rel = formatRelativeTimeEn(item.created_at);
         return (

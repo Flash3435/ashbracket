@@ -29,14 +29,15 @@ export default async function AccountActivityPage({ searchParams }: PageProps) {
   const ctx = await loadAccountKnockoutSelection(user.id, participantParam);
 
   let feedError: string | null = null;
-  let items: Awaited<ReturnType<typeof loadPoolActivityForViewer>> = [];
+  let activity: Awaited<ReturnType<typeof loadPoolActivityForViewer>> | null =
+    null;
   const selectedPoolId = ctx.selectedId
     ? ctx.myParticipants.find((p) => p.id === ctx.selectedId)?.pool_id
     : null;
 
   if (ctx.selectedId && selectedPoolId && !ctx.loadError) {
     try {
-      items = await loadPoolActivityForViewer(supabase, selectedPoolId, {
+      activity = await loadPoolActivityForViewer(supabase, selectedPoolId, {
         ensureDailyRecap: true,
         limit: 20,
       });
@@ -141,9 +142,13 @@ export default async function AccountActivityPage({ searchParams }: PageProps) {
                 >
                   {feedError}
                 </p>
-              ) : (
-                <PoolActivityFeed items={items} />
-              )}
+              ) : activity ? (
+                <PoolActivityFeed
+                  items={activity.items}
+                  liveRecapFacts={activity.liveRecapFacts}
+                  liveRecapDateYmd={activity.liveRecapDateYmd}
+                />
+              ) : null}
             </>
           ) : null}
         </>

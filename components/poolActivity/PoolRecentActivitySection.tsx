@@ -23,10 +23,11 @@ export async function PoolRecentActivitySection({
   showWhenEmpty = true,
 }: Props) {
   const supabase = await createClient();
-  let items: Awaited<ReturnType<typeof loadPoolActivityForViewer>> = [];
+  let activity: Awaited<ReturnType<typeof loadPoolActivityForViewer>> | null =
+    null;
   let loadError: string | null = null;
   try {
-    items = await loadPoolActivityForViewer(supabase, poolId, {
+    activity = await loadPoolActivityForViewer(supabase, poolId, {
       ensureDailyRecap: true,
       limit: itemLimit,
     });
@@ -35,7 +36,7 @@ export async function PoolRecentActivitySection({
       e instanceof Error ? e.message : "Could not load pool activity.";
   }
 
-  if (!showWhenEmpty && !loadError && items.length === 0) {
+  if (!showWhenEmpty && !loadError && activity && activity.items.length === 0) {
     return null;
   }
 
@@ -58,7 +59,12 @@ export async function PoolRecentActivitySection({
           {loadError}
         </p>
       ) : (
-        <PoolActivityFeed items={items} compact={compact} />
+        <PoolActivityFeed
+          items={activity?.items ?? []}
+          compact={compact}
+          liveRecapFacts={activity?.liveRecapFacts ?? null}
+          liveRecapDateYmd={activity?.liveRecapDateYmd ?? null}
+        />
       )}
     </section>
   );
