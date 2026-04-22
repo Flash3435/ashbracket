@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { formatRelativeTimeEn } from "../../lib/datetime/formatRelativeTimeEn";
+import { recapActivityDisplayBody } from "../../lib/poolActivity/buildDeterministicRecapBody";
 import type { PoolActivityFeedRow } from "../../lib/poolActivity/poolActivityTypes";
 
 type PoolActivityFeedProps = {
@@ -64,6 +65,10 @@ export function PoolActivityFeed({ items, compact }: PoolActivityFeedProps) {
         const isRecap = item.type === "ash_daily_recap";
         const rawDiag = item.metadata_json.completion_diagnostics;
         const completionDiag = isCompletionDiagnostics(rawDiag) ? rawDiag : null;
+        const recapBody =
+          item.type === "ash_daily_recap"
+            ? recapActivityDisplayBody(item.body_text, item.metadata_json)
+            : item.body_text;
         const rel = formatRelativeTimeEn(item.created_at);
         return (
           <li key={item.id}>
@@ -94,7 +99,7 @@ export function PoolActivityFeed({ items, compact }: PoolActivityFeedProps) {
                     <span className="text-xs text-ash-muted">{rel}</span>
                   </div>
                   <p className="mt-1 whitespace-pre-wrap text-sm text-ash-text">
-                    {item.body_text}
+                    {recapBody}
                   </p>
                   {isRecap && completionDiag && completionDiag.length > 0 ? (
                     <details className="mt-2 text-xs text-ash-muted">

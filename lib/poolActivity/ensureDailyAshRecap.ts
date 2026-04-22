@@ -96,7 +96,7 @@ async function loadRecapFacts(
   };
 }
 
-function recapPrompt(facts: RecapFacts, recapDate: string): string {
+function recapFlavorPrompt(facts: RecapFacts, recapDate: string): string {
   const factsBlock = [
     `calendar_date=${recapDate} (America/Edmonton)`,
     `participant_count=${facts.participantCount}`,
@@ -108,12 +108,17 @@ function recapPrompt(facts: RecapFacts, recapDate: string): string {
 
   return `You are Ash, the voice of the AshBracket pool app — witty, sports-radio-ish, office-safe, lightly opinionated, never mean.
 
-Write a short daily pool recap in character using ONLY the facts below. "Participants_with_complete_brackets" means everyone who has filled every required pick slot (full bracket), not merely opened the form. Champion stats, when given, apply only among those complete brackets. Do not invent statistics, match outcomes, or participant names not given. If a fact is missing, skip it gracefully.
+The app will show a separate fixed opening sentence with exact participant and champion stats. Your job is ONLY optional follow-up color (about one short paragraph).
 
-Stay under about 90 words. Sound playful and confident. No abusive or insulting language.
+Rules:
+- Do NOT state any numbers, counts, fractions, "X of Y", percentages, or champion vote totals — those are already shown elsewhere.
+- Do not invent match outcomes, team names, or participant names not implied by the tone of "a pool" in general.
+- If you have nothing additive to say, output exactly the word: SKIP
 
-Facts:
-${factsBlock}`;
+Facts (context only — do not repeat numerically):
+${factsBlock}
+
+Stay under about 60 words. No abusive or insulting language.`;
 }
 
 /**
@@ -139,10 +144,19 @@ export async function ensureDailyAshRecapForPool(poolId: string): Promise<void> 
   if (existing?.id) return;
 
   const { facts, participantRows } = await loadRecapFacts(supabase, poolId);
-  const fallback = buildDeterministicRecapBody(facts);
-  const aiText = await generateAshDailyRecapOpenAI(recapPrompt(facts, recapDate));
-  const bodyText = (aiText && aiText.length > 0 ? aiText : fallback).trim();
-  const isAi = Boolean(aiText && aiText.length > 0);
+  const baseline = buildDeterministicRecapBody(facts);
+  const aiFlavor = (
+    await generateAshDailyRecapOpenAI(recapFlavorPrompt(facts, recapDate))
+  )?.trim();
+  const flavor =
+    aiFlavor &&
+    aiFlavor.length > 0 &&
+    !/^skip\.?$/i.test(aiFlavor) &&
+    !/^skip$/i.test(aiFlavor)
+      ? aiFlavor
+      : "";
+  const bodyText = flavor ? `${baseline}\n\n${flavor}` : baseline;
+  const isAi = Boolean(flavor);
 
   const metadataJson: Record<string, unknown> = {
     recap_date: recapDate,
