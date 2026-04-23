@@ -3,10 +3,12 @@ import { NhlPicksRound1Grid } from "@/components/nhl/NhlPicksRound1Grid";
 import { PageContainer } from "@/components/ui/PageContainer";
 import { buildNhlAdminBracketViewModel } from "@/lib/nhl/bracketViewModel";
 import { getOfficial2026EditionTeamStatus } from "@/lib/nhl/official2026Edition";
+import { isNhlEditionLocked } from "@/lib/nhl/nhlEditionLock";
 import {
   countNhlSeriesForEdition,
   countNhlTeamsForEdition,
   fetchActiveNhlEdition,
+  fetchNhlR1PicksForEdition,
   fetchNhlSeriesRowsForEdition,
   fetchNhlTeamSlugsForEdition,
 } from "@/lib/nhl/queries";
@@ -16,9 +18,9 @@ import type { Metadata } from "next";
 import Link from "next/link";
 
 export const metadata: Metadata = {
-  title: "Preview",
+  title: "Round 1 picks",
   description:
-    "Read-only NHL playoff field and Round 1 matchup preview for the active AshBracket NHL edition. Bracket pick entry is not open yet; nothing on this page is saved.",
+    "Round 1 Stanley Cup Playoff series-winner picks for the active AshBracket NHL edition. Choices are saved per signed-in user and stay separate from World Cup pools.",
 };
 
 export const dynamic = "force-dynamic";
@@ -29,6 +31,9 @@ function round1Rows(seriesRows: NhlSeriesRow[]): NhlSeriesRow[] {
 
 export default async function NhlPicksPage() {
   const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
   const { edition, error: editionError } = await fetchActiveNhlEdition(supabase);
 
   let teamCount = 0;
@@ -38,6 +43,8 @@ export default async function NhlPicksPage() {
   let countsError: string | null = null;
   let slugError: string | null = null;
   let fieldStatus: ReturnType<typeof getOfficial2026EditionTeamStatus> | null = null;
+  let round1PickBySeriesId: Record<string, string> = {};
+  let picksLoadError: string | null = null;
 
   if (edition && !editionError) {
     const [teamCountRes, seriesCountRes, seriesRes, slugRes] = await Promise.all([
@@ -62,9 +69,16 @@ export default async function NhlPicksPage() {
         slugRes.slugs.map((s) => ({ team_slug: s })),
       );
     }
+
+    if (user) {
+      const pickRes = await fetchNhlR1PicksForEdition(supabase, edition.id);
+      round1PickBySeriesId = pickRes.pickBySeriesId;
+      picksLoadError = pickRes.error;
+    }
   }
 
   const dataError = editionError ?? seriesError ?? slugError ?? countsError;
+  const picksLocked = edition && !editionError ? isNhlEditionLocked(edition.lock_at) : false;
 
   const model =
     edition && !editionError && !seriesError && seriesRows.length > 0
@@ -90,24 +104,43 @@ export default async function NhlPicksPage() {
           AshBracket NHL
         </p>
         <h1 className="mt-2 text-3xl font-bold tracking-tight text-ash-text sm:text-4xl">
-          Playoff preview
+          Round 1 picks
         </h1>
-        <div className="mt-4 max-w-2xl rounded-xl border border-amber-500/30 bg-amber-950/20 px-4 py-3 text-sm leading-relaxed text-amber-100/95">
-          <p className="font-semibold text-amber-50/95">NHL bracket picks are not open yet.</p>
-          <p className="mt-2 text-amber-100/85">
-            This page is a read-only view of the playoff field and Round 1 matchups from the active
-            edition. AshBracket does not record or save any NHL bracket choices here today.
-          </p>
-        </div>
         <p className="mt-4 max-w-2xl text-base leading-relaxed text-slate-300">
-          When pick entry ships, you will choose each playoff series winner through the Stanley Cup
-          Final, starting with Round 1 below. For now, use this page only to see how the tree is
-          laid out and which teams are paired.
+          Choose a winner for each Round 1 series for the active NHL edition. Only this round is
+          wired for entry today—later rounds stay preview-only until their flows ship.
         </p>
         <p className="mt-2 max-w-2xl text-sm leading-relaxed text-slate-500">
-          There are no pick controls on this page—scroll to the Round 1 cards for a matchup
-          preview only.
+          Picks are stored in NHL-only tables and never touch World Cup pick flows. Tap a team card
+          to save immediately (sign-in required).
         </p>
+        {edition && !editionError ? (
+          <div className="mt-4 max-w-2xl space-y-2 text-sm leading-relaxed">
+            {picksLocked ? (
+              <p className="rounded-xl border border-amber-500/35 bg-amber-950/25 px-4 py-3 text-amber-100/95">
+                This edition&apos;s pick window is closed (lock time has passed). You can still
+                review Round 1, but new changes are not accepted.
+              </p>
+            ) : edition.lock_at ? (
+              <p className="rounded-xl border border-blue-500/25 bg-slate-950/50 px-4 py-3 text-slate-300">
+                Lock scheduled for{" "}
+                <span className="font-medium text-slate-100">
+                  {new Date(edition.lock_at).toLocaleString(undefined, {
+                    dateStyle: "medium",
+                    timeStyle: "short",
+                  })}
+                </span>
+                . After that moment, Round 1 picks cannot be changed.
+              </p>
+            ) : (
+              <p className="rounded-xl border border-slate-600/40 bg-slate-950/45 px-4 py-3 text-slate-400">
+                No <code className="rounded bg-slate-900/80 px-1 py-0.5 text-slate-200">lock_at</code>{" "}
+                is set on this edition yet, so the database still treats the window as open. Add a
+                lock time on the edition when you are ready to freeze picks.
+              </p>
+            )}
+          </div>
+        ) : null}
       </section>
 
       <section className="ash-surface space-y-4 px-4 py-5 sm:px-5">
@@ -115,9 +148,15 @@ export default async function NhlPicksPage() {
 
         {dataError ? (
           <p className="text-sm text-amber-200/90">
-            Some NHL data could not be loaded ({dataError}). The rest of this page explains how
-            bracket play will work; matchup cards appear when the edition and series load
-            successfully.
+            Some NHL data could not be loaded ({dataError}). Matchup cards appear when the edition
+            and series load successfully.
+          </p>
+        ) : null}
+
+        {picksLoadError ? (
+          <p className="text-sm text-amber-200/90">
+            Saved Round 1 picks could not be loaded ({picksLoadError}). You can still browse
+            matchups; try refreshing after signing in.
           </p>
         ) : null}
 
@@ -176,32 +215,26 @@ export default async function NhlPicksPage() {
       </section>
 
       <section className="ash-surface space-y-4 px-4 py-5 sm:px-5">
-        <h2 className="text-lg font-semibold text-ash-text">How bracket play will work (when open)</h2>
+        <h2 className="text-lg font-semibold text-ash-text">How bracket play works</h2>
         <p className="text-sm leading-relaxed text-slate-400">
-          The pool follows the real Stanley Cup Playoff tree. When bracket entry goes live, you will
-          choose each series winner (not individual games). Higher-seeded teams meet their Round 1
-          opponents as shown in the NHL bracket; each correct prediction would advance into the next
-          round the same way the real playoffs do.
+          The pool follows the real Stanley Cup Playoff tree. You choose each series winner (not
+          individual games). This page currently records Round 1 only; later rounds remain
+          informational until their pick flows exist.
         </p>
         <ul className="list-inside list-disc space-y-2 text-sm leading-relaxed text-slate-400">
-          <li>Round 1: one predicted winner per Eastern and Western conference series.</li>
-          <li>Round 2: Round 1 winners feed the next series slots.</li>
-          <li>Conference Finals and Stanley Cup Final: continue series-winner predictions through one champion.</li>
-          <li>The end goal is to predict who lifts the Cup—along with as many earlier rounds as you can.</li>
+          <li>Round 1: one predicted winner per series below (live on this page).</li>
+          <li>Round 2 onward: preview on this page; pick entry for those rounds is not implemented yet.</li>
+          <li>Conference Finals and Stanley Cup Final will continue the same series-winner pattern when shipped.</li>
         </ul>
-        <p className="text-sm text-slate-500">
-          Full pick submission, scoring, and standings are not wired on this page yet; treat this
-          as a read-only preview of the bracket you will eventually play.
-        </p>
       </section>
 
       <section className="space-y-4">
         <div className="px-1 sm:px-0">
-          <h2 className="text-lg font-semibold text-ash-text">Round 1 · matchup preview</h2>
+          <h2 className="text-lg font-semibold text-ash-text">Round 1 · choose series winners</h2>
           <p className="mt-1 max-w-3xl text-sm leading-relaxed text-slate-400">
-            These are the Round 1 series for the active playoff field. Matchups come from the
-            edition&apos;s Round 1 rows in the database—the same pairings used on NHL home&apos;s
-            bracket preview.
+            Matchups come from the active edition&apos;s Round 1 rows in the database—the same
+            pairings as the NHL home bracket preview. Tap a team to save your winner for that
+            series.
           </p>
         </div>
 
@@ -211,9 +244,17 @@ export default async function NhlPicksPage() {
           </div>
         ) : null}
 
-        {showRound1Grid ? (
+        {showRound1Grid && edition ? (
           <div className="rounded-2xl border border-blue-500/15 bg-slate-950/25 px-4 py-6 sm:px-6">
-            <NhlPicksRound1Grid east={eastR1} west={westR1} fallback={round1Fallback} />
+            <NhlPicksRound1Grid
+              east={eastR1}
+              west={westR1}
+              fallback={round1Fallback}
+              editionId={edition.id}
+              round1PickBySeriesId={round1PickBySeriesId}
+              picksLocked={picksLocked}
+              isAuthenticated={Boolean(user)}
+            />
           </div>
         ) : edition && !editionError && !seriesError && r1All.length === 0 ? (
           <div className="rounded-xl border border-dashed border-blue-500/25 bg-slate-950/40 px-4 py-8 text-center text-sm leading-relaxed text-slate-500">

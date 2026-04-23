@@ -176,6 +176,30 @@ export async function fetchNhlSeriesRowsForEdition(
   return { rows, error: null };
 }
 
+/** Current user's Round 1 picks for an edition (RLS: own rows only). */
+export async function fetchNhlR1PicksForEdition(
+  supabase: SupabaseClient,
+  editionId: string,
+): Promise<{
+  pickBySeriesId: Record<string, string>;
+  error: string | null;
+}> {
+  const { data, error } = await supabase
+    .from("nhl_r1_series_picks")
+    .select("series_id, picked_team_id")
+    .eq("edition_id", editionId);
+
+  if (error) {
+    return { pickBySeriesId: {}, error: error.message };
+  }
+  const pickBySeriesId: Record<string, string> = {};
+  for (const row of data ?? []) {
+    const r = row as { series_id: string; picked_team_id: string };
+    pickBySeriesId[r.series_id] = r.picked_team_id;
+  }
+  return { pickBySeriesId, error: null };
+}
+
 export async function fetchNhlMembershipForUserEdition(
   supabase: SupabaseClient,
   userId: string,
