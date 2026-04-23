@@ -21,6 +21,7 @@ const NAV_ITEMS: NavItem[] = [
   { href: "/nhl/rules", label: "Rules" },
   { href: "/nhl/standings", label: "Standings" },
   { href: "/nhl/picks", label: "Picks" },
+  { href: "/nhl/account", label: "Account" },
   { href: "/nhl/admin", label: "Admin", requiresAuth: true },
 ];
 
@@ -51,6 +52,12 @@ export function NhlSectionShell({
 }) {
   const pathname = usePathname();
   const navItems = NAV_ITEMS.filter((item) => !item.requiresAuth || isSignedIn);
+  const returnPath =
+    pathname && (pathname === "/nhl" || pathname.startsWith("/nhl/"))
+      ? pathname
+      : "/nhl";
+  const loginHref = `/nhl/login?next=${encodeURIComponent(returnPath)}`;
+  const signupHref = `/nhl/signup?next=${encodeURIComponent(returnPath)}`;
 
   return (
     <div className="flex min-h-full flex-col bg-gradient-to-b from-blue-950/35 via-ash-body to-ash-body">
@@ -75,6 +82,25 @@ export function NhlSectionShell({
             {navItems.map((item) => (
               <NavLink key={item.href} pathname={pathname} {...item} />
             ))}
+            {!isSignedIn ? (
+              <span className="flex flex-wrap items-center gap-x-2 gap-y-1 border-l border-blue-500/25 pl-3 text-sm sm:pl-4">
+                <Link
+                  href={loginHref}
+                  className="font-medium text-slate-400 no-underline transition-colors hover:text-slate-100"
+                >
+                  Sign in
+                </Link>
+                <span className="text-slate-600" aria-hidden>
+                  ·
+                </span>
+                <Link
+                  href={signupHref}
+                  className="font-medium text-slate-400 no-underline transition-colors hover:text-slate-100"
+                >
+                  Sign up
+                </Link>
+              </span>
+            ) : null}
           </nav>
         </div>
       </header>
