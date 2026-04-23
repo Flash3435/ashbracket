@@ -40,7 +40,7 @@ export default async function NhlLoginPage({
         <PageContainer>
           <PageTitle
             title="Sign in"
-            description="Sign in to access NHL playoff picks."
+            description="Sign in for NHL pool invites, read-only previews, and account status on AshBracket."
           />
           <LoginForm
             postLoginHref={postLoginHref}
@@ -69,7 +69,7 @@ export default async function NhlLoginPage({
         <PageContainer>
           <PageTitle
             title="Sign in"
-            description="Sign in to access NHL playoff picks."
+            description="Sign in for NHL pool invites, read-only previews, and account status on AshBracket."
           />
           <LoginForm
             postLoginHref={postLoginHref}
@@ -90,7 +90,7 @@ export default async function NhlLoginPage({
     <PageContainer>
       <PageTitle
         title="Sign in"
-        description="Sign in to access NHL playoff picks."
+        description="Sign in for NHL pool invites, read-only previews, and account status on AshBracket."
       />
       <LoginForm
         postLoginHref={postLoginHref}

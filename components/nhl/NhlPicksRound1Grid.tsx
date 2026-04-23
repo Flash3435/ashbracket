@@ -101,7 +101,7 @@ export function NhlPicksMatchupCard({ series }: { series: NhlSeriesRow }) {
       </div>
       {hasPairing ? (
         <p className="mt-3 text-[11px] text-emerald-200/85">
-          Both teams are set—your series winner pick will go here.
+          Both teams are set—read-only preview; series-winner entry is not available yet.
         </p>
       ) : (
         <p className="mt-3 text-[11px] text-slate-500">Opponents for this series are not filled in yet.</p>
@@ -149,7 +149,9 @@ export function NhlPicksRound1Grid({
         <h3 className="text-center text-sm font-semibold uppercase tracking-widest text-blue-200/90">
           Eastern Conference · Round 1
         </h3>
-        <p className="mt-1 text-center text-xs text-slate-500">Eight teams, four series—you will pick each winner.</p>
+        <p className="mt-1 text-center text-xs text-slate-500">
+          Eight teams, four series—when NHL pick entry opens, a winner will be chosen per series here.
+        </p>
         <div className="mt-4 grid gap-4 sm:grid-cols-2">
           {eastSorted.map((s) => (
             <NhlPicksMatchupCard key={s.id} series={s} />
@@ -163,7 +165,9 @@ export function NhlPicksRound1Grid({
         <h3 className="text-center text-sm font-semibold uppercase tracking-widest text-blue-200/90">
           Western Conference · Round 1
         </h3>
-        <p className="mt-1 text-center text-xs text-slate-500">Eight teams, four series—you will pick each winner.</p>
+        <p className="mt-1 text-center text-xs text-slate-500">
+          Eight teams, four series—when NHL pick entry opens, a winner will be chosen per series here.
+        </p>
         <div className="mt-4 grid gap-4 sm:grid-cols-2">
           {westSorted.map((s) => (
             <NhlPicksMatchupCard key={s.id} series={s} />

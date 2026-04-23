@@ -12,9 +12,9 @@ import type { Metadata } from "next";
 import Link from "next/link";
 
 export const metadata: Metadata = {
-  title: "Account",
+  title: "Status",
   description:
-    "Your AshBracket NHL account hub—participation status, bracket activity, and edition context as NHL picks and pools go live.",
+    "NHL participation and edition status on AshBracket. NHL bracket pick entry is not open yet; this page does not save picks.",
 };
 
 export const dynamic = "force-dynamic";
@@ -82,25 +82,25 @@ export default async function NhlAccountPage() {
 
   return (
     <PageContainer>
-      {/* A. Hero / intro */}
       <section className="rounded-2xl border border-blue-500/20 bg-gradient-to-br from-slate-950/80 via-slate-900/40 to-blue-950/30 px-5 py-8 shadow-lg shadow-blue-950/20 sm:px-8">
         <p className="text-xs font-semibold uppercase tracking-widest text-blue-300/90">
-          NHL account
+          NHL status
         </p>
         <h1 className="mt-2 text-3xl font-bold tracking-tight text-ash-text sm:text-4xl">
           Account
         </h1>
         <p className="mt-3 max-w-2xl text-base leading-relaxed text-slate-300">
-          Manage your NHL playoff participation here. As picks and pool entry go live, this page
-          will show your status, deadlines, and bracket activity for the active edition.
+          <span className="font-medium text-slate-100">NHL bracket picks are not open yet</span> on
+          AshBracket. This page only shows participation and edition context—nothing here records
+          NHL series choices, and World Cup pick flows stay separate.
         </p>
-        <p className="mt-2 max-w-2xl text-sm leading-relaxed text-slate-500">
-          The NHL account experience is still rolling out in phases—today you get edition context
-          and clear next steps; deeper dashboard tools will appear as those features ship.
-        </p>
+        <div className="mt-6">
+          <Link href="/nhl/picks" className="btn-primary inline-flex text-sm no-underline">
+            View Round 1 matchup preview
+          </Link>
+        </div>
       </section>
 
-      {/* B. Active edition / status */}
       <section className="ash-surface px-4 py-5 sm:px-5">
         <h2 className="text-lg font-semibold text-ash-text">Active edition</h2>
         {dataError ? (
@@ -138,16 +138,13 @@ export default async function NhlAccountPage() {
                   Official 2026 playoff field loaded
                 </p>
               ) : null}
-              <p className="text-sm text-slate-400">
-                Account features will expand as picks go live.
-              </p>
             </div>
 
             {fieldStatus === "non_official" && teamCount > 0 ? (
               <p className="text-xs text-slate-500">
                 Teams are loaded for this edition; the roster does not match the official 2026
-                playoff field AshBracket expects yet. What you see on Picks still reflects stored
-                data for this edition.
+                playoff field AshBracket expects yet. The preview page still reflects stored data for
+                this edition.
               </p>
             ) : null}
 
@@ -166,38 +163,28 @@ export default async function NhlAccountPage() {
         ) : null}
       </section>
 
-      {/* C. What this page will contain */}
-      <section className="rounded-2xl border border-blue-500/15 bg-slate-950/50 px-5 py-6 sm:px-6">
-        <h2 className="text-lg font-semibold text-ash-text">What you&apos;ll see here</h2>
-        <p className="mt-2 text-sm leading-relaxed text-slate-400">
-          This hub is meant to become your NHL participant dashboard. When the underlying flows
-          are connected, expect:
-        </p>
-        <ul className="mt-4 list-inside list-disc space-y-2 text-sm leading-relaxed text-slate-400">
-          <li>Whether you are entered in the active NHL pool</li>
-          <li>Your bracket and pick status at a glance</li>
-          <li>Pick deadlines and lock timing for the edition</li>
-          <li>Quick paths back to picks and standings</li>
-          <li>Edition-specific participation context</li>
-        </ul>
-        <p className="mt-4 text-sm text-slate-500">
-          None of that personal state is wired up on this page yet; the list above describes the
-          intent, not current behavior.
+      <section className="rounded-2xl border border-blue-500/15 bg-slate-950/50 px-5 py-5 sm:px-6">
+        <p className="text-sm leading-relaxed text-slate-400">
+          Later, this URL can summarize pool entry, deadlines, and bracket status once NHL pick entry
+          and scoring are connected. Until then, use the button above for the read-only playoff
+          preview.
         </p>
       </section>
 
-      {/* D. Current account state / empty state */}
       <section
         className="rounded-2xl border border-blue-400/20 bg-gradient-to-br from-blue-950/40 via-slate-950/80 to-slate-900/60 px-5 py-7 shadow-inner shadow-blue-950/30 sm:px-7"
         aria-labelledby="nhl-account-status-heading"
       >
         <h2 id="nhl-account-status-heading" className="text-lg font-semibold text-ash-text">
-          Your NHL account status
+          Your NHL participation
         </h2>
 
         {participationState === "signed_out" ? (
           <div className="mt-4 space-y-3 text-sm leading-relaxed text-slate-300">
-            <p>You are not signed in. Use AshBracket sign-in for NHL picks and pools—the same email and password as the rest of the site.</p>
+            <p>
+              You are not signed in. Use AshBracket sign-in for NHL pool invites and status—the
+              same email and password as the rest of the site.
+            </p>
             <div className="flex flex-wrap gap-2">
               <Link href="/nhl/login?next=%2Fnhl%2Faccount" className="btn-primary inline-flex text-sm no-underline">
                 Sign in
@@ -238,19 +225,17 @@ export default async function NhlAccountPage() {
         {participationState === "signed_in_ready" ? (
           <div className="mt-4 space-y-3 text-sm leading-relaxed text-slate-300">
             <p>
-              <span className="font-medium text-slate-100">You&apos;re signed in and linked for NHL participation</span>{" "}
-              on <span className="text-slate-100">{edition?.name}</span> ({edition?.season_label}).
-            </p>
-            <p className="text-slate-400">
-              Picks persistence and scoring are still rolling out; you can browse the bracket and NHL
-              pages while those features ship.
+              <span className="font-medium text-slate-100">You&apos;re signed in and linked</span>{" "}
+              for NHL pool access on <span className="text-slate-100">{edition?.name}</span> (
+              {edition?.season_label}). Bracket entry and scoring are still in development—you can
+              browse the read-only preview and other NHL pages while that ships.
             </p>
             <div className="flex flex-wrap gap-2">
-              <Link href="/nhl/picks" className="btn-primary inline-flex text-sm no-underline">
-                Open picks
-              </Link>
               <Link href="/nhl/standings" className="btn-ghost inline-flex text-sm no-underline">
                 Standings
+              </Link>
+              <Link href="/nhl" className="btn-ghost inline-flex text-sm no-underline">
+                NHL home
               </Link>
             </div>
           </div>
@@ -264,62 +249,45 @@ export default async function NhlAccountPage() {
         ) : null}
 
         <p className="mt-5 text-sm leading-relaxed text-slate-500">
-          Prefer the bracket preview?{" "}
-          <Link href="/nhl/picks" className="font-medium text-blue-300 underline-offset-2 hover:text-blue-200 hover:underline">
-            Picks
-          </Link>{" "}
-          stays available either way.
+          Read-only playoff tree:{" "}
+          <Link
+            href="/nhl/picks"
+            className="font-medium text-blue-300 underline-offset-2 hover:text-blue-200 hover:underline"
+          >
+            Round 1 matchup preview
+          </Link>
+          .
         </p>
       </section>
 
-      {/* E. Helpful next actions */}
       <section>
-        <h2 className="text-lg font-semibold text-ash-text">Where to go next</h2>
+        <h2 className="text-lg font-semibold text-ash-text">See also</h2>
         <p className="mt-1 text-sm text-slate-500">
-          These pages are live in the NHL section today—use them while the account dashboard catches
-          up.
+          Other NHL pages (no bracket saving today).
         </p>
         <div className="mt-4 grid gap-3 sm:grid-cols-2">
-          <Link
-            href="/nhl/picks"
-            className="ash-surface-interactive block rounded-xl border-blue-500/15 px-4 py-4 no-underline hover:border-blue-400/35"
-          >
-            <p className="text-base font-semibold text-ash-text">Picks</p>
-            <p className="mt-1 text-sm text-slate-500">Preview the bracket and Round 1 matchups.</p>
-          </Link>
           <Link
             href="/nhl/rules"
             className="ash-surface-interactive block rounded-xl border-blue-500/15 px-4 py-4 no-underline hover:border-blue-400/35"
           >
             <p className="text-base font-semibold text-ash-text">Rules</p>
-            <p className="mt-1 text-sm text-slate-500">How the NHL pool will work on AshBracket.</p>
+            <p className="mt-1 text-sm text-slate-500">Planned pool format and scoring.</p>
           </Link>
           <Link
             href="/nhl/standings"
             className="ash-surface-interactive block rounded-xl border-blue-500/15 px-4 py-4 no-underline hover:border-blue-400/35"
           >
             <p className="text-base font-semibold text-ash-text">Standings</p>
-            <p className="mt-1 text-sm text-slate-500">Leaderboard destination as scoring ships.</p>
+            <p className="mt-1 text-sm text-slate-500">Leaderboard when scoring connects.</p>
           </Link>
           <Link
             href="/nhl"
-            className="ash-surface-interactive block rounded-xl border-blue-500/15 px-4 py-4 no-underline hover:border-blue-400/35"
+            className="ash-surface-interactive block rounded-xl border-blue-500/15 px-4 py-4 no-underline hover:border-blue-400/35 sm:col-span-2"
           >
             <p className="text-base font-semibold text-ash-text">NHL home</p>
-            <p className="mt-1 text-sm text-slate-500">Overview, edition summary, and bracket preview.</p>
+            <p className="mt-1 text-sm text-slate-500">Overview and full bracket preview.</p>
           </Link>
         </div>
-      </section>
-
-      {/* F. What’s next for NHL accounts */}
-      <section className="ash-surface px-4 py-5 sm:px-5">
-        <h2 className="text-lg font-semibold text-ash-text">What&apos;s next for NHL accounts</h2>
-        <ul className="mt-3 list-inside list-disc space-y-2 text-sm leading-relaxed text-slate-400">
-          <li>View participation status for the active pool</li>
-          <li>Return to an unfinished bracket when picks persist</li>
-          <li>See active edition info and reminders in one place</li>
-          <li>Follow standings after scoring goes live</li>
-        </ul>
       </section>
     </PageContainer>
   );

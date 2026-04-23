@@ -68,12 +68,13 @@ export default async function NhlHomePage() {
           AshBracket NHL Playoffs
         </h1>
         <p className="mt-3 max-w-2xl text-base leading-relaxed text-slate-300">
-          Follow the 2026 Stanley Cup Playoffs bracket, make your playoff picks as this section
-          rolls out, and check back for rules and standings as they go live.
+          Follow the 2026 Stanley Cup Playoffs bracket in read-only form, read how the NHL pool will
+          work, and check standings context as this section rolls out. NHL bracket pick entry on
+          AshBracket is not open yet.
         </p>
         <p className="mt-2 max-w-2xl text-sm leading-relaxed text-slate-500">
-          Rules, picks, and standings are being added in phases—everything here stays inside the
-          NHL area of AshBracket.
+          Rules, the matchup preview, and standings are being added in phases—everything here stays
+          inside the NHL area of AshBracket. Nothing here saves World Cup picks.
         </p>
         <div className="mt-6 flex flex-wrap gap-3">
           <a href="#nhl-bracket-preview" className="btn-primary">
@@ -83,7 +84,7 @@ export default async function NhlHomePage() {
             See rules
           </Link>
           <Link href="/nhl/picks" className="btn-ghost border-blue-500/25">
-            Make picks
+            Round 1 preview
           </Link>
         </div>
       </section>
@@ -92,7 +93,7 @@ export default async function NhlHomePage() {
         <h2 className="text-lg font-semibold text-ash-text">Active edition</h2>
         {dataError ? (
           <p className="mt-2 text-sm text-amber-200/90">
-            Some NHL data could not be loaded ({dataError}). You can still open Rules, Picks, or
+            Some NHL data could not be loaded ({dataError}). You can still open Rules, Preview, or
             Standings from the navigation above.
           </p>
         ) : null}
@@ -171,14 +172,14 @@ export default async function NhlHomePage() {
       <section>
         <h2 className="text-lg font-semibold text-ash-text">How the NHL pool will work</h2>
         <ul className="mt-3 list-inside list-disc space-y-2 text-sm leading-relaxed text-slate-400">
-          <li>Pick the winner of each playoff series as picks go live.</li>
+          <li>When NHL bracket entry opens, choose the winner of each playoff series.</li>
           <li>Advance winners through the bracket round by round.</li>
           <li>Later rounds unlock logically as the real playoffs progress.</li>
           <li>Standings and scoring will update here as results are recorded.</li>
         </ul>
         <p className="mt-3 text-sm text-slate-500">
-          The NHL section is under active development; treat Rules, Picks, and Standings pages as
-          early destinations that will gain behavior over time.
+          The NHL section is under active development; treat Rules, the read-only preview, and
+          Standings as early destinations that will gain behavior over time.
         </p>
       </section>
 
@@ -196,8 +197,10 @@ export default async function NhlHomePage() {
             href="/nhl/picks"
             className="ash-surface-interactive block rounded-xl border-blue-500/15 px-4 py-4 no-underline hover:border-blue-400/35"
           >
-            <p className="text-base font-semibold text-ash-text">Picks</p>
-            <p className="mt-1 text-sm text-slate-500">Where bracket picks will live.</p>
+            <p className="text-base font-semibold text-ash-text">Matchup preview</p>
+            <p className="mt-1 text-sm text-slate-500">
+              Read-only Round 1 pairings and bracket layout—no pick entry yet.
+            </p>
           </Link>
           <Link
             href="/nhl/standings"

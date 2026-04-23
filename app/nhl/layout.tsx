@@ -7,7 +7,7 @@ export const metadata: Metadata = {
     template: "%s · AshBracket NHL",
   },
   description:
-    "NHL playoff pool — picks and standings. This section is under active development.",
+    "NHL playoff pool on AshBracket—read-only bracket preview, rules, and standings context while the section is under active development.",
 };
 
 export default function NhlSectionLayout({

@@ -16,9 +16,9 @@ import type { Metadata } from "next";
 import Link from "next/link";
 
 export const metadata: Metadata = {
-  title: "Picks",
+  title: "Preview",
   description:
-    "Preview the NHL playoff bracket and Round 1 matchups for the active AshBracket NHL edition. Series-by-series picks are rolling out.",
+    "Read-only NHL playoff field and Round 1 matchup preview for the active AshBracket NHL edition. Bracket pick entry is not open yet; nothing on this page is saved.",
 };
 
 export const dynamic = "force-dynamic";
@@ -89,15 +89,24 @@ export default async function NhlPicksPage() {
         <p className="text-xs font-semibold uppercase tracking-widest text-blue-300/90">
           AshBracket NHL
         </p>
-        <h1 className="mt-2 text-3xl font-bold tracking-tight text-ash-text sm:text-4xl">Picks</h1>
-        <p className="mt-3 max-w-2xl text-base leading-relaxed text-slate-300">
-          Preview the playoff bracket and get ready to make your picks. You will pick each playoff
-          series winner through the Stanley Cup Final, starting with Round 1 below.
+        <h1 className="mt-2 text-3xl font-bold tracking-tight text-ash-text sm:text-4xl">
+          Playoff preview
+        </h1>
+        <div className="mt-4 max-w-2xl rounded-xl border border-amber-500/30 bg-amber-950/20 px-4 py-3 text-sm leading-relaxed text-amber-100/95">
+          <p className="font-semibold text-amber-50/95">NHL bracket picks are not open yet.</p>
+          <p className="mt-2 text-amber-100/85">
+            This page is a read-only view of the playoff field and Round 1 matchups from the active
+            edition. AshBracket does not record or save any NHL bracket choices here today.
+          </p>
+        </div>
+        <p className="mt-4 max-w-2xl text-base leading-relaxed text-slate-300">
+          When pick entry ships, you will choose each playoff series winner through the Stanley Cup
+          Final, starting with Round 1 below. For now, use this page only to see how the tree is
+          laid out and which teams are paired.
         </p>
         <p className="mt-2 max-w-2xl text-sm leading-relaxed text-slate-500">
-          Series-by-series pick submission is still rolling out with the NHL section—nothing you
-          do on this page is saved yet. Use this view to learn the flow and see the real matchups
-          loaded from the active edition.
+          There are no pick controls on this page—scroll to the Round 1 cards for a matchup
+          preview only.
         </p>
       </section>
 
@@ -106,8 +115,9 @@ export default async function NhlPicksPage() {
 
         {dataError ? (
           <p className="text-sm text-amber-200/90">
-            Some NHL data could not be loaded ({dataError}). The rest of this page explains the
-            picks flow; matchup cards appear when the edition and series load successfully.
+            Some NHL data could not be loaded ({dataError}). The rest of this page explains how
+            bracket play will work; matchup cards appear when the edition and series load
+            successfully.
           </p>
         ) : null}
 
@@ -166,17 +176,17 @@ export default async function NhlPicksPage() {
       </section>
 
       <section className="ash-surface space-y-4 px-4 py-5 sm:px-5">
-        <h2 className="text-lg font-semibold text-ash-text">How picks will work</h2>
+        <h2 className="text-lg font-semibold text-ash-text">How bracket play will work (when open)</h2>
         <p className="text-sm leading-relaxed text-slate-400">
-          The pool follows the real Stanley Cup Playoff tree. When submission goes live, you will
-          pick the winner of each series (not individual games). Higher-seeded teams meet their
-          Round 1 opponents as shown in the NHL bracket; your correct picks advance into the next
-          round slots the same way the real playoffs do.
+          The pool follows the real Stanley Cup Playoff tree. When bracket entry goes live, you will
+          choose each series winner (not individual games). Higher-seeded teams meet their Round 1
+          opponents as shown in the NHL bracket; each correct prediction would advance into the next
+          round the same way the real playoffs do.
         </p>
         <ul className="list-inside list-disc space-y-2 text-sm leading-relaxed text-slate-400">
-          <li>Round 1: pick the winner of each Eastern and Western conference series.</li>
-          <li>Round 2: winners from Round 1 meet in the next series slots.</li>
-          <li>Conference Finals and Stanley Cup Final: keep picking series winners until one champion.</li>
+          <li>Round 1: one predicted winner per Eastern and Western conference series.</li>
+          <li>Round 2: Round 1 winners feed the next series slots.</li>
+          <li>Conference Finals and Stanley Cup Final: continue series-winner predictions through one champion.</li>
           <li>The end goal is to predict who lifts the Cup—along with as many earlier rounds as you can.</li>
         </ul>
         <p className="text-sm text-slate-500">
@@ -189,8 +199,9 @@ export default async function NhlPicksPage() {
         <div className="px-1 sm:px-0">
           <h2 className="text-lg font-semibold text-ash-text">Round 1 · matchup preview</h2>
           <p className="mt-1 max-w-3xl text-sm leading-relaxed text-slate-400">
-            Here are the series you will be picking first. Matchups come from the active edition’s
-            Round 1 rows in the database—the same pairings used for the public bracket preview.
+            These are the Round 1 series for the active playoff field. Matchups come from the
+            edition&apos;s Round 1 rows in the database—the same pairings used on NHL home&apos;s
+            bracket preview.
           </p>
         </div>
 

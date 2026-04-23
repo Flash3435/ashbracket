@@ -14,8 +14,7 @@ const NAV_ITEMS: NavItem[] = [
   { href: "/nhl", label: "Home", match: "exact" },
   { href: "/nhl/rules", label: "Rules" },
   { href: "/nhl/standings", label: "Standings" },
-  { href: "/nhl/picks", label: "Picks" },
-  { href: "/nhl/account", label: "Account" },
+  { href: "/nhl/picks", label: "Preview" },
   { href: "/nhl/admin", label: "Admin" },
 ];
 

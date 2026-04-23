@@ -7,7 +7,7 @@ import Link from "next/link";
 export const metadata: Metadata = {
   title: "Rules",
   description:
-    "How the AshBracket NHL playoff pool works—bracket picks, planned round-based scoring, and lock timing.",
+    "How the AshBracket NHL playoff pool is designed to work—planned series-by-series entry, round-based scoring, and lock timing. Bracket pick entry is not live yet.",
 };
 
 export const dynamic = "force-dynamic";
@@ -27,9 +27,9 @@ export default async function NhlRulesPage() {
         </h1>
         <p className="mt-3 max-w-2xl text-base leading-relaxed text-slate-300">
           This page outlines the intended NHL playoff bracket format for AshBracket NHL—a
-          public-facing pool built around the Stanley Cup playoffs. The NHL section is being
-          rolled out in phases; picks, standings, and scoring will connect here as that work
-          ships.
+          public-facing pool built around the Stanley Cup playoffs. You cannot submit or save NHL
+          bracket picks on the site today; the NHL section is being rolled out in phases, and
+          bracket entry, standings, and scoring will connect here as that work ships.
         </p>
       </section>
 
@@ -70,15 +70,15 @@ export default async function NhlRulesPage() {
       </section>
 
       <section className="ash-surface space-y-4 px-4 py-5 sm:px-5">
-        <h2 className="text-lg font-semibold text-ash-text">Pick timing and locks</h2>
+        <h2 className="text-lg font-semibold text-ash-text">Planned pick timing and locks</h2>
         <p className="text-sm leading-relaxed text-slate-400">
-          Picks are expected to lock before the relevant round or series begins in the real
-          playoffs—once a lock passes, that pick should no longer be editable. Later rounds
-          may stay open until their own lock times, even if you already entered earlier rounds.
+          When bracket entry is enabled, each series winner choice is expected to lock before the
+          relevant round or series begins in the real playoffs—after a lock, that choice should no
+          longer be editable. Later rounds may stay open until their own lock times.
         </p>
         <p className="text-sm leading-relaxed text-slate-500">
-          Exact lock schedules, grace periods, and any pick-deadline messaging will be finalized
-          as the NHL section rolls out; check back on this page and on Picks when behavior goes
+          Exact lock schedules, grace periods, and deadline messaging will be finalized as the NHL
+          section rolls out; check back on this page and on the read-only preview when behavior goes
           live.
         </p>
       </section>
@@ -128,7 +128,7 @@ export default async function NhlRulesPage() {
       <section>
         <h2 className="text-lg font-semibold text-ash-text">Explore the NHL section</h2>
         <p className="mt-1 text-sm text-slate-400">
-          Jump to the rest of the isolated NHL area—behavior on Picks and Standings will grow
+          Jump to the rest of the isolated NHL area—behavior on the preview and Standings will grow
           over time.
         </p>
         <div className="mt-4 grid gap-3 sm:grid-cols-3">
@@ -143,8 +143,10 @@ export default async function NhlRulesPage() {
             href="/nhl/picks"
             className="ash-surface-interactive block rounded-xl border-blue-500/15 px-4 py-4 no-underline hover:border-blue-400/35"
           >
-            <p className="text-base font-semibold text-ash-text">Picks</p>
-            <p className="mt-1 text-sm text-slate-500">Where bracket picks will live.</p>
+            <p className="text-base font-semibold text-ash-text">Matchup preview</p>
+            <p className="mt-1 text-sm text-slate-500">
+              Read-only field and Round 1 pairings until pick entry opens.
+            </p>
           </Link>
           <Link
             href="/nhl/standings"

@@ -57,7 +57,7 @@ export function NhlJoinInvitePanel({
             NHL account
           </Link>
           <Link href="/nhl/picks" className="btn-ghost inline-flex text-sm no-underline">
-            Picks
+            Matchup preview
           </Link>
         </div>
       </div>

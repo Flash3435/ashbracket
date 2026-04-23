@@ -16,7 +16,7 @@ import Link from "next/link";
 export const metadata: Metadata = {
   title: "Standings",
   description:
-    "NHL playoff leaderboard for AshBracket NHL—edition context, how standings will work, and the live table as picks and scoring go live.",
+    "NHL playoff leaderboard context for AshBracket NHL—edition details and how standings will work once bracket entry and scoring are connected.",
 };
 
 export const dynamic = "force-dynamic";
@@ -296,7 +296,7 @@ export default async function NhlStandingsPage() {
       <section>
         <h2 className="text-lg font-semibold text-ash-text">Explore the NHL section</h2>
         <p className="mt-1 text-sm text-slate-400">
-          Stay inside the NHL area—open rules, picks, or home from here.
+          Stay inside the NHL area—open rules, the read-only preview, or home from here.
         </p>
         <div className="mt-4 grid gap-3 sm:grid-cols-3">
           <Link
@@ -310,8 +310,10 @@ export default async function NhlStandingsPage() {
             href="/nhl/picks"
             className="ash-surface-interactive block rounded-xl border-blue-500/15 px-4 py-4 no-underline hover:border-blue-400/35"
           >
-            <p className="text-base font-semibold text-ash-text">Picks</p>
-            <p className="mt-1 text-sm text-slate-500">Where bracket picks will live.</p>
+            <p className="text-base font-semibold text-ash-text">Matchup preview</p>
+            <p className="mt-1 text-sm text-slate-500">
+              Read-only bracket field—no saved NHL picks yet.
+            </p>
           </Link>
           <Link
             href="/nhl"
