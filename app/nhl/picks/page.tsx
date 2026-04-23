@@ -29,6 +29,22 @@ function round1Rows(seriesRows: NhlSeriesRow[]): NhlSeriesRow[] {
   return seriesRows.filter((r) => r.round_code === "R1");
 }
 
+/** PostgREST when the picks migration has not been applied to the linked project yet. */
+function formatNhlPicksLoadError(message: string): string {
+  const m = message.toLowerCase();
+  if (
+    m.includes("nhl_r1_series_picks") &&
+    (m.includes("schema cache") || m.includes("does not exist") || m.includes("not find"))
+  ) {
+    return (
+      "The Supabase project is missing the `nhl_r1_series_picks` table. Apply migration " +
+      "`20260422153000_nhl_r1_series_picks.sql` (e.g. `supabase db push` from the ashbracket repo, " +
+      "or paste that file into the Supabase SQL editor), then refresh. Until then, matchups still load but picks cannot load or save."
+    );
+  }
+  return `${message} Try refreshing after signing in.`;
+}
+
 export default async function NhlPicksPage() {
   const supabase = await createClient();
   const {
@@ -155,8 +171,8 @@ export default async function NhlPicksPage() {
 
         {picksLoadError ? (
           <p className="text-sm text-amber-200/90">
-            Saved Round 1 picks could not be loaded ({picksLoadError}). You can still browse
-            matchups; try refreshing after signing in.
+            <span className="font-medium text-amber-100/95">Saved picks unavailable. </span>
+            {formatNhlPicksLoadError(picksLoadError)}
           </p>
         ) : null}
 
