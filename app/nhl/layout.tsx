@@ -1,5 +1,8 @@
 import type { Metadata } from "next";
 import { NhlSectionShell } from "@/components/nhl/NhlSectionShell";
+import { createClient } from "@/lib/supabase/server";
+
+export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = {
   title: {
@@ -10,10 +13,17 @@ export const metadata: Metadata = {
     "NHL playoff pool on AshBracket—read-only bracket preview, rules, and standings context while the section is under active development.",
 };
 
-export default function NhlSectionLayout({
+export default async function NhlSectionLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
-  return <NhlSectionShell>{children}</NhlSectionShell>;
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  return (
+    <NhlSectionShell isSignedIn={!!user}>{children}</NhlSectionShell>
+  );
 }

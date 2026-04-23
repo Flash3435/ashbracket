@@ -8,14 +8,20 @@ const navBase =
 const navInactive = `${navBase} text-slate-400 hover:text-slate-100`;
 const navActive = `${navBase} text-slate-100 border-blue-400/50`;
 
-type NavItem = { href: string; label: string; match?: "exact" | "prefix" };
+type NavItem = {
+  href: string;
+  label: string;
+  match?: "exact" | "prefix";
+  /** Hidden in the nav until the user has a session (admin routes still enforce server-side). */
+  requiresAuth?: boolean;
+};
 
 const NAV_ITEMS: NavItem[] = [
   { href: "/nhl", label: "Home", match: "exact" },
   { href: "/nhl/rules", label: "Rules" },
   { href: "/nhl/standings", label: "Standings" },
   { href: "/nhl/picks", label: "Picks" },
-  { href: "/nhl/admin", label: "Admin" },
+  { href: "/nhl/admin", label: "Admin", requiresAuth: true },
 ];
 
 function NavLink({
@@ -23,7 +29,7 @@ function NavLink({
   label,
   pathname,
   match = "prefix",
-}: NavItem & { pathname: string }) {
+}: Omit<NavItem, "requiresAuth"> & { pathname: string }) {
   const pathOnly = href.split("?")[0] ?? "";
   const isActive =
     match === "exact"
@@ -36,8 +42,15 @@ function NavLink({
   );
 }
 
-export function NhlSectionShell({ children }: { children: React.ReactNode }) {
+export function NhlSectionShell({
+  children,
+  isSignedIn,
+}: {
+  children: React.ReactNode;
+  isSignedIn: boolean;
+}) {
   const pathname = usePathname();
+  const navItems = NAV_ITEMS.filter((item) => !item.requiresAuth || isSignedIn);
 
   return (
     <div className="flex min-h-full flex-col bg-gradient-to-b from-blue-950/35 via-ash-body to-ash-body">
@@ -59,7 +72,7 @@ export function NhlSectionShell({ children }: { children: React.ReactNode }) {
             className="flex flex-wrap items-center gap-x-4 gap-y-2 sm:justify-end"
             aria-label="NHL section"
           >
-            {NAV_ITEMS.map((item) => (
+            {navItems.map((item) => (
               <NavLink key={item.href} pathname={pathname} {...item} />
             ))}
           </nav>
