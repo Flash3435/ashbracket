@@ -6,6 +6,9 @@ import { resolveNhlTeamLogoPath } from "@/lib/nhl/teamLogos";
 
 const PX = { sm: 28, md: 40 } as const;
 
+/** NHL CDN primary marks use a wide viewBox (~960×640); keep layout predictable beside text. */
+const NHL_LOGO_BOX_ASPECT = 960 / 640;
+
 export type NhlTeamLogoSize = keyof typeof PX;
 
 type Props = {
@@ -20,7 +23,8 @@ type Props = {
 };
 
 /**
- * NHL-only team mark. Uses static assets under `/nhl/logos/` when mapped; otherwise a compact abbreviation badge.
+ * NHL-only logo: real transparent mark in a neutral box when an asset resolves;
+ * dashed abbreviation badge only when missing or failed to load.
  */
 export function NhlTeamLogo({
   size = "sm",
@@ -31,6 +35,7 @@ export function NhlTeamLogo({
   className = "",
 }: Props) {
   const dim = PX[size];
+  const boxW = Math.max(Math.round(dim * NHL_LOGO_BOX_ASPECT), dim + 4);
   const resolved = useMemo(
     () =>
       resolveNhlTeamLogoPath({
@@ -48,24 +53,30 @@ export function NhlTeamLogo({
 
   return (
     <span
-      className={`relative inline-flex shrink-0 items-center justify-center rounded-full bg-slate-900/80 ring-1 ring-white/10 ${className}`}
-      style={{ width: dim, height: dim }}
+      className={`relative inline-flex shrink-0 items-center justify-center overflow-hidden rounded-md ${
+        showImage
+          ? "bg-slate-950/25 ring-1 ring-white/5"
+          : "border border-dashed border-amber-400/45 bg-slate-950/70 ring-1 ring-amber-500/15"
+      } ${className}`}
+      style={{ height: dim, width: boxW }}
       title={label}
     >
       {showImage ? (
         <Image
           src={resolved!}
           alt=""
-          width={dim}
-          height={dim}
-          className="h-full w-full rounded-full object-cover"
+          width={960}
+          height={640}
+          className="object-contain p-0.5"
+          style={{ width: "100%", height: "100%" }}
           onError={() => setBroken(true)}
-          sizes={`${dim}px`}
+          sizes={`${boxW}px`}
+          priority={false}
           aria-hidden
         />
       ) : (
         <span
-          className={`select-none font-mono font-bold leading-none text-slate-100 ${
+          className={`select-none px-0.5 font-mono font-semibold leading-none tracking-tight text-amber-100/90 ${
             size === "md" ? "text-[11px]" : "text-[9px]"
           }`}
           aria-hidden

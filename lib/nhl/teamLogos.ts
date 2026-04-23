@@ -1,6 +1,6 @@
 import { NHL_2026_PLAYOFF_TEAMS } from "./nhl2026PlayoffField";
 
-/** Slugs that have a committed asset under `public/nhl/logos/{slug}.svg`. */
+/** Slugs that have a committed asset under `public/nhl/logos/{slug}.svg` (league SVG artwork, see SOURCE.txt). */
 export const NHL_LOGO_ASSET_SLUGS: ReadonlySet<string> = new Set(
   NHL_2026_PLAYOFF_TEAMS.map((t) => t.team_slug),
 );

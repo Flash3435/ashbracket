@@ -1,0 +1,6 @@
+These files are the NHL-provided primary SVG marks (light variant) from
+https://assets.nhle.com/logos/nhl/svg/{TEAM_ABBREV}_light.svg
+renamed to match app team_slug keys (e.g. golden-knights.svg from VGK_light.svg).
+
+Trademark notice: NHL and team marks are property of the NHL and member clubs.
+Refresh copies with scripts or manual download if the league updates artwork.
