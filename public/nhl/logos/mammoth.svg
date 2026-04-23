@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="Utah Mammoth">
+  <circle cx="32" cy="32" r="31" fill="#153263"/>
+  <circle cx="32" cy="32" r="31" fill="none" stroke="rgba(108,172,228,0.55)" stroke-width="2"/>
+  <text x="32" y="40" text-anchor="middle" font-family="system-ui,-apple-system,sans-serif" font-size="17" font-weight="700" fill="#6CACE4">UTA</text>
+</svg>

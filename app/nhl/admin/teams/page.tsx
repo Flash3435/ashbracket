@@ -1,3 +1,4 @@
+import { NhlTeamLogo } from "@/components/nhl/NhlTeamLogo";
 import { PageContainer } from "@/components/ui/PageContainer";
 import { PageTitle } from "@/components/ui/PageTitle";
 import { createClient } from "@/lib/supabase/server";
@@ -95,6 +96,7 @@ export default async function NhlAdminTeamsPage() {
               <table className="min-w-full border-collapse text-left text-sm">
                 <thead className="border-b border-blue-500/20 bg-slate-950/60 text-xs uppercase tracking-wide text-slate-400">
                   <tr>
+                    <th className="px-3 py-2">Logo</th>
                     <th className="px-3 py-2">Abbr</th>
                     <th className="px-3 py-2">Name</th>
                     <th className="px-3 py-2">Conference</th>
@@ -105,6 +107,15 @@ export default async function NhlAdminTeamsPage() {
                 <tbody className="divide-y divide-blue-500/10 text-ash-text">
                   {teamsRes.teams.map((t) => (
                     <tr key={t.id} className="bg-slate-950/30">
+                      <td className="px-3 py-2 align-middle">
+                        <NhlTeamLogo
+                          size="sm"
+                          teamSlug={t.team_slug}
+                          abbreviation={t.abbreviation}
+                          logoPath={t.logo_path}
+                          name={t.team_name}
+                        />
+                      </td>
                       <td className="px-3 py-2 font-mono text-xs">{t.abbreviation}</td>
                       <td className="px-3 py-2">{t.team_name}</td>
                       <td className="px-3 py-2 capitalize">{t.conference}</td>

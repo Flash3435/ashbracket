@@ -49,8 +49,14 @@ export type NhlSeries = {
 export type NhlSeriesRow = NhlSeries & {
   higher_team_name: string | null;
   higher_team_abbr: string | null;
+  higher_team_slug: string | null;
+  higher_team_logo_path: string | null;
   lower_team_name: string | null;
   lower_team_abbr: string | null;
+  lower_team_slug: string | null;
+  lower_team_logo_path: string | null;
   winner_team_name: string | null;
   winner_team_abbr: string | null;
+  winner_team_slug: string | null;
+  winner_team_logo_path: string | null;
 };

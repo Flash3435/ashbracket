@@ -1,11 +1,14 @@
+import { NhlTeamLogo } from "@/components/nhl/NhlTeamLogo";
 import { PageContainer } from "@/components/ui/PageContainer";
 import { getOfficial2026EditionTeamStatus } from "@/lib/nhl/official2026Edition";
 import {
   countNhlSeriesForEdition,
   countNhlTeamsForEdition,
   fetchActiveNhlEdition,
+  fetchNhlTeamsForEdition,
   fetchNhlTeamSlugsForEdition,
 } from "@/lib/nhl/queries";
+import type { NhlTeam } from "@/lib/nhl/types";
 import { createClient } from "@/lib/supabase/server";
 import type { Metadata } from "next";
 import Link from "next/link";
@@ -26,13 +29,16 @@ export default async function NhlStandingsPage() {
   let seriesCount = 0;
   let countsError: string | null = null;
   let slugError: string | null = null;
+  let teamsListError: string | null = null;
+  let editionTeamsSorted: NhlTeam[] = [];
   let fieldStatus: ReturnType<typeof getOfficial2026EditionTeamStatus> | null = null;
 
   if (edition && !editionError) {
-    const [teamCountRes, seriesCountRes, slugRes] = await Promise.all([
+    const [teamCountRes, seriesCountRes, slugRes, teamsRes] = await Promise.all([
       countNhlTeamsForEdition(supabase, edition.id),
       countNhlSeriesForEdition(supabase, edition.id),
       fetchNhlTeamSlugsForEdition(supabase, edition.id),
+      fetchNhlTeamsForEdition(supabase, edition.id),
     ]);
 
     if (teamCountRes.error || seriesCountRes.error) {
@@ -47,6 +53,16 @@ export default async function NhlStandingsPage() {
       fieldStatus = getOfficial2026EditionTeamStatus(
         slugRes.slugs.map((s) => ({ team_slug: s })),
       );
+    }
+
+    teamsListError = teamsRes.error;
+    if (!teamsRes.error && teamsRes.teams.length > 0) {
+      editionTeamsSorted = [...teamsRes.teams].sort((a, b) => {
+        const side = (t: NhlTeam) => (t.conference === "west" ? 1 : 0);
+        const ds = side(a) - side(b);
+        if (ds !== 0) return ds;
+        return (a.seed ?? 99) - (b.seed ?? 99);
+      });
     }
   }
 
@@ -111,6 +127,29 @@ export default async function NhlStandingsPage() {
               <p className="mt-3 text-sm leading-relaxed text-slate-500">
                 Leaderboard and scoring rules apply to this edition as they go live.
               </p>
+              {teamsListError ? (
+                <p className="mt-3 text-xs text-amber-200/90">
+                  Team logos could not be loaded ({teamsListError}).
+                </p>
+              ) : editionTeamsSorted.length > 0 ? (
+                <div className="mt-4">
+                  <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">
+                    Playoff field (visual)
+                  </p>
+                  <div className="mt-2 flex flex-wrap items-center gap-2">
+                    {editionTeamsSorted.map((t) => (
+                      <NhlTeamLogo
+                        key={t.id}
+                        size="md"
+                        teamSlug={t.team_slug}
+                        abbreviation={t.abbreviation}
+                        logoPath={t.logo_path}
+                        name={t.team_name}
+                      />
+                    ))}
+                  </div>
+                </div>
+              ) : null}
             </div>
 
             <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center">

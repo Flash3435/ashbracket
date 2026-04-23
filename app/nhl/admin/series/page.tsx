@@ -1,3 +1,4 @@
+import { NhlTeamLogo } from "@/components/nhl/NhlTeamLogo";
 import { PageContainer } from "@/components/ui/PageContainer";
 import { PageTitle } from "@/components/ui/PageTitle";
 import { createClient } from "@/lib/supabase/server";
@@ -15,6 +16,37 @@ function sideLabel(side: string | null): string {
   if (side === "cup") return "Cup";
   if (side === "east" || side === "west") return side.charAt(0).toUpperCase() + side.slice(1);
   return "—";
+}
+
+function SeriesTeamCell({
+  abbr,
+  name,
+  slug,
+  logoPath,
+}: {
+  abbr: string | null;
+  name: string | null;
+  slug: string | null;
+  logoPath: string | null;
+}) {
+  if (!abbr && !name) {
+    return <span className="text-slate-600">—</span>;
+  }
+  return (
+    <div className="flex items-center gap-2">
+      <NhlTeamLogo
+        size="sm"
+        teamSlug={slug}
+        abbreviation={abbr}
+        logoPath={logoPath}
+        name={name ?? abbr}
+      />
+      <div className="min-w-0">
+        <span className="font-mono text-xs text-slate-300">{abbr ?? "—"}</span>
+        {name ? <span className="mt-0.5 block truncate text-xs text-slate-500">{name}</span> : null}
+      </div>
+    </div>
+  );
 }
 
 export default async function NhlAdminSeriesPage() {
@@ -132,22 +164,35 @@ export default async function NhlAdminSeriesPage() {
                       <td className="px-3 py-2 tabular-nums">{r.slot_index}</td>
                       <td className="px-3 py-2 text-ash-muted">{sideLabel(r.side_or_conference)}</td>
                       <td className="px-3 py-2 text-ash-muted">
-                        {r.higher_team_abbr ?? "—"}
-                        {r.higher_team_name ? (
-                          <span className="block text-xs text-slate-500">{r.higher_team_name}</span>
-                        ) : null}
+                        <SeriesTeamCell
+                          abbr={r.higher_team_abbr}
+                          name={r.higher_team_name}
+                          slug={r.higher_team_slug}
+                          logoPath={r.higher_team_logo_path}
+                        />
                       </td>
                       <td className="px-3 py-2 text-ash-muted">
-                        {r.lower_team_abbr ?? "—"}
-                        {r.lower_team_name ? (
-                          <span className="block text-xs text-slate-500">{r.lower_team_name}</span>
-                        ) : null}
+                        <SeriesTeamCell
+                          abbr={r.lower_team_abbr}
+                          name={r.lower_team_name}
+                          slug={r.lower_team_slug}
+                          logoPath={r.lower_team_logo_path}
+                        />
                       </td>
                       <td className="px-3 py-2 capitalize">
                         {r.status.replaceAll("_", " ")}
                       </td>
                       <td className="px-3 py-2 text-ash-muted">
-                        {r.winner_team_abbr ?? "—"}
+                        {r.winner_team_abbr || r.winner_team_name ? (
+                          <SeriesTeamCell
+                            abbr={r.winner_team_abbr}
+                            name={r.winner_team_name}
+                            slug={r.winner_team_slug}
+                            logoPath={r.winner_team_logo_path}
+                          />
+                        ) : (
+                          "—"
+                        )}
                       </td>
                     </tr>
                   ))}

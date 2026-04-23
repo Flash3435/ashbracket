@@ -54,6 +54,11 @@ const nextConfig: NextConfig = {
   turbopack: {
     root: packageRoot,
   },
+  images: {
+    dangerouslyAllowSVG: true,
+    contentDispositionType: "attachment",
+    contentSecurityPolicy: "default-src 'self'; script-src 'none'; sandbox;",
+  },
   async rewrites() {
     return [{ source: "/favicon.ico", destination: "/icon.png" }];
   },

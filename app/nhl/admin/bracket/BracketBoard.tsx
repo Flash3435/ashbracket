@@ -1,15 +1,20 @@
 import type { NhlAdminBracketViewModel } from "@/lib/nhl/bracketViewModel";
 import { roundLabel } from "@/lib/nhl/bracketViewModel";
 import type { NhlSeriesRow } from "@/lib/nhl/types";
+import { NhlTeamLogo } from "@/components/nhl/NhlTeamLogo";
 
 function TeamBlock({
   abbr,
   name,
   role,
+  teamSlug,
+  logoPath,
 }: {
   abbr: string | null;
   name: string | null;
   role: "higher" | "lower";
+  teamSlug?: string | null;
+  logoPath?: string | null;
 }) {
   if (!abbr && !name) {
     return (
@@ -25,21 +30,31 @@ function TeamBlock({
   const secondary = abbr && name && abbr !== name ? name : null;
 
   return (
-    <div className="rounded border border-blue-500/15 bg-slate-950/50 px-2 py-1.5">
-      <p className="text-[10px] font-medium uppercase tracking-wide text-slate-500">
-        {role === "higher" ? "Higher seed" : "Lower seed"}
-      </p>
-      <p
-        className="mt-0.5 text-sm font-semibold text-ash-text"
-        title={name ?? abbr ?? undefined}
-      >
-        {primary}
-      </p>
-      {secondary ? (
-        <p className="truncate text-[11px] leading-tight text-slate-500" title={secondary}>
-          {secondary}
+    <div className="flex items-start gap-2 rounded border border-blue-500/15 bg-slate-950/50 px-2 py-1.5">
+      <NhlTeamLogo
+        className="mt-0.5"
+        size="sm"
+        teamSlug={teamSlug}
+        abbreviation={abbr}
+        logoPath={logoPath}
+        name={name ?? abbr}
+      />
+      <div className="min-w-0 flex-1">
+        <p className="text-[10px] font-medium uppercase tracking-wide text-slate-500">
+          {role === "higher" ? "Higher seed" : "Lower seed"}
         </p>
-      ) : null}
+        <p
+          className="mt-0.5 text-sm font-semibold text-ash-text"
+          title={name ?? abbr ?? undefined}
+        >
+          {primary}
+        </p>
+        {secondary ? (
+          <p className="truncate text-[11px] leading-tight text-slate-500" title={secondary}>
+            {secondary}
+          </p>
+        ) : null}
+      </div>
     </div>
   );
 }
@@ -64,14 +79,30 @@ function MatchupCard({
           abbr={series.higher_team_abbr}
           name={series.higher_team_name}
           role="higher"
+          teamSlug={series.higher_team_slug}
+          logoPath={series.higher_team_logo_path}
         />
         <p className="text-center text-[10px] text-slate-500">vs</p>
-        <TeamBlock abbr={series.lower_team_abbr} name={series.lower_team_name} role="lower" />
+        <TeamBlock
+          abbr={series.lower_team_abbr}
+          name={series.lower_team_name}
+          role="lower"
+          teamSlug={series.lower_team_slug}
+          logoPath={series.lower_team_logo_path}
+        />
       </div>
       <p className="mt-2 text-[10px] capitalize text-slate-400">{status}</p>
       {winner ? (
-        <p className="mt-1 text-[10px] text-emerald-300/90">
-          Winner: <span className="font-semibold">{winner}</span>
+        <p className="mt-1 flex flex-wrap items-center gap-1.5 text-[10px] text-emerald-300/90">
+          <span>Winner:</span>
+          <NhlTeamLogo
+            size="sm"
+            teamSlug={series.winner_team_slug}
+            abbreviation={series.winner_team_abbr}
+            logoPath={series.winner_team_logo_path}
+            name={series.winner_team_name ?? series.winner_team_abbr}
+          />
+          <span className="font-semibold">{winner}</span>
         </p>
       ) : null}
     </div>

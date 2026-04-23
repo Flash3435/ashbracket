@@ -1,4 +1,5 @@
 import type { NhlSeriesRow } from "@/lib/nhl/types";
+import { NhlTeamLogo } from "./NhlTeamLogo";
 
 function conferenceWord(side: NhlSeriesRow["side_or_conference"]): string {
   if (side === "east") return "East";
@@ -19,10 +20,14 @@ function TeamBlock({
   abbr,
   name,
   seedLabel,
+  teamSlug,
+  logoPath,
 }: {
   abbr: string | null;
   name: string | null;
   seedLabel: string;
+  teamSlug?: string | null;
+  logoPath?: string | null;
 }) {
   if (!abbr && !name) {
     return (
@@ -35,14 +40,24 @@ function TeamBlock({
   const primary = abbr ?? name ?? "—";
   const secondary = name && abbr && name !== abbr ? name : name && !abbr ? name : null;
   return (
-    <div className="rounded-lg border border-blue-500/25 bg-slate-950/55 px-3 py-2.5">
-      <p className="text-[10px] font-medium uppercase tracking-wide text-slate-500">{seedLabel}</p>
-      <p className="mt-0.5 font-mono text-base font-semibold tracking-tight text-ash-text">{primary}</p>
-      {secondary ? (
-        <p className="mt-0.5 truncate text-xs leading-snug text-slate-400" title={secondary}>
-          {secondary}
-        </p>
-      ) : null}
+    <div className="flex items-start gap-3 rounded-lg border border-blue-500/25 bg-slate-950/55 px-3 py-2.5">
+      <NhlTeamLogo
+        className="mt-0.5"
+        size="md"
+        teamSlug={teamSlug}
+        abbreviation={abbr}
+        logoPath={logoPath}
+        name={name ?? abbr}
+      />
+      <div className="min-w-0 flex-1">
+        <p className="text-[10px] font-medium uppercase tracking-wide text-slate-500">{seedLabel}</p>
+        <p className="mt-0.5 font-mono text-base font-semibold tracking-tight text-ash-text">{primary}</p>
+        {secondary ? (
+          <p className="mt-0.5 truncate text-xs leading-snug text-slate-400" title={secondary}>
+            {secondary}
+          </p>
+        ) : null}
+      </div>
     </div>
   );
 }
@@ -70,6 +85,8 @@ export function NhlPicksMatchupCard({ series }: { series: NhlSeriesRow }) {
           abbr={series.higher_team_abbr}
           name={series.higher_team_name}
           seedLabel="Higher seed"
+          teamSlug={series.higher_team_slug}
+          logoPath={series.higher_team_logo_path}
         />
         <p className="py-0.5 text-center text-[11px] font-medium uppercase tracking-widest text-slate-500">
           vs
@@ -78,6 +95,8 @@ export function NhlPicksMatchupCard({ series }: { series: NhlSeriesRow }) {
           abbr={series.lower_team_abbr}
           name={series.lower_team_name}
           seedLabel="Lower seed"
+          teamSlug={series.lower_team_slug}
+          logoPath={series.lower_team_logo_path}
         />
       </div>
       {hasPairing ? (

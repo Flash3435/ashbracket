@@ -104,12 +104,19 @@ export async function fetchNhlTeamsForEdition(
 function teamLabel(
   teamsById: Map<string, NhlTeam>,
   id: string | null,
-): { name: string | null; abbr: string | null } {
-  if (!id) return { name: null, abbr: null };
+): {
+  name: string | null;
+  abbr: string | null;
+  slug: string | null;
+  logo_path: string | null;
+} {
+  if (!id) return { name: null, abbr: null, slug: null, logo_path: null };
   const t = teamsById.get(id);
   return {
     name: t?.team_name ?? null,
     abbr: t?.abbreviation ?? null,
+    slug: t?.team_slug ?? null,
+    logo_path: t?.logo_path ?? null,
   };
 }
 
@@ -153,10 +160,16 @@ export async function fetchNhlSeriesRowsForEdition(
       ...s,
       higher_team_name: hi.name,
       higher_team_abbr: hi.abbr,
+      higher_team_slug: hi.slug,
+      higher_team_logo_path: hi.logo_path,
       lower_team_name: lo.name,
       lower_team_abbr: lo.abbr,
+      lower_team_slug: lo.slug,
+      lower_team_logo_path: lo.logo_path,
       winner_team_name: w.name,
       winner_team_abbr: w.abbr,
+      winner_team_slug: w.slug,
+      winner_team_logo_path: w.logo_path,
     };
   });
 
