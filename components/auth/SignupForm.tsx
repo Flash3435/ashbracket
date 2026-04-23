@@ -4,7 +4,10 @@ import { createClient } from "@/lib/supabase/client";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
-import { claimParticipantInvite } from "../../lib/join/actions";
+import {
+  claimParticipantInvite,
+  type PoolJoinMutationResult,
+} from "../../lib/join/actions";
 
 export type SignupInviteContext = {
   token: string;
@@ -22,6 +25,13 @@ type SignupFormProps = {
   loginHref: string;
   /** When true (non-invite flows), show confirm password and require a match before submit. */
   requirePasswordConfirmation?: boolean;
+  /** When set (e.g. NHL product invites), used instead of World Cup `claimParticipantInvite`. */
+  claimInvite?: (token: string) => Promise<PoolJoinMutationResult>;
+  /**
+   * When set, successful same-session invite claims navigate here instead of
+   * `/account/picks?participant=…`.
+   */
+  postInviteClaimPath?: string;
 };
 
 function looksLikeExistingUserError(message: string): boolean {
@@ -40,6 +50,8 @@ export function SignupForm({
   inviteContext,
   loginHref,
   requirePasswordConfirmation = false,
+  claimInvite,
+  postInviteClaimPath,
 }: SignupFormProps) {
   const router = useRouter();
   const inviteMode = Boolean(inviteContext);
@@ -94,7 +106,8 @@ export function SignupForm({
 
     if (data.session && inviteContext) {
       setLoading(true);
-      const claim = await claimParticipantInvite(inviteContext.token);
+      const runClaim = claimInvite ?? claimParticipantInvite;
+      const claim = await runClaim(inviteContext.token);
       setLoading(false);
       if (!claim.ok) {
         setError(
@@ -102,9 +115,13 @@ export function SignupForm({
         );
         return;
       }
-      router.push(
-        `/account/picks?participant=${encodeURIComponent(claim.participantId)}`,
-      );
+      if (postInviteClaimPath !== undefined) {
+        router.push(postInviteClaimPath);
+      } else {
+        router.push(
+          `/account/picks?participant=${encodeURIComponent(claim.participantId)}`,
+        );
+      }
       router.refresh();
       return;
     }

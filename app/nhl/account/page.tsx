@@ -4,6 +4,7 @@ import {
   countNhlSeriesForEdition,
   countNhlTeamsForEdition,
   fetchActiveNhlEdition,
+  fetchNhlMembershipForUserEdition,
   fetchNhlTeamSlugsForEdition,
 } from "@/lib/nhl/queries";
 import { createClient } from "@/lib/supabase/server";
@@ -55,6 +56,29 @@ export default async function NhlAccountPage() {
   }
 
   const dataError = editionError ?? slugError ?? countsError;
+
+  let membershipId: string | null = null;
+  let membershipError: string | null = null;
+  if (user && edition && !editionError) {
+    const mem = await fetchNhlMembershipForUserEdition(supabase, user.id, edition.id);
+    membershipId = mem.membershipId;
+    membershipError = mem.error;
+  }
+
+  const participationState:
+    | "signed_out"
+    | "signed_in_no_edition"
+    | "signed_in_no_membership"
+    | "signed_in_ready"
+    | "signed_in_membership_unknown" = !user
+    ? "signed_out"
+    : !edition || editionError
+      ? "signed_in_no_edition"
+      : membershipError
+        ? "signed_in_membership_unknown"
+        : membershipId
+          ? "signed_in_ready"
+          : "signed_in_no_membership";
 
   return (
     <PageContainer>
@@ -170,30 +194,82 @@ export default async function NhlAccountPage() {
         <h2 id="nhl-account-status-heading" className="text-lg font-semibold text-ash-text">
           Your NHL account status
         </h2>
-        <p className="mt-3 text-sm leading-relaxed text-slate-300">
-          NHL account tools are not active yet. Once NHL picks and participation are enabled, this
-          area will show your bracket status, pool entry, and deadlines for the active edition.
-        </p>
-        <p className="mt-3 text-sm leading-relaxed text-slate-400">
-          For now, use{" "}
+
+        {participationState === "signed_out" ? (
+          <div className="mt-4 space-y-3 text-sm leading-relaxed text-slate-300">
+            <p>You are not signed in. Use AshBracket sign-in for NHL picks and pools—the same email and password as the rest of the site.</p>
+            <div className="flex flex-wrap gap-2">
+              <Link href="/nhl/login?next=%2Fnhl%2Faccount" className="btn-primary inline-flex text-sm no-underline">
+                Sign in
+              </Link>
+              <Link href="/nhl/signup?next=%2Fnhl%2Faccount" className="btn-ghost inline-flex text-sm no-underline">
+                Create account
+              </Link>
+            </div>
+          </div>
+        ) : null}
+
+        {participationState === "signed_in_no_edition" ? (
+          <div className="mt-4 space-y-2 text-sm leading-relaxed text-slate-300">
+            <p>
+              <span className="font-medium text-slate-100">You&apos;re signed in.</span> There is
+              no active NHL edition in this environment yet, so NHL participation cannot be linked
+              here until an edition is published.
+            </p>
+          </div>
+        ) : null}
+
+        {participationState === "signed_in_no_membership" ? (
+          <div className="mt-4 space-y-3 text-sm leading-relaxed text-slate-300">
+            <p>
+              <span className="font-medium text-slate-100">You&apos;re signed in.</span> You
+              haven&apos;t joined an NHL pool for{" "}
+              <span className="text-slate-100">{edition?.name}</span> yet.
+            </p>
+            <p className="text-slate-400">
+              When your organizer shares an NHL invite link, open it on this site (under{" "}
+              <code className="rounded bg-slate-900/80 px-1 text-slate-200">/nhl/join/…</code>) to
+              connect your account to this playoff product. That step is separate from any World Cup
+              pool you may already be in.
+            </p>
+          </div>
+        ) : null}
+
+        {participationState === "signed_in_ready" ? (
+          <div className="mt-4 space-y-3 text-sm leading-relaxed text-slate-300">
+            <p>
+              <span className="font-medium text-slate-100">You&apos;re signed in and linked for NHL participation</span>{" "}
+              on <span className="text-slate-100">{edition?.name}</span> ({edition?.season_label}).
+            </p>
+            <p className="text-slate-400">
+              Picks persistence and scoring are still rolling out; you can browse the bracket and NHL
+              pages while those features ship.
+            </p>
+            <div className="flex flex-wrap gap-2">
+              <Link href="/nhl/picks" className="btn-primary inline-flex text-sm no-underline">
+                Open picks
+              </Link>
+              <Link href="/nhl/standings" className="btn-ghost inline-flex text-sm no-underline">
+                Standings
+              </Link>
+            </div>
+          </div>
+        ) : null}
+
+        {participationState === "signed_in_membership_unknown" ? (
+          <p className="mt-4 text-sm text-amber-100/90">
+            You&apos;re signed in, but NHL participation status could not be loaded ({membershipError}
+            ).
+          </p>
+        ) : null}
+
+        <p className="mt-5 text-sm leading-relaxed text-slate-500">
+          Prefer the bracket preview?{" "}
           <Link href="/nhl/picks" className="font-medium text-blue-300 underline-offset-2 hover:text-blue-200 hover:underline">
             Picks
           </Link>{" "}
-          to preview the current playoff bracket and matchups.
+          stays available either way.
         </p>
-        <div className="mt-5 rounded-lg border border-blue-500/20 bg-slate-950/60 px-4 py-3 text-sm text-slate-400">
-          {user ? (
-            <p>
-              <span className="font-medium text-slate-200">You&apos;re signed in.</span>{" "}
-              Sign-in-aware NHL participation tools will appear here once they are enabled.
-            </p>
-          ) : (
-            <p>
-              Sign-in-aware NHL account tools will appear here once they are enabled. You are not
-              signed in; NHL pages here remain public previews until participation tools ship.
-            </p>
-          )}
-        </div>
       </section>
 
       {/* E. Helpful next actions */}

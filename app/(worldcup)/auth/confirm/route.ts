@@ -9,15 +9,17 @@ import { NextResponse, type NextRequest } from "next/server";
 export async function GET(request: NextRequest) {
   const url = new URL(request.url);
   const code = url.searchParams.get("code");
-  const next = safeRedirectPath(
-    url.searchParams.get("next") ?? undefined,
-    "/join",
-  );
+  const rawNext = url.searchParams.get("next") ?? undefined;
+  const next = safeRedirectPath(rawNext, "/join");
   const origin = url.origin;
+  const loginPath =
+    rawNext && (rawNext === "/nhl" || rawNext.startsWith("/nhl/"))
+      ? "/nhl/login"
+      : "/login";
 
   if (!code) {
     return NextResponse.redirect(
-      `${origin}/login?error=auth_confirm&next=${encodeURIComponent(next)}`,
+      `${origin}${loginPath}?error=auth_confirm&next=${encodeURIComponent(next)}`,
     );
   }
 
@@ -25,7 +27,7 @@ export async function GET(request: NextRequest) {
   const { error } = await supabase.auth.exchangeCodeForSession(code);
   if (error) {
     return NextResponse.redirect(
-      `${origin}/login?error=auth_confirm&next=${encodeURIComponent(next)}`,
+      `${origin}${loginPath}?error=auth_confirm&next=${encodeURIComponent(next)}`,
     );
   }
 

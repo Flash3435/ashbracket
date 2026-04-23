@@ -175,3 +175,22 @@ export async function fetchNhlSeriesRowsForEdition(
 
   return { rows, error: null };
 }
+
+export async function fetchNhlMembershipForUserEdition(
+  supabase: SupabaseClient,
+  userId: string,
+  editionId: string,
+): Promise<{ membershipId: string | null; error: string | null }> {
+  const { data, error } = await supabase
+    .from("nhl_memberships")
+    .select("id")
+    .eq("user_id", userId)
+    .eq("edition_id", editionId)
+    .maybeSingle();
+
+  if (error) {
+    return { membershipId: null, error: error.message };
+  }
+  const id = data?.id as string | undefined;
+  return { membershipId: id ?? null, error: null };
+}
