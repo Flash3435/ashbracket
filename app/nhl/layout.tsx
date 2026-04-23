@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { NhlSectionShell } from "@/components/nhl/NhlSectionShell";
+import { isGlobalAdmin } from "@/lib/auth/permissions";
 import { createClient } from "@/lib/supabase/server";
 
 export const dynamic = "force-dynamic";
@@ -22,8 +23,11 @@ export default async function NhlSectionLayout({
   const {
     data: { user },
   } = await supabase.auth.getUser();
+  const showNhlAdminNav = user ? await isGlobalAdmin(supabase) : false;
 
   return (
-    <NhlSectionShell isSignedIn={!!user}>{children}</NhlSectionShell>
+    <NhlSectionShell isSignedIn={!!user} showNhlAdminNav={showNhlAdminNav}>
+      {children}
+    </NhlSectionShell>
   );
 }

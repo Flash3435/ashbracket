@@ -12,8 +12,8 @@ type NavItem = {
   href: string;
   label: string;
   match?: "exact" | "prefix";
-  /** Hidden in the nav until the user has a session (admin routes still enforce server-side). */
-  requiresAuth?: boolean;
+  /** Matches `/nhl/admin` access: global `app_admins` only (see `requireNhlGlobalAdminPage`). */
+  requiresGlobalAdmin?: boolean;
 };
 
 const NAV_ITEMS: NavItem[] = [
@@ -22,7 +22,7 @@ const NAV_ITEMS: NavItem[] = [
   { href: "/nhl/standings", label: "Standings" },
   { href: "/nhl/picks", label: "Picks" },
   { href: "/nhl/account", label: "Account" },
-  { href: "/nhl/admin", label: "Admin", requiresAuth: true },
+  { href: "/nhl/admin", label: "Admin", requiresGlobalAdmin: true },
 ];
 
 function NavLink({
@@ -30,7 +30,7 @@ function NavLink({
   label,
   pathname,
   match = "prefix",
-}: Omit<NavItem, "requiresAuth"> & { pathname: string }) {
+}: Omit<NavItem, "requiresGlobalAdmin"> & { pathname: string }) {
   const pathOnly = href.split("?")[0] ?? "";
   const isActive =
     match === "exact"
@@ -46,12 +46,17 @@ function NavLink({
 export function NhlSectionShell({
   children,
   isSignedIn,
+  showNhlAdminNav,
 }: {
   children: React.ReactNode;
   isSignedIn: boolean;
+  /** True only for global admins — same gate as NHL admin routes. */
+  showNhlAdminNav: boolean;
 }) {
   const pathname = usePathname();
-  const navItems = NAV_ITEMS.filter((item) => !item.requiresAuth || isSignedIn);
+  const navItems = NAV_ITEMS.filter(
+    (item) => !item.requiresGlobalAdmin || showNhlAdminNav,
+  );
   const returnPath =
     pathname && (pathname === "/nhl" || pathname.startsWith("/nhl/"))
       ? pathname

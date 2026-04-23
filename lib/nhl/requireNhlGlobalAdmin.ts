@@ -13,9 +13,9 @@ export async function requireNhlGlobalAdminPage(
     data: { user },
   } = await supabase.auth.getUser();
   if (!user) {
-    redirect(`/login?next=${encodeURIComponent(nextPath)}`);
+    redirect(`/nhl/login?next=${encodeURIComponent(nextPath)}`);
   }
   if (!(await isGlobalAdmin(supabase))) {
-    redirect("/admin");
+    redirect("/nhl/account");
   }
 }

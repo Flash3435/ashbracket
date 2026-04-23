@@ -31,7 +31,7 @@ export default async function NhlLoginContinuePage({ searchParams }: PageProps) 
   );
 
   if (result.kind === "redirect") {
-    redirect(result.path);
+    return redirect(result.path);
   }
 
   if (result.kind === "blocked_admin") {
@@ -65,4 +65,6 @@ export default async function NhlLoginContinuePage({ searchParams }: PageProps) 
       </PageContainer>
     );
   }
+
+  return redirect("/nhl/account");
 }
