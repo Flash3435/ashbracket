@@ -147,16 +147,25 @@ function LaterRoundStrip({
 }
 
 /** Read-only bracket preview for public NHL pages (no admin copy). */
-export function NhlBracketPreview({ model }: { model: NhlAdminBracketViewModel }) {
+export function NhlBracketPreview({
+  model,
+  includeRound1 = true,
+}: {
+  model: NhlAdminBracketViewModel;
+  /** When false, only later rounds are shown (e.g. when Round 1 is highlighted elsewhere). */
+  includeRound1?: boolean;
+}) {
   const eastR1 = [...model.east.r1].sort((a, b) => a.slot_index - b.slot_index);
   const westR1 = [...model.west.r1].sort((a, b) => a.slot_index - b.slot_index);
 
   return (
     <div className="space-y-5">
-      <div className="flex flex-col gap-6 lg:flex-row lg:items-start lg:justify-center lg:gap-5">
-        <Round1Column title="Eastern Conference" labelPrefix="E · " rows={eastR1} />
-        <Round1Column title="Western Conference" labelPrefix="W · " rows={westR1} />
-      </div>
+      {includeRound1 ? (
+        <div className="flex flex-col gap-6 lg:flex-row lg:items-start lg:justify-center lg:gap-5">
+          <Round1Column title="Eastern Conference" labelPrefix="E · " rows={eastR1} />
+          <Round1Column title="Western Conference" labelPrefix="W · " rows={westR1} />
+        </div>
+      ) : null}
 
       <LaterRoundStrip
         title={roundLabel("R2")}
