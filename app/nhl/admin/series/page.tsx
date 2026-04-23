@@ -1,3 +1,4 @@
+import { NhlAdminSeriesWinnerForm } from "@/components/nhl/NhlAdminSeriesWinnerForm";
 import { NhlTeamLogo } from "@/components/nhl/NhlTeamLogo";
 import { PageContainer } from "@/components/ui/PageContainer";
 import { PageTitle } from "@/components/ui/PageTitle";
@@ -155,6 +156,7 @@ export default async function NhlAdminSeriesPage() {
                     <th className="px-3 py-2">Lower seed</th>
                     <th className="px-3 py-2">Status</th>
                     <th className="px-3 py-2">Winner</th>
+                    <th className="px-3 py-2">Record result</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-blue-500/10 text-ash-text">
@@ -192,6 +194,20 @@ export default async function NhlAdminSeriesPage() {
                           />
                         ) : (
                           "—"
+                        )}
+                      </td>
+                      <td className="px-3 py-2 align-top text-ash-muted">
+                        {r.higher_seed_team_id && r.lower_seed_team_id ? (
+                          <NhlAdminSeriesWinnerForm
+                            seriesId={r.id}
+                            higherTeamId={r.higher_seed_team_id}
+                            lowerTeamId={r.lower_seed_team_id}
+                            higherAbbr={r.higher_team_abbr ?? "Hi"}
+                            lowerAbbr={r.lower_team_abbr ?? "Lo"}
+                            currentWinnerTeamId={r.winner_team_id}
+                          />
+                        ) : (
+                          <span className="text-slate-500">Assign both teams first</span>
                         )}
                       </td>
                     </tr>

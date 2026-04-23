@@ -1,5 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import type { NhlEdition, NhlSeries, NhlSeriesRow, NhlTeam } from "./types";
+import type { NhlEdition, NhlSeries, NhlSeriesRow, NhlStandingsRow, NhlTeam } from "./types";
 
 export async function fetchActiveNhlEdition(
   supabase: SupabaseClient,
@@ -217,4 +217,98 @@ export async function fetchNhlMembershipForUserEdition(
   }
   const id = data?.id as string | undefined;
   return { membershipId: id ?? null, error: null };
+}
+
+/** Series with a recorded winner (any round) — used for standings messaging. */
+export async function countNhlSeriesWithWinnerForEdition(
+  supabase: SupabaseClient,
+  editionId: string,
+): Promise<{ count: number; error: string | null }> {
+  const { count, error } = await supabase
+    .from("nhl_series")
+    .select("id", { count: "exact", head: true })
+    .eq("edition_id", editionId)
+    .not("winner_team_id", "is", null);
+
+  if (error) {
+    return { count: 0, error: error.message };
+  }
+  return { count: count ?? 0, error: null };
+}
+
+function mapRpcStandingsRow(raw: Record<string, unknown>): NhlStandingsRow | null {
+  const rank = raw.rank;
+  const user_id = raw.user_id;
+  const entry_name = raw.entry_name;
+  const total_points = raw.total_points;
+  const correct_picks = raw.correct_picks;
+  const pending_decisions = raw.pending_decisions;
+  const pick_count = raw.pick_count;
+  const status = raw.status;
+
+  if (
+    typeof user_id !== "string" ||
+    typeof entry_name !== "string" ||
+    typeof status !== "string"
+  ) {
+    return null;
+  }
+
+  const rankNum = typeof rank === "number" ? rank : Number(rank);
+  const pointsNum = typeof total_points === "number" ? total_points : Number(total_points);
+  const correctNum = typeof correct_picks === "number" ? correct_picks : Number(correct_picks);
+  const pendingNum =
+    typeof pending_decisions === "number" ? pending_decisions : Number(pending_decisions);
+  const pickCountNum = typeof pick_count === "number" ? pick_count : Number(pick_count);
+
+  if (
+    !Number.isFinite(rankNum) ||
+    !Number.isFinite(pointsNum) ||
+    !Number.isFinite(correctNum) ||
+    !Number.isFinite(pendingNum) ||
+    !Number.isFinite(pickCountNum)
+  ) {
+    return null;
+  }
+
+  if (status !== "no_picks" && status !== "in_progress" && status !== "complete") {
+    return null;
+  }
+
+  return {
+    rank: rankNum,
+    user_id,
+    entry_name,
+    total_points: pointsNum,
+    correct_picks: correctNum,
+    pending_decisions: pendingNum,
+    pick_count: pickCountNum,
+    status,
+  };
+}
+
+/**
+ * NHL-only leaderboard for an edition. Uses SECURITY DEFINER RPC (see migration
+ * `20260422180000_nhl_standings_rpc.sql`); safe for anon/authenticated without exposing raw picks.
+ */
+export async function fetchNhlEditionStandings(
+  supabase: SupabaseClient,
+  editionId: string,
+): Promise<{ rows: NhlStandingsRow[]; error: string | null }> {
+  const { data, error } = await supabase.rpc("fetch_nhl_edition_standings", {
+    p_edition_id: editionId,
+  });
+
+  if (error) {
+    return { rows: [], error: error.message };
+  }
+
+  const rows: NhlStandingsRow[] = [];
+  for (const raw of data ?? []) {
+    const mapped = mapRpcStandingsRow(raw as Record<string, unknown>);
+    if (mapped) {
+      rows.push(mapped);
+    }
+  }
+  return { rows, error: null };
 }

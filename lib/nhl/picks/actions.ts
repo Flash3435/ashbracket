@@ -102,5 +102,6 @@ export async function saveNhlRound1SeriesPickAction(input: {
   }
 
   revalidatePath("/nhl/picks");
+  revalidatePath("/nhl/standings");
   return { ok: true };
 }

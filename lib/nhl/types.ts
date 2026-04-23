@@ -60,3 +60,17 @@ export type NhlSeriesRow = NhlSeries & {
   winner_team_slug: string | null;
   winner_team_logo_path: string | null;
 };
+
+/** One leaderboard row from `fetch_nhl_edition_standings` RPC. */
+export type NhlStandingsStatus = "no_picks" | "in_progress" | "complete";
+
+export type NhlStandingsRow = {
+  rank: number;
+  user_id: string;
+  entry_name: string;
+  total_points: number;
+  correct_picks: number;
+  pending_decisions: number;
+  pick_count: number;
+  status: NhlStandingsStatus;
+};
