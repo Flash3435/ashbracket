@@ -49,7 +49,7 @@ export function LoginForm({
           <p className="rounded-md border border-amber-700/50 bg-amber-950/30 px-3 py-2 text-sm text-amber-100">
             {isNhlSurface
               ? "That NHL admin page is only available to AshBracket global admins."
-              : "That page is only available to pool organizers (admin accounts)."}
+              : "This area is for pool organizers."}
           </p>
         ) : null}
         <p className="rounded-md border border-amber-700/50 bg-amber-950/30 px-3 py-2 text-sm text-amber-100">
@@ -63,12 +63,13 @@ export function LoginForm({
           ) : (
             <>
               {" "}
-              This account is not authorized for the admin area. Sign out and use an organizer
-              account, or ask an owner to add you in{" "}
+              You don’t have access to the admin area yet. Want to run your own
+              pool? Create a new pool, or sign out and use a different
+              account. You can also ask a pool owner to add you in{" "}
               <code className="rounded bg-amber-950/60 px-1 text-amber-100">
                 pool_admins
               </code>{" "}
-              or{" "}
+              (organizers) — app-wide access is only for global administrators in{" "}
               <code className="rounded bg-amber-950/60 px-1 text-amber-100">
                 app_admins
               </code>
@@ -77,6 +78,20 @@ export function LoginForm({
           )}
         </p>
         <div className="flex flex-wrap gap-2">
+          {!isNhlSurface ? (
+            <Link
+              href="/account/pools/new"
+              className="btn-primary inline-flex items-center text-sm"
+            >
+              Create your own pool
+            </Link>
+          ) : null}
+          <Link
+            href={blockedStateAccountHref}
+            className="btn-ghost inline-flex items-center text-sm ring-1 ring-ash-border"
+          >
+            {isNhlSurface ? "NHL account" : "My account"}
+          </Link>
           <button
             type="button"
             onClick={onSignOut}
@@ -84,12 +99,6 @@ export function LoginForm({
           >
             Sign out
           </button>
-          <Link
-            href={blockedStateAccountHref}
-            className="btn-ghost inline-flex items-center text-sm"
-          >
-            {isNhlSurface ? "NHL account" : "My account"}
-          </Link>
         </div>
       </div>
     );

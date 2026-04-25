@@ -25,6 +25,7 @@ export async function SiteHeader() {
       isSignedIn={!!user}
       isAdmin={isAdmin}
       showActivityNav={showActivityNav}
+      showCreatePoolNav={!!user && !isAdmin}
     />
   );
 }

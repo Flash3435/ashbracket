@@ -1,30 +1,33 @@
 "use server";
 
-import { isGlobalAdmin } from "@/lib/auth/permissions";
 import { createClient } from "@/lib/supabase/server";
 import { revalidatePath } from "next/cache";
 import { validateJoinCodeFormat } from "./joinCodeFormat";
 import { validatePoolNameInput } from "./validatePoolNameInput";
 
-export type CreatePoolWithOwnerResult =
-  | { ok: true; poolId: string }
+export type CreatePoolForCurrentUserResult =
+  | { ok: true; poolId: string; poolName: string; joinCode: string }
   | { ok: false; error: string };
 
+type RpcResult = {
+  pool_id: string;
+  pool_name: string;
+  join_code: string;
+};
+
 /**
- * Global admins only. Creates a pool with `created_by_user_id`, join code
- * (provided or auto-generated in RPC), `is_public`, and an owner `pool_admins`
- * row via `create_pool_with_owner` (SECURITY DEFINER).
+ * Any signed-in user. Creates a pool, join code, optional public visibility, and
+ * an owner `pool_admins` row via `create_pool_for_current_user` (SECURITY DEFINER).
  */
-export async function createPoolWithOwnerAction(input: {
+export async function createPoolForCurrentUserAction(input: {
   name: string;
   joinCode?: string | null;
   isPublic?: boolean;
-}): Promise<CreatePoolWithOwnerResult> {
+}): Promise<CreatePoolForCurrentUserResult> {
   const nameCheck = validatePoolNameInput(input.name);
   if (!nameCheck.ok) {
     return { ok: false, error: nameCheck.error };
   }
-  const name = nameCheck.name;
 
   const joinCheck = validateJoinCodeFormat(input.joinCode);
   if (!joinCheck.ok) {
@@ -39,29 +42,17 @@ export async function createPoolWithOwnerAction(input: {
     if (!user) {
       return { ok: false, error: "You must be signed in to create a pool." };
     }
-    if (!(await isGlobalAdmin(supabase))) {
-      return {
-        ok: false,
-        error: "Only global administrators can create pools.",
-      };
-    }
 
-    const { data: poolId, error } = await supabase.rpc(
-      "create_pool_with_owner",
-      {
-        p_name: name,
-        p_join_code: joinCheck.normalized,
-        p_is_public: Boolean(input.isPublic),
-      },
-    );
+    const { data, error } = await supabase.rpc("create_pool_for_current_user", {
+      p_name: nameCheck.name,
+      p_join_code: joinCheck.normalized,
+      p_is_public: Boolean(input.isPublic),
+    });
 
     if (error) {
       const msg = error.message;
-      if (msg.includes("only global administrators")) {
-        return {
-          ok: false,
-          error: "Only global administrators can create pools.",
-        };
+      if (msg === "not authenticated" || msg.includes("not authenticated")) {
+        return { ok: false, error: "You must be signed in to create a pool." };
       }
       if (msg.includes("join code is already in use")) {
         return { ok: false, error: "That join code is already in use." };
@@ -79,17 +70,42 @@ export async function createPoolWithOwnerAction(input: {
       if (msg.includes("join code may only contain")) {
         return { ok: false, error: msg };
       }
+      if (msg.includes("invalid pool name")) {
+        return {
+          ok: false,
+          error: "Please enter a valid pool name (1–200 characters).",
+        };
+      }
       return { ok: false, error: msg };
     }
-    if (!poolId || typeof poolId !== "string") {
+
+    let parsed: unknown;
+    try {
+      parsed = typeof data === "string" ? JSON.parse(data) : data;
+    } catch {
+      return { ok: false, error: "Pool was not created." };
+    }
+    const row = parsed as RpcResult | null;
+    if (
+      !row ||
+      typeof row !== "object" ||
+      typeof row.pool_id !== "string" ||
+      typeof row.join_code !== "string"
+    ) {
       return { ok: false, error: "Pool was not created." };
     }
 
     revalidatePath("/admin");
     revalidatePath("/account");
-    revalidatePath(`/admin/pools/${poolId}`);
 
-    return { ok: true, poolId };
+    revalidatePath(`/admin/pools/${row.pool_id}`);
+
+    return {
+      ok: true,
+      poolId: row.pool_id,
+      poolName: row.pool_name,
+      joinCode: row.join_code,
+    };
   } catch (e) {
     return {
       ok: false,

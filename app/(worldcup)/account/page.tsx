@@ -38,6 +38,21 @@ export default async function AccountPage({ searchParams }: PageProps) {
     redirect("/login?next=/account");
   }
 
+  const { data: orgAdminRows, error: orgErr } = await supabase
+    .from("pool_admins")
+    .select("pools (id, name, join_code)")
+    .eq("user_id", user.id);
+
+  const organizedPools = (
+    (orgAdminRows as { pools: { id: string; name: string; join_code: string | null } | null }[] | null) ??
+    []
+  )
+    .map((r) => r.pools)
+    .filter(
+      (p): p is { id: string; name: string; join_code: string | null } =>
+        p != null,
+    );
+
   const { data: rows, error } = await supabase
     .from("participants")
     .select("id, display_name, pool_id")
@@ -115,6 +130,45 @@ export default async function AccountPage({ searchParams }: PageProps) {
         />
       </div>
 
+      <div className="mb-6 space-y-3">
+        {orgErr ? (
+          <p className="text-sm text-amber-200" role="alert">
+            Could not load pools you organize ({orgErr.message}).
+          </p>
+        ) : null}
+        {organizedPools.length > 0 ? (
+          <div className="ash-surface p-4">
+            <h2 className="text-sm font-semibold text-ash-text">
+              Pools you organize
+            </h2>
+            <ul className="mt-2 space-y-2 text-sm">
+              {organizedPools.map((p) => (
+                <li
+                  key={p.id}
+                  className="flex flex-wrap items-center justify-between gap-2"
+                >
+                  <span className="text-ash-text">{p.name}</span>
+                  <Link
+                    href={`/admin/pools/${p.id}`}
+                    className="btn-primary inline-flex py-1.5 text-xs"
+                  >
+                    Manage pool
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          </div>
+        ) : null}
+        <div>
+          <Link
+            href="/account/pools/new"
+            className="btn-ghost inline-flex text-sm ring-1 ring-ash-border"
+          >
+            Create your own pool
+          </Link>
+        </div>
+      </div>
+
       {error ? (
         <p className="text-sm text-red-300" role="alert">
           {error.message}
@@ -124,12 +178,21 @@ export default async function AccountPage({ searchParams }: PageProps) {
       {!error && list.length === 0 ? (
         <div className="ash-surface p-6">
           <p className="text-sm text-ash-muted">
-            You are not linked to a pool yet. Use your join code to create or
-            claim a profile.
+            You are not linked to a pool as a participant yet. Use your join
+            code to create or claim a profile, or start your own pool as the
+            organizer.
           </p>
-          <Link href="/join" className="btn-primary mt-4 inline-flex">
-            Join a pool
-          </Link>
+          <div className="mt-4 flex flex-wrap gap-2">
+            <Link href="/join" className="btn-primary inline-flex">
+              Join a pool
+            </Link>
+            <Link
+              href="/account/pools/new"
+              className="btn-ghost inline-flex ring-1 ring-ash-border"
+            >
+              Create your own pool
+            </Link>
+          </div>
         </div>
       ) : null}
 

@@ -51,9 +51,10 @@ export async function resolvePostLoginDestination(
   const safeNext = sanitizeRequestedNext(requestedNextRaw);
   if (safeNext) {
     const path = pathnameOnly(safeNext);
-    const wantsAdmin =
-      path === "/admin" || path.startsWith("/admin/");
-    if (wantsAdmin && !canAdmin) {
+    // Any signed-in user may land on `/admin` (self-serve pool CTA). Subpaths
+    // require a pool or global admin (same as middleware).
+    const wantsAdminSub = path.startsWith("/admin/");
+    if (wantsAdminSub && !canAdmin) {
       const {
         data: { user },
       } = await supabase.auth.getUser();

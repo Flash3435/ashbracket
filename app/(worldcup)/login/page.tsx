@@ -19,7 +19,9 @@ export default async function LoginPage({
 
   const showForbidden = sp.error === "forbidden";
   const showEmailConfirmFailed = sp.error === "auth_confirm";
-  const wantsAdminDest = sp.next?.startsWith("/admin") ?? false;
+  const nextPathOnly = sp.next?.split("?")[0] ?? "";
+  const wantsProtectedAdmin =
+    nextPathOnly.startsWith("/admin/") || showForbidden;
   const postLoginHref =
     sp.next !== undefined && sp.next !== ""
       ? `/login/continue?next=${encodeURIComponent(sp.next)}`
@@ -32,8 +34,7 @@ export default async function LoginPage({
 
   if (user) {
     const canAdmin = await canAccessAdminDashboard(supabase, user.id);
-    const mustBlockNonAdmin =
-      !canAdmin && (wantsAdminDest || showForbidden);
+    const mustBlockNonAdmin = !canAdmin && wantsProtectedAdmin;
     if (mustBlockNonAdmin) {
       return (
         <PageContainer>

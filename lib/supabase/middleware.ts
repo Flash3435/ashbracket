@@ -100,7 +100,11 @@ async function runSession(request: NextRequest): Promise<NextResponse> {
     }
   }
 
-  if (request.nextUrl.pathname.startsWith("/admin")) {
+  const adminPath = request.nextUrl.pathname;
+  const isAdminRoot = adminPath === "/admin" || adminPath === "/admin/";
+  const isAdminSubpath = !isAdminRoot && adminPath.startsWith("/admin");
+
+  if (isAdminRoot || isAdminSubpath) {
     if (!user) {
       const loginUrl = request.nextUrl.clone();
       loginUrl.pathname = "/login";
@@ -113,18 +117,23 @@ async function runSession(request: NextRequest): Promise<NextResponse> {
       return redirect;
     }
 
-    const allowed = await canAccessAdminDashboard(supabase, user.id);
-    if (!allowed) {
-      const forbiddenUrl = request.nextUrl.clone();
-      forbiddenUrl.pathname = "/login";
-      forbiddenUrl.searchParams.set(
-        "next",
-        `${request.nextUrl.pathname}${request.nextUrl.search}`,
-      );
-      forbiddenUrl.searchParams.set("error", "forbidden");
-      const redirect = NextResponse.redirect(forbiddenUrl);
-      copyAuthCookies(supabaseResponse, redirect);
-      return redirect;
+    // Subpaths (pool settings, tournament tools) require a pool or global
+    // admin. `/admin` alone is a landing: any signed-in user can open it to
+    // start self-serve pool creation or read guidance.
+    if (isAdminSubpath) {
+      const allowed = await canAccessAdminDashboard(supabase, user.id);
+      if (!allowed) {
+        const forbiddenUrl = request.nextUrl.clone();
+        forbiddenUrl.pathname = "/login";
+        forbiddenUrl.searchParams.set(
+          "next",
+          `${request.nextUrl.pathname}${request.nextUrl.search}`,
+        );
+        forbiddenUrl.searchParams.set("error", "forbidden");
+        const redirect = NextResponse.redirect(forbiddenUrl);
+        copyAuthCookies(supabaseResponse, redirect);
+        return redirect;
+      }
     }
   }
 

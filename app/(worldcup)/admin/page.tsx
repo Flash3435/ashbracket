@@ -50,10 +50,28 @@ export default async function AdminHomePage() {
       ) : null}
 
       {!error && list.length === 0 && !global ? (
-        <p className="text-sm text-ash-muted">
-          You do not have any pools yet. When a pool is created and you are
-          assigned as an organizer, it will appear here.
-        </p>
+        <div className="space-y-3 rounded-lg border border-ash-border bg-ash-body/40 p-4 text-sm text-ash-muted">
+          <p className="text-ash-text">This area is for pool organizers.</p>
+          <p>
+            Want to run your own pool? You can create one from your account —
+            you&apos;ll become the organizer and can open pool settings, invite
+            participants, and manage admins for that pool only.
+          </p>
+          <div className="flex flex-wrap gap-2">
+            <Link
+              href="/account/pools/new"
+              className="btn-primary inline-flex text-sm"
+            >
+              Create your own pool
+            </Link>
+            <Link
+              href="/account"
+              className="btn-ghost inline-flex text-sm ring-1 ring-ash-border"
+            >
+              My account
+            </Link>
+          </div>
+        </div>
       ) : null}
 
       {!error && list.length > 0 ? (

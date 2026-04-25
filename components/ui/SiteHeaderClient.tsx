@@ -40,12 +40,15 @@ export type SiteHeaderClientProps = {
   isAdmin: boolean;
   /** True when the user has at least one pool profile (activity is per-pool, not public). */
   showActivityNav?: boolean;
+  /** Self-serve organizer entry (signed in, not yet a pool or global admin). */
+  showCreatePoolNav?: boolean;
 };
 
 export function SiteHeaderClient({
   isSignedIn,
   isAdmin,
   showActivityNav = false,
+  showCreatePoolNav = false,
 }: SiteHeaderClientProps) {
   const pathname = usePathname();
 
@@ -128,6 +131,15 @@ export function SiteHeaderClient({
               {isAdmin ? (
                 <TextNavLink href="/admin" pathname={pathname} match="prefix">
                   Admin
+                </TextNavLink>
+              ) : null}
+              {showCreatePoolNav ? (
+                <TextNavLink
+                  href="/account/pools/new"
+                  pathname={pathname}
+                  match="prefix"
+                >
+                  Create a pool
                 </TextNavLink>
               ) : null}
               <SignOutButton className="btn-ghost px-3 py-1.5 text-sm disabled:opacity-50" />
