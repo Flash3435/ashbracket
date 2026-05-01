@@ -2,22 +2,14 @@
 
 import { isGlobalAdmin } from "@/lib/auth/permissions";
 import { fetchActiveNhlEdition } from "@/lib/nhl/queries";
+import { revalidateNhlPublicSurfaces } from "@/lib/nhl/revalidateNhlPublicSurfaces";
 import { createClient } from "@/lib/supabase/server";
-import { revalidatePath } from "next/cache";
 
 const UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 function isUuid(v: string): boolean {
   return UUID_RE.test(v.trim());
-}
-
-function revalidateNhlStandingsRelated() {
-  revalidatePath("/nhl");
-  revalidatePath("/nhl/standings");
-  revalidatePath("/nhl/picks");
-  revalidatePath("/nhl/admin/series");
-  revalidatePath("/nhl/admin/bracket");
 }
 
 /**
@@ -68,7 +60,7 @@ export async function recordNhlSeriesWinnerAction(formData: FormData): Promise<v
       .eq("edition_id", edition.id);
 
     if (!error) {
-      revalidateNhlStandingsRelated();
+      revalidateNhlPublicSurfaces();
     }
     return;
   }
@@ -91,6 +83,6 @@ export async function recordNhlSeriesWinnerAction(formData: FormData): Promise<v
     .eq("edition_id", edition.id);
 
   if (!error) {
-    revalidateNhlStandingsRelated();
+    revalidateNhlPublicSurfaces();
   }
 }

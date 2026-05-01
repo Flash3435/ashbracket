@@ -77,8 +77,17 @@ export default async function NhlAdminSeriesPage() {
     <PageContainer compactBottom>
       <PageTitle
         title="Series"
-        description="All bracket slots from Round 1 through the Stanley Cup Final. For a conference layout, use the bracket view; this table is for detailed inspection."
+        description="All bracket slots from Round 1 through the Stanley Cup Final. Round 1 scores can also sync from the league bracket API via /api/nhl/sync-playoff-series when NHL_PLAYOFF_SYNC_ENABLED=true (see ops env below)."
       />
+
+      <p className="text-xs leading-relaxed text-slate-500">
+        Automated sync (optional): set Vercel env{" "}
+        <code className="rounded bg-slate-950/70 px-1 py-px text-slate-300">NHL_PLAYOFF_SYNC_ENABLED=true</code>
+        , supply <code className="rounded bg-slate-950/70 px-1 py-px text-slate-300">CRON_SECRET</code> and{" "}
+        <code className="rounded bg-slate-950/70 px-1 py-px text-slate-300">SUPABASE_SERVICE_ROLE_KEY</code>; optional{" "}
+        <code className="rounded bg-slate-950/70 px-1 py-px text-slate-300">NHL_PLAYOFF_BRACKET_YEAR=2026</code>. Vercel
+        Cron calls the route every 10 minutes (<code className="text-slate-400">vercel.json</code>).
+      </p>
 
       <p className="text-sm text-ash-muted">
         <Link href="/nhl/admin" className="ash-link">
