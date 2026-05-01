@@ -1,6 +1,7 @@
 "use client";
 
 import { saveNhlRound1SeriesPickAction } from "@/lib/nhl/picks/actions";
+import { buildNhlSeriesStatePresentation } from "@/lib/nhl/nhlSeriesStateText";
 import type { NhlSeriesRow } from "@/lib/nhl/types";
 import Link from "next/link";
 import { useEffect, useState, useTransition } from "react";
@@ -30,6 +31,7 @@ function SelectableTeamRow({
   selected,
   disabled,
   onSelect,
+  resultEmphasis,
 }: {
   abbr: string | null;
   name: string | null;
@@ -39,6 +41,8 @@ function SelectableTeamRow({
   selected: boolean;
   disabled: boolean;
   onSelect: () => void;
+  /** When the real series has a recorded winner, highlight that side and mute the other. */
+  resultEmphasis?: "winner" | "loser" | "neutral";
 }) {
   if (!abbr && !name) {
     return (
@@ -50,6 +54,12 @@ function SelectableTeamRow({
   }
   const primary = abbr ?? name ?? "—";
   const secondary = name && abbr && name !== abbr ? name : name && !abbr ? name : null;
+  const resultRing =
+    resultEmphasis === "winner"
+      ? "ring-1 ring-emerald-400/35"
+      : resultEmphasis === "loser"
+        ? "opacity-[0.68] saturate-75"
+        : "";
   return (
     <button
       type="button"
@@ -60,7 +70,7 @@ function SelectableTeamRow({
         selected
           ? "border-emerald-500/55 bg-emerald-950/35 ring-1 ring-emerald-500/25"
           : "border-blue-500/25 bg-slate-950/55 hover:border-blue-400/45 hover:bg-slate-900/60"
-      } ${disabled ? "cursor-not-allowed opacity-50" : "cursor-pointer"}`}
+      } ${resultRing} ${disabled ? "cursor-not-allowed opacity-50" : "cursor-pointer"}`}
     >
       <NhlTeamLogo
         className="mt-0.5"
@@ -79,7 +89,13 @@ function SelectableTeamRow({
           </p>
         ) : null}
         <p className="mt-1 text-[10px] font-medium uppercase tracking-wide text-slate-500">
-          {selected ? "Your pick" : "Tap to pick winner"}
+          {resultEmphasis === "winner"
+            ? "Series winner"
+            : resultEmphasis === "loser"
+              ? "Eliminated"
+              : selected
+                ? "Your pick"
+                : "Tap to pick winner"}
         </p>
       </div>
     </button>
@@ -114,6 +130,14 @@ export function NhlRound1SeriesPickCard({
   const hasPairing = Boolean(
     hi && lo && (series.higher_team_abbr || series.higher_team_name) && (series.lower_team_abbr || series.lower_team_name),
   );
+
+  const pres = buildNhlSeriesStatePresentation(series);
+  const resolvedWinnerId = pres.winnerTeamId ?? series.winner_team_id;
+  function resultForTeam(teamId: string | null): "winner" | "loser" | "neutral" {
+    if (!resolvedWinnerId || !teamId) return "neutral";
+    if (resolvedWinnerId === teamId) return "winner";
+    return "loser";
+  }
 
   const canPick = isAuthenticated && !picksLocked && hasPairing && hi && lo;
   const controlsDisabled = !canPick || isPending;
@@ -153,6 +177,20 @@ export function NhlRound1SeriesPickCard({
           {headline}
         </span>
       </div>
+      <div className="mt-3 rounded-lg border border-slate-600/35 bg-slate-900/35 px-3 py-2.5">
+        <div className="flex flex-wrap items-center justify-between gap-x-2 gap-y-1">
+          <span className="rounded-full border border-blue-400/25 bg-blue-950/45 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-blue-100/95">
+            {pres.statusLabel}
+          </span>
+          {pres.scoreHigherLower ? (
+            <span className="font-mono text-xs font-semibold tabular-nums text-slate-200">
+              {pres.scoreHigherLower}
+            </span>
+          ) : null}
+        </div>
+        <p className="mt-2 text-[11px] leading-snug text-slate-300">{pres.primaryLine}</p>
+      </div>
+
       <div className="mt-3 space-y-2">
         <SelectableTeamRow
           abbr={series.higher_team_abbr}
@@ -163,6 +201,7 @@ export function NhlRound1SeriesPickCard({
           selected={Boolean(hi && pickedId === hi)}
           disabled={controlsDisabled || !hi}
           onSelect={() => hi && pickTeam(hi)}
+          resultEmphasis={resolvedWinnerId ? resultForTeam(hi) : "neutral"}
         />
         <p className="py-0.5 text-center text-[11px] font-medium uppercase tracking-widest text-slate-500">
           vs
@@ -176,6 +215,7 @@ export function NhlRound1SeriesPickCard({
           selected={Boolean(lo && pickedId === lo)}
           disabled={controlsDisabled || !lo}
           onSelect={() => lo && pickTeam(lo)}
+          resultEmphasis={resolvedWinnerId ? resultForTeam(lo) : "neutral"}
         />
       </div>
 

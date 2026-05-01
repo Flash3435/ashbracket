@@ -141,8 +141,9 @@ export default async function NhlHomePage() {
       <section id="nhl-bracket-preview" className="scroll-mt-28">
         <h2 className="text-lg font-semibold text-ash-text">Bracket preview</h2>
         <p className="mt-1 text-sm text-slate-400">
-          Round 1 matchups reflect the official playoff field when the active edition is fully
-          loaded. Later rounds stay open until winners advance.
+          Cards include current series scores and status when playoff results are logged; finished
+          series show who advanced. Later-round slots reflect teams assigned to those matchups once
+          they are known.
         </p>
 
         {model ? (

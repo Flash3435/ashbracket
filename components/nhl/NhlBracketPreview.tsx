@@ -1,5 +1,6 @@
 import type { NhlAdminBracketViewModel } from "@/lib/nhl/bracketViewModel";
 import { roundLabel } from "@/lib/nhl/bracketViewModel";
+import { buildNhlSeriesStatePresentation, nhlTeamSlotOutcome } from "@/lib/nhl/nhlSeriesStateText";
 import type { NhlSeriesRow } from "@/lib/nhl/types";
 import { NhlTeamLogo } from "./NhlTeamLogo";
 
@@ -9,12 +10,16 @@ function TeamLine({
   role,
   teamSlug,
   logoPath,
+  teamId,
+  winnerTeamId,
 }: {
   abbr: string | null;
   name: string | null;
   role: "higher" | "lower";
   teamSlug?: string | null;
   logoPath?: string | null;
+  teamId: string | null;
+  winnerTeamId: string | null;
 }) {
   if (!abbr && !name) {
     return (
@@ -26,12 +31,19 @@ function TeamLine({
       </div>
     );
   }
+  const outcome = nhlTeamSlotOutcome(winnerTeamId, teamId);
+  const emphasis =
+    outcome === "winner"
+      ? "border-emerald-500/45 bg-emerald-950/35 ring-1 ring-emerald-500/25"
+      : outcome === "loser"
+        ? "border-slate-600/35 bg-slate-950/40 opacity-[0.72]"
+        : "border-blue-500/20 bg-slate-950/55";
   const primary = abbr ?? name ?? "—";
   const secondary = abbr && name && abbr !== name ? name : null;
   return (
-    <div className="flex items-start gap-2 rounded border border-blue-500/20 bg-slate-950/55 px-2.5 py-2">
+    <div className={`flex items-start gap-2 rounded border px-2.5 py-2 ${emphasis}`}>
       <NhlTeamLogo
-        className="mt-0.5"
+        className={`mt-0.5 ${outcome === "loser" ? "opacity-75" : ""}`}
         size="sm"
         teamSlug={teamSlug}
         abbreviation={abbr}
@@ -42,23 +54,22 @@ function TeamLine({
         <p className="text-[10px] font-medium uppercase tracking-wide text-slate-500">
           {role === "higher" ? "Higher seed" : "Lower seed"}
         </p>
-        <p className="mt-0.5 text-sm font-semibold text-ash-text" title={name ?? abbr ?? undefined}>
+        <p className={`mt-0.5 text-sm font-semibold text-ash-text ${outcome === "loser" ? "text-slate-400" : ""}`} title={name ?? abbr ?? undefined}>
           {primary}
+          {outcome === "winner" ? (
+            <span className="ml-1.5 align-middle font-sans text-[10px] font-semibold uppercase tracking-wide text-emerald-300/90">
+              W
+            </span>
+          ) : null}
         </p>
         {secondary ? (
-          <p className="truncate text-[11px] leading-tight text-slate-500" title={secondary}>
+          <p className={`truncate text-[11px] leading-tight ${outcome === "loser" ? "text-slate-600" : "text-slate-500"}`} title={secondary}>
             {secondary}
           </p>
         ) : null}
       </div>
     </div>
   );
-}
-
-function statusPhrase(status: NhlSeriesRow["status"]) {
-  if (status === "complete") return "Series complete";
-  if (status === "in_progress") return "In progress";
-  return null;
 }
 
 function PublicMatchupCard({
@@ -68,21 +79,31 @@ function PublicMatchupCard({
   series: NhlSeriesRow;
   headline: string;
 }) {
-  const status = statusPhrase(series.status);
-  const winner =
-    series.winner_team_abbr ??
-    (series.winner_team_name ? series.winner_team_name.slice(0, 12) : null);
+  const pres = buildNhlSeriesStatePresentation(series);
+  const showScore = Boolean(pres.scoreHigherLower);
 
   return (
     <div className="rounded-lg border border-blue-500/20 bg-slate-950/50 px-3 py-2.5 shadow-sm">
-      <p className="font-mono text-[10px] uppercase tracking-wide text-slate-500">{headline}</p>
-      <div className="mt-2 space-y-1">
+      <div className="flex flex-wrap items-baseline justify-between gap-x-2 gap-y-0.5">
+        <p className="font-mono text-[10px] uppercase tracking-wide text-slate-500">{headline}</p>
+        <span className="shrink-0 rounded border border-blue-400/25 bg-blue-950/40 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-blue-100/95">
+          {pres.statusLabel}
+        </span>
+      </div>
+      {showScore ? (
+        <p className="mt-2 text-center text-xs font-semibold tabular-nums text-slate-200">
+          {pres.scoreHigherLower}
+        </p>
+      ) : null}
+      <div className={showScore ? "mt-1.5 space-y-1" : "mt-2 space-y-1"}>
         <TeamLine
           abbr={series.higher_team_abbr}
           name={series.higher_team_name}
           role="higher"
           teamSlug={series.higher_team_slug}
           logoPath={series.higher_team_logo_path}
+          teamId={series.higher_seed_team_id}
+          winnerTeamId={pres.winnerTeamId ?? series.winner_team_id}
         />
         <p className="py-0.5 text-center text-[10px] text-slate-500">vs</p>
         <TeamLine
@@ -91,22 +112,11 @@ function PublicMatchupCard({
           role="lower"
           teamSlug={series.lower_team_slug}
           logoPath={series.lower_team_logo_path}
+          teamId={series.lower_seed_team_id}
+          winnerTeamId={pres.winnerTeamId ?? series.winner_team_id}
         />
       </div>
-      {status ? <p className="mt-2 text-[10px] text-slate-400">{status}</p> : null}
-      {winner ? (
-        <p className="mt-1 flex flex-wrap items-center gap-1.5 text-[10px] text-emerald-300/90">
-          <span>Winner:</span>
-          <NhlTeamLogo
-            size="sm"
-            teamSlug={series.winner_team_slug}
-            abbreviation={series.winner_team_abbr}
-            logoPath={series.winner_team_logo_path}
-            name={series.winner_team_name ?? series.winner_team_abbr}
-          />
-          <span className="font-semibold">{winner}</span>
-        </p>
-      ) : null}
+      <p className="mt-2 text-[11px] leading-snug text-slate-300">{pres.primaryLine}</p>
     </div>
   );
 }

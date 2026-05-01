@@ -3,6 +3,7 @@ import { NhlTeamLogo } from "@/components/nhl/NhlTeamLogo";
 import { PageContainer } from "@/components/ui/PageContainer";
 import { PageTitle } from "@/components/ui/PageTitle";
 import { createClient } from "@/lib/supabase/server";
+import { buildNhlSeriesStatePresentation } from "@/lib/nhl/nhlSeriesStateText";
 import { getOfficial2026EditionTeamStatus } from "@/lib/nhl/official2026Edition";
 import {
   fetchActiveNhlEdition,
@@ -154,13 +155,17 @@ export default async function NhlAdminSeriesPage() {
                     <th className="px-3 py-2">Side</th>
                     <th className="px-3 py-2">Higher seed</th>
                     <th className="px-3 py-2">Lower seed</th>
-                    <th className="px-3 py-2">Status</th>
+                    <th className="px-3 py-2">Score</th>
+                    <th className="px-3 py-2">State</th>
+                    <th className="px-3 py-2">Summary</th>
                     <th className="px-3 py-2">Winner</th>
                     <th className="px-3 py-2">Record result</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-blue-500/10 text-ash-text">
-                  {seriesRes.rows.map((r) => (
+                  {seriesRes.rows.map((r) => {
+                    const pres = buildNhlSeriesStatePresentation(r);
+                    return (
                     <tr key={r.id} className="bg-slate-950/30">
                       <td className="px-3 py-2 font-mono text-xs">{r.round_code}</td>
                       <td className="px-3 py-2 tabular-nums">{r.slot_index}</td>
@@ -181,8 +186,17 @@ export default async function NhlAdminSeriesPage() {
                           logoPath={r.lower_team_logo_path}
                         />
                       </td>
-                      <td className="px-3 py-2 capitalize">
-                        {r.status.replaceAll("_", " ")}
+                      <td className="whitespace-nowrap px-3 py-2 font-mono text-xs text-slate-300" title="Higher wins · Lower wins">
+                        {pres.scoreHigherLower ?? "—"}
+                      </td>
+                      <td
+                        className="px-3 py-2 text-xs font-medium text-blue-100/95"
+                        title={`Database status: ${r.status.replaceAll("_", " ")}`}
+                      >
+                        {pres.statusLabel}
+                      </td>
+                      <td className="max-w-[220px] px-3 py-2 text-xs leading-snug text-slate-400">
+                        {pres.primaryLine}
                       </td>
                       <td className="px-3 py-2 text-ash-muted">
                         {r.winner_team_abbr || r.winner_team_name ? (
@@ -211,7 +225,8 @@ export default async function NhlAdminSeriesPage() {
                         )}
                       </td>
                     </tr>
-                  ))}
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
