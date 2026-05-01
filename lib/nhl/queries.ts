@@ -1,4 +1,8 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import {
+  fetchNhleBracketJsonForOverlay,
+  overlayRound1SeriesRowsFromBracket,
+} from "./nhleBracketOverlay";
 import type { NhlEdition, NhlSeries, NhlSeriesRow, NhlStandingsRow, NhlTeam } from "./types";
 
 export async function fetchActiveNhlEdition(
@@ -174,6 +178,30 @@ export async function fetchNhlSeriesRowsForEdition(
   });
 
   return { rows, error: null };
+}
+
+/**
+ * Same as {@link fetchNhlSeriesRowsForEdition}, but merges **Round 1** wins / status /
+ * `winner_team_id` from the public NHLE playoff-bracket API when available (no DB write).
+ * Use on public `/nhl` and `/nhl/picks` so live scores show without cron or service role.
+ */
+export async function fetchNhlSeriesRowsWithPublicLiveOverlay(
+  supabase: SupabaseClient,
+  editionId: string,
+): Promise<{ rows: NhlSeriesRow[]; error: string | null }> {
+  const res = await fetchNhlSeriesRowsForEdition(supabase, editionId);
+  if (res.error || res.rows.length === 0) {
+    return res;
+  }
+  const bracket = await fetchNhleBracketJsonForOverlay();
+  if (!bracket) {
+    return res;
+  }
+  try {
+    return { rows: overlayRound1SeriesRowsFromBracket(res.rows, bracket), error: null };
+  } catch {
+    return res;
+  }
 }
 
 /** Current user's Round 1 picks for an edition (RLS: own rows only). */

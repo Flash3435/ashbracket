@@ -6,7 +6,7 @@ import {
   countNhlSeriesForEdition,
   countNhlTeamsForEdition,
   fetchActiveNhlEdition,
-  fetchNhlSeriesRowsForEdition,
+  fetchNhlSeriesRowsWithPublicLiveOverlay,
   fetchNhlTeamSlugsForEdition,
 } from "@/lib/nhl/queries";
 import { createClient } from "@/lib/supabase/server";
@@ -20,7 +20,7 @@ export default async function NhlHomePage() {
 
   let teamCount = 0;
   let seriesCount = 0;
-  let seriesRows: Awaited<ReturnType<typeof fetchNhlSeriesRowsForEdition>>["rows"] = [];
+  let seriesRows: Awaited<ReturnType<typeof fetchNhlSeriesRowsWithPublicLiveOverlay>>["rows"] = [];
   let seriesError: string | null = null;
   let countsError: string | null = null;
   let slugError: string | null = null;
@@ -30,7 +30,7 @@ export default async function NhlHomePage() {
     const [teamCountRes, seriesCountRes, seriesRes, slugRes] = await Promise.all([
       countNhlTeamsForEdition(supabase, edition.id),
       countNhlSeriesForEdition(supabase, edition.id),
-      fetchNhlSeriesRowsForEdition(supabase, edition.id),
+      fetchNhlSeriesRowsWithPublicLiveOverlay(supabase, edition.id),
       fetchNhlTeamSlugsForEdition(supabase, edition.id),
     ]);
 
@@ -141,9 +141,9 @@ export default async function NhlHomePage() {
       <section id="nhl-bracket-preview" className="scroll-mt-28">
         <h2 className="text-lg font-semibold text-ash-text">Bracket preview</h2>
         <p className="mt-1 text-sm text-slate-400">
-          Cards include current series scores and status when playoff results are logged; finished
-          series show who advanced. Later-round slots reflect teams assigned to those matchups once
-          they are known.
+          Round 1 cards pull live scores from the league playoff-bracket feed when it&apos;s
+          available, and still respect your database for pairings. Later rounds use your stored
+          matchup rows as teams advance.
         </p>
 
         {model ? (

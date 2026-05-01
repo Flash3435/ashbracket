@@ -9,7 +9,7 @@ import {
   countNhlTeamsForEdition,
   fetchActiveNhlEdition,
   fetchNhlR1PicksForEdition,
-  fetchNhlSeriesRowsForEdition,
+  fetchNhlSeriesRowsWithPublicLiveOverlay,
   fetchNhlTeamSlugsForEdition,
 } from "@/lib/nhl/queries";
 import type { NhlSeriesRow } from "@/lib/nhl/types";
@@ -66,7 +66,7 @@ export default async function NhlPicksPage() {
     const [teamCountRes, seriesCountRes, seriesRes, slugRes] = await Promise.all([
       countNhlTeamsForEdition(supabase, edition.id),
       countNhlSeriesForEdition(supabase, edition.id),
-      fetchNhlSeriesRowsForEdition(supabase, edition.id),
+      fetchNhlSeriesRowsWithPublicLiveOverlay(supabase, edition.id),
       fetchNhlTeamSlugsForEdition(supabase, edition.id),
     ]);
 
@@ -248,9 +248,9 @@ export default async function NhlPicksPage() {
         <div className="px-1 sm:px-0">
           <h2 className="text-lg font-semibold text-ash-text">Round 1 · choose series winners</h2>
           <p className="mt-1 max-w-3xl text-sm leading-relaxed text-slate-400">
-            Matchups come from the active edition&apos;s Round 1 rows in the database—the same
-            pairings as the NHL home bracket preview. Tap a team to save your winner for that
-            series.
+            Matchups come from your edition&apos;s Round 1 rows; series scores on this page overlay
+            the league playoff bracket feed when it&apos;s reachable (no extra setup required). Tap a
+            team to save your pick for each series.
           </p>
         </div>
 
