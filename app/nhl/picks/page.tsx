@@ -1,4 +1,4 @@
-import { NhlBracketPreview } from "@/components/nhl/NhlBracketPreview";
+import { NhlBracketPreviewLive } from "@/components/nhl/NhlBracketPreviewLive";
 import { NhlPicksRound1Grid } from "@/components/nhl/NhlPicksRound1Grid";
 import { PageContainer } from "@/components/ui/PageContainer";
 import { buildNhlAdminBracketViewModel } from "@/lib/nhl/bracketViewModel";
@@ -9,7 +9,7 @@ import {
   countNhlTeamsForEdition,
   fetchActiveNhlEdition,
   fetchNhlR1PicksForEdition,
-  fetchNhlSeriesRowsWithPublicLiveOverlay,
+  fetchNhlSeriesRowsForEdition,
   fetchNhlTeamSlugsForEdition,
 } from "@/lib/nhl/queries";
 import type { NhlSeriesRow } from "@/lib/nhl/types";
@@ -66,7 +66,7 @@ export default async function NhlPicksPage() {
     const [teamCountRes, seriesCountRes, seriesRes, slugRes] = await Promise.all([
       countNhlTeamsForEdition(supabase, edition.id),
       countNhlSeriesForEdition(supabase, edition.id),
-      fetchNhlSeriesRowsWithPublicLiveOverlay(supabase, edition.id),
+      fetchNhlSeriesRowsForEdition(supabase, edition.id),
       fetchNhlTeamSlugsForEdition(supabase, edition.id),
     ]);
 
@@ -298,7 +298,7 @@ export default async function NhlPicksPage() {
               Compact bracket path (Round 1 summarized above)
             </p>
             <div className="mt-3">
-              <NhlBracketPreview model={model} includeRound1={false} />
+              <NhlBracketPreviewLive initialRows={seriesRows} includeRound1={false} />
             </div>
           </div>
         ) : edition && !editionError && !seriesError && seriesRows.length === 0 ? (

@@ -1,12 +1,11 @@
-import { NhlBracketPreview } from "@/components/nhl/NhlBracketPreview";
+import { NhlBracketPreviewLive } from "@/components/nhl/NhlBracketPreviewLive";
 import { PageContainer } from "@/components/ui/PageContainer";
-import { buildNhlAdminBracketViewModel } from "@/lib/nhl/bracketViewModel";
 import { getOfficial2026EditionTeamStatus } from "@/lib/nhl/official2026Edition";
 import {
   countNhlSeriesForEdition,
   countNhlTeamsForEdition,
   fetchActiveNhlEdition,
-  fetchNhlSeriesRowsWithPublicLiveOverlay,
+  fetchNhlSeriesRowsForEdition,
   fetchNhlTeamSlugsForEdition,
 } from "@/lib/nhl/queries";
 import { createClient } from "@/lib/supabase/server";
@@ -20,7 +19,7 @@ export default async function NhlHomePage() {
 
   let teamCount = 0;
   let seriesCount = 0;
-  let seriesRows: Awaited<ReturnType<typeof fetchNhlSeriesRowsWithPublicLiveOverlay>>["rows"] = [];
+  let seriesRows: Awaited<ReturnType<typeof fetchNhlSeriesRowsForEdition>>["rows"] = [];
   let seriesError: string | null = null;
   let countsError: string | null = null;
   let slugError: string | null = null;
@@ -30,7 +29,7 @@ export default async function NhlHomePage() {
     const [teamCountRes, seriesCountRes, seriesRes, slugRes] = await Promise.all([
       countNhlTeamsForEdition(supabase, edition.id),
       countNhlSeriesForEdition(supabase, edition.id),
-      fetchNhlSeriesRowsWithPublicLiveOverlay(supabase, edition.id),
+      fetchNhlSeriesRowsForEdition(supabase, edition.id),
       fetchNhlTeamSlugsForEdition(supabase, edition.id),
     ]);
 
@@ -50,11 +49,6 @@ export default async function NhlHomePage() {
       );
     }
   }
-
-  const model =
-    edition && !editionError && !seriesError && seriesRows.length > 0
-      ? buildNhlAdminBracketViewModel(seriesRows)
-      : null;
 
   const dataError = editionError ?? seriesError ?? slugError ?? countsError;
 
@@ -146,9 +140,9 @@ export default async function NhlHomePage() {
           matchup rows as teams advance.
         </p>
 
-        {model ? (
+        {seriesRows.length > 0 && !seriesError ? (
           <div className="mt-5">
-            <NhlBracketPreview model={model} />
+            <NhlBracketPreviewLive initialRows={seriesRows} includeRound1 />
           </div>
         ) : edition && !editionError && !seriesError && seriesRows.length === 0 ? (
           <div className="mt-5 rounded-lg border border-dashed border-blue-500/25 bg-slate-950/40 px-4 py-8 text-center text-sm text-slate-500">

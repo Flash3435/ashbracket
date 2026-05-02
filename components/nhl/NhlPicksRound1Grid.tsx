@@ -1,8 +1,16 @@
+"use client";
+
 import type { NhlSeriesRow } from "@/lib/nhl/types";
+import { useEffect, useState } from "react";
 import { NhlRound1SeriesPickCard } from "./NhlRound1SeriesPickCard";
 
 function sortBySlot(rows: NhlSeriesRow[]): NhlSeriesRow[] {
-  return [...rows].sort((a, b) => a.slot_index - b.slot_index);
+  return [...rows].sort((a, b) => Number(a.slot_index) - Number(b.slot_index));
+}
+
+function mergeSliceFromFull(prior: NhlSeriesRow[], mergedFull: NhlSeriesRow[]): NhlSeriesRow[] {
+  const byId = new Map(mergedFull.map((r) => [r.id, r]));
+  return sortBySlot(prior.map((r) => byId.get(r.id) ?? r));
 }
 
 export function NhlPicksRound1Grid({
@@ -23,19 +31,48 @@ export function NhlPicksRound1Grid({
   picksLocked: boolean;
   isAuthenticated: boolean;
 }) {
-  const eastSorted = sortBySlot(east);
-  const westSorted = sortBySlot(west);
+  const [eastRows, setEastRows] = useState(() => sortBySlot(east));
+  const [westRows, setWestRows] = useState(() => sortBySlot(west));
+  const [fallbackRows, setFallbackRows] = useState<NhlSeriesRow[] | null>(() =>
+    fallback && fallback.length > 0 ? sortBySlot(fallback) : null,
+  );
+
+  useEffect(() => {
+    setEastRows(sortBySlot(east));
+    setWestRows(sortBySlot(west));
+    setFallbackRows(fallback && fallback.length > 0 ? sortBySlot(fallback) : null);
+  }, [east, west, fallback]);
+
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      try {
+        const res = await fetch("/api/nhl/round1-live-overlay", { cache: "no-store" });
+        const j = (await res.json()) as { ok?: boolean; rows?: NhlSeriesRow[] };
+        const merged = j.rows;
+        if (cancelled || !j?.ok || !Array.isArray(merged)) return;
+        setEastRows((prev) => mergeSliceFromFull(prev, merged));
+        setWestRows((prev) => mergeSliceFromFull(prev, merged));
+        setFallbackRows((prev) => (prev ? mergeSliceFromFull(prev, merged) : null));
+      } catch {
+        /* ignore */
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [editionId]);
+
   const useFallback =
-    fallback &&
-    fallback.length > 0 &&
-    eastSorted.length === 0 &&
-    westSorted.length === 0;
+    fallbackRows &&
+    fallbackRows.length > 0 &&
+    eastRows.length === 0 &&
+    westRows.length === 0;
 
   if (useFallback) {
-    const rows = sortBySlot(fallback);
     return (
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        {rows.map((s) => (
+        {fallbackRows.map((s) => (
           <NhlRound1SeriesPickCard
             key={s.id}
             editionId={editionId}
@@ -59,7 +96,7 @@ export function NhlPicksRound1Grid({
           Choose one series winner per matchup. Picks save as soon as you tap a team (Round 1 only).
         </p>
         <div className="mt-4 grid gap-4 sm:grid-cols-2">
-          {eastSorted.map((s) => (
+          {eastRows.map((s) => (
             <NhlRound1SeriesPickCard
               key={s.id}
               editionId={editionId}
@@ -70,7 +107,7 @@ export function NhlPicksRound1Grid({
             />
           ))}
         </div>
-        {eastSorted.length === 0 ? (
+        {eastRows.length === 0 ? (
           <p className="mt-4 text-center text-sm text-slate-500">No Eastern Round 1 rows are loaded for this edition.</p>
         ) : null}
       </div>
@@ -82,7 +119,7 @@ export function NhlPicksRound1Grid({
           Choose one series winner per matchup. Picks save as soon as you tap a team (Round 1 only).
         </p>
         <div className="mt-4 grid gap-4 sm:grid-cols-2">
-          {westSorted.map((s) => (
+          {westRows.map((s) => (
             <NhlRound1SeriesPickCard
               key={s.id}
               editionId={editionId}
@@ -93,7 +130,7 @@ export function NhlPicksRound1Grid({
             />
           ))}
         </div>
-        {westSorted.length === 0 ? (
+        {westRows.length === 0 ? (
           <p className="mt-4 text-center text-sm text-slate-500">No Western Round 1 rows are loaded for this edition.</p>
         ) : null}
       </div>
