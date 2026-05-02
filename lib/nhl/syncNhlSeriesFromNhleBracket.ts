@@ -1,4 +1,5 @@
 import { createServiceRoleClient } from "@/lib/supabase/service";
+import { bracketYearFromEnv } from "./nhleBracketOverlay";
 import { NHL_2026_PLAYOFF_TEAMS, NHL_2026_ROUND1_SLOTS } from "./nhl2026PlayoffField";
 import { fetchActiveNhlEdition } from "./queries";
 import type { NhlSeries } from "./types";
@@ -76,7 +77,7 @@ export type SyncNhlSeriesFromNhleResult =
  * Pairings must match {@link NHL_2026_ROUND1_SLOTS} abbreviations versus the NHLE bracket.
  */
 export async function syncNhlSeriesFromNhleBracket(
-  playoffYear: string = process.env.NHL_PLAYOFF_BRACKET_YEAR?.trim() || "2026",
+  playoffYear: string = bracketYearFromEnv(),
 ): Promise<SyncNhlSeriesFromNhleResult> {
   const errors: string[] = [];
 

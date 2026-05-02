@@ -1,4 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { unstable_noStore as noStore } from "next/cache";
 import {
   fetchNhleBracketJsonForOverlay,
   overlayRound1SeriesRowsFromBracket,
@@ -220,6 +221,7 @@ export async function fetchNhlSeriesRowsWithPublicLiveOverlay(
   supabase: SupabaseClient,
   editionId: string,
 ): Promise<{ rows: NhlSeriesRow[]; error: string | null }> {
+  noStore();
   const res = await fetchNhlSeriesRowsForEdition(supabase, editionId);
   if (res.error || res.rows.length === 0) {
     return res;

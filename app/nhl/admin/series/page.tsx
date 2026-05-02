@@ -81,10 +81,10 @@ export default async function NhlAdminSeriesPage() {
       />
 
       <p className="text-xs leading-relaxed text-slate-500">
-        Public pages overlay live Round 1 scores from NHLE by default. Only set{" "}
-        <code className="rounded bg-slate-950/70 px-1 py-px text-slate-300">NHL_PUBLIC_BRACKET_OVERLAY=false</code> if
-        you intend to turn that off—setting it to <code className="text-slate-400">false</code> disables the overlay.
-        Optional DB sync:{" "}
+        Public pages overlay live Round 1 scores from NHLE by default. To disable that read-through,
+        set{" "}
+        <code className="rounded bg-slate-950/70 px-1 py-px text-slate-300">NHL_DISABLE_LIVE_BRACKET_OVERLAY=true</code>{" "}
+        (the old <code className="text-slate-400">NHL_PUBLIC_BRACKET_OVERLAY</code> flag is ignored). Optional DB sync:{" "}
         <code className="rounded bg-slate-950/70 px-1 py-px text-slate-300">NHL_PLAYOFF_SYNC_ENABLED=true</code> with{" "}
         <code className="rounded bg-slate-950/70 px-1 py-px text-slate-300">CRON_SECRET</code> and{" "}
         <code className="rounded bg-slate-950/70 px-1 py-px text-slate-300">SUPABASE_SERVICE_ROLE_KEY</code>; optional{" "}

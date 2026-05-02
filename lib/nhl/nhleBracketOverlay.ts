@@ -60,10 +60,11 @@ function inferStatus(winsHi: number, winsLo: number, hasWinnerId: boolean): NhlS
 function filterR1Items(apiList: NhleSeriesItem[]): NhleSeriesItem[] {
   return apiList.filter((s) => {
     const ab = (x: string | undefined) => (x ?? "").trim().toUpperCase();
+    const abbrev = String(s.seriesAbbrev ?? "").trim().toUpperCase();
     const pr = s.playoffRound == null ? NaN : Number(s.playoffRound);
     const roundLooksLikeR1 = !Number.isFinite(pr) || pr === 1;
     return (
-      s.seriesAbbrev === "R1" &&
+      abbrev === "R1" &&
       roundLooksLikeR1 &&
       ab(s.topSeedTeam?.abbrev) !== "" &&
       ab(s.bottomSeedTeam?.abbrev) !== "" &&
@@ -73,33 +74,59 @@ function filterR1Items(apiList: NhleSeriesItem[]): NhleSeriesItem[] {
   });
 }
 
-/** Overlay is on unless the env var is explicitly turned off (common misconfig: setting "false" thinking it enables sync). */
+/** Opt-out only: set `NHL_DISABLE_LIVE_BRACKET_OVERLAY=true` to skip NHLE (we no longer read `NHL_PUBLIC_BRACKET_OVERLAY=false` — too easy to misconfigure in Vercel). */
+export function isNhleLiveBracketOverlayDisabled(): boolean {
+  const v = process.env.NHL_DISABLE_LIVE_BRACKET_OVERLAY?.trim().toLowerCase() ?? "";
+  return v === "true" || v === "1" || v === "yes" || v === "on";
+}
+
+/** @deprecated use isNhleLiveBracketOverlayDisabled */
 export function isNhlePublicBracketOverlayDisabled(): boolean {
-  const v = process.env.NHL_PUBLIC_BRACKET_OVERLAY?.trim().toLowerCase() ?? "";
-  return v === "false" || v === "0" || v === "off" || v === "no";
+  return isNhleLiveBracketOverlayDisabled();
+}
+
+/** NHLE path segment, e.g. `2026` for `…/playoff-bracket/2026` (not `20252026`). */
+export function bracketYearFromEnv(): string {
+  const raw = process.env.NHL_PLAYOFF_BRACKET_YEAR?.trim() ?? "";
+  return /^\d{4}$/.test(raw) ? raw : "2026";
+}
+
+function nhleWinCount(v: unknown): number {
+  if (typeof v === "number" && Number.isFinite(v)) return Math.max(0, Math.floor(v));
+  if (typeof v === "string") {
+    const x = parseInt(v, 10);
+    return Number.isFinite(x) ? Math.max(0, x) : 0;
+  }
+  return 0;
 }
 
 /**
  * Fetch league bracket JSON (short cache). Returns null if disabled or on transport/parse failure.
  */
 export async function fetchNhleBracketJsonForOverlay(
-  playoffYear: string = process.env.NHL_PLAYOFF_BRACKET_YEAR?.trim() || "2026",
+  playoffYear: string = bracketYearFromEnv(),
 ): Promise<unknown | null> {
-  if (isNhlePublicBracketOverlayDisabled()) {
+  if (isNhleLiveBracketOverlayDisabled()) {
+    console.warn("[nhle overlay] skipped: NHL_DISABLE_LIVE_BRACKET_OVERLAY is set");
     return null;
   }
+  const url = `${NHLE_PLAYOFF_BRACKET}/${encodeURIComponent(playoffYear)}`;
   try {
-    const res = await fetch(`${NHLE_PLAYOFF_BRACKET}/${encodeURIComponent(playoffYear)}`, {
+    const res = await fetch(url, {
       cache: "no-store",
       headers: {
         Accept: "application/json",
-        "User-Agent": "AshBracket/1.0 (+https://ashbracket.com)",
+        "User-Agent": "Mozilla/5.0 (compatible; AshBracket/1.0; +https://ashbracket.com)",
       },
-      signal: AbortSignal.timeout(20_000),
     });
-    if (!res.ok) return null;
+    if (!res.ok) {
+      console.warn(`[nhle overlay] HTTP ${res.status} for ${url}`);
+      return null;
+    }
     return await res.json();
-  } catch {
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    console.warn(`[nhle overlay] fetch failed ${url}: ${msg}`);
     return null;
   }
 }
@@ -130,7 +157,14 @@ export function overlayRound1SeriesRowsFromBracket(
     for (const api of r1FromApi) {
       const top = api.topSeedTeam!.abbrev!.toUpperCase();
       const bottom = api.bottomSeedTeam!.abbrev!.toUpperCase();
-      const mapped = mapWinsToHigherLower(hiAbbr, loAbbr, top, bottom, Number(api.topSeedWins ?? 0), Number(api.bottomSeedWins ?? 0));
+      const mapped = mapWinsToHigherLower(
+        hiAbbr,
+        loAbbr,
+        top,
+        bottom,
+        nhleWinCount(api.topSeedWins),
+        nhleWinCount(api.bottomSeedWins),
+      );
       if (mapped) {
         apiSlice = api;
         break;
@@ -138,16 +172,19 @@ export function overlayRound1SeriesRowsFromBracket(
     }
     if (!apiSlice) continue;
 
-    const row = rows.find(
-      (r) =>
-        r.round_code === "R1" &&
-        r.side_or_conference === slot.side &&
-        r.slot_index === slot.slot_index,
-    );
+    const row = rows.find((r) => {
+      const rc = String(r.round_code ?? "").toUpperCase();
+      const side = String(r.side_or_conference ?? "").toLowerCase();
+      return (
+        rc === "R1" &&
+        side === slot.side &&
+        Number(r.slot_index) === Number(slot.slot_index)
+      );
+    });
     if (!row || !row.higher_seed_team_id || !row.lower_seed_team_id) continue;
 
-    const topWins = Number(apiSlice.topSeedWins ?? 0);
-    const bottomWins = Number(apiSlice.bottomSeedWins ?? 0);
+    const topWins = nhleWinCount(apiSlice.topSeedWins);
+    const bottomWins = nhleWinCount(apiSlice.bottomSeedWins);
     const mapped = mapWinsToHigherLower(
       hiAbbr,
       loAbbr,
@@ -181,7 +218,7 @@ export function overlayRound1SeriesRowsFromBracket(
   /** If slot keys did not line up with DB, still match R1 rows by the two team abbreviations. */
   const patchedIds = new Set(patchBySeriesId.keys());
   for (const row of rows) {
-    if (row.round_code !== "R1" || patchedIds.has(row.id)) continue;
+    if (String(row.round_code ?? "").toUpperCase() !== "R1" || patchedIds.has(row.id)) continue;
     const ha = row.higher_team_abbr?.toUpperCase() ?? "";
     const la = row.lower_team_abbr?.toUpperCase() ?? "";
     if (!ha || !la || !row.higher_seed_team_id || !row.lower_seed_team_id) continue;
@@ -190,7 +227,14 @@ export function overlayRound1SeriesRowsFromBracket(
     for (const api of r1FromApi) {
       const top = api.topSeedTeam!.abbrev!.toUpperCase();
       const bottom = api.bottomSeedTeam!.abbrev!.toUpperCase();
-      const mapped = mapWinsToHigherLower(ha, la, top, bottom, Number(api.topSeedWins ?? 0), Number(api.bottomSeedWins ?? 0));
+      const mapped = mapWinsToHigherLower(
+        ha,
+        la,
+        top,
+        bottom,
+        nhleWinCount(api.topSeedWins),
+        nhleWinCount(api.bottomSeedWins),
+      );
       if (mapped) {
         apiSlice = api;
         break;
@@ -198,8 +242,8 @@ export function overlayRound1SeriesRowsFromBracket(
     }
     if (!apiSlice) continue;
 
-    const topWins = Number(apiSlice.topSeedWins ?? 0);
-    const bottomWins = Number(apiSlice.bottomSeedWins ?? 0);
+    const topWins = nhleWinCount(apiSlice.topSeedWins);
+    const bottomWins = nhleWinCount(apiSlice.bottomSeedWins);
     const mapped = mapWinsToHigherLower(
       ha,
       la,
