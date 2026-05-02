@@ -185,6 +185,37 @@ export async function fetchNhlSeriesRowsForEdition(
  * `winner_team_id` from the public NHLE playoff-bracket API when available (no DB write).
  * Use on public `/nhl` and `/nhl/picks` so live scores show without cron or service role.
  */
+function syncWinnerDisplayFieldsFromSeeds(row: NhlSeriesRow): NhlSeriesRow {
+  if (!row.winner_team_id) {
+    return {
+      ...row,
+      winner_team_name: null,
+      winner_team_abbr: null,
+      winner_team_slug: null,
+      winner_team_logo_path: null,
+    };
+  }
+  if (row.higher_seed_team_id && row.winner_team_id === row.higher_seed_team_id) {
+    return {
+      ...row,
+      winner_team_name: row.higher_team_name,
+      winner_team_abbr: row.higher_team_abbr,
+      winner_team_slug: row.higher_team_slug,
+      winner_team_logo_path: row.higher_team_logo_path,
+    };
+  }
+  if (row.lower_seed_team_id && row.winner_team_id === row.lower_seed_team_id) {
+    return {
+      ...row,
+      winner_team_name: row.lower_team_name,
+      winner_team_abbr: row.lower_team_abbr,
+      winner_team_slug: row.lower_team_slug,
+      winner_team_logo_path: row.lower_team_logo_path,
+    };
+  }
+  return row;
+}
+
 export async function fetchNhlSeriesRowsWithPublicLiveOverlay(
   supabase: SupabaseClient,
   editionId: string,
@@ -198,7 +229,8 @@ export async function fetchNhlSeriesRowsWithPublicLiveOverlay(
     return res;
   }
   try {
-    return { rows: overlayRound1SeriesRowsFromBracket(res.rows, bracket), error: null };
+    const merged = overlayRound1SeriesRowsFromBracket(res.rows, bracket);
+    return { rows: merged.map(syncWinnerDisplayFieldsFromSeeds), error: null };
   } catch {
     return res;
   }

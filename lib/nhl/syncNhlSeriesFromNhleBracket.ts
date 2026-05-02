@@ -84,7 +84,10 @@ export async function syncNhlSeriesFromNhleBracket(
   try {
     res = await fetch(`${NHLE_PLAYOFF_BRACKET}/${encodeURIComponent(playoffYear)}`, {
       cache: "no-store",
-      headers: { Accept: "application/json" },
+      headers: {
+        Accept: "application/json",
+        "User-Agent": "AshBracket/1.0 (+https://ashbracket.com)",
+      },
       signal: AbortSignal.timeout(25_000),
     });
   } catch (e) {

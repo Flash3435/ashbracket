@@ -60,9 +60,11 @@ function inferStatus(winsHi: number, winsLo: number, hasWinnerId: boolean): NhlS
 function filterR1Items(apiList: NhleSeriesItem[]): NhleSeriesItem[] {
   return apiList.filter((s) => {
     const ab = (x: string | undefined) => (x ?? "").trim().toUpperCase();
+    const pr = s.playoffRound == null ? NaN : Number(s.playoffRound);
+    const roundLooksLikeR1 = !Number.isFinite(pr) || pr === 1;
     return (
       s.seriesAbbrev === "R1" &&
-      Number(s.playoffRound) === 1 &&
+      roundLooksLikeR1 &&
       ab(s.topSeedTeam?.abbrev) !== "" &&
       ab(s.bottomSeedTeam?.abbrev) !== "" &&
       ab(s.topSeedTeam?.abbrev) !== "TBD" &&
@@ -71,20 +73,29 @@ function filterR1Items(apiList: NhleSeriesItem[]): NhleSeriesItem[] {
   });
 }
 
+/** Overlay is on unless the env var is explicitly turned off (common misconfig: setting "false" thinking it enables sync). */
+export function isNhlePublicBracketOverlayDisabled(): boolean {
+  const v = process.env.NHL_PUBLIC_BRACKET_OVERLAY?.trim().toLowerCase() ?? "";
+  return v === "false" || v === "0" || v === "off" || v === "no";
+}
+
 /**
  * Fetch league bracket JSON (short cache). Returns null if disabled or on transport/parse failure.
  */
 export async function fetchNhleBracketJsonForOverlay(
   playoffYear: string = process.env.NHL_PLAYOFF_BRACKET_YEAR?.trim() || "2026",
 ): Promise<unknown | null> {
-  if (process.env.NHL_PUBLIC_BRACKET_OVERLAY?.trim() === "false") {
+  if (isNhlePublicBracketOverlayDisabled()) {
     return null;
   }
   try {
     const res = await fetch(`${NHLE_PLAYOFF_BRACKET}/${encodeURIComponent(playoffYear)}`, {
-      next: { revalidate: 45 },
-      headers: { Accept: "application/json" },
-      signal: AbortSignal.timeout(14_000),
+      cache: "no-store",
+      headers: {
+        Accept: "application/json",
+        "User-Agent": "AshBracket/1.0 (+https://ashbracket.com)",
+      },
+      signal: AbortSignal.timeout(20_000),
     });
     if (!res.ok) return null;
     return await res.json();
@@ -165,6 +176,58 @@ export function overlayRound1SeriesRowsFromBracket(
       status,
       winner_team_id,
     });
+  }
+
+  /** If slot keys did not line up with DB, still match R1 rows by the two team abbreviations. */
+  const patchedIds = new Set(patchBySeriesId.keys());
+  for (const row of rows) {
+    if (row.round_code !== "R1" || patchedIds.has(row.id)) continue;
+    const ha = row.higher_team_abbr?.toUpperCase() ?? "";
+    const la = row.lower_team_abbr?.toUpperCase() ?? "";
+    if (!ha || !la || !row.higher_seed_team_id || !row.lower_seed_team_id) continue;
+
+    let apiSlice: NhleSeriesItem | undefined;
+    for (const api of r1FromApi) {
+      const top = api.topSeedTeam!.abbrev!.toUpperCase();
+      const bottom = api.bottomSeedTeam!.abbrev!.toUpperCase();
+      const mapped = mapWinsToHigherLower(ha, la, top, bottom, Number(api.topSeedWins ?? 0), Number(api.bottomSeedWins ?? 0));
+      if (mapped) {
+        apiSlice = api;
+        break;
+      }
+    }
+    if (!apiSlice) continue;
+
+    const topWins = Number(apiSlice.topSeedWins ?? 0);
+    const bottomWins = Number(apiSlice.bottomSeedWins ?? 0);
+    const mapped = mapWinsToHigherLower(
+      ha,
+      la,
+      apiSlice.topSeedTeam!.abbrev!.toUpperCase(),
+      apiSlice.bottomSeedTeam!.abbrev!.toUpperCase(),
+      topWins,
+      bottomWins,
+    );
+    if (!mapped) continue;
+
+    const winAbbr = winningAbbrev(apiSlice)?.toUpperCase() ?? null;
+    let winnerResolved: string | null = null;
+    if (winAbbr === ha) winnerResolved = row.higher_seed_team_id;
+    else if (winAbbr === la) winnerResolved = row.lower_seed_team_id;
+
+    const hasApiWinner =
+      Boolean(apiSlice.winningTeamId && apiSlice.winningTeamId > 0) && winnerResolved !== null;
+    const status = inferStatus(mapped.hi, mapped.lo, hasApiWinner);
+    const winner_team_id =
+      hasApiWinner && winnerResolved !== null ? winnerResolved : row.winner_team_id;
+
+    patchBySeriesId.set(row.id, {
+      games_won_by_higher_seed: mapped.hi,
+      games_won_by_lower_seed: mapped.lo,
+      status,
+      winner_team_id,
+    });
+    patchedIds.add(row.id);
   }
 
   return rows.map((row) => {

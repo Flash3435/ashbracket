@@ -81,12 +81,15 @@ export default async function NhlAdminSeriesPage() {
       />
 
       <p className="text-xs leading-relaxed text-slate-500">
-        Automated sync (optional): set Vercel env{" "}
-        <code className="rounded bg-slate-950/70 px-1 py-px text-slate-300">NHL_PLAYOFF_SYNC_ENABLED=true</code>
-        , supply <code className="rounded bg-slate-950/70 px-1 py-px text-slate-300">CRON_SECRET</code> and{" "}
+        Public pages overlay live Round 1 scores from NHLE by default. Only set{" "}
+        <code className="rounded bg-slate-950/70 px-1 py-px text-slate-300">NHL_PUBLIC_BRACKET_OVERLAY=false</code> if
+        you intend to turn that off—setting it to <code className="text-slate-400">false</code> disables the overlay.
+        Optional DB sync:{" "}
+        <code className="rounded bg-slate-950/70 px-1 py-px text-slate-300">NHL_PLAYOFF_SYNC_ENABLED=true</code> with{" "}
+        <code className="rounded bg-slate-950/70 px-1 py-px text-slate-300">CRON_SECRET</code> and{" "}
         <code className="rounded bg-slate-950/70 px-1 py-px text-slate-300">SUPABASE_SERVICE_ROLE_KEY</code>; optional{" "}
-        <code className="rounded bg-slate-950/70 px-1 py-px text-slate-300">NHL_PLAYOFF_BRACKET_YEAR=2026</code>. Vercel
-        Cron calls the route every 10 minutes (<code className="text-slate-400">vercel.json</code>).
+        <code className="rounded bg-slate-950/70 px-1 py-px text-slate-300">NHL_PLAYOFF_BRACKET_YEAR=2026</code> (
+        <code className="text-slate-400">vercel.json</code> cron).
       </p>
 
       <p className="text-sm text-ash-muted">
