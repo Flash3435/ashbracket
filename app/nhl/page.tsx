@@ -5,7 +5,7 @@ import {
   countNhlSeriesForEdition,
   countNhlTeamsForEdition,
   fetchActiveNhlEdition,
-  fetchNhlSeriesRowsForEdition,
+  fetchNhlSeriesRowsWithPublicLiveOverlay,
   fetchNhlTeamSlugsForEdition,
 } from "@/lib/nhl/queries";
 import { createClient } from "@/lib/supabase/server";
@@ -19,7 +19,7 @@ export default async function NhlHomePage() {
 
   let teamCount = 0;
   let seriesCount = 0;
-  let seriesRows: Awaited<ReturnType<typeof fetchNhlSeriesRowsForEdition>>["rows"] = [];
+  let seriesRows: Awaited<ReturnType<typeof fetchNhlSeriesRowsWithPublicLiveOverlay>>["rows"] = [];
   let seriesError: string | null = null;
   let countsError: string | null = null;
   let slugError: string | null = null;
@@ -29,7 +29,7 @@ export default async function NhlHomePage() {
     const [teamCountRes, seriesCountRes, seriesRes, slugRes] = await Promise.all([
       countNhlTeamsForEdition(supabase, edition.id),
       countNhlSeriesForEdition(supabase, edition.id),
-      fetchNhlSeriesRowsForEdition(supabase, edition.id),
+      fetchNhlSeriesRowsWithPublicLiveOverlay(supabase, edition.id),
       fetchNhlTeamSlugsForEdition(supabase, edition.id),
     ]);
 

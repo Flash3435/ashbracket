@@ -27,6 +27,8 @@ export function NhlBracketPreviewLive({
     void (async () => {
       try {
         const res = await fetch("/api/nhl/round1-live-overlay", { cache: "no-store" });
+        const ct = res.headers.get("content-type") ?? "";
+        if (!res.ok || !ct.includes("application/json")) return;
         const j = (await res.json()) as { ok?: boolean; rows?: NhlSeriesRow[] };
         const merged = j.rows;
         if (cancelled || !j?.ok || !Array.isArray(merged)) return;

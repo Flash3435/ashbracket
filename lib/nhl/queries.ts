@@ -185,7 +185,7 @@ export async function fetchNhlSeriesRowsForEdition(
 /**
  * Same as {@link fetchNhlSeriesRowsForEdition}, but merges **Round 1** wins / status /
  * `winner_team_id` from the public NHLE playoff-bracket API when available (no DB write).
- * Use on public `/nhl` for SSR; `/nhl/picks` also hydrates via `/api/nhl/round1-live-overlay`.
+ * Use on public `/nhl` and `/nhl/picks` for SSR. Client may still call `/api/nhl/round1-live-overlay` when present.
  */
 export async function fetchNhlSeriesRowsWithPublicLiveOverlay(
   supabase: SupabaseClient,

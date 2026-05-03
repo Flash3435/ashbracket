@@ -9,7 +9,7 @@ import {
   countNhlTeamsForEdition,
   fetchActiveNhlEdition,
   fetchNhlR1PicksForEdition,
-  fetchNhlSeriesRowsForEdition,
+  fetchNhlSeriesRowsWithPublicLiveOverlay,
   fetchNhlTeamSlugsForEdition,
 } from "@/lib/nhl/queries";
 import type { NhlSeriesRow } from "@/lib/nhl/types";
@@ -66,7 +66,7 @@ export default async function NhlPicksPage() {
     const [teamCountRes, seriesCountRes, seriesRes, slugRes] = await Promise.all([
       countNhlTeamsForEdition(supabase, edition.id),
       countNhlSeriesForEdition(supabase, edition.id),
-      fetchNhlSeriesRowsForEdition(supabase, edition.id),
+      fetchNhlSeriesRowsWithPublicLiveOverlay(supabase, edition.id),
       fetchNhlTeamSlugsForEdition(supabase, edition.id),
     ]);
 
