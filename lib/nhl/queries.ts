@@ -203,7 +203,9 @@ export async function fetchNhlSeriesRowsWithPublicLiveOverlay(
   try {
     const merged = overlayRound1SeriesRowsFromBracket(res.rows, bracket);
     return { rows: merged.map(syncWinnerDisplayFieldsFromSeeds), error: null };
-  } catch {
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    console.warn("[nhl queries] overlayRound1SeriesRowsFromBracket failed:", msg);
     return res;
   }
 }

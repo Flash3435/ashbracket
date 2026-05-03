@@ -103,6 +103,12 @@ function nhleWinCount(v: unknown): number {
 /**
  * Fetch league bracket JSON (short cache). Returns null if disabled or on transport/parse failure.
  */
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => {
+    setTimeout(resolve, ms);
+  });
+}
+
 export async function fetchNhleBracketJsonForOverlay(
   playoffYear: string = bracketYearFromEnv(),
 ): Promise<unknown | null> {
@@ -111,24 +117,34 @@ export async function fetchNhleBracketJsonForOverlay(
     return null;
   }
   const url = `${NHLE_PLAYOFF_BRACKET}/${encodeURIComponent(playoffYear)}`;
-  try {
-    const res = await fetch(url, {
-      cache: "no-store",
-      headers: {
-        Accept: "application/json",
-        "User-Agent": "Mozilla/5.0 (compatible; AshBracket/1.0; +https://ashbracket.com)",
-      },
-    });
-    if (!res.ok) {
-      console.warn(`[nhle overlay] HTTP ${res.status} for ${url}`);
-      return null;
+  const attempts = 3;
+  let lastErr = "";
+  for (let i = 0; i < attempts; i++) {
+    try {
+      const res = await fetch(url, {
+        cache: "no-store",
+        headers: {
+          Accept: "application/json",
+          "User-Agent": "Mozilla/5.0 (compatible; AshBracket/1.0; +https://ashbracket.com)",
+        },
+      });
+      if (!res.ok) {
+        lastErr = `HTTP ${res.status}`;
+        console.warn(`[nhle overlay] ${lastErr} for ${url} (attempt ${i + 1}/${attempts})`);
+      } else {
+        return await res.json();
+      }
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      lastErr = msg;
+      console.warn(`[nhle overlay] fetch failed ${url} (attempt ${i + 1}/${attempts}): ${msg}`);
     }
-    return await res.json();
-  } catch (e) {
-    const msg = e instanceof Error ? e.message : String(e);
-    console.warn(`[nhle overlay] fetch failed ${url}: ${msg}`);
-    return null;
+    if (i < attempts - 1) {
+      await sleep(200 * (i + 1));
+    }
   }
+  console.warn(`[nhle overlay] giving up on ${url}: ${lastErr}`);
+  return null;
 }
 
 /**

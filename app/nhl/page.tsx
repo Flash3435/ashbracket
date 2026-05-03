@@ -9,11 +9,15 @@ import {
   fetchNhlTeamSlugsForEdition,
 } from "@/lib/nhl/queries";
 import { createClient } from "@/lib/supabase/server";
+import { unstable_noStore as noStore } from "next/cache";
+import { connection } from "next/server";
 import Link from "next/link";
 
 export const dynamic = "force-dynamic";
 
 export default async function NhlHomePage() {
+  noStore();
+  await connection();
   const supabase = await createClient();
   const { edition, error: editionError } = await fetchActiveNhlEdition(supabase);
 

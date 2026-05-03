@@ -14,7 +14,9 @@ import {
 } from "@/lib/nhl/queries";
 import type { NhlSeriesRow } from "@/lib/nhl/types";
 import { createClient } from "@/lib/supabase/server";
+import { unstable_noStore as noStore } from "next/cache";
 import type { Metadata } from "next";
+import { connection } from "next/server";
 import Link from "next/link";
 
 export const metadata: Metadata = {
@@ -46,6 +48,8 @@ function formatNhlPicksLoadError(message: string): string {
 }
 
 export default async function NhlPicksPage() {
+  noStore();
+  await connection();
   const supabase = await createClient();
   const {
     data: { user },
