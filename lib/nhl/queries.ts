@@ -294,12 +294,25 @@ export async function countNhlSeriesWithWinnerForEdition(
   return { count: count ?? 0, error: null };
 }
 
+function num(raw: unknown): number {
+  const n = typeof raw === "number" ? raw : Number(raw);
+  return Number.isFinite(n) ? n : NaN;
+}
+
 function mapRpcStandingsRow(raw: Record<string, unknown>): NhlStandingsRow | null {
   const rank = raw.rank;
+  const round2_plus_rank = raw.round2_plus_rank;
   const user_id = raw.user_id;
   const entry_name = raw.entry_name;
   const total_points = raw.total_points;
+  const round1_points = raw.round1_points;
+  const round2_points = raw.round2_points;
+  const conference_final_points = raw.conference_final_points;
+  const stanley_cup_final_points = raw.stanley_cup_final_points;
+  const bonus_points = raw.bonus_points;
+  const round2_plus_points = raw.round2_plus_points;
   const correct_picks = raw.correct_picks;
+  const correct_picks_post_round1 = raw.correct_picks_post_round1;
   const pending_decisions = raw.pending_decisions;
   const pick_count = raw.pick_count;
   const status = raw.status;
@@ -312,17 +325,32 @@ function mapRpcStandingsRow(raw: Record<string, unknown>): NhlStandingsRow | nul
     return null;
   }
 
-  const rankNum = typeof rank === "number" ? rank : Number(rank);
-  const pointsNum = typeof total_points === "number" ? total_points : Number(total_points);
-  const correctNum = typeof correct_picks === "number" ? correct_picks : Number(correct_picks);
-  const pendingNum =
-    typeof pending_decisions === "number" ? pending_decisions : Number(pending_decisions);
-  const pickCountNum = typeof pick_count === "number" ? pick_count : Number(pick_count);
+  const rankNum = num(rank);
+  const r2RankNum = num(round2_plus_rank);
+  const pointsNum = num(total_points);
+  const r1Pts = num(round1_points);
+  const r2Pts = num(round2_points);
+  const cfPts = num(conference_final_points);
+  const scfPts = num(stanley_cup_final_points);
+  const bonusPts = num(bonus_points);
+  const r2PlusPts = num(round2_plus_points);
+  const correctNum = num(correct_picks);
+  const correctPostR1 = num(correct_picks_post_round1);
+  const pendingNum = num(pending_decisions);
+  const pickCountNum = num(pick_count);
 
   if (
     !Number.isFinite(rankNum) ||
+    !Number.isFinite(r2RankNum) ||
     !Number.isFinite(pointsNum) ||
+    !Number.isFinite(r1Pts) ||
+    !Number.isFinite(r2Pts) ||
+    !Number.isFinite(cfPts) ||
+    !Number.isFinite(scfPts) ||
+    !Number.isFinite(bonusPts) ||
+    !Number.isFinite(r2PlusPts) ||
     !Number.isFinite(correctNum) ||
+    !Number.isFinite(correctPostR1) ||
     !Number.isFinite(pendingNum) ||
     !Number.isFinite(pickCountNum)
   ) {
@@ -335,10 +363,18 @@ function mapRpcStandingsRow(raw: Record<string, unknown>): NhlStandingsRow | nul
 
   return {
     rank: rankNum,
+    round2_plus_rank: r2RankNum,
     user_id,
     entry_name,
     total_points: pointsNum,
+    round1_points: r1Pts,
+    round2_points: r2Pts,
+    conference_final_points: cfPts,
+    stanley_cup_final_points: scfPts,
+    bonus_points: bonusPts,
+    round2_plus_points: r2PlusPts,
     correct_picks: correctNum,
+    correct_picks_post_round1: correctPostR1,
     pending_decisions: pendingNum,
     pick_count: pickCountNum,
     status,
@@ -346,8 +382,8 @@ function mapRpcStandingsRow(raw: Record<string, unknown>): NhlStandingsRow | nul
 }
 
 /**
- * NHL-only leaderboard for an edition. Uses SECURITY DEFINER RPC (see migration
- * `20260422180000_nhl_standings_rpc.sql`); safe for anon/authenticated without exposing raw picks.
+ * NHL-only leaderboard for an edition. Uses SECURITY DEFINER RPC (see
+ * `20260504180000_nhl_standings_round_breakdown.sql`); safe for anon/authenticated without exposing raw picks.
  */
 export async function fetchNhlEditionStandings(
   supabase: SupabaseClient,

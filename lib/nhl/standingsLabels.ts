@@ -21,8 +21,9 @@ export function formatNhlStandingsLoadError(message: string): string {
     (m.includes("schema cache") || m.includes("does not exist") || m.includes("not find"))
   ) {
     return (
-      "The database is missing the NHL standings function. Apply migration " +
-      "`20260422180000_nhl_standings_rpc.sql` (for example `supabase db push` from the ashbracket " +
+      "The database is missing the NHL standings function. Apply the NHL standings migrations " +
+      "(for example `20260422180000_nhl_standings_rpc.sql` and the latest `fetch_nhl_edition_standings` " +
+      "update such as `20260504180000_nhl_standings_round_breakdown.sql` via `supabase db push` from the ashbracket " +
       "repo), then refresh this page."
     );
   }

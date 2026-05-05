@@ -65,11 +65,25 @@ export type NhlSeriesRow = NhlSeries & {
 export type NhlStandingsStatus = "no_picks" | "in_progress" | "complete";
 
 export type NhlStandingsRow = {
+  /** Overall leaderboard rank (all rounds). */
   rank: number;
+  /** Rank by points from Round 2 onward only (excludes Round 1). */
+  round2_plus_rank: number;
   user_id: string;
   entry_name: string;
+  /** Sum of all round points plus bonus. */
   total_points: number;
+  round1_points: number;
+  round2_points: number;
+  conference_final_points: number;
+  stanley_cup_final_points: number;
+  /** Reserved for future bonus categories; always 0 until modeled in SQL. */
+  bonus_points: number;
+  /** round2 + conference_final + stanley_cup_final + bonus (excludes Round 1). */
+  round2_plus_points: number;
   correct_picks: number;
+  /** Correct picks on series in R2, CF, or SCF only (for Round 2+ tiebreaks). */
+  correct_picks_post_round1: number;
   pending_decisions: number;
   pick_count: number;
   status: NhlStandingsStatus;
