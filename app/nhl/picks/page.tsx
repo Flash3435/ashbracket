@@ -11,6 +11,7 @@ import {
   isRound1FullyResolvedForProgression,
   mergeRound2DisplayFromRound1,
 } from "@/lib/nhl/nhlPicksProgression";
+import { maybeSyncNhlBracketRound1ToDatabase } from "@/lib/nhl/syncNhlSeriesFromNhleBracket";
 import {
   countNhlSeriesForEdition,
   countNhlTeamsForEdition,
@@ -87,6 +88,8 @@ export default async function NhlPicksPage() {
   let userPoolTotalPoints: number | null = null;
 
   if (edition && !editionError) {
+    await maybeSyncNhlBracketRound1ToDatabase();
+
     const [teamCountRes, seriesCountRes, slugRes, teamsRes] = await Promise.all([
       countNhlTeamsForEdition(supabase, edition.id),
       countNhlSeriesForEdition(supabase, edition.id),
@@ -240,6 +243,7 @@ export default async function NhlPicksPage() {
             summary={r1UserSummary}
             r2PicksLoadError={r2PicksLoadError}
             totalPoolPoints={userPoolTotalPoints}
+            nhleAutoSyncEnabled={process.env.NHL_PLAYOFF_SYNC_ENABLED?.trim() === "true"}
           />
         </section>
       ) : null}

@@ -71,6 +71,22 @@ export type SyncNhlSeriesFromNhleResult =
   | { ok: false; error: string };
 
 /**
+ * When `NHL_PLAYOFF_SYNC_ENABLED=true`, writes NHLE Round 1 results into `nhl_series` so standings
+ * and picks use the same stored winners. No-op otherwise (safe on every request).
+ */
+export async function maybeSyncNhlBracketRound1ToDatabase(): Promise<void> {
+  if (process.env.NHL_PLAYOFF_SYNC_ENABLED?.trim() !== "true") {
+    return;
+  }
+  const result = await syncNhlSeriesFromNhleBracket();
+  if (!result.ok) {
+    console.warn("[nhle sync] Round 1 bracket sync skipped:", result.error);
+  } else if (result.errors.length > 0) {
+    console.warn("[nhle sync] Round 1 completed with warnings:", result.errors.join("; "));
+  }
+}
+
+/**
  * Pulls live Round 1 wins (and series winner when the league marks the series decided) from the
  * public NHLE bracket API into `nhl_series` for the **active** NHL edition.
  *

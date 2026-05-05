@@ -13,6 +13,7 @@ import {
   fetchNhlTeamsForEdition,
   fetchNhlTeamSlugsForEdition,
 } from "@/lib/nhl/queries";
+import { maybeSyncNhlBracketRound1ToDatabase } from "@/lib/nhl/syncNhlSeriesFromNhleBracket";
 import type { NhlTeam } from "@/lib/nhl/types";
 import { createClient } from "@/lib/supabase/server";
 import type { Metadata } from "next";
@@ -43,6 +44,8 @@ export default async function NhlStandingsPage() {
   let standingsError: string | null = null;
 
   if (edition && !editionError) {
+    await maybeSyncNhlBracketRound1ToDatabase();
+
     const [teamCountRes, seriesCountRes, slugRes, teamsRes, winnersRes] = await Promise.all([
       countNhlTeamsForEdition(supabase, edition.id),
       countNhlSeriesForEdition(supabase, edition.id),
@@ -267,8 +270,17 @@ export default async function NhlStandingsPage() {
             <span className="font-medium text-slate-300">
               Picks are in, but no completed series results are available yet.
             </span>{" "}
-            Points stay at zero until at least one series has a recorded winner (NHL admin →
-            Series).
+            Points stay at zero until at least one series has a recorded winner in the database
+            (NHL admin → Series). The picks page may already show finals from the live bracket before
+            those rows update here.
+            {process.env.NHL_PLAYOFF_SYNC_ENABLED?.trim() === "true" ? (
+              <>
+                {" "}
+                <span className="font-medium text-slate-300">NHLE sync is on</span> for this
+                deployment—this page tries to pull Round 1 winners from the league on each load;
+                refresh if counts just changed.
+              </>
+            ) : null}
           </p>
         ) : null}
 
