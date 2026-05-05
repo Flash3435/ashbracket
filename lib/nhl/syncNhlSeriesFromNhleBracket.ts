@@ -1,4 +1,3 @@
-import { revalidateNhlPublicSurfaces } from "@/lib/nhl/revalidateNhlPublicSurfaces";
 import { createServiceRoleClient } from "@/lib/supabase/service";
 import { bracketYearFromEnv } from "./nhleBracketOverlay";
 import { NHL_2026_PLAYOFF_TEAMS, NHL_2026_ROUND1_SLOTS } from "./nhl2026PlayoffField";
@@ -77,6 +76,9 @@ export type SyncNhlSeriesFromNhleResult =
  * Idempotent: pulls official Round 1 finals from NHLE into `nhl_series` when the service role key
  * is configured. Runs on `/nhl/picks` and `/nhl/standings` so leaderboard scoring matches public picks.
  * Fails quietly (logs) if the key or network is unavailable.
+ *
+ * Does not call `revalidatePath` — that is only safe from route handlers / server actions, not
+ * during a Server Component render (would 500 production `/nhl/picks` and `/nhl/standings`).
  */
 export async function maybeSyncNhlBracketRound1ToDatabase(): Promise<void> {
   const result = await syncNhlSeriesFromNhleBracket();
@@ -89,9 +91,6 @@ export async function maybeSyncNhlBracketRound1ToDatabase(): Promise<void> {
       "[nhle sync] Round 1 completed:",
       [...result.errors, `conflicts_skipped=${result.round1ConflictSkipped}`].join("; "),
     );
-  }
-  if (result.round1Updated > 0) {
-    revalidateNhlPublicSurfaces();
   }
 }
 
