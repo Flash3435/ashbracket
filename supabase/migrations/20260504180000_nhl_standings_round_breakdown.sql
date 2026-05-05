@@ -1,5 +1,8 @@
 -- NHL standings: per-round points, Round 2+ rank, and bonus placeholder (edition-scoped; no World Cup changes).
 
+-- Changing RETURNS TABLE columns is not allowed with CREATE OR REPLACE alone (PostgreSQL 42P13).
+DROP FUNCTION IF EXISTS public.fetch_nhl_edition_standings(uuid);
+
 CREATE OR REPLACE FUNCTION public.fetch_nhl_edition_standings(p_edition_id uuid)
 RETURNS TABLE (
   rank bigint,
