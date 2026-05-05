@@ -1,6 +1,6 @@
 "use client";
 
-import { saveNhlRound1SeriesPickAction } from "@/lib/nhl/picks/actions";
+import { saveNhlRound2SeriesPickAction } from "@/lib/nhl/picks/actions";
 import { effectiveSeriesWinnerId } from "@/lib/nhl/nhlPicksProgression";
 import { buildNhlSeriesStatePresentation } from "@/lib/nhl/nhlSeriesStateText";
 import type { NhlSeriesRow } from "@/lib/nhl/types";
@@ -11,16 +11,15 @@ import { NhlTeamLogo } from "./NhlTeamLogo";
 function conferenceWord(side: NhlSeriesRow["side_or_conference"]): string {
   if (side === "east") return "East";
   if (side === "west") return "West";
-  if (side === "cup") return "Stanley Cup";
   return "Playoffs";
 }
 
 function slotHeadline(series: NhlSeriesRow): string {
   if (series.side_or_conference === "east" || series.side_or_conference === "west") {
     const letter = series.side_or_conference === "east" ? "E" : "W";
-    return `${letter} · ${series.slot_index}`;
+    return `${letter} · R2 · ${series.slot_index}`;
   }
-  return `Slot ${series.slot_index}`;
+  return `R2 · ${series.slot_index}`;
 }
 
 function SelectableTeamRow({
@@ -42,14 +41,13 @@ function SelectableTeamRow({
   selected: boolean;
   disabled: boolean;
   onSelect: () => void;
-  /** When the real series has a recorded winner, highlight that side and mute the other. */
   resultEmphasis?: "winner" | "loser" | "neutral";
 }) {
   if (!abbr && !name) {
     return (
       <div className="rounded-lg border border-dashed border-slate-600/60 bg-slate-950/40 px-3 py-2.5">
         <p className="text-[10px] font-medium uppercase tracking-wide text-slate-500">{seedLabel}</p>
-        <p className="mt-0.5 text-sm font-medium text-slate-500">To be determined</p>
+        <p className="mt-0.5 text-sm font-medium text-slate-500">Waiting on Round 1</p>
       </div>
     );
   }
@@ -103,7 +101,7 @@ function SelectableTeamRow({
   );
 }
 
-export function NhlRound1SeriesPickCard({
+export function NhlRound2SeriesPickCard({
   editionId,
   series,
   initialPickedTeamId,
@@ -134,13 +132,13 @@ export function NhlRound1SeriesPickCard({
 
   const pres = buildNhlSeriesStatePresentation(series);
   const resolvedWinnerId = pres.winnerTeamId ?? series.winner_team_id;
-  const seriesDecided = Boolean(effectiveSeriesWinnerId(series));
   function resultForTeam(teamId: string | null): "winner" | "loser" | "neutral" {
     if (!resolvedWinnerId || !teamId) return "neutral";
     if (resolvedWinnerId === teamId) return "winner";
     return "loser";
   }
 
+  const seriesDecided = Boolean(effectiveSeriesWinnerId(series));
   const canPick = isAuthenticated && !picksLocked && hasPairing && hi && lo && !seriesDecided;
   const controlsDisabled = !canPick || isPending;
 
@@ -151,7 +149,7 @@ export function NhlRound1SeriesPickCard({
     setBanner({ kind: "idle" });
     startTransition(() => {
       void (async () => {
-        const res = await saveNhlRound1SeriesPickAction({
+        const res = await saveNhlRound2SeriesPickAction({
           editionId,
           seriesId: series.id,
           pickedTeamId: teamId,
@@ -169,11 +167,21 @@ export function NhlRound1SeriesPickCard({
     });
   }
 
+  const pickedLabel =
+    pickedId && hi && pickedId === hi
+      ? (series.higher_team_abbr ?? series.higher_team_name ?? "Higher seed")
+      : pickedId && lo && pickedId === lo
+        ? (series.lower_team_abbr ?? series.lower_team_name ?? "Lower seed")
+        : null;
+
+  const pickCorrect =
+    seriesDecided && pickedId && resolvedWinnerId ? pickedId === resolvedWinnerId : null;
+
   return (
     <article className="rounded-xl border border-blue-500/20 bg-gradient-to-b from-slate-950/70 to-slate-950/40 p-4 shadow-md shadow-blue-950/15">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <span className="rounded-full border border-blue-400/25 bg-blue-950/40 px-2.5 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-blue-200/90">
-          {conf}
+        <span className="rounded-full border border-violet-400/25 bg-violet-950/40 px-2.5 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-violet-200/90">
+          {conf} · Round 2
         </span>
         <span className="font-mono text-[11px] font-medium uppercase tracking-wider text-slate-500">
           {headline}
@@ -181,7 +189,7 @@ export function NhlRound1SeriesPickCard({
       </div>
       <div className="mt-3 rounded-lg border border-slate-600/35 bg-slate-900/35 px-3 py-2.5">
         <div className="flex flex-wrap items-center justify-between gap-x-2 gap-y-1">
-          <span className="rounded-full border border-blue-400/25 bg-blue-950/45 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-blue-100/95">
+          <span className="rounded-full border border-violet-400/25 bg-violet-950/45 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-violet-100/95">
             {pres.statusLabel}
           </span>
           {pres.scoreHigherLower ? (
@@ -221,40 +229,26 @@ export function NhlRound1SeriesPickCard({
         />
       </div>
 
-      {isAuthenticated && hasPairing && seriesDecided ? (
+      {isAuthenticated && hasPairing && pickedId && pickedLabel ? (
         <div className="mt-3 rounded-lg border border-slate-600/40 bg-slate-900/45 px-3 py-2.5">
-          {pickedId ? (
-            <>
-              <p className="text-[11px] text-slate-400">
-                Your pick:{" "}
-                <span className="font-semibold text-slate-100">
-                  {pickedId === hi
-                    ? (series.higher_team_abbr ?? series.higher_team_name ?? "Higher seed")
-                    : pickedId === lo
-                      ? (series.lower_team_abbr ?? series.lower_team_name ?? "Lower seed")
-                      : "—"}
-                </span>
-              </p>
-              <p className="mt-2">
-                <span
-                  className={`inline-flex rounded-full border px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wide ${
-                    pickedId === resolvedWinnerId
-                      ? "border-emerald-500/40 bg-emerald-950/35 text-emerald-100/95"
-                      : "border-rose-500/40 bg-rose-950/30 text-rose-100/95"
-                  }`}
-                >
-                  {pickedId === resolvedWinnerId ? "Your pick was correct" : "Your pick was incorrect"}
-                </span>
-              </p>
-              {pickedId === resolvedWinnerId ? (
-                <p className="mt-1.5 text-[10px] text-slate-500">You earned points for this series (see summary).</p>
-              ) : null}
-            </>
-          ) : (
-            <p className="text-[11px] text-slate-400">
-              You did not submit a pick for this series before it finished.
+          <p className="text-[11px] text-slate-400">
+            Your pick: <span className="font-semibold text-slate-100">{pickedLabel}</span>
+          </p>
+          {seriesDecided && pickCorrect !== null ? (
+            <p className="mt-2">
+              <span
+                className={`inline-flex rounded-full border px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wide ${
+                  pickCorrect
+                    ? "border-emerald-500/40 bg-emerald-950/35 text-emerald-100/95"
+                    : "border-rose-500/40 bg-rose-950/30 text-rose-100/95"
+                }`}
+              >
+                {pickCorrect ? "Your pick was correct" : "Your pick was incorrect"}
+              </span>
             </p>
-          )}
+          ) : !seriesDecided ? (
+            <p className="mt-1.5 text-[10px] text-slate-500">Result pending — pick locked in once the series ends.</p>
+          ) : null}
         </div>
       ) : null}
 
@@ -263,7 +257,7 @@ export function NhlRound1SeriesPickCard({
           <Link href="/nhl/login?next=%2Fnhl%2Fpicks" className="text-blue-300 underline-offset-2 hover:underline">
             Sign in
           </Link>{" "}
-          to save your Round 1 winners for this edition.
+          to save your Round 2 winners for this edition.
         </p>
       ) : null}
 
@@ -272,7 +266,9 @@ export function NhlRound1SeriesPickCard({
       ) : null}
 
       {isAuthenticated && !picksLocked && !hasPairing ? (
-        <p className="mt-3 text-[11px] text-slate-500">Opponents for this series are not filled in yet—you cannot pick until both teams are set.</p>
+        <p className="mt-3 text-[11px] text-slate-500">
+          This Round 2 pairing is not ready yet—both Round 1 feeders need a decided winner in the pool.
+        </p>
       ) : null}
 
       {isPending ? <p className="mt-3 text-[11px] text-blue-200/90">Saving…</p> : null}
