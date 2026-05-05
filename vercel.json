@@ -2,7 +2,7 @@
   "crons": [
     {
       "path": "/api/nhl/sync-playoff-series",
-      "schedule": "*/10 * * * *"
+      "schedule": "0 14 * * *"
     }
   ]
 }
