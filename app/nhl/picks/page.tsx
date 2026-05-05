@@ -243,7 +243,6 @@ export default async function NhlPicksPage() {
             summary={r1UserSummary}
             r2PicksLoadError={r2PicksLoadError}
             totalPoolPoints={userPoolTotalPoints}
-            nhleAutoSyncEnabled={process.env.NHL_PLAYOFF_SYNC_ENABLED?.trim() === "true"}
           />
         </section>
       ) : null}

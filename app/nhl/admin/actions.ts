@@ -18,6 +18,8 @@ import {
   fetchActiveNhlEdition,
   fetchNhlTeamSlugsForEdition,
 } from "@/lib/nhl/queries";
+import { revalidateNhlPublicSurfaces } from "@/lib/nhl/revalidateNhlPublicSurfaces";
+import { syncNhlSeriesFromNhleBracket } from "@/lib/nhl/syncNhlSeriesFromNhleBracket";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 
@@ -230,3 +232,27 @@ export async function createNhlBracketSkeletonAction() {
 
 /** @deprecated Use {@link loadOfficial2026PlayoffTeamsAction} — name kept for any stale imports. */
 export const seedNhlStarterTeamsAction = loadOfficial2026PlayoffTeamsAction;
+
+/**
+ * Pulls official Round 1 finals from the NHLE bracket API into `nhl_series` (service role).
+ * Idempotent; does not overwrite a stored winner that disagrees with the league feed.
+ */
+export async function syncNhlOfficialRound1FromBracketAction() {
+  await guardGlobalAdmin();
+
+  const result = await syncNhlSeriesFromNhleBracket();
+  if (!result.ok) {
+    redirect(`/nhl/admin/series?err=${encodeURIComponent(result.error)}`);
+  }
+
+  revalidateNhlPublicSurfaces();
+  revalidateNhlAdmin();
+
+  const q = new URLSearchParams({
+    ok: "sync_round1",
+    up: String(result.round1Updated),
+    sk: String(result.round1Skipped),
+    cf: String(result.round1ConflictSkipped),
+  });
+  redirect(`/nhl/admin/series?${q.toString()}`);
+}

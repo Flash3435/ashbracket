@@ -9,7 +9,6 @@ export function NhlPicksRoundSummary({
   summary,
   r2PicksLoadError,
   totalPoolPoints,
-  nhleAutoSyncEnabled,
 }: {
   isAuthenticated: boolean;
   round1Complete: boolean;
@@ -19,8 +18,6 @@ export function NhlPicksRoundSummary({
   r2PicksLoadError: string | null;
   /** Optional: user’s total points across rounds from standings RPC (includes R2+ when scored). */
   totalPoolPoints: number | null;
-  /** Server: true when `NHL_PLAYOFF_SYNC_ENABLED` — NHLE→DB sync may run on NHL page loads. */
-  nhleAutoSyncEnabled: boolean;
 }) {
   if (!isAuthenticated) {
     return (
@@ -126,28 +123,16 @@ export function NhlPicksRoundSummary({
         totalPoolPoints !== null &&
         totalPoolPoints === 0 ? (
           <p className="rounded-lg border border-amber-500/25 bg-amber-950/20 px-3 py-2 text-xs leading-relaxed text-amber-100/90 sm:text-sm">
-            This summary can use the <span className="font-medium">live bracket</span> so you see
-            correct picks as soon as the league shows a series final.{" "}
-            <span className="font-medium">Standings</span> only award points after each series has a
-            stored winner in the database (<code className="rounded bg-slate-900/80 px-1">winner_team_id</code>
-            ). Until those rows are updated, you may see points here but{" "}
-            <span className="font-medium">0 on the leaderboard</span>.
-            {nhleAutoSyncEnabled ? (
-              <>
-                {" "}
-                This deployment runs an automatic Round 1 sync from the league when NHL pages load
-                (<code className="rounded bg-slate-900/80 px-1">NHL_PLAYOFF_SYNC_ENABLED</code>); refresh
-                after a moment if points are still catching up.
-              </>
-            ) : (
-              <>
-                {" "}
-                An organizer can record winners under NHL admin → Series, or enable server sync from
-                the NHLE bracket (see <code className="rounded bg-slate-900/80 px-1">NHL_PLAYOFF_SYNC_ENABLED</code>{" "}
-                and <code className="rounded bg-slate-900/80 px-1">/api/nhl/sync-playoff-series</code>
-                ).
-              </>
-            )}
+            Your Round 1 summary uses the <span className="font-medium">latest public playoff results</span>{" "}
+            so you can see how you did as soon as games end.{" "}
+            <span className="font-medium">Leaderboard points</span> use results saved to this pool and
+            usually catch up within a refresh. If the leaderboard still looks behind, the site may not
+            have finished saving official finals yet—try again shortly, or ask an organizer to run{" "}
+            <span className="font-medium">Sync official Round 1 results</span> under{" "}
+            <Link href="/nhl/admin/series" className="text-blue-300 underline-offset-2 hover:underline">
+              NHL admin → Series
+            </Link>
+            .
           </p>
         ) : null}
       </div>

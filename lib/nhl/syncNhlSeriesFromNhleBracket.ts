@@ -1,3 +1,4 @@
+import { revalidateNhlPublicSurfaces } from "@/lib/nhl/revalidateNhlPublicSurfaces";
 import { createServiceRoleClient } from "@/lib/supabase/service";
 import { bracketYearFromEnv } from "./nhleBracketOverlay";
 import { NHL_2026_PLAYOFF_TEAMS, NHL_2026_ROUND1_SLOTS } from "./nhl2026PlayoffField";
@@ -66,23 +67,31 @@ export type SyncNhlSeriesFromNhleResult =
       playoffYear: string;
       round1Updated: number;
       round1Skipped: number;
+      /** DB already had a different winner than NHLE — left unchanged (admin override). */
+      round1ConflictSkipped: number;
       errors: string[];
     }
   | { ok: false; error: string };
 
 /**
- * When `NHL_PLAYOFF_SYNC_ENABLED=true`, writes NHLE Round 1 results into `nhl_series` so standings
- * and picks use the same stored winners. No-op otherwise (safe on every request).
+ * Idempotent: pulls official Round 1 finals from NHLE into `nhl_series` when the service role key
+ * is configured. Runs on `/nhl/picks` and `/nhl/standings` so leaderboard scoring matches public picks.
+ * Fails quietly (logs) if the key or network is unavailable.
  */
 export async function maybeSyncNhlBracketRound1ToDatabase(): Promise<void> {
-  if (process.env.NHL_PLAYOFF_SYNC_ENABLED?.trim() !== "true") {
-    return;
-  }
   const result = await syncNhlSeriesFromNhleBracket();
   if (!result.ok) {
     console.warn("[nhle sync] Round 1 bracket sync skipped:", result.error);
-  } else if (result.errors.length > 0) {
-    console.warn("[nhle sync] Round 1 completed with warnings:", result.errors.join("; "));
+    return;
+  }
+  if (result.errors.length > 0 || result.round1ConflictSkipped > 0) {
+    console.warn(
+      "[nhle sync] Round 1 completed:",
+      [...result.errors, `conflicts_skipped=${result.round1ConflictSkipped}`].join("; "),
+    );
+  }
+  if (result.round1Updated > 0) {
+    revalidateNhlPublicSurfaces();
   }
 }
 
@@ -166,6 +175,7 @@ export async function syncNhlSeriesFromNhleBracket(
 
   let round1Updated = 0;
   let round1Skipped = 0;
+  let round1ConflictSkipped = 0;
 
   for (const slot of NHL_2026_ROUND1_SLOTS) {
     const hiAbbr = abbreviationForSlug(slot.higher_team_slug)?.toUpperCase() ?? "";
@@ -219,6 +229,31 @@ export async function syncNhlSeriesFromNhleBracket(
       Boolean(apiSlice.winningTeamId && apiSlice.winningTeamId > 0) && winnerIdResolved !== null;
     const status = inferStatus(mapped.hi, mapped.lo, hasApiWinner);
 
+    const { data: existingRow, error: exErr } = await supabase
+      .from("nhl_series")
+      .select("winner_team_id")
+      .eq("edition_id", edition.id)
+      .eq("round_code", "R1")
+      .eq("side_or_conference", slot.side)
+      .eq("slot_index", slot.slot_index)
+      .maybeSingle();
+
+    if (exErr) {
+      errors.push(`R1 ${slot.side} #${slot.slot_index}: ${exErr.message}`);
+      round1Skipped += 1;
+      continue;
+    }
+
+    const dbWinnerId = (existingRow as { winner_team_id: string | null } | null)?.winner_team_id ?? null;
+
+    if (hasApiWinner && winnerIdResolved && dbWinnerId && dbWinnerId !== winnerIdResolved) {
+      round1ConflictSkipped += 1;
+      errors.push(
+        `R1 ${slot.side} #${slot.slot_index}: skipped — pool already has a different winner than NHLE (admin override).`,
+      );
+      continue;
+    }
+
     const updatePayload: {
       games_won_by_higher_seed: number;
       games_won_by_lower_seed: number;
@@ -250,5 +285,5 @@ export async function syncNhlSeriesFromNhleBracket(
     }
   }
 
-  return { ok: true, playoffYear, round1Updated, round1Skipped, errors };
+  return { ok: true, playoffYear, round1Updated, round1Skipped, round1ConflictSkipped, errors };
 }

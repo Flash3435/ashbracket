@@ -268,19 +268,14 @@ export default async function NhlStandingsPage() {
         noRecordedWinnersYet ? (
           <p className="mt-4 text-sm leading-relaxed text-slate-400">
             <span className="font-medium text-slate-300">
-              Picks are in, but no completed series results are available yet.
+              Picks are in, but no completed series results are saved to this pool yet.
             </span>{" "}
-            Points stay at zero until at least one series has a recorded winner in the database
-            (NHL admin → Series). The picks page may already show finals from the live bracket before
-            those rows update here.
-            {process.env.NHL_PLAYOFF_SYNC_ENABLED?.trim() === "true" ? (
-              <>
-                {" "}
-                <span className="font-medium text-slate-300">NHLE sync is on</span> for this
-                deployment—this page tries to pull Round 1 winners from the league on each load;
-                refresh if counts just changed.
-              </>
-            ) : null}
+            Points stay at zero until official Round 1 winners are stored (this page tries to pull them
+            when you load it; organizers can also use{" "}
+            <Link href="/nhl/admin/series" className="text-blue-300 underline-offset-2 hover:underline">
+              NHL admin → Series
+            </Link>
+            ).
           </p>
         ) : null}
 
