@@ -307,6 +307,7 @@ export default async function AdminTournamentStatusPage({ searchParams }: PagePr
       <LedgerRecomputeDiagnosticsTable
         rows={ledgerRecomputeDiag.rows}
         loadError={ledgerRecomputeDiag.error}
+        statusWarning={ledgerRecomputeDiag.recomputeStatusWarning}
       />
 
       {(resultsLockedRes.count ?? 0) > 0 || (matchesSyncLocked ?? 0) > 0 ? (

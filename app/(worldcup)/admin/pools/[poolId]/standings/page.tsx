@@ -45,6 +45,7 @@ export default async function AdminPoolStandingsPage({
         description="When this pool’s leaderboard was last rebuilt successfully, and from which path."
         rows={ledgerRecomputeDiag.rows}
         loadError={ledgerRecomputeDiag.error}
+        statusWarning={ledgerRecomputeDiag.recomputeStatusWarning}
       />
       {poolImpact ? (
         <RecomputeStandingsPanel

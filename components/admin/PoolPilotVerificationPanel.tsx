@@ -107,14 +107,24 @@ type Props = {
 export function PoolPilotVerificationPanel({ snapshot }: Props) {
   if (snapshot.loadError) {
     return (
-      <p className="rounded-md border border-red-800/80 bg-red-950/40 px-3 py-2 text-sm text-red-200">
-        {snapshot.loadError}
-      </p>
+      <section className="ash-surface p-4">
+        <p className="rounded-md border border-red-800/80 bg-red-950/40 px-3 py-2 text-sm text-red-200">
+          {snapshot.loadError}
+        </p>
+      </section>
     );
   }
 
   return (
     <section className="ash-surface space-y-6 p-4">
+      {snapshot.recomputeStatusWarning ? (
+        <p
+          className="rounded-md border border-amber-800/70 bg-amber-950/35 px-3 py-2 text-sm text-amber-100"
+          role="status"
+        >
+          {snapshot.recomputeStatusWarning}
+        </p>
+      ) : null}
       <div>
         <h2 className="text-sm font-bold text-ash-text">Pilot verification</h2>
         <p className="mt-1 text-sm text-ash-muted">

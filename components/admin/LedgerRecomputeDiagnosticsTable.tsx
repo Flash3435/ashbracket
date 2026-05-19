@@ -47,6 +47,7 @@ type Props = {
   description?: string;
   rows: WcPoolLedgerRecomputeRow[];
   loadError: string | null;
+  statusWarning?: string | null;
 };
 
 export function LedgerRecomputeDiagnosticsTable({
@@ -54,6 +55,7 @@ export function LedgerRecomputeDiagnosticsTable({
   description = "Last successful leaderboard recompute for each World Cup pool. Internal diagnostic only.",
   rows,
   loadError,
+  statusWarning = null,
 }: Props) {
   return (
     <section className="ash-surface mb-6 p-4">
@@ -62,11 +64,20 @@ export function LedgerRecomputeDiagnosticsTable({
       <p className="mt-2 text-xs text-ash-muted">
         “Recent” means the last successful recompute was within about two hours (UI hint only).
       </p>
+      {statusWarning ? (
+        <p
+          className="mt-3 rounded-md border border-amber-800/70 bg-amber-950/35 px-3 py-2 text-sm text-amber-100"
+          role="status"
+        >
+          {statusWarning}
+        </p>
+      ) : null}
       {loadError ? (
         <p className="mt-3 rounded-md border border-red-800/80 bg-red-950/40 px-3 py-2 text-sm text-red-200">
           {loadError}
         </p>
-      ) : (
+      ) : null}
+      {!loadError ? (
         <div className="mt-4 overflow-x-auto">
           <table className="w-full min-w-[32rem] border-collapse text-left text-sm text-ash-muted">
             <thead>
@@ -99,7 +110,7 @@ export function LedgerRecomputeDiagnosticsTable({
             </tbody>
           </table>
         </div>
-      )}
+      ) : null}
     </section>
   );
 }

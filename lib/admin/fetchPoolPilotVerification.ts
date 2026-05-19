@@ -18,7 +18,10 @@ export type PoolPilotVerificationRow = WcPoolLedgerRecomputeRow & {
 export type PoolPilotVerificationSnapshot = {
   livePools: PoolPilotVerificationRow[];
   simulationPools: PoolPilotVerificationRow[];
+  /** Hard failure — pool list could not be loaded. */
   loadError: string | null;
+  /** Soft warning — recompute timestamps unavailable (missing migration). */
+  recomputeStatusWarning: string | null;
 };
 
 export async function fetchPoolPilotVerification(
@@ -30,7 +33,12 @@ export async function fetchPoolPilotVerification(
     .order("name", { ascending: true });
 
   if (pErr) {
-    return { livePools: [], simulationPools: [], loadError: pErr.message };
+    return {
+      livePools: [],
+      simulationPools: [],
+      loadError: pErr.message,
+      recomputeStatusWarning: null,
+    };
   }
 
   const poolList = pools ?? [];
@@ -56,11 +64,16 @@ export async function fetchPoolPilotVerification(
   }
 
   const ids = poolList.map((p) => p.id as string);
-  const { rows: diagRows, error: dErr } =
+  const { rows: diagRows, error: dErr, recomputeStatusWarning } =
     await fetchWcLedgerRecomputeDiagnosticsForPools(supabase, ids.length ? ids : null);
 
   if (dErr) {
-    return { livePools: [], simulationPools: [], loadError: dErr };
+    return {
+      livePools: [],
+      simulationPools: [],
+      loadError: dErr,
+      recomputeStatusWarning: null,
+    };
   }
 
   const diagById = new Map(diagRows.map((r) => [r.poolId, r]));
@@ -102,5 +115,6 @@ export async function fetchPoolPilotVerification(
     livePools: enriched.filter((r) => !r.isSimulation),
     simulationPools: enriched.filter((r) => r.isSimulation),
     loadError: null,
+    recomputeStatusWarning,
   };
 }
