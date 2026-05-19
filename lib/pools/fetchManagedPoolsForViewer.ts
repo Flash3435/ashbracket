@@ -16,6 +16,8 @@ export type ManagedPoolRow = {
   group_advance_exact_points: string | number | null;
   group_advance_wrong_slot_points: string | number | null;
   tie_break_note: string | null;
+  tournament_edition_id: string;
+  is_simulation: boolean;
 };
 
 /**

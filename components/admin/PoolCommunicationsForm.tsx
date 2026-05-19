@@ -11,17 +11,21 @@ import {
   getEmailTemplateDefaults,
   renderTemplatedPoolEmail,
 } from "../../lib/communications/messageTemplates";
+import type { SimulationPoolEmailUiStatus } from "@/lib/admin/simulationPoolEmailPolicy";
+import { SIMULATION_POOL_EMAIL_TYPED_PHRASE } from "@/lib/admin/simulationPoolEmailPolicy";
 import {
   type PoolCommunicationParticipant,
   type RecipientPreset,
   resolvePoolEmailTargets,
 } from "../../lib/communications/recipientResolve";
+import { SimulationPoolEmailStatusBanner } from "./SimulationPoolEmailStatusBanner";
 
 type PoolCommunicationsFormProps = {
   poolId: string;
   poolName: string;
   lockAtIso: string | null;
   participants: PoolCommunicationParticipant[];
+  simulationEmailStatus: SimulationPoolEmailUiStatus;
 };
 
 const PRESET_OPTIONS: { value: RecipientPreset; label: string; hint: string }[] =
@@ -87,7 +91,14 @@ export function PoolCommunicationsForm({
   poolName,
   lockAtIso,
   participants,
+  simulationEmailStatus,
 }: PoolCommunicationsFormProps) {
+  const {
+    isSimulationPool: isSimulation,
+    isProduction,
+    sendsBlocked,
+    requiresTypedPhrase,
+  } = simulationEmailStatus;
   const [preset, setPreset] = useState<RecipientPreset>("all");
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [messageKind, setMessageKind] = useState<MessageKind>("payment_reminder");
@@ -95,7 +106,15 @@ export function PoolCommunicationsForm({
   const [formError, setFormError] = useState<string | null>(null);
   const [sendResult, setSendResult] = useState<string | null>(null);
   const [confirmOpen, setConfirmOpen] = useState(false);
+  const [productionAck, setProductionAck] = useState(false);
+  const [simulationEmailAck, setSimulationEmailAck] = useState(false);
+  const [typedPhrase, setTypedPhrase] = useState("");
   const [pending, startTransition] = useTransition();
+
+  const typedPhraseOk =
+    !requiresTypedPhrase ||
+    typedPhrase.trim().toUpperCase().replace(/\s+/g, " ") ===
+      SIMULATION_POOL_EMAIL_TYPED_PHRASE;
 
   const draft = draftsByKind[messageKind];
 
@@ -168,6 +187,12 @@ export function PoolCommunicationsForm({
         selectedParticipantIds: [...selectedIds],
         subjectTemplate: draft.subject,
         bodyTemplate: draft.body,
+        productionAcknowledged:
+          isProduction && (requiresTypedPhrase || !isSimulation)
+            ? productionAck
+            : true,
+        simulationEmailAcknowledged: isSimulation ? simulationEmailAck : true,
+        typedConfirmationPhrase: requiresTypedPhrase ? typedPhrase : undefined,
       });
       setConfirmOpen(false);
       if (!res.ok) {
@@ -200,6 +225,10 @@ export function PoolCommunicationsForm({
         poolId,
         subjectTemplate: draft.subject,
         bodyTemplate: draft.body,
+        productionAcknowledged:
+          isProduction && requiresTypedPhrase ? productionAck : true,
+        simulationEmailAcknowledged: isSimulation ? simulationEmailAck : true,
+        typedConfirmationPhrase: requiresTypedPhrase ? typedPhrase : undefined,
       });
       if (!res.ok) {
         setFormError(res.error);
@@ -224,12 +253,61 @@ export function PoolCommunicationsForm({
   }
 
   const deadlineLabel = formatPoolLockSummary(lockAtIso);
-  const canSend = resolved.targets.length > 0 && draft.subject.trim() && draft.body.trim();
+  const canSend =
+    resolved.targets.length > 0 &&
+    draft.subject.trim() &&
+    draft.body.trim() &&
+    !sendsBlocked;
   const noRecipients = resolved.targets.length === 0;
+  const canTestSend =
+    draft.subject.trim() &&
+    draft.body.trim() &&
+    !sendsBlocked &&
+    typedPhraseOk &&
+    (!requiresTypedPhrase || (productionAck && simulationEmailAck));
 
   return (
     <>
       <form className="space-y-8" onSubmit={(e) => e.preventDefault()}>
+        <SimulationPoolEmailStatusBanner status={simulationEmailStatus} />
+        {requiresTypedPhrase ? (
+          <div className="rounded-md border border-amber-700/50 bg-amber-950/25 px-4 py-3">
+            <label className="block text-sm font-medium text-amber-100">
+              Type{" "}
+              <span className="font-mono">{SIMULATION_POOL_EMAIL_TYPED_PHRASE}</span>{" "}
+              to confirm any email from this simulation pool
+              <input
+                type="text"
+                value={typedPhrase}
+                onChange={(e) => setTypedPhrase(e.target.value)}
+                autoComplete="off"
+                spellCheck={false}
+                placeholder={SIMULATION_POOL_EMAIL_TYPED_PHRASE}
+                className="mt-2 w-full rounded-md border border-amber-800/60 bg-ash-body px-3 py-2 font-mono text-sm text-ash-text"
+              />
+            </label>
+            <label className="mt-3 flex cursor-pointer items-start gap-2 text-sm text-amber-100">
+              <input
+                type="checkbox"
+                checked={productionAck}
+                onChange={(e) => setProductionAck(e.target.checked)}
+                disabled={pending}
+                className="mt-1"
+              />
+              <span>I understand this sends real email on production.</span>
+            </label>
+            <label className="mt-2 flex cursor-pointer items-start gap-2 text-sm text-amber-100">
+              <input
+                type="checkbox"
+                checked={simulationEmailAck}
+                onChange={(e) => setSimulationEmailAck(e.target.checked)}
+                disabled={pending}
+                className="mt-1"
+              />
+              <span>I intend to send email from this simulation test pool.</span>
+            </label>
+          </div>
+        ) : null}
         {formError ? (
           <p
             className="rounded-md border border-red-800/80 bg-red-950/40 px-3 py-2 text-sm text-red-200"
@@ -507,16 +585,21 @@ export function PoolCommunicationsForm({
             disabled={pending || !canSend}
             className="btn-primary disabled:cursor-not-allowed disabled:opacity-50"
           >
-            {pending ? "Working…" : "Send emails…"}
+            {pending ? "Working…" : sendsBlocked ? "Email blocked" : "Send emails…"}
           </button>
           <button
             type="button"
             onClick={runTestSend}
-            disabled={pending || !draft.subject.trim() || !draft.body.trim()}
+            disabled={pending || !canTestSend}
             className="rounded-md border border-ash-border bg-ash-body/60 px-4 py-2 text-sm font-medium text-ash-text hover:bg-ash-body disabled:cursor-not-allowed disabled:opacity-50"
           >
             Test send to me
           </button>
+          {sendsBlocked ? (
+            <span className="text-sm text-red-200">
+              Outbound email from simulation pools is off on production.
+            </span>
+          ) : null}
           {!canSend && !noRecipients ? (
             <span className="text-sm text-ash-muted">
               Add a subject and message to send.
@@ -543,8 +626,26 @@ export function PoolCommunicationsForm({
               id="send-confirm-title"
               className="text-base font-semibold text-ash-text"
             >
-              Confirm send
+              {isSimulation ? "Confirm send (simulation pool)" : "Confirm send"}
             </h3>
+            {isSimulation ? (
+              <p className="mt-2 rounded-md border border-amber-700/50 bg-amber-950/30 px-3 py-2 text-sm text-amber-100">
+                <strong>Simulation pool · test data.</strong> You are about to send real
+                email from a test pool on production. Use test recipients only.
+              </p>
+            ) : null}
+            {requiresTypedPhrase ? (
+              <p className="mt-2 text-sm text-amber-100">
+                You must have typed{" "}
+                <span className="font-mono">{SIMULATION_POOL_EMAIL_TYPED_PHRASE}</span>{" "}
+                in the box on the form before confirming.
+              </p>
+            ) : null}
+            {isProduction && !isSimulation ? (
+              <p className="mt-2 rounded-md border border-red-800/60 bg-red-950/35 px-3 py-2 text-sm text-red-100">
+                <strong>Production:</strong> this sends real email to real addresses.
+              </p>
+            ) : null}
             <ul className="mt-4 space-y-2 text-sm text-ash-muted">
               <li>
                 <span className="text-ash-text">Pool:</span> {poolName}
@@ -559,6 +660,32 @@ export function PoolCommunicationsForm({
                 {resolved.targets.length === 1 ? "person" : "people"}
               </li>
             </ul>
+            {isProduction && (!isSimulation || requiresTypedPhrase) ? (
+              <label className="mt-4 flex cursor-pointer items-start gap-2 text-sm text-ash-text">
+                <input
+                  type="checkbox"
+                  checked={productionAck}
+                  onChange={(e) => setProductionAck(e.target.checked)}
+                  disabled={pending}
+                  className="mt-1"
+                />
+                <span>I understand this sends real email on production.</span>
+              </label>
+            ) : null}
+            {isSimulation && requiresTypedPhrase ? (
+              <label className="mt-3 flex cursor-pointer items-start gap-2 text-sm text-ash-text">
+                <input
+                  type="checkbox"
+                  checked={simulationEmailAck}
+                  onChange={(e) => setSimulationEmailAck(e.target.checked)}
+                  disabled={pending}
+                  className="mt-1"
+                />
+                <span>
+                  I intend to send email from this simulation pool (test pool only).
+                </span>
+              </label>
+            ) : null}
             <div className="mt-6 flex flex-wrap justify-end gap-2">
               <button
                 type="button"
@@ -570,7 +697,14 @@ export function PoolCommunicationsForm({
               <button
                 type="button"
                 onClick={runSend}
-                disabled={pending || !canSend}
+                disabled={
+                  pending ||
+                  !canSend ||
+                  !typedPhraseOk ||
+                  (isProduction && requiresTypedPhrase && !productionAck) ||
+                  (isProduction && !isSimulation && !productionAck) ||
+                  (isSimulation && requiresTypedPhrase && !simulationEmailAck)
+                }
                 className="btn-primary disabled:cursor-not-allowed disabled:opacity-50"
               >
                 {pending ? "Sending…" : "Confirm send"}

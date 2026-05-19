@@ -2,6 +2,7 @@ import { revalidatePath } from "next/cache";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { revalidatePoolAdminPaths } from "@/lib/admin/revalidatePoolAdminPaths";
 import { createClient } from "@/lib/supabase/server";
+import { createServiceRoleClient } from "@/lib/supabase/service";
 import { computePoolScores } from "./computePoolScores";
 import {
   mapPredictionRow,
@@ -11,6 +12,44 @@ import {
 
 type RecomputeResult = { error?: string };
 
+/** Persisted on `wc_pool_ledger_recompute_status.last_trigger` (World Cup football only). */
+export type WcLedgerRecomputeTrigger =
+  | "participant_save"
+  | "tournament_sync"
+  | "admin_manual_recompute"
+  | "admin_pick_edit"
+  | "admin_result_edit"
+  | "admin_recompute_all_pools";
+
+export type RecomputePoolLedgerOptions = {
+  ledgerTrigger?: WcLedgerRecomputeTrigger;
+};
+
+async function recordLedgerRecomputeDiagnostic(
+  supabase: SupabaseClient,
+  poolId: string,
+  trigger: WcLedgerRecomputeTrigger,
+): Promise<void> {
+  const at = new Date().toISOString();
+  const { error } = await supabase.from("wc_pool_ledger_recompute_status").upsert(
+    {
+      pool_id: poolId,
+      last_success_at: at,
+      last_trigger: trigger,
+      last_status: "ok",
+      last_error: null,
+    },
+    { onConflict: "pool_id" },
+  );
+  if (error) {
+    console.error("[ashbracket:ledger-diagnostics] upsert failed", {
+      poolId,
+      trigger,
+      message: error.message,
+    });
+  }
+}
+
 /**
  * Same as `recomputePoolLedgerForPool` but uses the given Supabase client (e.g. service role
  * when the RPC requires elevated privileges).
@@ -18,6 +57,7 @@ type RecomputeResult = { error?: string };
 export async function recomputePoolLedgerWithClient(
   supabase: SupabaseClient,
   poolId: string,
+  options?: RecomputePoolLedgerOptions,
 ): Promise<RecomputeResult> {
   const { data: predRaw, error: predErr } = await supabase
     .from("predictions")
@@ -30,11 +70,18 @@ export async function recomputePoolLedgerWithClient(
 
   const { data: poolRow, error: poolErr } = await supabase
     .from("pools")
-    .select("id, group_advance_exact_points, group_advance_wrong_slot_points")
+    .select(
+      "id, group_advance_exact_points, group_advance_wrong_slot_points, tournament_edition_id",
+    )
     .eq("id", poolId)
     .maybeSingle();
 
   if (poolErr) return { error: poolErr.message };
+  if (!poolRow?.tournament_edition_id) {
+    return { error: "Pool has no tournament edition assigned." };
+  }
+
+  const editionId = poolRow.tournament_edition_id as string;
 
   const { data: groupStageRow } = await supabase
     .from("tournament_stages")
@@ -72,8 +119,9 @@ export async function recomputePoolLedgerWithClient(
   const { data: resultsRaw, error: resErr } = await supabase
     .from("results")
     .select(
-      "id, tournament_stage_id, kind, team_id, group_code, slot_key, value_text, resolved_at, created_at",
-    );
+      "id, tournament_stage_id, kind, team_id, group_code, slot_key, value_text, resolved_at, created_at, edition_id",
+    )
+    .eq("edition_id", editionId);
 
   if (resErr) return { error: resErr.message };
 
@@ -105,6 +153,10 @@ export async function recomputePoolLedgerWithClient(
 
   if (rpcErr) return { error: rpcErr.message };
 
+  if (options?.ledgerTrigger) {
+    await recordLedgerRecomputeDiagnostic(supabase, poolId, options.ledgerTrigger);
+  }
+
   revalidatePoolAdminPaths(poolId);
   revalidatePath("/admin/results");
   revalidatePath("/admin/tournament");
@@ -120,7 +172,21 @@ export async function recomputePoolLedgerWithClient(
  */
 export async function recomputePoolLedgerForPool(
   poolId: string,
+  options?: RecomputePoolLedgerOptions,
 ): Promise<RecomputeResult> {
   const supabase = await createClient();
-  return recomputePoolLedgerWithClient(supabase, poolId);
+  return recomputePoolLedgerWithClient(supabase, poolId, options);
+}
+
+/**
+ * Same as `recomputePoolLedgerWithClient` but uses the service role client so the
+ * `replace_points_ledger_for_pool` RPC succeeds after application code has verified
+ * the acting user (e.g. participant owns their row). Use only from trusted server actions.
+ */
+export async function recomputePoolLedgerForPoolAsTrustedServer(
+  poolId: string,
+  options?: RecomputePoolLedgerOptions,
+): Promise<RecomputeResult> {
+  const supabase = createServiceRoleClient();
+  return recomputePoolLedgerWithClient(supabase, poolId, options);
 }

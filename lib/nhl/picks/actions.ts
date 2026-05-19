@@ -3,6 +3,7 @@
 import { effectiveSeriesWinnerId, mergeRound2DisplayFromRound1 } from "@/lib/nhl/nhlPicksProgression";
 import {
   fetchActiveNhlEdition,
+  fetchNhlMembershipForUserEdition,
   fetchNhlSeriesRowsWithPublicLiveOverlay,
   fetchNhlTeamsForEdition,
 } from "@/lib/nhl/queries";
@@ -30,7 +31,28 @@ function friendlyPickError(raw: string): string {
   if (m.includes("edition does not match series")) return "Series does not belong to that edition.";
   if (m.includes("series not found")) return "Series was not found.";
   if (m.includes("jwt") || m.includes("not authenticated")) return "You must be signed in to save picks.";
+  if (m.includes("join the nhl competition")) {
+    return "Join the NHL competition on your account page before saving picks.";
+  }
   return raw.length > 160 ? "Could not save your pick. Try again." : raw;
+}
+
+async function requireNhlCompetitionEntry(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  userId: string,
+  editionId: string,
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  const mem = await fetchNhlMembershipForUserEdition(supabase, userId, editionId);
+  if (mem.error) {
+    return { ok: false, error: "Could not verify NHL competition entry. Try again." };
+  }
+  if (!mem.membershipId) {
+    return {
+      ok: false,
+      error: "Join the NHL competition on your account page before saving picks.",
+    };
+  }
+  return { ok: true };
 }
 
 export type SaveNhlRound1SeriesPickResult =
@@ -72,6 +94,11 @@ export async function saveNhlRound1SeriesPickAction(input: {
   }
   if (isNhlEditionLocked(edition.lock_at)) {
     return { ok: false, error: "Picks are closed for this edition." };
+  }
+
+  const entry = await requireNhlCompetitionEntry(supabase, user.id, editionId);
+  if (!entry.ok) {
+    return { ok: false, error: entry.error };
   }
 
   const seriesRes = await fetchNhlSeriesRowsWithPublicLiveOverlay(supabase, editionId);
@@ -155,6 +182,11 @@ export async function saveNhlRound2SeriesPickAction(input: {
     return { ok: false, error: "Picks are closed for this edition." };
   }
 
+  const entry = await requireNhlCompetitionEntry(supabase, user.id, editionId);
+  if (!entry.ok) {
+    return { ok: false, error: entry.error };
+  }
+
   await supabase.rpc("sync_nhl_r2_slots_from_r1", { p_edition_id: editionId });
 
   const [seriesRes, teamsRes] = await Promise.all([
@@ -177,7 +209,7 @@ export async function saveNhlRound2SeriesPickAction(input: {
     return {
       ok: false,
       error:
-        "This Round 2 matchup is not open yet—both feeding Round 1 winners must be recorded in the pool (or try again after the league sync updates).",
+        "This Round 2 matchup is not open yet—both feeding Round 1 winners must be recorded in the edition (or try again after the league sync updates).",
     };
   }
   if (pickedTeamId !== hi && pickedTeamId !== lo) {

@@ -2,6 +2,7 @@ import { createServiceRoleClient } from "@/lib/supabase/service";
 import { bracketYearFromEnv } from "./nhleBracketOverlay";
 import { NHL_2026_PLAYOFF_TEAMS, NHL_2026_ROUND1_SLOTS } from "./nhl2026PlayoffField";
 import { fetchActiveNhlEdition } from "./queries";
+import { syncNhlR2SlotsFromR1 } from "./syncNhlEditionBracketSlots";
 import type { NhlSeries } from "./types";
 
 const NHLE_PLAYOFF_BRACKET = "https://api-web.nhle.com/v1/playoff-bracket";
@@ -60,45 +61,90 @@ function inferStatus(winsHi: number, winsLo: number, hasWinnerId: boolean): NhlS
   return "pending";
 }
 
+function filterNhleRoundItems(apiList: NhleSeriesItem[], playoffRound: number): NhleSeriesItem[] {
+  return apiList.filter((s) => {
+    const ab = (x: string | undefined) => (x ?? "").trim().toUpperCase();
+    const pr = s.playoffRound == null ? NaN : Number(s.playoffRound);
+    return (
+      pr === playoffRound &&
+      ab(s.topSeedTeam?.abbrev) !== "" &&
+      ab(s.bottomSeedTeam?.abbrev) !== "" &&
+      ab(s.topSeedTeam?.abbrev) !== "TBD" &&
+      ab(s.bottomSeedTeam?.abbrev) !== "TBD"
+    );
+  });
+}
+
+function findApiSliceForPair(
+  apiItems: NhleSeriesItem[],
+  hiAbbr: string,
+  loAbbr: string,
+): NhleSeriesItem | undefined {
+  for (const api of apiItems) {
+    const top = api.topSeedTeam!.abbrev!.toUpperCase();
+    const bottom = api.bottomSeedTeam!.abbrev!.toUpperCase();
+    const mapped = mapWinsToHigherLower(
+      hiAbbr,
+      loAbbr,
+      top,
+      bottom,
+      Number(api.topSeedWins ?? 0),
+      Number(api.bottomSeedWins ?? 0),
+    );
+    if (mapped) {
+      return api;
+    }
+  }
+  return undefined;
+}
+
 export type SyncNhlSeriesFromNhleResult =
   | {
       ok: true;
       playoffYear: string;
       round1Updated: number;
       round1Skipped: number;
-      /** DB already had a different winner than NHLE — left unchanged (admin override). */
       round1ConflictSkipped: number;
+      round2Updated: number;
+      round2Skipped: number;
+      round2ConflictSkipped: number;
       errors: string[];
     }
   | { ok: false; error: string };
 
 /**
- * Idempotent: pulls official Round 1 finals from NHLE into `nhl_series` when the service role key
- * is configured. Runs on `/nhl/picks` and `/nhl/standings` so leaderboard scoring matches public picks.
- * Fails quietly (logs) if the key or network is unavailable.
- *
- * Does not call `revalidatePath` — that is only safe from route handlers / server actions, not
- * during a Server Component render (would 500 production `/nhl/picks` and `/nhl/standings`).
+ * Idempotent: pulls official Round 1 and Round 2 finals from NHLE into `nhl_series` when the
+ * service role key is configured. Runs on `/nhl/picks` and `/nhl/standings` so leaderboard scoring
+ * matches saved picks.
  */
-export async function maybeSyncNhlBracketRound1ToDatabase(): Promise<void> {
+export async function maybeSyncNhlBracketToDatabase(): Promise<void> {
   const result = await syncNhlSeriesFromNhleBracket();
   if (!result.ok) {
-    console.warn("[nhle sync] Round 1 bracket sync skipped:", result.error);
+    console.warn("[nhle sync] bracket sync skipped:", result.error);
     return;
   }
-  if (result.errors.length > 0 || result.round1ConflictSkipped > 0) {
+  if (
+    result.errors.length > 0 ||
+    result.round1ConflictSkipped > 0 ||
+    result.round2ConflictSkipped > 0
+  ) {
     console.warn(
-      "[nhle sync] Round 1 completed:",
-      [...result.errors, `conflicts_skipped=${result.round1ConflictSkipped}`].join("; "),
+      "[nhle sync] bracket sync completed with notes:",
+      [
+        ...result.errors,
+        `r1_conflicts=${result.round1ConflictSkipped}`,
+        `r2_conflicts=${result.round2ConflictSkipped}`,
+      ].join("; "),
     );
   }
 }
 
+/** @deprecated use {@link maybeSyncNhlBracketToDatabase} */
+export const maybeSyncNhlBracketRound1ToDatabase = maybeSyncNhlBracketToDatabase;
+
 /**
- * Pulls live Round 1 wins (and series winner when the league marks the series decided) from the
- * public NHLE bracket API into `nhl_series` for the **active** NHL edition.
- *
- * Pairings must match {@link NHL_2026_ROUND1_SLOTS} abbreviations versus the NHLE bracket.
+ * Pulls live Round 1 and Round 2 series results from the public NHLE bracket API into
+ * `nhl_series` for the **active** NHL edition, then refreshes Round 2 matchup slots from R1 winners.
  */
 export async function syncNhlSeriesFromNhleBracket(
   playoffYear: string = bracketYearFromEnv(),
@@ -133,17 +179,8 @@ export async function syncNhlSeriesFromNhleBracket(
 
   const rawSeries = payload as { series?: NhleSeriesItem[] };
   const apiList = rawSeries.series ?? [];
-  const r1FromApi = apiList.filter((s) => {
-    const ab = (x: string | undefined) => (x ?? "").trim().toUpperCase();
-    return (
-      s.seriesAbbrev === "R1" &&
-      Number(s.playoffRound) === 1 &&
-      ab(s.topSeedTeam?.abbrev) !== "" &&
-      ab(s.bottomSeedTeam?.abbrev) !== "" &&
-      ab(s.topSeedTeam?.abbrev) !== "TBD" &&
-      ab(s.bottomSeedTeam?.abbrev) !== "TBD"
-    );
-  });
+  const r1FromApi = filterNhleRoundItems(apiList, 1);
+  const r2FromApi = filterNhleRoundItems(apiList, 2);
 
   let supabase;
   try {
@@ -168,8 +205,11 @@ export async function syncNhlSeriesFromNhleBracket(
   }
 
   const idByAbbrev = new Map<string, string>();
+  const abbrevById = new Map<string, string>();
   for (const t of teams as { id: string; abbreviation: string }[]) {
-    idByAbbrev.set(t.abbreviation.toUpperCase(), t.id);
+    const ab = t.abbreviation.toUpperCase();
+    idByAbbrev.set(ab, t.id);
+    abbrevById.set(t.id, ab);
   }
 
   let round1Updated = 0;
@@ -185,16 +225,7 @@ export async function syncNhlSeriesFromNhleBracket(
       continue;
     }
 
-    let apiSlice: NhleSeriesItem | undefined;
-    for (const api of r1FromApi) {
-      const top = api.topSeedTeam!.abbrev!.toUpperCase();
-      const bottom = api.bottomSeedTeam!.abbrev!.toUpperCase();
-      const mapped = mapWinsToHigherLower(hiAbbr, loAbbr, top, bottom, Number(api.topSeedWins ?? 0), Number(api.bottomSeedWins ?? 0));
-      if (mapped) {
-        apiSlice = api;
-        break;
-      }
-    }
+    const apiSlice = findApiSliceForPair(r1FromApi, hiAbbr, loAbbr);
 
     if (!apiSlice) {
       round1Skipped += 1;
@@ -248,7 +279,7 @@ export async function syncNhlSeriesFromNhleBracket(
     if (hasApiWinner && winnerIdResolved && dbWinnerId && dbWinnerId !== winnerIdResolved) {
       round1ConflictSkipped += 1;
       errors.push(
-        `R1 ${slot.side} #${slot.slot_index}: skipped — pool already has a different winner than NHLE (admin override).`,
+        `R1 ${slot.side} #${slot.slot_index}: skipped — edition already has a different winner than NHLE (admin override).`,
       );
       continue;
     }
@@ -284,5 +315,142 @@ export async function syncNhlSeriesFromNhleBracket(
     }
   }
 
-  return { ok: true, playoffYear, round1Updated, round1Skipped, round1ConflictSkipped, errors };
+  const slotSync = await syncNhlR2SlotsFromR1(supabase, edition.id);
+  if (slotSync.error) {
+    errors.push(`sync_nhl_r2_slots_from_r1: ${slotSync.error}`);
+  }
+
+  const { data: r2Rows, error: r2LoadErr } = await supabase
+    .from("nhl_series")
+    .select(
+      "id, side_or_conference, slot_index, higher_seed_team_id, lower_seed_team_id, winner_team_id",
+    )
+    .eq("edition_id", edition.id)
+    .eq("round_code", "R2");
+
+  if (r2LoadErr) {
+    errors.push(`R2 load: ${r2LoadErr.message}`);
+    return {
+      ok: true,
+      playoffYear,
+      round1Updated,
+      round1Skipped,
+      round1ConflictSkipped,
+      round2Updated: 0,
+      round2Skipped: 0,
+      round2ConflictSkipped: 0,
+      errors,
+    };
+  }
+
+  let round2Updated = 0;
+  let round2Skipped = 0;
+  let round2ConflictSkipped = 0;
+
+  for (const row of r2Rows ?? []) {
+    const rec = row as {
+      id: string;
+      side_or_conference: string | null;
+      slot_index: number;
+      higher_seed_team_id: string | null;
+      lower_seed_team_id: string | null;
+      winner_team_id: string | null;
+    };
+
+    const hiId = rec.higher_seed_team_id;
+    const loId = rec.lower_seed_team_id;
+    if (!hiId || !loId) {
+      round2Skipped += 1;
+      continue;
+    }
+
+    const hiAbbr = abbrevById.get(hiId) ?? "";
+    const loAbbr = abbrevById.get(loId) ?? "";
+    if (!hiAbbr || !loAbbr) {
+      round2Skipped += 1;
+      continue;
+    }
+
+    const apiSlice = findApiSliceForPair(r2FromApi, hiAbbr, loAbbr);
+    if (!apiSlice) {
+      round2Skipped += 1;
+      errors.push(
+        `R2 ${rec.side_or_conference} #${rec.slot_index}: no NHLE match for pair ${hiAbbr}–${loAbbr}`,
+      );
+      continue;
+    }
+
+    const topWins = Number(apiSlice.topSeedWins ?? 0);
+    const bottomWins = Number(apiSlice.bottomSeedWins ?? 0);
+    const mapped = mapWinsToHigherLower(
+      hiAbbr,
+      loAbbr,
+      apiSlice.topSeedTeam!.abbrev!.toUpperCase(),
+      apiSlice.bottomSeedTeam!.abbrev!.toUpperCase(),
+      topWins,
+      bottomWins,
+    );
+    if (!mapped) {
+      round2Skipped += 1;
+      continue;
+    }
+
+    const winAbbr = winningAbbrev(apiSlice)?.toUpperCase() ?? null;
+    let winnerIdResolved: string | null = null;
+    if (winAbbr === hiAbbr) winnerIdResolved = hiId;
+    else if (winAbbr === loAbbr) winnerIdResolved = loId;
+
+    const hasApiWinner =
+      Boolean(apiSlice.winningTeamId && apiSlice.winningTeamId > 0) && winnerIdResolved !== null;
+    const status = inferStatus(mapped.hi, mapped.lo, hasApiWinner);
+    const dbWinnerId = rec.winner_team_id;
+
+    if (hasApiWinner && winnerIdResolved && dbWinnerId && dbWinnerId !== winnerIdResolved) {
+      round2ConflictSkipped += 1;
+      errors.push(
+        `R2 ${rec.side_or_conference} #${rec.slot_index}: skipped — edition already has a different winner than NHLE (admin override).`,
+      );
+      continue;
+    }
+
+    const updatePayload: {
+      games_won_by_higher_seed: number;
+      games_won_by_lower_seed: number;
+      status: NhlSeries["status"];
+      winner_team_id?: string;
+    } = {
+      games_won_by_higher_seed: mapped.hi,
+      games_won_by_lower_seed: mapped.lo,
+      status,
+    };
+
+    if (hasApiWinner && winnerIdResolved) {
+      updatePayload.winner_team_id = winnerIdResolved;
+    }
+
+    const { error: upErr } = await supabase
+      .from("nhl_series")
+      .update(updatePayload)
+      .eq("id", rec.id)
+      .eq("edition_id", edition.id);
+
+    if (upErr) {
+      errors.push(`R2 ${rec.side_or_conference} #${rec.slot_index}: ${upErr.message}`);
+      round2Skipped += 1;
+    } else {
+      round2Updated += 1;
+    }
+  }
+
+  return {
+    ok: true,
+    playoffYear,
+    round1Updated,
+    round1Skipped,
+    round1ConflictSkipped,
+    round2Updated,
+    round2Skipped,
+    round2ConflictSkipped,
+    errors,
+  };
 }

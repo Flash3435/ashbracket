@@ -258,6 +258,21 @@ export async function fetchNhlR2PicksForEdition(
   return { pickBySeriesId, error: null };
 }
 
+export async function countNhlMembershipsForEdition(
+  supabase: SupabaseClient,
+  editionId: string,
+): Promise<{ count: number; error: string | null }> {
+  const { count, error } = await supabase
+    .from("nhl_memberships")
+    .select("id", { count: "exact", head: true })
+    .eq("edition_id", editionId);
+
+  if (error) {
+    return { count: 0, error: error.message };
+  }
+  return { count: count ?? 0, error: null };
+}
+
 export async function fetchNhlMembershipForUserEdition(
   supabase: SupabaseClient,
   userId: string,

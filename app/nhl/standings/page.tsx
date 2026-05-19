@@ -13,7 +13,8 @@ import {
   fetchNhlTeamsForEdition,
   fetchNhlTeamSlugsForEdition,
 } from "@/lib/nhl/queries";
-import { maybeSyncNhlBracketRound1ToDatabase } from "@/lib/nhl/syncNhlSeriesFromNhleBracket";
+import { maybeSyncNhlBracketToDatabase } from "@/lib/nhl/syncNhlSeriesFromNhleBracket";
+import { syncNhlR2SlotsFromR1 } from "@/lib/nhl/syncNhlEditionBracketSlots";
 import type { NhlTeam } from "@/lib/nhl/types";
 import { createClient } from "@/lib/supabase/server";
 import type { Metadata } from "next";
@@ -44,7 +45,8 @@ export default async function NhlStandingsPage() {
   let standingsError: string | null = null;
 
   if (edition && !editionError) {
-    await maybeSyncNhlBracketRound1ToDatabase();
+    await maybeSyncNhlBracketToDatabase();
+    await syncNhlR2SlotsFromR1(supabase, edition.id);
 
     const [teamCountRes, seriesCountRes, slugRes, teamsRes, winnersRes] = await Promise.all([
       countNhlTeamsForEdition(supabase, edition.id),
@@ -140,7 +142,7 @@ export default async function NhlStandingsPage() {
           <div className="space-y-4">
             <div className="rounded-xl border border-blue-500/20 bg-slate-950/50 px-4 py-4">
               <p className="text-xs font-semibold uppercase tracking-wider text-blue-300/80">
-                Active playoff pool
+                Active competition
               </p>
               <p className="mt-1 text-lg font-semibold text-ash-text">{edition.name}</p>
               <p className="mt-1 text-sm text-slate-400">
@@ -244,8 +246,8 @@ export default async function NhlStandingsPage() {
 
         {!standingsError && edition && !editionError && !hasEntries ? (
           <p className="mt-4 text-sm leading-relaxed text-slate-400">
-            <span className="font-medium text-slate-300">No NHL entries yet.</span> Join with an
-            invite or save at least one Round 1 pick so your account appears in this pool.
+            <span className="font-medium text-slate-300">No competitors yet.</span> Join the
+            competition from your account page or save picks to appear on the leaderboard.
           </p>
         ) : null}
 
@@ -268,7 +270,7 @@ export default async function NhlStandingsPage() {
         noRecordedWinnersYet ? (
           <p className="mt-4 text-sm leading-relaxed text-slate-400">
             <span className="font-medium text-slate-300">
-              Picks are in, but no completed series results are saved to this pool yet.
+              Picks are in, but no completed series results are saved for this edition yet.
             </span>{" "}
             Points stay at zero until official Round 1 winners are stored (this page tries to pull them
             when you load it; organizers can also use{" "}

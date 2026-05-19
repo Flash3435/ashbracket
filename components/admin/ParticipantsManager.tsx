@@ -9,8 +9,13 @@ import {
   sendParticipantInviteAction,
   updateParticipantAction,
 } from "../../app/(worldcup)/admin/participants/actions";
+import type { SimulationPoolEmailUiStatus } from "@/lib/admin/simulationPoolEmailPolicy";
+import {
+  SIMULATION_POOL_EMAIL_TYPED_PHRASE,
+} from "@/lib/admin/simulationPoolEmailPolicy";
 import type { Participant } from "../../types/participant";
 import { PoolShareInvitePanel } from "./PoolShareInvitePanel";
+import { SimulationPoolEmailStatusBanner } from "./SimulationPoolEmailStatusBanner";
 
 type ParticipantsManagerProps = {
   poolId: string;
@@ -19,6 +24,7 @@ type ParticipantsManagerProps = {
   joinCode: string | null;
   shareUrl: string | null;
   disabled?: boolean;
+  simulationEmailStatus?: SimulationPoolEmailUiStatus;
 };
 
 type Panel = "none" | "invite" | "manual";
@@ -56,7 +62,11 @@ export function ParticipantsManager({
   joinCode,
   shareUrl,
   disabled = false,
+  simulationEmailStatus,
 }: ParticipantsManagerProps) {
+  const emailStatus = simulationEmailStatus;
+  const sendsBlocked = emailStatus?.sendsBlocked ?? false;
+  const requiresTypedPhrase = emailStatus?.requiresTypedPhrase ?? false;
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
   const [participants, setParticipants] = useState<Participant[]>(
@@ -72,6 +82,16 @@ export function ParticipantsManager({
     null,
   );
   const [copyDone, setCopyDone] = useState(false);
+  const [typedPhrase, setTypedPhrase] = useState("");
+  const [productionAck, setProductionAck] = useState(false);
+  const [simulationEmailAck, setSimulationEmailAck] = useState(false);
+
+  const typedPhraseOk =
+    !requiresTypedPhrase ||
+    typedPhrase.trim().toUpperCase().replace(/\s+/g, " ") ===
+      SIMULATION_POOL_EMAIL_TYPED_PHRASE;
+  const emailConfirmOk =
+    !requiresTypedPhrase || (typedPhraseOk && productionAck && simulationEmailAck);
 
   useEffect(() => {
     setParticipants(initialParticipants);
@@ -103,7 +123,7 @@ export function ParticipantsManager({
 
   function handleInvite(e: React.FormEvent) {
     e.preventDefault();
-    if (disabled) return;
+    if (disabled || sendsBlocked || !emailConfirmOk) return;
     const name = inviteForm.displayName.trim();
     const email = inviteForm.email.trim();
     if (!name || !email) return;
@@ -116,6 +136,9 @@ export function ParticipantsManager({
         displayName: name,
         email,
         paid: inviteForm.paid,
+        productionAcknowledged: productionAck,
+        simulationEmailAcknowledged: simulationEmailAck,
+        typedConfirmationPhrase: requiresTypedPhrase ? typedPhrase : undefined,
       });
       if (!res.ok) {
         setActionError(res.error);
@@ -176,12 +199,18 @@ export function ParticipantsManager({
   }
 
   function handleSendOrResendInvite(id: string) {
-    if (disabled) return;
+    if (disabled || sendsBlocked || !emailConfirmOk) return;
     setActionError(null);
     setInviteFeedback(null);
     setCopyDone(false);
     startTransition(async () => {
-      const res = await sendParticipantInviteAction({ poolId, participantId: id });
+      const res = await sendParticipantInviteAction({
+        poolId,
+        participantId: id,
+        productionAcknowledged: productionAck,
+        simulationEmailAcknowledged: simulationEmailAck,
+        typedConfirmationPhrase: requiresTypedPhrase ? typedPhrase : undefined,
+      });
       if (!res.ok) {
         setActionError(res.error);
         return;
@@ -267,6 +296,43 @@ export function ParticipantsManager({
 
   return (
     <div className="space-y-6">
+      {emailStatus ? (
+        <SimulationPoolEmailStatusBanner status={emailStatus} />
+      ) : null}
+      {requiresTypedPhrase ? (
+        <div className="rounded-md border border-amber-700/50 bg-amber-950/25 px-4 py-3 text-sm text-amber-100">
+          <label className="block font-medium">
+            Type{" "}
+            <span className="font-mono">{SIMULATION_POOL_EMAIL_TYPED_PHRASE}</span>{" "}
+            before sending invite email
+            <input
+              type="text"
+              value={typedPhrase}
+              onChange={(e) => setTypedPhrase(e.target.value)}
+              autoComplete="off"
+              className="mt-2 w-full rounded-md border border-amber-800/60 bg-ash-body px-3 py-2 font-mono text-sm text-ash-text"
+            />
+          </label>
+          <label className="mt-3 flex cursor-pointer items-start gap-2">
+            <input
+              type="checkbox"
+              checked={productionAck}
+              onChange={(e) => setProductionAck(e.target.checked)}
+              className="mt-1"
+            />
+            <span>I understand this sends real email on production.</span>
+          </label>
+          <label className="mt-2 flex cursor-pointer items-start gap-2">
+            <input
+              type="checkbox"
+              checked={simulationEmailAck}
+              onChange={(e) => setSimulationEmailAck(e.target.checked)}
+              className="mt-1"
+            />
+            <span>I intend to send invite email from this simulation test pool.</span>
+          </label>
+        </div>
+      ) : null}
       {actionError ? (
         <p className="rounded-md border border-red-800/80 bg-red-950/40 px-3 py-2 text-sm text-red-200">
           {actionError}
@@ -434,10 +500,10 @@ export function ParticipantsManager({
             </button>
             <button
               type="submit"
-              disabled={disabled || isPending}
+              disabled={disabled || isPending || sendsBlocked || !emailConfirmOk}
               className="btn-primary disabled:cursor-not-allowed disabled:opacity-50"
             >
-              Send invite
+              {sendsBlocked ? "Invite email blocked" : "Send invite"}
             </button>
           </div>
         </form>
@@ -574,13 +640,21 @@ export function ParticipantsManager({
                     {p.inviteStatus !== "joined" ? (
                       <button
                         type="button"
-                        disabled={disabled || isPending || !p.email?.trim()}
+                        disabled={
+                          disabled ||
+                          isPending ||
+                          !p.email?.trim() ||
+                          sendsBlocked ||
+                          !emailConfirmOk
+                        }
                         onClick={() => handleSendOrResendInvite(p.id)}
                         className="mr-2 text-sm font-medium text-ash-accent hover:underline disabled:cursor-not-allowed disabled:opacity-40"
                       >
-                        {p.inviteStatus === "invited"
-                          ? "Resend invite"
-                          : "Send invite"}
+                        {sendsBlocked
+                          ? "Email blocked"
+                          : p.inviteStatus === "invited"
+                            ? "Resend invite"
+                            : "Send invite"}
                       </button>
                     ) : null}
                     <button
@@ -648,13 +722,21 @@ export function ParticipantsManager({
                   {p.inviteStatus !== "joined" ? (
                     <button
                       type="button"
-                      disabled={disabled || isPending || !p.email?.trim()}
+                      disabled={
+                        disabled ||
+                        isPending ||
+                        !p.email?.trim() ||
+                        sendsBlocked ||
+                        !emailConfirmOk
+                      }
                       onClick={() => handleSendOrResendInvite(p.id)}
                       className="text-sm font-medium text-ash-accent hover:underline disabled:cursor-not-allowed disabled:opacity-40"
                     >
-                      {p.inviteStatus === "invited"
-                        ? "Resend invite"
-                        : "Send invite"}
+                      {sendsBlocked
+                        ? "Email blocked"
+                        : p.inviteStatus === "invited"
+                          ? "Resend invite"
+                          : "Send invite"}
                     </button>
                   ) : null}
                   <button

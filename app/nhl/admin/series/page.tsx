@@ -17,7 +17,16 @@ import Link from "next/link";
 export const dynamic = "force-dynamic";
 
 type SeriesPageProps = {
-  searchParams: Promise<{ ok?: string; err?: string; up?: string; sk?: string; cf?: string }>;
+  searchParams: Promise<{
+    ok?: string;
+    err?: string;
+    up?: string;
+    sk?: string;
+    cf?: string;
+    r2up?: string;
+    r2sk?: string;
+    r2cf?: string;
+  }>;
 };
 
 function sideLabel(side: string | null): string {
@@ -102,18 +111,24 @@ export default async function NhlAdminSeriesPage({ searchParams }: SeriesPagePro
         <NhlAdminSyncOfficialRound1Form />
       </div>
 
-      {sp.ok === "sync_round1" ? (
+      {sp.ok === "sync_bracket" || sp.ok === "sync_round1" ? (
         <p className="mt-4 rounded-md border border-emerald-800/60 bg-emerald-950/30 px-3 py-2 text-sm text-emerald-100">
-          Official Round 1 sync finished:{" "}
-          <span className="font-medium">{Number(sp.up ?? 0)}</span> slot(s) updated,{" "}
-          <span className="font-medium">{Number(sp.sk ?? 0)}</span> skipped.
+          Official bracket sync finished — Round 1:{" "}
+          <span className="font-medium">{Number(sp.up ?? 0)}</span> updated,{" "}
+          <span className="font-medium">{Number(sp.sk ?? 0)}</span> skipped
           {Number(sp.cf ?? 0) > 0 ? (
             <>
-              {" "}
-              <span className="font-medium">{Number(sp.cf)}</span> slot(s) left unchanged because this
-              pool already had a different winner than the league feed (manual override).
+              , <span className="font-medium">{Number(sp.cf)}</span> R1 conflict(s)
             </>
           ) : null}
+          . Round 2: <span className="font-medium">{Number(sp.r2up ?? 0)}</span> updated,{" "}
+          <span className="font-medium">{Number(sp.r2sk ?? 0)}</span> skipped
+          {Number(sp.r2cf ?? 0) > 0 ? (
+            <>
+              , <span className="font-medium">{Number(sp.r2cf)}</span> R2 conflict(s)
+            </>
+          ) : null}
+          .
         </p>
       ) : null}
 
@@ -175,7 +190,7 @@ export default async function NhlAdminSeriesPage({ searchParams }: SeriesPagePro
               <p className="mt-2 text-xs text-slate-500">
                 Round 1: <span className="font-medium text-slate-400">{missing}</span> of{" "}
                 <span className="font-medium text-slate-400">{r1.length}</span> series slots still have
-                no stored winner in this pool (leaderboard stays at zero for those until they are saved
+                no stored winner in the edition (leaderboard stays at zero until results are saved
                 or synced).
               </p>
             );

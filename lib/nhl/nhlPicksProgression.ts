@@ -178,3 +178,61 @@ export function round2SeriesReadyForPicks(series: NhlSeriesRow): boolean {
       (series.lower_team_abbr || series.lower_team_name),
   );
 }
+
+export type Round2UserSummary = {
+  totalSeries: number;
+  resolvedSeries: number;
+  pickedSeries: number;
+  correctCount: number;
+  incorrectCount: number;
+  pendingPickCount: number;
+  noPickResolvedCount: number;
+  round2PointsEarned: number;
+};
+
+export function buildRound2UserSummary(
+  r2Rows: NhlSeriesRow[],
+  pickBySeriesId: Record<string, string>,
+): Round2UserSummary {
+  let resolvedSeries = 0;
+  let pickedSeries = 0;
+  let correctCount = 0;
+  let incorrectCount = 0;
+  let pendingPickCount = 0;
+  let noPickResolvedCount = 0;
+  let round2PointsEarned = 0;
+  const w = NHL_SERIES_WINNER_POINTS_BY_ROUND.R2;
+
+  for (const s of r2Rows) {
+    if (!round2SeriesReadyForPicks(s)) continue;
+    const win = effectiveSeriesWinnerId(s);
+    const pick = pickBySeriesId[s.id] ?? null;
+    if (pick) pickedSeries += 1;
+    if (!win) {
+      if (pick) pendingPickCount += 1;
+      continue;
+    }
+    resolvedSeries += 1;
+    if (!pick) {
+      noPickResolvedCount += 1;
+      continue;
+    }
+    if (pick === win) {
+      correctCount += 1;
+      round2PointsEarned += w;
+    } else {
+      incorrectCount += 1;
+    }
+  }
+
+  return {
+    totalSeries: r2Rows.filter(round2SeriesReadyForPicks).length,
+    resolvedSeries,
+    pickedSeries,
+    correctCount,
+    incorrectCount,
+    pendingPickCount,
+    noPickResolvedCount,
+    round2PointsEarned,
+  };
+}

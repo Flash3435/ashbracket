@@ -2,7 +2,8 @@ import { createClient } from "@supabase/supabase-js";
 
 /**
  * Service-role Supabase client for trusted server-only work (bypasses RLS on reads).
- * Ledger replacement RPCs still enforce `auth.uid()` in-app-admin checks inside the function body.
+ * `replace_points_ledger_for_pool` allows `service_role` after application-level checks
+ * (e.g. verified participant pick save); pool managers still use the normal server client.
  */
 export function createServiceRoleClient() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;

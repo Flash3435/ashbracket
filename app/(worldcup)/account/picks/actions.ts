@@ -10,6 +10,7 @@ import { mergeKnockoutProgressionSlotsFromPredictions } from "../../../../lib/pr
 import { validateKnockoutPickSaveInput } from "../../../../lib/predictions/validateKnockoutPickPayload";
 import { fetchOfficialRoundOf32Complete } from "../../../../lib/tournament/fetchOfficialRoundOf32Complete";
 import { mapPredictionRow } from "../../../../src/lib/scoring/mapSupabaseRows";
+import { recomputePoolLedgerForPoolAsTrustedServer } from "../../../../src/lib/scoring/recomputePoolLedger";
 import { revalidatePath } from "next/cache";
 import type {
   ParticipantPickSlotPayload,
@@ -29,8 +30,8 @@ function poolIsLocked(lockAt: string | null): boolean {
 
 /**
  * Saves knockout picks for the signed-in user's participant row only (RLS on `predictions`).
- * Verifies ownership and pool lock server-side. Does not call `replace_points_ledger_for_pool`
- * (admin-only); standings refresh when an organizer recomputes or results sync runs.
+ * Verifies ownership and pool lock server-side, then recomputes that pool's `points_ledger`
+ * via the trusted service-role path so the public leaderboard matches persisted scoring.
  */
 export async function saveMyKnockoutPicksAction(input: {
   participantId: string;
@@ -225,6 +226,32 @@ export async function saveMyKnockoutPicksAction(input: {
         console.error("pool_activity picks milestone failed", e);
       }
     }
+
+    const poolIdStr = row.pool_id as string;
+    const ledger = await recomputePoolLedgerForPoolAsTrustedServer(poolIdStr, {
+      ledgerTrigger: "participant_save",
+    });
+    if (ledger.error) {
+      console.error("[ashbracket:participant-picks] ledger recompute failed", {
+        poolId: poolIdStr,
+        participantId: input.participantId,
+        error: ledger.error,
+      });
+      revalidatePath("/account/picks");
+      revalidatePath("/account/picks/summary");
+      revalidatePath(`/participant/${input.participantId}/snapshot`);
+      revalidatePath("/account");
+      revalidatePath("/account/activity");
+      revalidatePath(`/participant/${input.participantId}`);
+      return {
+        ok: false,
+        error: `Your picks were saved, but the pool leaderboard could not be updated yet: ${ledger.error}`,
+      };
+    }
+    console.info("[ashbracket:participant-picks] ledger recomputed after save", {
+      poolId: poolIdStr,
+      participantId: input.participantId,
+    });
 
     revalidatePath("/account/picks");
     revalidatePath("/account/picks/summary");

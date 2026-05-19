@@ -16,11 +16,11 @@ function cronSecretMatches(req: Request): boolean {
 }
 
 /**
- * Automated Round 1 series sync from the public NHLE bracket API into `nhl_series`.
+ * Automated Round 1 and Round 2 series sync from the public NHLE bracket API into `nhl_series`.
  *
  * Enable with env: `NHL_PLAYOFF_SYNC_ENABLED=true`, `SUPABASE_SERVICE_ROLE_KEY`, `CRON_SECRET`.
  * `/nhl/picks` and `/nhl/standings` also run the same sync on each request when
- * `SUPABASE_SERVICE_ROLE_KEY` is set (`maybeSyncNhlBracketRound1ToDatabase`). This route remains
+ * `SUPABASE_SERVICE_ROLE_KEY` is set (`maybeSyncNhlBracketToDatabase`). This route remains
  * gated by `NHL_PLAYOFF_SYNC_ENABLED` for scheduled cron calls. Opt-in playoff year:
  * `NHL_PLAYOFF_BRACKET_YEAR` (default `2026`).
  */
@@ -50,6 +50,9 @@ export async function GET(req: Request) {
     round1Updated: result.round1Updated,
     round1Skipped: result.round1Skipped,
     round1ConflictSkipped: result.round1ConflictSkipped,
+    round2Updated: result.round2Updated,
+    round2Skipped: result.round2Skipped,
+    round2ConflictSkipped: result.round2ConflictSkipped,
     errors: result.errors,
   });
 }

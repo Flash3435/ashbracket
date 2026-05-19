@@ -16,11 +16,14 @@ type StageByCode = Partial<
 >;
 
 type KnockoutResultsEditorProps = {
+  editionId: string;
   sections: KnockoutEditorSection[];
   teams: Team[];
   stageByCode: StageByCode;
   initialResults: Result[];
   disabled?: boolean;
+  isSimulation?: boolean;
+  isProduction?: boolean;
 };
 
 function slotLabel(
@@ -51,11 +54,14 @@ function matchesSlot(
 }
 
 export function KnockoutResultsEditor({
+  editionId,
   sections,
   teams,
   stageByCode,
   initialResults,
   disabled = false,
+  isSimulation = false,
+  isProduction = false,
 }: KnockoutResultsEditorProps) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
@@ -95,6 +101,7 @@ export function KnockoutResultsEditor({
     setSavingKey(rowKeyUi);
     startTransition(async () => {
       const res = await setKnockoutResultAction({
+        editionId,
         tournamentStageId,
         kind,
         slotKey: binding === "group_finish" ? null : slotKey,
@@ -112,6 +119,21 @@ export function KnockoutResultsEditor({
 
   return (
     <div className="space-y-8">
+      {isProduction ? (
+        <p
+          className={`rounded-md border px-3 py-2 text-sm ${
+            isSimulation
+              ? "border-amber-600/60 bg-amber-950/35 text-amber-100"
+              : "border-red-800/70 bg-red-950/40 text-red-100"
+          }`}
+          role="alert"
+        >
+          <strong>Production:</strong> each save updates{" "}
+          {isSimulation
+            ? "simulation test results and recalculates simulation pool standings only."
+            : "live official results and recalculates live pool standings."}
+        </p>
+      ) : null}
       {actionError ? (
         <p className="rounded-md border border-red-800/80 bg-red-950/40 px-3 py-2 text-sm text-red-200">
           {actionError}

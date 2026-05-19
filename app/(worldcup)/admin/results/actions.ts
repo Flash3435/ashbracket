@@ -10,11 +10,20 @@ import {
   officialR32SlotMapsEqual,
   parseValidateAndResolveOfficialR32,
 } from "@/lib/admin/officialRoundOf32Validation";
+import { logAdminRiskAction } from "@/lib/admin/adminRiskAuditLog";
+import { logPilotVerificationEvent } from "@/lib/admin/pilotVerificationLog";
+import { fetchEditionImpactSummary, fetchPoolImpactSummary } from "@/lib/admin/fetchAdminImpactSummary";
+import { checkProductionAdminAck } from "@/lib/admin/requireProductionAdminAck";
 import { createClient } from "@/lib/supabase/server";
 import { isGlobalAdmin } from "../../../../lib/auth/permissions";
 import { mapResultRow, mapTeamRow } from "@/lib/results/mapRows";
 import { TEAM_TABLE_SELECT } from "@/lib/teams/teamDbSelect";
-import { fetchGroupTeamCountryCodesByLetter } from "@/lib/tournament/fetchGroupTeamCountryCodesByLetter";
+import {
+  fetchOfficialLiveEdition,
+  type TournamentEditionRow,
+} from "@/lib/tournament/editionScope";
+import { fetchGroupTeamCountryCodesForEdition } from "@/lib/tournament/fetchGroupTeamCountryCodesForEdition";
+import { recomputePoolsForEdition } from "@/lib/tournament/recomputePoolsForEdition";
 import { recomputePoolLedgerForPool } from "@/lib/scoring/recomputePoolLedger";
 import { revalidatePath } from "next/cache";
 import type { Result, Team } from "../../../../src/types/domain";
@@ -48,6 +57,56 @@ function isEditableResultKind(k: string): boolean {
   return (EDITABLE_RESULT_KINDS as readonly string[]).includes(k);
 }
 
+type SupabaseServer = Awaited<ReturnType<typeof createClient>>;
+
+async function requireGlobalAdminEdition(
+  supabase: SupabaseServer,
+  editionId: string,
+): Promise<{ ok: true; edition: TournamentEditionRow } | { ok: false; error: string }> {
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user || !(await isGlobalAdmin(supabase))) {
+    return {
+      ok: false,
+      error: "Only global administrators can edit tournament results.",
+    };
+  }
+
+  const { data, error } = await supabase
+    .from("tournament_editions")
+    .select("id, code, name, is_simulation")
+    .eq("id", editionId)
+    .maybeSingle();
+
+  if (error) return { ok: false, error: error.message };
+  if (!data) return { ok: false, error: "Tournament edition not found." };
+
+  return {
+    ok: true,
+    edition: {
+      id: data.id as string,
+      code: data.code as string,
+      name: data.name as string,
+      isSimulation: Boolean(data.is_simulation),
+    },
+  };
+}
+
+async function recomputeAfterEditionResultEdit(
+  supabase: SupabaseServer,
+  editionId: string,
+): Promise<RecomputeStandingsResult> {
+  const out = await recomputePoolsForEdition(
+    supabase,
+    editionId,
+    "admin_result_edit",
+  );
+  if (!out.ok) return out;
+  revalidatePath("/admin/results");
+  return { ok: true };
+}
+
 export type RecomputeStandingsResult =
   | { ok: true }
   | { ok: false; error: string };
@@ -55,18 +114,44 @@ export type RecomputeStandingsResult =
 /**
  * Re-runs deterministic scoring for one pool (global or pool admin for that pool).
  */
-export async function recomputeStandingsForPoolAction(
-  poolId: string,
-): Promise<RecomputeStandingsResult> {
+export async function recomputeStandingsForPoolAction(input: {
+  poolId: string;
+  productionAcknowledged?: boolean;
+}): Promise<RecomputeStandingsResult> {
   try {
+    const ack = checkProductionAdminAck(input.productionAcknowledged);
+    if (!ack.ok) return ack;
+
     const supabase = await createClient();
+    const poolId = input.poolId.trim();
     const gate = await assertCanManagePool(supabase, poolId);
     if (!gate.ok) return { ok: false, error: gate.error };
 
-    const ledger = await recomputePoolLedgerForPool(poolId.trim());
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    const impact = await fetchPoolImpactSummary(supabase, poolId);
+
+    const ledger = await recomputePoolLedgerForPool(poolId, {
+      ledgerTrigger: "admin_manual_recompute",
+    });
     if (ledger.error) {
       return { ok: false, error: ledger.error };
     }
+
+    logAdminRiskAction({
+      action: "pool_recompute",
+      userId: user?.id ?? null,
+      userEmail: user?.email,
+      poolId,
+      poolName: impact?.poolName,
+      editionId: impact?.editionId,
+      editionCode: impact?.editionCode,
+      isSimulation: impact?.isSimulation,
+      affectedPoolCount: 1,
+      affectedParticipantCount: impact?.participantCount,
+    });
+
     return { ok: true };
   } catch (e) {
     return { ok: false, error: messageFromUnknown(e) };
@@ -74,11 +159,19 @@ export async function recomputeStandingsForPoolAction(
 }
 
 /**
- * Recomputes ledger for every pool (after editing shared results). Global admins only.
+ * Recomputes ledger for every **live** pool on the official edition. Global admins only.
  */
-export async function recomputeAllPoolsLedgerAction(): Promise<RecomputeStandingsResult> {
+export async function recomputeAllPoolsLedgerAction(input?: {
+  productionAcknowledged?: boolean;
+}): Promise<RecomputeStandingsResult> {
   try {
+    const ack = checkProductionAdminAck(input?.productionAcknowledged);
+    if (!ack.ok) return ack;
+
     const supabase = await createClient();
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
     if (!(await isGlobalAdmin(supabase))) {
       return {
         ok: false,
@@ -86,20 +179,29 @@ export async function recomputeAllPoolsLedgerAction(): Promise<RecomputeStanding
       };
     }
 
-    const { data: poolRows, error: poolErr } = await supabase
-      .from("pools")
-      .select("id");
-
-    if (poolErr) {
-      return { ok: false, error: poolErr.message };
+    const liveEdition = await fetchOfficialLiveEdition(supabase);
+    if (!liveEdition) {
+      return { ok: false, error: "Official live tournament edition is not installed." };
     }
 
-    for (const row of poolRows ?? []) {
-      const ledger = await recomputePoolLedgerForPool(row.id as string);
-      if (ledger.error) {
-        return { ok: false, error: ledger.error };
-      }
-    }
+    const impact = await fetchEditionImpactSummary(supabase, liveEdition.id);
+    const out = await recomputePoolsForEdition(
+      supabase,
+      liveEdition.id,
+      "admin_recompute_all_pools",
+    );
+    if (!out.ok) return out;
+
+    logAdminRiskAction({
+      action: "edition_recompute_pools",
+      userId: user?.id ?? null,
+      userEmail: user?.email,
+      editionId: liveEdition.id,
+      editionCode: liveEdition.code,
+      isSimulation: false,
+      affectedPoolCount: impact?.poolCount,
+      affectedParticipantCount: impact?.participantCount,
+    });
 
     revalidatePath("/admin/results");
     return { ok: true };
@@ -109,10 +211,70 @@ export async function recomputeAllPoolsLedgerAction(): Promise<RecomputeStanding
 }
 
 /**
- * Saves knockout result rows (shared tournament data). **Global admins only.**
- * Recomputes ledger for **all** pools after each save.
+ * Recomputes every pool tied to a specific edition (live or simulation). Global admins only.
+ */
+export async function recomputeEditionPoolsLedgerAction(input: {
+  editionId: string;
+  productionAcknowledged?: boolean;
+}): Promise<RecomputeStandingsResult> {
+  try {
+    const ack = checkProductionAdminAck(input.productionAcknowledged);
+    if (!ack.ok) return ack;
+
+    const supabase = await createClient();
+    const gate = await requireGlobalAdminEdition(supabase, input.editionId.trim());
+    if (!gate.ok) return gate;
+
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    const impact = await fetchEditionImpactSummary(supabase, gate.edition.id);
+
+    const out = await recomputePoolsForEdition(
+      supabase,
+      gate.edition.id,
+      "admin_recompute_all_pools",
+    );
+    if (!out.ok) return out;
+
+    logAdminRiskAction({
+      action: "edition_recompute_pools",
+      userId: user?.id ?? null,
+      userEmail: user?.email,
+      editionId: gate.edition.id,
+      editionCode: gate.edition.code,
+      isSimulation: gate.edition.isSimulation,
+      affectedPoolCount: impact?.poolCount,
+      affectedParticipantCount: impact?.participantCount,
+    });
+
+    if (gate.edition.isSimulation) {
+      await logPilotVerificationEvent(supabase, {
+        eventType: "simulation_results_recomputed",
+        userId: user?.id ?? null,
+        message: `Recalculated ${impact?.poolCount ?? 0} simulation pool leaderboard(s) for edition ${gate.edition.code}.`,
+        payload: {
+          editionId: gate.edition.id,
+          poolCount: impact?.poolCount,
+        },
+      });
+    }
+
+    revalidatePath("/admin/results");
+    revalidatePath("/admin/pilot");
+    revalidatePath(`/admin/simulation/editions/${gate.edition.id}/results`);
+    return { ok: true };
+  } catch (e) {
+    return { ok: false, error: messageFromUnknown(e) };
+  }
+}
+
+/**
+ * Saves knockout result rows for one tournament edition. **Global admins only.**
+ * Recomputes ledgers only for pools bound to that edition.
  */
 export async function setKnockoutResultAction(input: {
+  editionId: string;
   tournamentStageId: string;
   kind: string;
   slotKey: string | null;
@@ -126,13 +288,10 @@ export async function setKnockoutResultAction(input: {
 
   try {
     const supabase = await createClient();
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-    if (!user || !(await isGlobalAdmin(supabase))) {
-      return { ok: false, error: "Only global administrators can edit tournament results." };
-    }
+    const gate = await requireGlobalAdminEdition(supabase, input.editionId.trim());
+    if (!gate.ok) return gate;
 
+    const editionId = gate.edition.id;
     const gc =
       input.groupCode != null && String(input.groupCode).trim() !== ""
         ? String(input.groupCode).trim().toUpperCase()
@@ -142,6 +301,7 @@ export async function setKnockoutResultAction(input: {
       let q = supabase
         .from("results")
         .delete()
+        .eq("edition_id", editionId)
         .eq("tournament_stage_id", input.tournamentStageId)
         .eq("kind", input.kind);
 
@@ -158,6 +318,7 @@ export async function setKnockoutResultAction(input: {
       const resolvedAt = new Date().toISOString();
       const { error } = await supabase.from("results").upsert(
         {
+          edition_id: editionId,
           tournament_stage_id: input.tournamentStageId,
           kind: input.kind,
           team_id: input.teamId,
@@ -168,36 +329,37 @@ export async function setKnockoutResultAction(input: {
           locked: true,
         },
         {
-          onConflict: "tournament_stage_id,kind,group_code,slot_key",
+          onConflict: "edition_id,tournament_stage_id,kind,group_code,slot_key",
         },
       );
 
       if (error) return { ok: false, error: error.message };
     }
 
-    const { data: poolRows, error: poolErr } = await supabase
-      .from("pools")
-      .select("id");
-
-    if (poolErr) {
+    const recompute = await recomputeAfterEditionResultEdit(supabase, editionId);
+    if (!recompute.ok) {
       return {
         ok: false,
-        error: `Result saved, but pools could not be listed to refresh scores: ${poolErr.message}`,
+        error: `Result saved, but pool leaderboards could not be refreshed: ${recompute.error}`,
       };
     }
 
-    for (const row of poolRows ?? []) {
-      const id = row.id as string;
-      const ledger = await recomputePoolLedgerForPool(id);
-      if (ledger.error) {
-        return {
-          ok: false,
-          error: `Result saved, but the leaderboard could not be updated for a pool: ${ledger.error}`,
-        };
-      }
-    }
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    const impact = await fetchEditionImpactSummary(supabase, editionId);
+    logAdminRiskAction({
+      action: "edition_results_edit",
+      userId: user?.id ?? null,
+      userEmail: user?.email,
+      editionId: gate.edition.id,
+      editionCode: gate.edition.code,
+      isSimulation: gate.edition.isSimulation,
+      affectedPoolCount: impact?.poolCount,
+      affectedParticipantCount: impact?.participantCount,
+      detail: `${input.kind} slot saved`,
+    });
 
-    revalidatePath("/admin/results");
     return { ok: true };
   } catch (e) {
     return { ok: false, error: messageFromUnknown(e) };
@@ -212,9 +374,10 @@ export type PreviewOfficialRoundOf32Result =
   | { ok: true; matches: OfficialR32PreviewMatch[]; slotTeamIdByKey: Record<string, string> }
   | { ok: false; error: string };
 
-type SupabaseServer = Awaited<ReturnType<typeof createClient>>;
-
-async function fetchOfficialR32ResolutionData(supabase: SupabaseServer): Promise<
+async function fetchOfficialR32ResolutionData(
+  supabase: SupabaseServer,
+  editionId: string,
+): Promise<
   | { ok: false; error: string }
   | {
       ok: true;
@@ -243,8 +406,9 @@ async function fetchOfficialR32ResolutionData(supabase: SupabaseServer): Promise
   const { data: groupResRows, error: gErr } = await supabase
     .from("results")
     .select(
-      "id, tournament_stage_id, kind, team_id, group_code, slot_key, value_text, resolved_at, created_at",
+      "id, tournament_stage_id, kind, team_id, group_code, slot_key, value_text, resolved_at, created_at, edition_id",
     )
+    .eq("edition_id", editionId)
     .eq("tournament_stage_id", groupStageId)
     .in("kind", ["group_winner", "group_runner_up"]);
 
@@ -253,8 +417,9 @@ async function fetchOfficialR32ResolutionData(supabase: SupabaseServer): Promise
   const { data: thirdResRows, error: tErr } = await supabase
     .from("results")
     .select(
-      "id, tournament_stage_id, kind, team_id, group_code, slot_key, value_text, resolved_at, created_at",
+      "id, tournament_stage_id, kind, team_id, group_code, slot_key, value_text, resolved_at, created_at, edition_id",
     )
+    .eq("edition_id", editionId)
     .eq("tournament_stage_id", r32StageId)
     .eq("kind", "third_place_qualifier");
 
@@ -274,7 +439,7 @@ async function fetchOfficialR32ResolutionData(supabase: SupabaseServer): Promise
   );
 
   const groupTeamCountryCodesByLetter =
-    await fetchGroupTeamCountryCodesByLetter(supabase);
+    await fetchGroupTeamCountryCodesForEdition(supabase, editionId);
 
   return {
     ok: true,
@@ -290,20 +455,15 @@ async function fetchOfficialR32ResolutionData(supabase: SupabaseServer): Promise
  * Validates official inputs and returns the resolved R32 pairings for admin review
  * (no database writes).
  */
-export async function previewOfficialRoundOf32FromEnteredResultsAction(): Promise<PreviewOfficialRoundOf32Result> {
+export async function previewOfficialRoundOf32FromEnteredResultsAction(
+  editionId: string,
+): Promise<PreviewOfficialRoundOf32Result> {
   try {
     const supabase = await createClient();
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-    if (!user || !(await isGlobalAdmin(supabase))) {
-      return {
-        ok: false,
-        error: "Only global administrators can preview the official Round of 32.",
-      };
-    }
+    const gate = await requireGlobalAdminEdition(supabase, editionId.trim());
+    if (!gate.ok) return gate;
 
-    const bundle = await fetchOfficialR32ResolutionData(supabase);
+    const bundle = await fetchOfficialR32ResolutionData(supabase, gate.edition.id);
     if (!bundle.ok) return bundle;
 
     const parsed = parseValidateAndResolveOfficialR32({
@@ -333,6 +493,7 @@ export async function previewOfficialRoundOf32FromEnteredResultsAction(): Promis
  * `slotTeamIdByKey` must match a fresh server-side resolution (same payload as preview).
  */
 export async function applyOfficialRoundOf32FromEnteredResultsAction(input: {
+  editionId: string;
   slotTeamIdByKey: Record<string, string>;
 }): Promise<ApplyOfficialRoundOf32Result> {
   try {
@@ -340,17 +501,10 @@ export async function applyOfficialRoundOf32FromEnteredResultsAction(input: {
     if (!normalized.ok) return { ok: false, error: normalized.error };
 
     const supabase = await createClient();
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-    if (!user || !(await isGlobalAdmin(supabase))) {
-      return {
-        ok: false,
-        error: "Only global administrators can apply the official Round of 32.",
-      };
-    }
+    const gate = await requireGlobalAdminEdition(supabase, input.editionId.trim());
+    if (!gate.ok) return gate;
 
-    const bundle = await fetchOfficialR32ResolutionData(supabase);
+    const bundle = await fetchOfficialR32ResolutionData(supabase, gate.edition.id);
     if (!bundle.ok) return bundle;
 
     const parsed = parseValidateAndResolveOfficialR32({
@@ -379,30 +533,26 @@ export async function applyOfficialRoundOf32FromEnteredResultsAction(input: {
     });
     if (!built.ok) return { ok: false, error: built.error };
 
-    const { error: upErr } = await supabase.from("results").upsert(built.rows, {
-      onConflict: "tournament_stage_id,kind,group_code,slot_key",
+    const rowsWithEdition = built.rows.map((row) => ({
+      ...row,
+      edition_id: gate.edition.id,
+    }));
+
+    const { error: upErr } = await supabase.from("results").upsert(rowsWithEdition, {
+      onConflict: "edition_id,tournament_stage_id,kind,group_code,slot_key",
     });
     if (upErr) return { ok: false, error: upErr.message };
 
-    const { data: poolRows, error: poolErr } = await supabase.from("pools").select("id");
-    if (poolErr) {
+    const recompute = await recomputeAfterEditionResultEdit(supabase, gate.edition.id);
+    if (!recompute.ok) {
       return {
         ok: false,
-        error: `Round of 32 saved, but pools could not be listed to refresh scores: ${poolErr.message}`,
+        error: `Round of 32 saved, but leaderboard recompute failed: ${recompute.error}`,
       };
     }
 
-    for (const row of poolRows ?? []) {
-      const ledger = await recomputePoolLedgerForPool(row.id as string);
-      if (ledger.error) {
-        return {
-          ok: false,
-          error: `Round of 32 saved, but leaderboard recompute failed: ${ledger.error}`,
-        };
-      }
-    }
-
     revalidatePath("/admin/results");
+    revalidatePath(`/admin/simulation/editions/${gate.edition.id}/results`);
     return {
       ok: true,
       message:

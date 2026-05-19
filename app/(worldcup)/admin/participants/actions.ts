@@ -1,6 +1,11 @@
 "use server";
 
 import { assertCanManagePool } from "@/lib/admin/assertCanManagePool";
+import {
+  gateSimulationPoolOutboundEmail,
+  logSimulationPoolEmailSuccess,
+} from "@/lib/admin/enforceSimulationPoolEmailForAction";
+import { isSimulationEmailOverrideEnabledInProduction } from "@/lib/admin/simulationPoolEmailPolicy";
 import { revalidatePoolAdminPaths } from "@/lib/admin/revalidatePoolAdminPaths";
 import { createClient } from "@/lib/supabase/server";
 import { joinInviteUrl } from "@/lib/site-url";
@@ -28,16 +33,19 @@ function messageFromUnknown(e: unknown): string {
   return e instanceof Error ? e.message : "Something went wrong.";
 }
 
-async function poolNameForPool(
+async function poolMetaForPool(
   supabase: Awaited<ReturnType<typeof createClient>>,
   poolId: string,
-): Promise<string> {
+): Promise<{ name: string; isSimulation: boolean }> {
   const { data } = await supabase
     .from("pools")
-    .select("name")
+    .select("name, is_simulation")
     .eq("id", poolId)
     .maybeSingle();
-  return (data?.name as string | undefined)?.trim() || "your pool";
+  return {
+    name: (data?.name as string | undefined)?.trim() || "your pool",
+    isSimulation: Boolean(data?.is_simulation),
+  };
 }
 
 function revalidateParticipants(poolId: string) {
@@ -87,6 +95,9 @@ export async function inviteParticipantAction(input: {
   displayName: string;
   email: string;
   paid: boolean;
+  productionAcknowledged?: boolean;
+  simulationEmailAcknowledged?: boolean;
+  typedConfirmationPhrase?: string;
 }): Promise<ParticipantActionResult> {
   try {
     const supabase = await createClient();
@@ -94,6 +105,27 @@ export async function inviteParticipantAction(input: {
     if (!gate.ok) return { ok: false, error: gate.error };
 
     const pid = input.poolId.trim();
+    const poolMeta = await poolMetaForPool(supabase, pid);
+    const {
+      data: { user: inviter },
+    } = await supabase.auth.getUser();
+
+    const emailGate = await gateSimulationPoolOutboundEmail({
+      supabase,
+      poolId: pid,
+      poolName: poolMeta.name,
+      action: "participant_invite_email",
+      userId: inviter?.id ?? null,
+      userEmail: inviter?.email,
+      recipientCount: 1,
+      productionAcknowledged: input.productionAcknowledged,
+      simulationEmailAcknowledged: input.simulationEmailAcknowledged,
+      typedConfirmationPhrase: input.typedConfirmationPhrase,
+    });
+    if (!emailGate.ok) {
+      return { ok: false, error: emailGate.error };
+    }
+
     const paidAt = paidAtForInsert(input.paid);
     const token = generateInviteToken();
     const sentAt = new Date().toISOString();
@@ -115,21 +147,30 @@ export async function inviteParticipantAction(input: {
 
     if (error) return { ok: false, error: error.message };
 
-    const poolName = await poolNameForPool(supabase, pid);
     const inviteUrl = joinInviteUrl(token);
-    const {
-      data: { user: inviter },
-    } = await supabase.auth.getUser();
     const inviterLabel = inviter
       ? await resolveInviterLabelForPoolInvite(supabase, pid, inviter)
       : "Your pool organizer";
     const mail = await sendParticipantInviteEmail({
       to: input.email.trim(),
-      poolName,
+      poolName: poolMeta.name,
       displayName: input.displayName.trim(),
       inviteUrl,
       inviterLabel,
     });
+
+    if (mail.ok) {
+      logSimulationPoolEmailSuccess({
+        action: "participant_invite_email",
+        userId: inviter?.id ?? null,
+        userEmail: inviter?.email,
+        poolId: pid,
+        poolName: poolMeta.name,
+        isSimulationPool: poolMeta.isSimulation,
+        overrideEnabled: isSimulationEmailOverrideEnabledInProduction(),
+        recipientCount: 1,
+      });
+    }
 
     revalidateParticipants(pid);
 
@@ -155,6 +196,9 @@ export async function inviteParticipantAction(input: {
 export async function sendParticipantInviteAction(input: {
   poolId: string;
   participantId: string;
+  productionAcknowledged?: boolean;
+  simulationEmailAcknowledged?: boolean;
+  typedConfirmationPhrase?: string;
 }): Promise<ParticipantActionResult> {
   try {
     const supabase = await createClient();
@@ -211,22 +255,52 @@ export async function sendParticipantInviteAction(input: {
       if (upErr) return { ok: false, error: upErr.message };
     }
 
-    const poolName = await poolNameForPool(supabase, pid);
-    const inviteUrl = joinInviteUrl(token);
-    const displayName = String(row.display_name ?? "").trim();
+    const poolMeta = await poolMetaForPool(supabase, pid);
     const {
       data: { user: inviter },
     } = await supabase.auth.getUser();
+
+    const emailGate = await gateSimulationPoolOutboundEmail({
+      supabase,
+      poolId: pid,
+      poolName: poolMeta.name,
+      action: "participant_invite_email",
+      userId: inviter?.id ?? null,
+      userEmail: inviter?.email,
+      recipientCount: 1,
+      productionAcknowledged: input.productionAcknowledged,
+      simulationEmailAcknowledged: input.simulationEmailAcknowledged,
+      typedConfirmationPhrase: input.typedConfirmationPhrase,
+    });
+    if (!emailGate.ok) {
+      return { ok: false, error: emailGate.error };
+    }
+
+    const inviteUrl = joinInviteUrl(token);
+    const displayName = String(row.display_name ?? "").trim();
     const inviterLabel = inviter
       ? await resolveInviterLabelForPoolInvite(supabase, pid, inviter)
       : "Your pool organizer";
     const mail = await sendParticipantInviteEmail({
       to: email,
-      poolName,
+      poolName: poolMeta.name,
       displayName,
       inviteUrl,
       inviterLabel,
     });
+
+    if (mail.ok) {
+      logSimulationPoolEmailSuccess({
+        action: "participant_invite_email",
+        userId: inviter?.id ?? null,
+        userEmail: inviter?.email,
+        poolId: pid,
+        poolName: poolMeta.name,
+        isSimulationPool: poolMeta.isSimulation,
+        overrideEnabled: isSimulationEmailOverrideEnabledInProduction(),
+        recipientCount: 1,
+      });
+    }
 
     revalidateParticipants(pid);
 

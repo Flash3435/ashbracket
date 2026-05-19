@@ -8,7 +8,11 @@ import {
   getOfficialR32ReadinessSummary,
   type OfficialR32ReadinessSummary,
 } from "@/lib/admin/officialRoundOf32Readiness";
+import { SimulationModeBanner } from "@/components/admin/SimulationModeBanner";
+import { isProductionDeployment } from "@/lib/admin/deploymentEnvironment";
+import { fetchEditionImpactSummary } from "@/lib/admin/fetchAdminImpactSummary";
 import { requireGlobalAdminPage } from "@/lib/admin/requireGlobalAdmin";
+import { fetchOfficialLiveEdition } from "@/lib/tournament/editionScope";
 import { createClient } from "@/lib/supabase/server";
 import { ALL_BRACKET_PICK_SECTIONS } from "@/lib/admin/knockoutResultsConfig";
 import { fetchGroupTeamCountryCodesByLetter } from "@/lib/tournament/fetchGroupTeamCountryCodesByLetter";
@@ -36,6 +40,8 @@ export default async function AdminResultsPage() {
   let stages: TournamentStage[] = [];
   let results: Result[] = [];
   let loadError: string | null = null;
+  let liveEditionId: string | null = null;
+  let liveEditionLabel: string | null = null;
   let r32Summary: OfficialR32ReadinessSummary = {
     groupsComplete: 0,
     thirdPlaceQualifiersEntered: 0,
@@ -45,6 +51,14 @@ export default async function AdminResultsPage() {
 
   try {
     const supabase = await createClient();
+    const liveEdition = await fetchOfficialLiveEdition(supabase);
+    if (!liveEdition) {
+      loadError =
+        "Official live tournament edition is not installed. Run the WC2026 seed before entering results.";
+    } else {
+      liveEditionId = liveEdition.id;
+      liveEditionLabel = `${liveEdition.name} (${liveEdition.code})`;
+    }
 
     const [teamsRes, stagesRes, resultsRes] = await Promise.all([
       supabase
@@ -58,12 +72,15 @@ export default async function AdminResultsPage() {
         )
         .in("code", STAGE_CODES_NEEDED)
         .order("sort_order", { ascending: true }),
-      supabase
-        .from("results")
-        .select(
-          "id, tournament_stage_id, kind, team_id, group_code, slot_key, value_text, resolved_at, created_at",
-        )
-        .in("kind", RESULT_KINDS),
+      liveEditionId
+        ? supabase
+            .from("results")
+            .select(
+              "id, tournament_stage_id, kind, team_id, group_code, slot_key, value_text, resolved_at, created_at, edition_id",
+            )
+            .eq("edition_id", liveEditionId)
+            .in("kind", RESULT_KINDS)
+        : Promise.resolve({ data: [], error: null }),
     ]);
 
     if (teamsRes.error) loadError = teamsRes.error.message;
@@ -106,11 +123,23 @@ export default async function AdminResultsPage() {
     TournamentStage | undefined
   >;
 
+  const isProduction = isProductionDeployment();
+  const supabaseForImpact = await createClient();
+  const liveImpact =
+    liveEditionId != null
+      ? await fetchEditionImpactSummary(supabaseForImpact, liveEditionId)
+      : null;
+
   return (
     <PageContainer>
       <PageTitle
-        title="Tournament results"
-        description="Enter official group 1st/2nd, eight third-place advancers, and either use “Apply FIFA Round of 32” (Annex C) or set all 32 bracket slots manually. When every Round of 32 slot has a team, participant Stage 3 picks unlock. Scoring follows pool rules (including Stage 1–2 rules from settings). Saves refresh all pool leaderboards."
+        title="Tournament results (live)"
+        description="Official live tournament only. During a production pilot, use Simulation → Test results for fake scores — do not enter pilot data here."
+      />
+      <SimulationModeBanner
+        variant="live"
+        editionLabel={liveEditionLabel ?? undefined}
+        className="mb-6"
       />
       {loadError ? (
         <p className="mb-4 rounded-md border border-red-800/80 bg-red-950/40 px-3 py-2 text-sm text-red-200">
@@ -119,22 +148,39 @@ export default async function AdminResultsPage() {
       ) : null}
       {!loadError && teams.length > 0 ? <AdminResultsR32StatusSummary summary={r32Summary} /> : null}
       <div className="mb-8">
-        <RecomputeAllPoolsPanel />
+        {liveEditionId && liveImpact ? (
+          <RecomputeAllPoolsPanel
+            isProduction={isProduction}
+            impact={liveImpact}
+            editionId={liveEditionId}
+            title="Recalculate live pool leaderboards"
+            description="Runs scoring for every live pool on the official tournament edition."
+            buttonLabel="Recalculate live pools"
+            successMessage="Live pool leaderboards updated."
+          />
+        ) : null}
       </div>
-      {!loadError && teams.length > 0 ? <ApplyOfficialRoundOf32Panel /> : null}
+      {!loadError && teams.length > 0 && liveEditionId ? (
+        <ApplyOfficialRoundOf32Panel editionId={liveEditionId} />
+      ) : null}
       {!loadError && teams.length === 0 ? (
         <p className="rounded-md border border-amber-700/50 bg-amber-950/30 px-3 py-2 text-sm text-amber-100">
           No teams found. Ask your site host to load the team list before you
           enter results.
         </p>
       ) : null}
-      <KnockoutResultsEditor
-        sections={ALL_BRACKET_PICK_SECTIONS}
-        teams={teams}
-        stageByCode={stageByCode}
-        initialResults={results}
-        disabled={Boolean(loadError) || teams.length === 0}
-      />
+      {liveEditionId ? (
+        <KnockoutResultsEditor
+          editionId={liveEditionId}
+          sections={ALL_BRACKET_PICK_SECTIONS}
+          teams={teams}
+          stageByCode={stageByCode}
+          initialResults={results}
+          disabled={Boolean(loadError) || teams.length === 0}
+          isSimulation={false}
+          isProduction={isProduction}
+        />
+      ) : null}
     </PageContainer>
   );
 }

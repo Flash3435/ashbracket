@@ -9,6 +9,7 @@ import { PageTitle } from "@/components/ui/PageTitle";
 import { createClient } from "@/lib/supabase/server";
 import { getOfficial2026EditionTeamStatus } from "@/lib/nhl/official2026Edition";
 import {
+  countNhlMembershipsForEdition,
   countNhlSeriesForEdition,
   countNhlTeamsForEdition,
   fetchActiveNhlEdition,
@@ -87,20 +88,23 @@ export default async function NhlAdminPage({ searchParams }: PageProps) {
 
   let teamCount = 0;
   let seriesCount = 0;
+  let competitorCount = 0;
   let countErr: string | null = null;
   let fieldStatus: FieldStatus = null;
 
   if (edition) {
-    const [tc, sc, slugRes] = await Promise.all([
+    const [tc, sc, mc, slugRes] = await Promise.all([
       countNhlTeamsForEdition(supabase, edition.id),
       countNhlSeriesForEdition(supabase, edition.id),
+      countNhlMembershipsForEdition(supabase, edition.id),
       fetchNhlTeamSlugsForEdition(supabase, edition.id),
     ]);
-    if (tc.error || sc.error || slugRes.error) {
-      countErr = tc.error ?? sc.error ?? slugRes.error ?? null;
+    if (tc.error || sc.error || mc.error || slugRes.error) {
+      countErr = tc.error ?? sc.error ?? mc.error ?? slugRes.error ?? null;
     } else {
       teamCount = tc.count;
       seriesCount = sc.count;
+      competitorCount = mc.count;
       fieldStatus = getOfficial2026EditionTeamStatus(
         slugRes.slugs.map((team_slug) => ({ team_slug })),
       );
@@ -139,8 +143,8 @@ export default async function NhlAdminPage({ searchParams }: PageProps) {
         description="Manage the NHL playoff edition, teams, and bracket structure."
       />
       <p className="max-w-2xl text-sm leading-relaxed text-ash-muted">
-        This section manages the isolated NHL playoff dataset and bracket structure. Participant
-        picks and scoring are planned for a later phase.
+        Manage the active NHL edition, bracket results, and global competition entry. Competitors
+        join the edition directly (no private NHL pools).
       </p>
 
       <div className="mt-6 space-y-4">
@@ -229,6 +233,21 @@ export default async function NhlAdminPage({ searchParams }: PageProps) {
               <Link href="/nhl/admin/series" className="ash-link text-sm">
                 Series table
               </Link>
+            ) : null
+          }
+        />
+        <DashboardCard
+          title="Competitors"
+          body={
+            <p className="text-2xl font-semibold tabular-nums text-ash-text">
+              {edition ? competitorCount : "—"}
+            </p>
+          }
+          footer={
+            edition ? (
+              <p className="text-xs text-ash-muted">
+                Users who joined the active edition (global competition).
+              </p>
             ) : null
           }
         />

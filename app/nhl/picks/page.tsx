@@ -8,10 +8,11 @@ import { getOfficial2026EditionTeamStatus } from "@/lib/nhl/official2026Edition"
 import { isNhlEditionLocked } from "@/lib/nhl/nhlEditionLock";
 import {
   buildRound1UserSummary,
+  buildRound2UserSummary,
   isRound1FullyResolvedForProgression,
   mergeRound2DisplayFromRound1,
 } from "@/lib/nhl/nhlPicksProgression";
-import { maybeSyncNhlBracketRound1ToDatabase } from "@/lib/nhl/syncNhlSeriesFromNhleBracket";
+import { maybeSyncNhlBracketToDatabase } from "@/lib/nhl/syncNhlSeriesFromNhleBracket";
 import {
   countNhlSeriesForEdition,
   countNhlTeamsForEdition,
@@ -85,10 +86,11 @@ export default async function NhlPicksPage() {
   let picksLoadError: string | null = null;
   let round2PickBySeriesId: Record<string, string> = {};
   let r2PicksLoadError: string | null = null;
-  let userPoolTotalPoints: number | null = null;
+  let userTotalPoints: number | null = null;
+  let userRound2Points: number | null = null;
 
   if (edition && !editionError) {
-    await maybeSyncNhlBracketRound1ToDatabase();
+    await maybeSyncNhlBracketToDatabase();
 
     const [teamCountRes, seriesCountRes, slugRes, teamsRes] = await Promise.all([
       countNhlTeamsForEdition(supabase, edition.id),
@@ -140,7 +142,10 @@ export default async function NhlPicksPage() {
       r2PicksLoadError = pickR2.error;
       if (!standingsRes.error) {
         const mine = standingsRes.rows.find((r) => r.user_id === user.id);
-        userPoolTotalPoints = mine ? mine.total_points : null;
+        if (mine) {
+          userTotalPoints = mine.total_points;
+          userRound2Points = mine.round2_points;
+        }
       }
     }
   }
@@ -182,6 +187,9 @@ export default async function NhlPicksPage() {
           round1PointsEarned: 0,
         }
     : null;
+  const r2All = displayRows.filter((r) => r.round_code === "R2");
+  const r2UserSummary =
+    user && r2All.length > 0 ? buildRound2UserSummary(r2All, round2PickBySeriesId) : null;
   const round2Open = Boolean(
     edition && user && round1ProgressComplete && !picksLocked && !r2PicksLoadError,
   );
@@ -240,9 +248,11 @@ export default async function NhlPicksPage() {
             round1Complete={round1ProgressComplete}
             round2Open={round2Open}
             picksLocked={picksLocked}
-            summary={r1UserSummary}
+            r1Summary={r1UserSummary}
+            r2Summary={r2UserSummary}
             r2PicksLoadError={r2PicksLoadError}
-            totalPoolPoints={userPoolTotalPoints}
+            totalPoints={userTotalPoints}
+            round2PointsFromStandings={userRound2Points}
           />
         </section>
       ) : null}

@@ -7,7 +7,11 @@ import {
 } from "../../app/(worldcup)/admin/results/actions";
 import type { OfficialR32PreviewMatch } from "../../lib/admin/officialRoundOf32FromResults";
 
-export function ApplyOfficialRoundOf32Panel() {
+type Props = {
+  editionId: string;
+};
+
+export function ApplyOfficialRoundOf32Panel({ editionId }: Props) {
   const [isPreviewing, startPreview] = useTransition();
   const [isApplying, startApply] = useTransition();
   const [matches, setMatches] = useState<OfficialR32PreviewMatch[] | null>(null);
@@ -56,7 +60,7 @@ export function ApplyOfficialRoundOf32Panel() {
             setMessage(null);
             resetPreview();
             startPreview(async () => {
-              const res = await previewOfficialRoundOf32FromEnteredResultsAction();
+              const res = await previewOfficialRoundOf32FromEnteredResultsAction(editionId);
               if (!res.ok) {
                 setError(res.error);
                 return;
@@ -148,6 +152,7 @@ export function ApplyOfficialRoundOf32Panel() {
               setMessage(null);
               startApply(async () => {
                 const res = await applyOfficialRoundOf32FromEnteredResultsAction({
+                  editionId,
                   slotTeamIdByKey: slotTeamIdByKey!,
                 });
                 if (!res.ok) {

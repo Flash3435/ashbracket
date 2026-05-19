@@ -1,6 +1,7 @@
 import { ParticipantsManager } from "@/components/admin/ParticipantsManager";
 import { PageContainer } from "@/components/ui/PageContainer";
 import { PageTitle } from "@/components/ui/PageTitle";
+import { getSimulationPoolEmailUiStatus } from "@/lib/admin/simulationPoolEmailPolicy";
 import { requireManagedPool } from "@/lib/admin/requireManagedPool";
 import { poolShareJoinUrl } from "@/lib/site-url";
 import {
@@ -18,6 +19,9 @@ export default async function AdminPoolParticipantsPage({
 }) {
   const { poolId } = await params;
   const { supabase, pool } = await requireManagedPool(poolId);
+  const simulationEmailStatus = getSimulationPoolEmailUiStatus(
+    Boolean(pool.is_simulation),
+  );
   const jc = pool.join_code?.trim() ?? null;
   const shareUrl = jc ? poolShareJoinUrl(jc) : null;
 
@@ -59,6 +63,7 @@ export default async function AdminPoolParticipantsPage({
         joinCode={jc}
         shareUrl={shareUrl}
         disabled={Boolean(loadError)}
+        simulationEmailStatus={simulationEmailStatus}
       />
     </PageContainer>
   );

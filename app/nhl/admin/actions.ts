@@ -234,7 +234,7 @@ export async function createNhlBracketSkeletonAction() {
 export const seedNhlStarterTeamsAction = loadOfficial2026PlayoffTeamsAction;
 
 /**
- * Pulls official Round 1 finals from the NHLE bracket API into `nhl_series` (service role).
+ * Pulls official Round 1 and Round 2 finals from the NHLE bracket API into `nhl_series` (service role).
  * Idempotent; does not overwrite a stored winner that disagrees with the league feed.
  */
 export async function syncNhlOfficialRound1FromBracketAction() {
@@ -249,10 +249,13 @@ export async function syncNhlOfficialRound1FromBracketAction() {
   revalidateNhlAdmin();
 
   const q = new URLSearchParams({
-    ok: "sync_round1",
+    ok: "sync_bracket",
     up: String(result.round1Updated),
     sk: String(result.round1Skipped),
     cf: String(result.round1ConflictSkipped),
+    r2up: String(result.round2Updated),
+    r2sk: String(result.round2Skipped),
+    r2cf: String(result.round2ConflictSkipped),
   });
   redirect(`/nhl/admin/series?${q.toString()}`);
 }

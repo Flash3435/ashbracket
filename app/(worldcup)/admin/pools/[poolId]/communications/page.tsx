@@ -1,6 +1,7 @@
 import { PoolCommunicationsForm } from "@/components/admin/PoolCommunicationsForm";
 import { PageContainer } from "@/components/ui/PageContainer";
 import { PageTitle } from "@/components/ui/PageTitle";
+import { getSimulationPoolEmailUiStatus } from "@/lib/admin/simulationPoolEmailPolicy";
 import { requireManagedPool } from "@/lib/admin/requireManagedPool";
 import { loadParticipantIdsWithIncompletePicks } from "@/lib/communications/picksCompleteness";
 import { formatPoolLockSummary } from "@/lib/communications/messageTemplates";
@@ -14,7 +15,10 @@ export default async function AdminPoolCommunicationsPage({
   params: Promise<{ poolId: string }>;
 }) {
   const { poolId } = await params;
-  const { supabase } = await requireManagedPool(poolId);
+  const { pool, supabase } = await requireManagedPool(poolId);
+  const simulationEmailStatus = getSimulationPoolEmailUiStatus(
+    Boolean(pool.is_simulation),
+  );
 
   let participants: PoolCommunicationParticipant[] = [];
   let poolName = "Your pool";
@@ -72,9 +76,12 @@ export default async function AdminPoolCommunicationsPage({
     <PageContainer>
       <PageTitle
         title="Email participants"
-        description="Send payment reminders, deadline reminders, or a custom note to groups of people in this pool. Each person only sees their own message."
+        description={
+          pool.is_simulation
+            ? "Simulation test pool — production blocks real email here by default. Complete the pilot checklist before enabling email."
+            : "Send payment reminders, deadline reminders, or a custom note to groups of people in this pool."
+        }
       />
-
       {loadError ? (
         <p className="mb-4 rounded-md border border-red-800/80 bg-red-950/40 px-3 py-2 text-sm text-red-200">
           {loadError}
@@ -111,6 +118,7 @@ export default async function AdminPoolCommunicationsPage({
           poolName={poolName}
           lockAtIso={lockAtIso}
           participants={participants}
+          simulationEmailStatus={simulationEmailStatus}
         />
       )}
     </PageContainer>

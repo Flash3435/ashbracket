@@ -180,8 +180,8 @@ export default async function AccountPicksPage({ searchParams }: PageProps) {
                 lockedMessage={lockHint}
                 savePicks={saveMyKnockoutPicksAction}
                 successMessage="Your picks were saved."
-                successDetail="Standings and the public leaderboard refresh when match results are updated or an organizer recomputes scores."
-                saveHelpText="Saving writes every slot (including empty ones you cleared). Your bracket is stored right away; the scoreboard catches up after the next standings update."
+                successDetail="Your pool’s scored leaderboard is recalculated from official results as soon as you save (same scoring rules as everyone else in the pool)."
+                saveHelpText="Saving writes every slot (including empty ones you cleared). Your bracket is stored immediately and the pool leaderboard is refreshed from the official results snapshot."
                 postSaveRedirectTo={postSaveRedirectTo}
               />
 

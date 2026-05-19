@@ -122,6 +122,22 @@ export default async function AdminHomePage() {
               </Link>
               <span> — health check for data and scores.</span>
             </li>
+            <li>
+              <Link href="/admin/pilot" className="ash-link text-emerald-200/90">
+                Production pilot checklist
+              </Link>
+              <span> — verify environment, snapshots, and live pool isolation.</span>
+            </li>
+            <li>
+              <Link href="/admin/simulation" className="ash-link text-amber-200/90">
+                Simulation testing
+              </Link>
+              <span>
+                {" "}
+                — isolated test pools and fake results (does not affect live
+                pools).
+              </span>
+            </li>
           </ul>
         </section>
       ) : null}

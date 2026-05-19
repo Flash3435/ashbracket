@@ -1,5 +1,7 @@
+import { LedgerRecomputeDiagnosticsTable } from "@/components/admin/LedgerRecomputeDiagnosticsTable";
 import { PageContainer } from "@/components/ui/PageContainer";
 import { PageTitle } from "@/components/ui/PageTitle";
+import { fetchWcLedgerRecomputeDiagnosticsForPools } from "@/lib/admin/wcLedgerRecomputeDiagnostics";
 import { requireGlobalAdminPage } from "@/lib/admin/requireGlobalAdmin";
 import { createClient } from "@/lib/supabase/server";
 import { OFFICIAL_EDITION_CODE } from "../../../../../lib/config/officialTournament";
@@ -44,20 +46,32 @@ export default async function AdminTournamentStatusPage({ searchParams }: PagePr
     .from("teams")
     .select("id", { count: "exact", head: true });
 
-  const resultsSyncRes = await supabase
-    .from("results")
-    .select("id", { count: "exact", head: true })
-    .eq("source", "sync");
+  const resultsSyncRes =
+    editionId != null
+      ? await supabase
+          .from("results")
+          .select("id", { count: "exact", head: true })
+          .eq("edition_id", editionId)
+          .eq("source", "sync")
+      : { count: 0, error: null };
 
-  const resultsManualRes = await supabase
-    .from("results")
-    .select("id", { count: "exact", head: true })
-    .eq("source", "manual");
+  const resultsManualRes =
+    editionId != null
+      ? await supabase
+          .from("results")
+          .select("id", { count: "exact", head: true })
+          .eq("edition_id", editionId)
+          .eq("source", "manual")
+      : { count: 0, error: null };
 
-  const resultsLockedRes = await supabase
-    .from("results")
-    .select("id", { count: "exact", head: true })
-    .eq("locked", true);
+  const resultsLockedRes =
+    editionId != null
+      ? await supabase
+          .from("results")
+          .select("id", { count: "exact", head: true })
+          .eq("edition_id", editionId)
+          .eq("locked", true)
+      : { count: 0, error: null };
 
   const ledgerMaxRes = await supabase
     .from("points_ledger")
@@ -73,12 +87,16 @@ export default async function AdminTournamentStatusPage({ searchParams }: PagePr
     .limit(1)
     .maybeSingle();
 
-  const resultResolvedMaxRes = await supabase
-    .from("results")
-    .select("resolved_at")
-    .order("resolved_at", { ascending: false })
-    .limit(1)
-    .maybeSingle();
+  const resultResolvedMaxRes =
+    editionId != null
+      ? await supabase
+          .from("results")
+          .select("resolved_at")
+          .eq("edition_id", editionId)
+          .order("resolved_at", { ascending: false })
+          .limit(1)
+          .maybeSingle()
+      : { data: null, error: null };
 
   let matchesTotal: number | null = null;
   let matchesFinished: number | null = null;
@@ -138,6 +156,11 @@ export default async function AdminTournamentStatusPage({ searchParams }: PagePr
     lastPredictionUpdateAt: predMaxRes.data?.updated_at ?? null,
     lastResultResolvedAt: resultResolvedMaxRes.data?.resolved_at ?? null,
   });
+
+  const ledgerRecomputeDiag = await fetchWcLedgerRecomputeDiagnosticsForPools(
+    supabase,
+    null,
+  );
 
   return (
     <PageContainer>
@@ -280,6 +303,11 @@ export default async function AdminTournamentStatusPage({ searchParams }: PagePr
           </p>
         </div>
       </section>
+
+      <LedgerRecomputeDiagnosticsTable
+        rows={ledgerRecomputeDiag.rows}
+        loadError={ledgerRecomputeDiag.error}
+      />
 
       {(resultsLockedRes.count ?? 0) > 0 || (matchesSyncLocked ?? 0) > 0 ? (
         <section className="mb-6 rounded-xl border border-amber-700/50 bg-amber-950/25 p-4 text-sm text-amber-100">

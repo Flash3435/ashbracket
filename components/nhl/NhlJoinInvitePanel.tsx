@@ -115,7 +115,7 @@ export function NhlJoinInvitePanel({
         disabled={pending}
         className="btn-primary w-full disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto"
       >
-        {pending ? "Joining…" : "Accept NHL invite"}
+        {pending ? "Joining…" : "Enter NHL competition"}
       </button>
     </form>
   );

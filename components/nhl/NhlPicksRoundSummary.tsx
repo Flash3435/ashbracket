@@ -1,4 +1,4 @@
-import type { Round1UserSummary } from "@/lib/nhl/nhlPicksProgression";
+import type { Round1UserSummary, Round2UserSummary } from "@/lib/nhl/nhlPicksProgression";
 import Link from "next/link";
 
 export function NhlPicksRoundSummary({
@@ -6,143 +6,188 @@ export function NhlPicksRoundSummary({
   round1Complete,
   round2Open,
   picksLocked,
-  summary,
+  r1Summary,
+  r2Summary,
   r2PicksLoadError,
-  totalPoolPoints,
+  totalPoints,
+  round2PointsFromStandings,
 }: {
   isAuthenticated: boolean;
   round1Complete: boolean;
   round2Open: boolean;
   picksLocked: boolean;
-  summary: Round1UserSummary | null;
+  r1Summary: Round1UserSummary | null;
+  r2Summary: Round2UserSummary | null;
   r2PicksLoadError: string | null;
-  /** Optional: user’s total points across rounds from standings RPC (includes R2+ when scored). */
-  totalPoolPoints: number | null;
+  totalPoints: number | null;
+  round2PointsFromStandings: number | null;
 }) {
   if (!isAuthenticated) {
     return (
       <div className="rounded-2xl border border-blue-500/20 bg-slate-950/50 px-5 py-5 sm:px-6">
-        <h2 className="text-base font-semibold text-ash-text">Your Round 1 results</h2>
+        <h2 className="text-base font-semibold text-ash-text">Your results</h2>
         <p className="mt-2 text-sm leading-relaxed text-slate-400">
-          Sign in to see your Round 1 record, points from correct picks, and Round 2 entry once the
-          bracket opens.
+          Sign in and join the competition from your account page to see your round-by-round record
+          and leaderboard points.
         </p>
+        <Link href="/nhl/account" className="btn-ghost mt-3 inline-flex text-sm no-underline">
+          NHL account
+        </Link>
       </div>
     );
   }
 
-  if (!summary) {
-    return null;
-  }
+  return (
+    <div className="space-y-4">
+      {r1Summary && r1Summary.totalSeries > 0 ? (
+        <Round1SummaryBlock
+          summary={r1Summary}
+          round1Complete={round1Complete}
+          round2Open={round2Open}
+          picksLocked={picksLocked}
+          totalPoints={totalPoints}
+        />
+      ) : null}
 
-  if (summary.totalSeries === 0) {
-    return (
-      <div className="rounded-2xl border border-blue-500/20 bg-slate-950/50 px-5 py-5 sm:px-6">
-        <h2 className="text-base font-semibold text-ash-text">Your Round 1 results</h2>
-        <p className="mt-2 text-sm text-slate-400">
-          Round 1 series are not configured for this edition yet, so there is nothing to score.
+      {round1Complete && r2Summary && r2Summary.totalSeries > 0 ? (
+        <Round2SummaryBlock
+          summary={r2Summary}
+          round2PointsFromStandings={round2PointsFromStandings}
+          totalPoints={totalPoints}
+        />
+      ) : null}
+
+      {r2PicksLoadError ? (
+        <p className="rounded-xl border border-amber-500/25 bg-amber-950/20 px-4 py-3 text-xs text-amber-200/90 sm:text-sm">
+          Round 2 pick storage is unavailable ({r2PicksLoadError}). Apply the latest NHL migration,
+          then refresh.
         </p>
-      </div>
-    );
-  }
+      ) : null}
+    </div>
+  );
+}
 
-  const { correctCount, incorrectCount, resolvedSeries, totalSeries, round1PointsEarned, pickedSeries, pendingPickCount, noPickResolvedCount } =
-    summary;
-
+function Round1SummaryBlock({
+  summary,
+  round1Complete,
+  round2Open,
+  picksLocked,
+  totalPoints,
+}: {
+  summary: Round1UserSummary;
+  round1Complete: boolean;
+  round2Open: boolean;
+  picksLocked: boolean;
+  totalPoints: number | null;
+}) {
+  const {
+    correctCount,
+    incorrectCount,
+    resolvedSeries,
+    totalSeries,
+    round1PointsEarned,
+    pickedSeries,
+    pendingPickCount,
+    noPickResolvedCount,
+  } = summary;
   const denom = resolvedSeries > 0 ? resolvedSeries : totalSeries;
 
   return (
     <div className="rounded-2xl border border-blue-500/20 bg-slate-950/50 px-5 py-5 sm:px-6">
       <h2 className="text-base font-semibold text-ash-text">Your Round 1 results</h2>
-
       <div className="mt-3 flex flex-wrap gap-2">
         <span className="inline-flex items-center rounded-full border border-slate-500/35 bg-slate-900/50 px-3 py-1 text-xs font-medium text-slate-200/95">
           {round1Complete ? "Round 1 complete" : "Round 1 in progress"}
         </span>
         {round2Open && !picksLocked ? (
           <span className="inline-flex items-center rounded-full border border-violet-500/35 bg-violet-950/35 px-3 py-1 text-xs font-medium text-violet-100/95">
-            Round 2 picks are open
-          </span>
-        ) : round1Complete && picksLocked ? (
-          <span className="inline-flex items-center rounded-full border border-amber-500/35 bg-amber-950/25 px-3 py-1 text-xs font-medium text-amber-100/95">
-            Pool locked — review only
-          </span>
-        ) : round1Complete ? (
-          <span className="inline-flex items-center rounded-full border border-slate-500/30 bg-slate-900/40 px-3 py-1 text-xs font-medium text-slate-300/95">
-            Round 2 unlocks below when matchups are ready
+            Round 2 picks open
           </span>
         ) : null}
       </div>
-
       <div className="mt-4 space-y-2 text-sm leading-relaxed text-slate-300">
         {resolvedSeries > 0 ? (
           <p>
             <span className="font-semibold text-slate-100">
               {correctCount} / {denom} correct
             </span>{" "}
-            on decided Round 1 series
-            {incorrectCount > 0 ? (
-              <span className="text-slate-500">
-                {" "}
-                ({incorrectCount} incorrect{noPickResolvedCount > 0 ? `; ${noPickResolvedCount} missed` : ""})
-              </span>
-            ) : noPickResolvedCount > 0 ? (
-              <span className="text-slate-500"> ({noPickResolvedCount} series with no pick)</span>
-            ) : null}
-            .
+            on decided Round 1 series.
           </p>
         ) : pickedSeries > 0 ? (
           <p>
-            You have picks on {pickedSeries} series{pendingPickCount > 0 ? "; results are still pending." : "."}
+            You have picks on {pickedSeries} series
+            {pendingPickCount > 0 ? "; results are still pending." : "."}
           </p>
         ) : (
-          <p>You have not saved any Round 1 picks yet. Choose a winner on each card below.</p>
+          <p>No Round 1 picks saved yet.</p>
         )}
-
         {resolvedSeries > 0 ? (
           <p className="text-slate-400">
-            Round 1 points earned:{" "}
-            <span className="font-medium text-emerald-200/95">{round1PointsEarned}</span> (1 point per
-            correct Round 1 series, same weight as the standings leaderboard).
+            Round 1 points:{" "}
+            <span className="font-medium text-emerald-200/95">{round1PointsEarned}</span>
+            {incorrectCount > 0 || noPickResolvedCount > 0 ? (
+              <span className="text-slate-500">
+                {" "}
+                ({incorrectCount} wrong
+                {noPickResolvedCount > 0 ? `, ${noPickResolvedCount} missed` : ""})
+              </span>
+            ) : null}
           </p>
         ) : null}
-
-        {totalPoolPoints !== null ? (
+        {totalPoints !== null ? (
           <p className="text-slate-500">
-            Points on the leaderboard (all rounds scored so far):{" "}
-            <span className="font-medium text-slate-300">{totalPoolPoints}</span> — see{" "}
+            Leaderboard total: <span className="font-medium text-slate-300">{totalPoints}</span> —{" "}
             <Link href="/nhl/standings" className="text-blue-300 underline-offset-2 hover:underline">
               standings
-            </Link>{" "}
-            for the full breakdown.
-          </p>
-        ) : null}
-
-        {resolvedSeries > 0 &&
-        round1PointsEarned > 0 &&
-        totalPoolPoints !== null &&
-        totalPoolPoints === 0 ? (
-          <p className="rounded-lg border border-amber-500/25 bg-amber-950/20 px-3 py-2 text-xs leading-relaxed text-amber-100/90 sm:text-sm">
-            Your Round 1 summary uses the <span className="font-medium">latest public playoff results</span>{" "}
-            so you can see how you did as soon as games end.{" "}
-            <span className="font-medium">Leaderboard points</span> use results saved to this pool and
-            usually catch up within a refresh. If the leaderboard still looks behind, the site may not
-            have finished saving official finals yet—try again shortly, or ask an organizer to run{" "}
-            <span className="font-medium">Sync official Round 1 results</span> under{" "}
-            <Link href="/nhl/admin/series" className="text-blue-300 underline-offset-2 hover:underline">
-              NHL admin → Series
             </Link>
-            .
           </p>
         ) : null}
       </div>
+    </div>
+  );
+}
 
-      {r2PicksLoadError ? (
-        <p className="mt-3 text-xs text-amber-200/90">
-          Round 2 pick storage is unavailable ({r2PicksLoadError}). Apply the latest NHL migration that
-          adds <code className="rounded bg-slate-900/80 px-1">nhl_r2_series_picks</code>, then refresh.
+function Round2SummaryBlock({
+  summary,
+  round2PointsFromStandings,
+  totalPoints,
+}: {
+  summary: Round2UserSummary;
+  round2PointsFromStandings: number | null;
+  totalPoints: number | null;
+}) {
+  const { correctCount, resolvedSeries, totalSeries, round2PointsEarned, pickedSeries } = summary;
+  const denom = resolvedSeries > 0 ? resolvedSeries : totalSeries;
+  const standingsR2 = round2PointsFromStandings ?? round2PointsEarned;
+
+  return (
+    <div className="rounded-2xl border border-violet-500/20 bg-slate-950/50 px-5 py-5 sm:px-6">
+      <h2 className="text-base font-semibold text-ash-text">Your Round 2 results</h2>
+      <div className="mt-4 space-y-2 text-sm leading-relaxed text-slate-300">
+        {resolvedSeries > 0 ? (
+          <p>
+            <span className="font-semibold text-slate-100">
+              {correctCount} / {denom} correct
+            </span>{" "}
+            on decided Round 2 series.
+          </p>
+        ) : pickedSeries > 0 ? (
+          <p>You have Round 2 picks saved; series results are still pending.</p>
+        ) : (
+          <p>No Round 2 picks saved yet.</p>
+        )}
+        <p className="text-slate-400">
+          Round 2 points (standings):{" "}
+          <span className="font-medium text-emerald-200/95">{standingsR2}</span> (2 points per correct
+          series, from saved edition results).
         </p>
-      ) : null}
+        {totalPoints !== null ? (
+          <p className="text-slate-500">
+            Overall leaderboard total:{" "}
+            <span className="font-medium text-slate-300">{totalPoints}</span>
+          </p>
+        ) : null}
+      </div>
     </div>
   );
 }

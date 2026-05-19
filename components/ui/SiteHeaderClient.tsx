@@ -88,6 +88,9 @@ export function SiteHeaderClient({
           <TextNavLink href="/rules" pathname={pathname}>
             Rules
           </TextNavLink>
+          <TextNavLink href="/contact" pathname={pathname}>
+            Contact
+          </TextNavLink>
 
           {!isSignedIn && (
             <>
