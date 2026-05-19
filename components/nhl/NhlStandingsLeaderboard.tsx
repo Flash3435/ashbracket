@@ -2,6 +2,7 @@
 
 import { labelNhlStandingsStatus } from "@/lib/nhl/standingsLabels";
 import type { NhlStandingsRow } from "@/lib/nhl/types";
+import Link from "next/link";
 import { useMemo, useState } from "react";
 
 type StandingsView = "overall" | "round2plus";
@@ -138,7 +139,18 @@ export function NhlStandingsLeaderboard({ rows }: { rows: NhlStandingsRow[] }) {
                   <td className="px-3 py-3 tabular-nums text-slate-200 sm:px-4">
                     {view === "overall" ? row.rank : row.round2_plus_rank}
                   </td>
-                  <td className="px-3 py-3 font-medium text-ash-text sm:px-4">{row.entry_name}</td>
+                  <td className="px-3 py-3 font-medium text-ash-text sm:px-4">
+                    {row.membership_id ? (
+                      <Link
+                        href={`/nhl/entry/${row.membership_id}`}
+                        className="text-blue-200 underline-offset-2 hover:text-blue-100 hover:underline"
+                      >
+                        {row.entry_name}
+                      </Link>
+                    ) : (
+                      row.entry_name
+                    )}
+                  </td>
                   <td className="px-3 py-3 text-right tabular-nums text-slate-200 sm:px-4">
                     {row.total_points}
                   </td>

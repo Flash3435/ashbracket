@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 export function revalidateNhlPublicSurfaces(): void {
   revalidatePath("/nhl");
   revalidatePath("/nhl/standings");
+  revalidatePath("/nhl/entry", "layout");
   revalidatePath("/nhl/picks");
   revalidatePath("/nhl/admin/series");
   revalidatePath("/nhl/admin/bracket");

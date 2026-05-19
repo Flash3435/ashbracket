@@ -69,6 +69,8 @@ export type NhlStandingsRow = {
   rank: number;
   /** Rank by points from Round 2 onward only (excludes Round 1). */
   round2_plus_rank: number;
+  /** Competition entry id when the participant joined; used for public pick-detail links. */
+  membership_id: string | null;
   user_id: string;
   entry_name: string;
   /** Sum of all round points plus bonus. */

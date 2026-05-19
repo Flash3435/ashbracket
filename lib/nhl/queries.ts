@@ -331,6 +331,7 @@ function num(raw: unknown): number {
 function mapRpcStandingsRow(raw: Record<string, unknown>): NhlStandingsRow | null {
   const rank = raw.rank;
   const round2_plus_rank = raw.round2_plus_rank;
+  const membership_id = raw.membership_id;
   const user_id = raw.user_id;
   const entry_name = raw.entry_name;
   const total_points = raw.total_points;
@@ -391,9 +392,13 @@ function mapRpcStandingsRow(raw: Record<string, unknown>): NhlStandingsRow | nul
     return null;
   }
 
+  const membershipId =
+    typeof membership_id === "string" && membership_id.length > 0 ? membership_id : null;
+
   return {
     rank: safeRank,
     round2_plus_rank: safeR2Rank,
+    membership_id: membershipId,
     user_id,
     entry_name,
     total_points: safePoints,
