@@ -255,8 +255,17 @@ export async function syncNhlSeriesFromNhleBracket(
       else if (winAbbr === loAbbr) winnerIdResolved = loId;
     }
 
-    const hasApiWinner =
+    let hasApiWinner =
       Boolean(apiSlice.winningTeamId && apiSlice.winningTeamId > 0) && winnerIdResolved !== null;
+    if (!hasApiWinner && hiId && loId) {
+      if (mapped.hi >= 4 && mapped.lo < 4) {
+        winnerIdResolved = hiId;
+        hasApiWinner = true;
+      } else if (mapped.lo >= 4 && mapped.hi < 4) {
+        winnerIdResolved = loId;
+        hasApiWinner = true;
+      }
+    }
     const status = inferStatus(mapped.hi, mapped.lo, hasApiWinner);
 
     const { data: existingRow, error: exErr } = await supabase
@@ -400,8 +409,17 @@ export async function syncNhlSeriesFromNhleBracket(
     if (winAbbr === hiAbbr) winnerIdResolved = hiId;
     else if (winAbbr === loAbbr) winnerIdResolved = loId;
 
-    const hasApiWinner =
+    let hasApiWinner =
       Boolean(apiSlice.winningTeamId && apiSlice.winningTeamId > 0) && winnerIdResolved !== null;
+    if (!hasApiWinner && hiId && loId) {
+      if (mapped.hi >= 4 && mapped.lo < 4) {
+        winnerIdResolved = hiId;
+        hasApiWinner = true;
+      } else if (mapped.lo >= 4 && mapped.hi < 4) {
+        winnerIdResolved = loId;
+        hasApiWinner = true;
+      }
+    }
     const status = inferStatus(mapped.hi, mapped.lo, hasApiWinner);
     const dbWinnerId = rec.winner_team_id;
 

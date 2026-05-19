@@ -9,6 +9,10 @@ export function NhlPicksRoundSummary({
   r1Summary,
   r2Summary,
   r2PicksLoadError,
+  r1LinkageBroken,
+  r2LinkageBroken,
+  r1LegacyUnresolved,
+  r2LegacyUnresolved,
   totalPoints,
   round2PointsFromStandings,
 }: {
@@ -19,6 +23,10 @@ export function NhlPicksRoundSummary({
   r1Summary: Round1UserSummary | null;
   r2Summary: Round2UserSummary | null;
   r2PicksLoadError: string | null;
+  r1LinkageBroken?: boolean;
+  r2LinkageBroken?: boolean;
+  r1LegacyUnresolved?: boolean;
+  r2LegacyUnresolved?: boolean;
   totalPoints: number | null;
   round2PointsFromStandings: number | null;
 }) {
@@ -39,12 +47,17 @@ export function NhlPicksRoundSummary({
 
   return (
     <div className="space-y-4">
+      {r1LinkageBroken || r1LegacyUnresolved ? (
+        <PickLinkageNotice roundLabel="Round 1" unresolved={Boolean(r1LegacyUnresolved)} />
+      ) : null}
+
       {r1Summary && r1Summary.totalSeries > 0 ? (
         <Round1SummaryBlock
           summary={r1Summary}
           round1Complete={round1Complete}
           round2Open={round2Open}
           picksLocked={picksLocked}
+          linkageBroken={Boolean(r1LinkageBroken)}
           totalPoints={totalPoints}
         />
       ) : null}
@@ -52,18 +65,47 @@ export function NhlPicksRoundSummary({
       {round1Complete && r2Summary && r2Summary.totalSeries > 0 ? (
         <Round2SummaryBlock
           summary={r2Summary}
+          linkageBroken={Boolean(r2LinkageBroken)}
           round2PointsFromStandings={round2PointsFromStandings}
           totalPoints={totalPoints}
         />
       ) : null}
 
+      {round1Complete && (r2LinkageBroken || r2LegacyUnresolved) ? (
+        <PickLinkageNotice roundLabel="Round 2" unresolved={Boolean(r2LegacyUnresolved)} />
+      ) : null}
+
       {r2PicksLoadError ? (
         <p className="rounded-xl border border-amber-500/25 bg-amber-950/20 px-4 py-3 text-xs text-amber-200/90 sm:text-sm">
-          Round 2 pick storage is unavailable ({r2PicksLoadError}). Apply the latest NHL migration,
-          then refresh.
+          Round 2 picks could not be loaded. Try refreshing the page after signing in.
         </p>
       ) : null}
     </div>
+  );
+}
+
+function PickLinkageNotice({
+  roundLabel,
+  unresolved,
+}: {
+  roundLabel: string;
+  unresolved: boolean;
+}) {
+  return (
+    <p className="rounded-xl border border-amber-500/30 bg-amber-950/25 px-4 py-3 text-sm leading-relaxed text-amber-100/95">
+      {unresolved ? (
+        <>
+          We found older {roundLabel} picks from a previous playoff setup that could not be matched
+          to the current bracket. If something looks wrong, contact support or re-save your picks
+          while the window is open.
+        </>
+      ) : (
+        <>
+          Some saved {roundLabel} picks may still be syncing to the current bracket. Refresh the
+          page in a moment; if cards stay empty, try saving again while picks are open.
+        </>
+      )}
+    </p>
   );
 }
 
@@ -72,12 +114,14 @@ function Round1SummaryBlock({
   round1Complete,
   round2Open,
   picksLocked,
+  linkageBroken,
   totalPoints,
 }: {
   summary: Round1UserSummary;
   round1Complete: boolean;
   round2Open: boolean;
   picksLocked: boolean;
+  linkageBroken: boolean;
   totalPoints: number | null;
 }) {
   const {
@@ -118,6 +162,11 @@ function Round1SummaryBlock({
             You have picks on {pickedSeries} series
             {pendingPickCount > 0 ? "; results are still pending." : "."}
           </p>
+        ) : linkageBroken ? (
+          <p className="text-amber-200/90">
+            Saved Round 1 picks could not be matched to the current bracket (this is not the same as
+            having no picks).
+          </p>
         ) : (
           <p>No Round 1 picks saved yet.</p>
         )}
@@ -149,16 +198,21 @@ function Round1SummaryBlock({
 
 function Round2SummaryBlock({
   summary,
+  linkageBroken,
   round2PointsFromStandings,
   totalPoints,
 }: {
   summary: Round2UserSummary;
+  linkageBroken: boolean;
   round2PointsFromStandings: number | null;
   totalPoints: number | null;
 }) {
   const { correctCount, resolvedSeries, totalSeries, round2PointsEarned, pickedSeries } = summary;
   const denom = resolvedSeries > 0 ? resolvedSeries : totalSeries;
-  const standingsR2 = round2PointsFromStandings ?? round2PointsEarned;
+  const standingsR2 =
+    round2PointsFromStandings != null && round2PointsFromStandings > 0
+      ? round2PointsFromStandings
+      : round2PointsEarned;
 
   return (
     <div className="rounded-2xl border border-violet-500/20 bg-slate-950/50 px-5 py-5 sm:px-6">
@@ -173,13 +227,18 @@ function Round2SummaryBlock({
           </p>
         ) : pickedSeries > 0 ? (
           <p>You have Round 2 picks saved; series results are still pending.</p>
+        ) : linkageBroken ? (
+          <p className="text-amber-200/90">
+            Saved Round 2 picks could not be matched to the current bracket (this is not the same as
+            having no picks).
+          </p>
         ) : (
           <p>No Round 2 picks saved yet.</p>
         )}
         <p className="text-slate-400">
-          Round 2 points (standings):{" "}
+          Round 2 points on the leaderboard:{" "}
           <span className="font-medium text-emerald-200/95">{standingsR2}</span> (2 points per correct
-          series, from saved edition results).
+          series).
         </p>
         {totalPoints !== null ? (
           <p className="text-slate-500">

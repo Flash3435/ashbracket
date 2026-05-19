@@ -13,11 +13,12 @@ import {
   fetchNhlTeamsForEdition,
   fetchNhlTeamSlugsForEdition,
 } from "@/lib/nhl/queries";
-import { maybeSyncNhlBracketToDatabase } from "@/lib/nhl/syncNhlSeriesFromNhleBracket";
-import { syncNhlR2SlotsFromR1 } from "@/lib/nhl/syncNhlEditionBracketSlots";
+import { prepareNhlEditionBracketForScoring } from "@/lib/nhl/prepareNhlEditionBracket";
 import type { NhlTeam } from "@/lib/nhl/types";
 import { createClient } from "@/lib/supabase/server";
+import { unstable_noStore as noStore } from "next/cache";
 import type { Metadata } from "next";
+import { connection } from "next/server";
 import Link from "next/link";
 
 export const metadata: Metadata = {
@@ -29,6 +30,8 @@ export const metadata: Metadata = {
 export const dynamic = "force-dynamic";
 
 export default async function NhlStandingsPage() {
+  noStore();
+  await connection();
   const supabase = await createClient();
   const { edition, error: editionError } = await fetchActiveNhlEdition(supabase);
 
@@ -45,8 +48,7 @@ export default async function NhlStandingsPage() {
   let standingsError: string | null = null;
 
   if (edition && !editionError) {
-    await maybeSyncNhlBracketToDatabase();
-    await syncNhlR2SlotsFromR1(supabase, edition.id);
+    await prepareNhlEditionBracketForScoring(edition.id, supabase);
 
     const [teamCountRes, seriesCountRes, slugRes, teamsRes, winnersRes] = await Promise.all([
       countNhlTeamsForEdition(supabase, edition.id),

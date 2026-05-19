@@ -22,8 +22,8 @@ export function formatNhlStandingsLoadError(message: string): string {
   ) {
     return (
       "The database is missing the NHL standings function. Apply the NHL standings migrations " +
-      "(for example `20260422180000_nhl_standings_rpc.sql` and the latest `fetch_nhl_edition_standings` " +
-      "update such as `20260504180000_nhl_standings_round_breakdown.sql` via `supabase db push` from the ashbracket " +
+      "(for example `20260504180000_nhl_standings_round_breakdown.sql` and " +
+      "`20260520140000_nhl_standings_scoring_winner.sql` via `supabase db push` from the ashbracket " +
       "repo), then refresh this page."
     );
   }

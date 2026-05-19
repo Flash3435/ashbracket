@@ -12,7 +12,11 @@ import {
   isRound1FullyResolvedForProgression,
   mergeRound2DisplayFromRound1,
 } from "@/lib/nhl/nhlPicksProgression";
-import { maybeSyncNhlBracketToDatabase } from "@/lib/nhl/syncNhlSeriesFromNhleBracket";
+import { prepareNhlEditionBracketForScoring } from "@/lib/nhl/prepareNhlEditionBracket";
+import {
+  picksLinkageLooksBroken,
+  hasUnresolvedLegacyPicks,
+} from "@/lib/nhl/nhlPickResolution";
 import {
   countNhlSeriesForEdition,
   countNhlTeamsForEdition,
@@ -23,6 +27,7 @@ import {
   fetchNhlSeriesRowsWithPublicLiveOverlay,
   fetchNhlTeamSlugsForEdition,
   fetchNhlTeamsForEdition,
+  type NhlPickResolutionMeta,
 } from "@/lib/nhl/queries";
 import type { NhlSeriesRow } from "@/lib/nhl/types";
 import { createClient } from "@/lib/supabase/server";
@@ -43,25 +48,12 @@ function round1Rows(seriesRows: NhlSeriesRow[]): NhlSeriesRow[] {
   return seriesRows.filter((r) => r.round_code === "R1");
 }
 
-/** PostgREST when picks migrations have not been applied to the linked project yet. */
-function formatNhlPicksLoadError(message: string, tableHint: "r1" | "r2"): string {
+function formatNhlPicksLoadError(message: string): string {
   const m = message.toLowerCase();
-  const tableName = tableHint === "r1" ? "nhl_r1_series_picks" : "nhl_r2_series_picks";
-  const migrationFile =
-    tableHint === "r1"
-      ? "`20260422153000_nhl_r1_series_picks.sql`"
-      : "`20260504120000_nhl_r2_series_picks_and_sync.sql`";
-  if (
-    m.includes(tableName) &&
-    (m.includes("schema cache") || m.includes("does not exist") || m.includes("not find"))
-  ) {
-    return (
-      `The Supabase project is missing the \`${tableName}\` table. Apply migration ${migrationFile} ` +
-      "(e.g. `supabase db push` from the ashbracket repo, or paste that file into the Supabase SQL editor), " +
-      "then refresh."
-    );
+  if (m.includes("schema cache") || m.includes("does not exist") || m.includes("not find")) {
+    return "Saved picks are temporarily unavailable on this site. Please try again later.";
   }
-  return `${message} Try refreshing after signing in.`;
+  return "We could not load your saved picks. Try refreshing the page after signing in.";
 }
 
 export default async function NhlPicksPage() {
@@ -86,11 +78,13 @@ export default async function NhlPicksPage() {
   let picksLoadError: string | null = null;
   let round2PickBySeriesId: Record<string, string> = {};
   let r2PicksLoadError: string | null = null;
+  let r1PickResolution: NhlPickResolutionMeta | null = null;
+  let r2PickResolution: NhlPickResolutionMeta | null = null;
   let userTotalPoints: number | null = null;
   let userRound2Points: number | null = null;
 
   if (edition && !editionError) {
-    await maybeSyncNhlBracketToDatabase();
+    await prepareNhlEditionBracketForScoring(edition.id, supabase);
 
     const [teamCountRes, seriesCountRes, slugRes, teamsRes] = await Promise.all([
       countNhlTeamsForEdition(supabase, edition.id),
@@ -114,8 +108,6 @@ export default async function NhlPicksPage() {
       );
     }
 
-    const teams = teamsRes.teams ?? [];
-
     let seriesRes = await fetchNhlSeriesRowsWithPublicLiveOverlay(supabase, edition.id);
     seriesRows = seriesRes.rows;
     seriesError = seriesRes.error;
@@ -128,18 +120,29 @@ export default async function NhlPicksPage() {
       }
     }
 
+    const teams = teamsRes.teams ?? [];
     displayRows = teamsLoadError ? seriesRows : mergeRound2DisplayFromRound1(seriesRows, teams);
 
     if (user) {
+      const r1SeriesForPicks = displayRows.filter((r) => r.round_code === "R1");
+      const r2SeriesForPicks = displayRows.filter((r) => r.round_code === "R2");
       const [pickRes, pickR2, standingsRes] = await Promise.all([
-        fetchNhlR1PicksForEdition(supabase, edition.id),
-        fetchNhlR2PicksForEdition(supabase, edition.id),
+        fetchNhlR1PicksForEdition(supabase, edition.id, {
+          currentR1SeriesRows: r1SeriesForPicks,
+          activeEditionTeams: teams,
+        }),
+        fetchNhlR2PicksForEdition(supabase, edition.id, {
+          currentR2SeriesRows: r2SeriesForPicks,
+          activeEditionTeams: teams,
+        }),
         fetchNhlEditionStandings(supabase, edition.id),
       ]);
       round1PickBySeriesId = pickRes.pickBySeriesId;
       picksLoadError = pickRes.error;
+      r1PickResolution = pickRes.resolution;
       round2PickBySeriesId = pickR2.pickBySeriesId;
       r2PicksLoadError = pickR2.error;
+      r2PickResolution = pickR2.resolution;
       if (!standingsRes.error) {
         const mine = standingsRes.rows.find((r) => r.user_id === user.id);
         if (mine) {
@@ -193,6 +196,10 @@ export default async function NhlPicksPage() {
   const round2Open = Boolean(
     edition && user && round1ProgressComplete && !picksLocked && !r2PicksLoadError,
   );
+  const r1LinkageBroken = picksLinkageLooksBroken(r1PickResolution, round1PickBySeriesId);
+  const r2LinkageBroken = picksLinkageLooksBroken(r2PickResolution, round2PickBySeriesId);
+  const r1LegacyUnresolved = hasUnresolvedLegacyPicks(r1PickResolution);
+  const r2LegacyUnresolved = hasUnresolvedLegacyPicks(r2PickResolution);
 
   return (
     <PageContainer compactBottom>
@@ -209,32 +216,30 @@ export default async function NhlPicksPage() {
           tree as the real playoffs.
         </p>
         <p className="mt-2 max-w-2xl text-sm leading-relaxed text-slate-500">
-          Picks are stored in NHL-only tables and never touch World Cup pick flows. Tap a team card
-          to save (sign-in required).
+          Tap a team card to save your pick (sign-in required).
         </p>
         {edition && !editionError ? (
           <div className="mt-4 max-w-2xl space-y-2 text-sm leading-relaxed">
             {picksLocked ? (
               <p className="rounded-xl border border-amber-500/35 bg-amber-950/25 px-4 py-3 text-amber-100/95">
-                This edition&apos;s pick window is closed (lock time has passed). You can still
-                review completed rounds, but new changes are not accepted.
+                The pick window for this playoff year is closed. You can still review your results,
+                but new changes are not accepted.
               </p>
             ) : edition.lock_at ? (
               <p className="rounded-xl border border-blue-500/25 bg-slate-950/50 px-4 py-3 text-slate-300">
-                Lock scheduled for{" "}
+                Picks close on{" "}
                 <span className="font-medium text-slate-100">
                   {new Date(edition.lock_at).toLocaleString(undefined, {
                     dateStyle: "medium",
                     timeStyle: "short",
                   })}
                 </span>
-                . After that moment, picks cannot be changed.
+                .
               </p>
             ) : (
               <p className="rounded-xl border border-slate-600/40 bg-slate-950/45 px-4 py-3 text-slate-400">
-                No <code className="rounded bg-slate-900/80 px-1 py-0.5 text-slate-200">lock_at</code>{" "}
-                is set on this edition yet, so the database still treats the window as open. Add a
-                lock time on the edition when you are ready to freeze picks.
+                No final pick deadline is set yet—you can still change your choices until an admin
+                closes the window.
               </p>
             )}
           </div>
@@ -251,6 +256,10 @@ export default async function NhlPicksPage() {
             r1Summary={r1UserSummary}
             r2Summary={r2UserSummary}
             r2PicksLoadError={r2PicksLoadError}
+            r1LinkageBroken={r1LinkageBroken}
+            r2LinkageBroken={r2LinkageBroken}
+            r1LegacyUnresolved={r1LegacyUnresolved}
+            r2LegacyUnresolved={r2LegacyUnresolved}
             totalPoints={userTotalPoints}
             round2PointsFromStandings={userRound2Points}
           />
@@ -270,7 +279,7 @@ export default async function NhlPicksPage() {
         {picksLoadError ? (
           <p className="text-sm text-amber-200/90">
             <span className="font-medium text-amber-100/95">Saved Round 1 picks unavailable. </span>
-            {formatNhlPicksLoadError(picksLoadError, "r1")}
+            {formatNhlPicksLoadError(picksLoadError)}
           </p>
         ) : null}
 
@@ -343,9 +352,9 @@ export default async function NhlPicksPage() {
               ? picksLocked
                 ? "locked with the edition; cards below show how you lined up the second round."
                 : r2PicksLoadError
-                  ? "ready in the UI, but pick storage needs the latest database migration (see banner above)."
+                  ? "ready, but your saved Round 2 picks could not be loaded (see message above)."
                   : "picks are open. Matchups use Round 1 winners on the bracket path (East/West R2 slots 1–2 from R1 slots 1–2 and 3–4)."
-              : "waiting until every Round 1 series has a decided winner in this pool."}
+              : "waiting until every Round 1 series has a decided winner."}
           </li>
           <li>
             <span className="text-slate-300">Conference Finals</span> — locked for now. They will
@@ -361,9 +370,9 @@ export default async function NhlPicksPage() {
       <section className="ash-surface space-y-4 px-4 py-5 sm:px-5">
         <h2 className="text-lg font-semibold text-ash-text">How bracket play works</h2>
         <p className="text-sm leading-relaxed text-slate-400">
-          The pool follows the real Stanley Cup Playoff tree. You choose each series winner (not
-          individual games). Scoring weights match the standings page (Round 1 = 1 pt, Round 2 = 2
-          pts per correct series, etc.).
+          The competition follows the real Stanley Cup Playoff tree. You choose each series winner
+          (not individual games). Scoring matches the standings page (Round 1 = 1 pt, Round 2 = 2
+          pts per correct series, and so on).
         </p>
       </section>
 
@@ -413,15 +422,15 @@ export default async function NhlPicksPage() {
           <p className="mt-1 max-w-3xl text-sm leading-relaxed text-slate-400">
             When all Round 1 winners are known, each conference&apos;s second round fills with those
             clubs (better regular-season seed listed as higher seed). If a slot still shows &quot;Waiting on
-            Round 1&quot;, the pool is missing a result for one of its feeder series—check back after
-            sync or admin updates.
+            Round 1&quot;, we are still waiting on a first-round result—check back after scores
+            update.
           </p>
         </div>
 
         {r2PicksLoadError && user ? (
           <p className="text-sm text-amber-200/90">
             <span className="font-medium text-amber-100/95">Round 2 picks unavailable. </span>
-            {formatNhlPicksLoadError(r2PicksLoadError, "r2")}
+            {formatNhlPicksLoadError(r2PicksLoadError)}
           </p>
         ) : null}
 

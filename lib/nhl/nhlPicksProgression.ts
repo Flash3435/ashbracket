@@ -8,6 +8,27 @@ export function effectiveSeriesWinnerId(series: NhlSeriesRow): string | null {
   return pres.winnerTeamId ?? series.winner_team_id ?? null;
 }
 
+/**
+ * Winner used for standings-style scoring: persisted `winner_team_id`, else inferred from
+ * 4+ games in a best-of-7 series (matches `fetch_nhl_edition_standings` after scoring migration).
+ */
+export function scoringWinnerTeamId(series: NhlSeriesRow): string | null {
+  if (series.winner_team_id) {
+    return series.winner_team_id;
+  }
+  const hi = series.higher_seed_team_id;
+  const lo = series.lower_seed_team_id;
+  if (!hi || !lo) {
+    return null;
+  }
+  const winsHi = series.games_won_by_higher_seed ?? 0;
+  const winsLo = series.games_won_by_lower_seed ?? 0;
+  if (Math.max(winsHi, winsLo) < 4 || winsHi === winsLo) {
+    return null;
+  }
+  return winsHi > winsLo ? hi : lo;
+}
+
 function teamsById(teams: NhlTeam[]): Map<string, NhlTeam> {
   return new Map(teams.map((t) => [t.id, t]));
 }
@@ -205,7 +226,7 @@ export function buildRound2UserSummary(
 
   for (const s of r2Rows) {
     if (!round2SeriesReadyForPicks(s)) continue;
-    const win = effectiveSeriesWinnerId(s);
+    const win = scoringWinnerTeamId(s);
     const pick = pickBySeriesId[s.id] ?? null;
     if (pick) pickedSeries += 1;
     if (!win) {

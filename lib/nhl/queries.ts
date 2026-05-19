@@ -5,7 +5,14 @@ import {
   overlayRound1SeriesRowsFromBracket,
 } from "./nhleBracketOverlay";
 import { syncWinnerDisplayFieldsFromSeeds } from "./nhlSeriesRowLabels";
+import {
+  fetchNhlR1PicksResolvedForEdition,
+  fetchNhlR2PicksResolvedForEdition,
+  type NhlPickResolutionMeta,
+} from "./nhlPickResolution";
 import type { NhlEdition, NhlSeries, NhlSeriesRow, NhlStandingsRow, NhlTeam } from "./types";
+
+export type { NhlPickResolutionMeta };
 
 export async function fetchActiveNhlEdition(
   supabase: SupabaseClient,
@@ -210,52 +217,59 @@ export async function fetchNhlSeriesRowsWithPublicLiveOverlay(
   }
 }
 
-/** Current user's Round 1 picks for an edition (RLS: own rows only). */
+/**
+ * Current user's Round 1 picks mapped onto the active edition's current bracket series ids.
+ * Resolves legacy rows saved on an inactive edition or stale series/team UUIDs when possible.
+ */
 export async function fetchNhlR1PicksForEdition(
   supabase: SupabaseClient,
   editionId: string,
+  options?: {
+    currentR1SeriesRows?: NhlSeriesRow[];
+    activeEditionTeams?: Pick<NhlTeam, "id" | "team_slug">[];
+  },
 ): Promise<{
   pickBySeriesId: Record<string, string>;
   error: string | null;
+  resolution: NhlPickResolutionMeta | null;
 }> {
-  const { data, error } = await supabase
-    .from("nhl_r1_series_picks")
-    .select("series_id, picked_team_id")
-    .eq("edition_id", editionId);
-
-  if (error) {
-    return { pickBySeriesId: {}, error: error.message };
+  const seriesRows = options?.currentR1SeriesRows;
+  const teams = options?.activeEditionTeams;
+  if (!seriesRows || !teams) {
+    return {
+      pickBySeriesId: {},
+      error: "Round 1 pick resolution requires current series rows and teams.",
+      resolution: null,
+    };
   }
-  const pickBySeriesId: Record<string, string> = {};
-  for (const row of data ?? []) {
-    const r = row as { series_id: string; picked_team_id: string };
-    pickBySeriesId[r.series_id] = r.picked_team_id;
-  }
-  return { pickBySeriesId, error: null };
+  return fetchNhlR1PicksResolvedForEdition(supabase, editionId, seriesRows, teams);
 }
 
-/** Current user's Round 2 picks for an edition (RLS: own rows only). */
+/**
+ * Current user's Round 2 picks mapped onto the active edition's current bracket series ids.
+ */
 export async function fetchNhlR2PicksForEdition(
   supabase: SupabaseClient,
   editionId: string,
+  options?: {
+    currentR2SeriesRows?: NhlSeriesRow[];
+    activeEditionTeams?: Pick<NhlTeam, "id" | "team_slug">[];
+  },
 ): Promise<{
   pickBySeriesId: Record<string, string>;
   error: string | null;
+  resolution: NhlPickResolutionMeta | null;
 }> {
-  const { data, error } = await supabase
-    .from("nhl_r2_series_picks")
-    .select("series_id, picked_team_id")
-    .eq("edition_id", editionId);
-
-  if (error) {
-    return { pickBySeriesId: {}, error: error.message };
+  const seriesRows = options?.currentR2SeriesRows;
+  const teams = options?.activeEditionTeams;
+  if (!seriesRows || !teams) {
+    return {
+      pickBySeriesId: {},
+      error: "Round 2 pick resolution requires current series rows and teams.",
+      resolution: null,
+    };
   }
-  const pickBySeriesId: Record<string, string> = {};
-  for (const row of data ?? []) {
-    const r = row as { series_id: string; picked_team_id: string };
-    pickBySeriesId[r.series_id] = r.picked_team_id;
-  }
-  return { pickBySeriesId, error: null };
+  return fetchNhlR2PicksResolvedForEdition(supabase, editionId, seriesRows, teams);
 }
 
 export async function countNhlMembershipsForEdition(
@@ -354,21 +368,22 @@ function mapRpcStandingsRow(raw: Record<string, unknown>): NhlStandingsRow | nul
   const pendingNum = num(pending_decisions);
   const pickCountNum = num(pick_count);
 
-  if (
-    !Number.isFinite(rankNum) ||
-    !Number.isFinite(r2RankNum) ||
-    !Number.isFinite(pointsNum) ||
-    !Number.isFinite(r1Pts) ||
-    !Number.isFinite(r2Pts) ||
-    !Number.isFinite(cfPts) ||
-    !Number.isFinite(scfPts) ||
-    !Number.isFinite(bonusPts) ||
-    !Number.isFinite(r2PlusPts) ||
-    !Number.isFinite(correctNum) ||
-    !Number.isFinite(correctPostR1) ||
-    !Number.isFinite(pendingNum) ||
-    !Number.isFinite(pickCountNum)
-  ) {
+  const safeRank = Number.isFinite(rankNum) ? rankNum : 0;
+  const safeR2Rank = Number.isFinite(r2RankNum) ? r2RankNum : safeRank;
+  const safePoints = Number.isFinite(pointsNum) ? pointsNum : 0;
+  const safeR1 = Number.isFinite(r1Pts) ? r1Pts : 0;
+  const safeR2 = Number.isFinite(r2Pts) ? r2Pts : 0;
+  const safeCf = Number.isFinite(cfPts) ? cfPts : 0;
+  const safeScf = Number.isFinite(scfPts) ? scfPts : 0;
+  const safeBonus = Number.isFinite(bonusPts) ? bonusPts : 0;
+  const safeR2Plus =
+    Number.isFinite(r2PlusPts) ? r2PlusPts : safeR2 + safeCf + safeScf + safeBonus;
+  const safeCorrect = Number.isFinite(correctNum) ? correctNum : 0;
+  const safeCorrectPostR1 = Number.isFinite(correctPostR1) ? correctPostR1 : 0;
+  const safePending = Number.isFinite(pendingNum) ? pendingNum : 0;
+  const safePickCount = Number.isFinite(pickCountNum) ? pickCountNum : 0;
+
+  if (!Number.isFinite(rankNum) && !Number.isFinite(pointsNum)) {
     return null;
   }
 
@@ -377,21 +392,21 @@ function mapRpcStandingsRow(raw: Record<string, unknown>): NhlStandingsRow | nul
   }
 
   return {
-    rank: rankNum,
-    round2_plus_rank: r2RankNum,
+    rank: safeRank,
+    round2_plus_rank: safeR2Rank,
     user_id,
     entry_name,
-    total_points: pointsNum,
-    round1_points: r1Pts,
-    round2_points: r2Pts,
-    conference_final_points: cfPts,
-    stanley_cup_final_points: scfPts,
-    bonus_points: bonusPts,
-    round2_plus_points: r2PlusPts,
-    correct_picks: correctNum,
-    correct_picks_post_round1: correctPostR1,
-    pending_decisions: pendingNum,
-    pick_count: pickCountNum,
+    total_points: safePoints,
+    round1_points: safeR1,
+    round2_points: safeR2,
+    conference_final_points: safeCf,
+    stanley_cup_final_points: safeScf,
+    bonus_points: safeBonus,
+    round2_plus_points: safeR2Plus,
+    correct_picks: safeCorrect,
+    correct_picks_post_round1: safeCorrectPostR1,
+    pending_decisions: safePending,
+    pick_count: safePickCount,
     status,
   };
 }
