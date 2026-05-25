@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useEffect, useMemo, useState, useTransition } from "react";
+import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import type { KnockoutPickSlotDraft } from "../../types/adminKnockoutPicks";
 import type { SaveKnockoutPicksResult } from "../../types/knockoutPicksSave";
 import type { Team } from "../../src/types/domain";
@@ -26,6 +26,14 @@ import {
   strengthLabelHint,
   teamStrengthLabel,
 } from "../../lib/teams/teamStrengthLabel";
+import {
+  picksDraftSignature,
+  picksSaveButtonDisabled,
+  picksSaveButtonLabel,
+  picksSaveStatusLine,
+  reconcilePicksSaveUiState,
+  type PicksSaveUiState,
+} from "../../lib/predictions/picksSaveState";
 import { KnockoutBracketPreview } from "./KnockoutBracketPreview";
 
 export type SaveKnockoutPicksFn = (input: {
@@ -517,11 +525,20 @@ export function KnockoutPicksWizard({
   postSaveRedirectTo,
 }: KnockoutPicksWizardProps) {
   const router = useRouter();
-  const [isPending, startTransition] = useTransition();
-  const [slots, setSlots] = useState<KnockoutPickSlotDraft[]>(() =>
-    pruneParticipantPicks(initialSlots, {
-      freezeKnockoutProgressionPicks: !knockoutBracketPicksUnlocked,
-    }),
+  const [isSaving, startSaveTransition] = useTransition();
+  const normalizedInitialSlots = useMemo(
+    () =>
+      pruneParticipantPicks(initialSlots, {
+        freezeKnockoutProgressionPicks: !knockoutBracketPicksUnlocked,
+      }),
+    [initialSlots, knockoutBracketPicksUnlocked],
+  );
+  const initialSignature = useMemo(
+    () => picksDraftSignature(normalizedInitialSlots),
+    [normalizedInitialSlots],
+  );
+  const [slots, setSlots] = useState<KnockoutPickSlotDraft[]>(
+    () => normalizedInitialSlots,
   );
   const [step, setStep] = useState(0);
 
@@ -538,38 +555,36 @@ export function KnockoutPicksWizard({
       ),
     [knockoutBracketPicksUnlocked, bonusQuestionCount],
   );
-  const [actionError, setActionError] = useState<string | null>(null);
-  const [success, setSuccess] = useState(false);
+  const [savedSignature, setSavedSignature] = useState(() => initialSignature);
+  const [saveUiState, setSaveUiState] = useState<PicksSaveUiState>({
+    kind: "saved",
+    lastSavedAt: null,
+  });
   const [quickHint, setQuickHint] = useState<string | null>(null);
   const [openRowKey, setOpenRowKey] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [picksMainView, setPicksMainView] = useState<"list" | "bracket">(
     "list",
   );
+  const lastParticipantIdRef = useRef(participantId);
+  const draftSignature = useMemo(() => picksDraftSignature(slots), [slots]);
 
   useEffect(() => {
-    startTransition(() => {
-      setSlots(
-        pruneParticipantPicks(initialSlots, {
-          freezeKnockoutProgressionPicks: !knockoutBracketPicksUnlocked,
-        }),
-      );
-    });
-  }, [initialSlots, knockoutBracketPicksUnlocked]);
+    const sameParticipant = lastParticipantIdRef.current === participantId;
+    lastParticipantIdRef.current = participantId;
+    setSlots(normalizedInitialSlots);
+    setSavedSignature(initialSignature);
+    setSaveUiState((prev) => ({
+      kind: "saved",
+      lastSavedAt: sameParticipant ? prev.lastSavedAt : null,
+    }));
+  }, [participantId, normalizedInitialSlots, initialSignature]);
 
   useEffect(() => {
-    startTransition(() => {
-      setStep((s) =>
-        s >= wizardSteps.length ? Math.max(0, wizardSteps.length - 1) : s,
-      );
-    });
+    setStep((s) =>
+      s >= wizardSteps.length ? Math.max(0, wizardSteps.length - 1) : s,
+    );
   }, [wizardSteps.length]);
-
-  useEffect(() => {
-    if (!success) return;
-    const t = window.setTimeout(() => setSuccess(false), 5000);
-    return () => window.clearTimeout(t);
-  }, [success]);
 
   useEffect(() => {
     if (!quickHint) return;
@@ -577,13 +592,24 @@ export function KnockoutPicksWizard({
     return () => window.clearTimeout(t);
   }, [quickHint]);
 
+  useEffect(() => {
+    if (isSaving) return;
+    setSaveUiState((prev) =>
+      reconcilePicksSaveUiState({
+        draftSignature,
+        savedSignature,
+        currentState: prev,
+      }),
+    );
+  }, [draftSignature, savedSignature, isSaving]);
+
   const teamById = useMemo(() => new Map(teams.map((t) => [t.id, t])), [teams]);
   const thirdPlaceTeamGroupById = useMemo(
     () => buildTeamIdToGroupLetter(teams, groupTeamCountryCodesByLetter),
     [teams, groupTeamCountryCodesByLetter],
   );
 
-  const coreDisabled = disabled || readOnly || isPending;
+  const coreDisabled = disabled || readOnly || isSaving;
   const preBracketActive = preBracketSelectionsLocked && !readOnly;
 
   function pickRowDisabled(row: KnockoutPickSlotDraft): boolean {
@@ -665,29 +691,42 @@ export function KnockoutPicksWizard({
   function onSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (disabled || readOnly) return;
-    setActionError(null);
-    setSuccess(false);
-    startTransition(async () => {
+    const submittedSignature = draftSignature;
+    const submittedSlots = slots.map((s) => ({
+      predictionKind: s.predictionKind,
+      tournamentStageId: s.tournamentStageId,
+      slotKey: s.slotKey,
+      groupCode: s.groupCode,
+      bonusKey: s.bonusKey,
+      teamId: s.teamId,
+    }));
+    setSaveUiState((prev) => ({
+      kind: "saving",
+      lastSavedAt: prev.lastSavedAt,
+    }));
+    startSaveTransition(async () => {
       const res = await savePicks({
         participantId,
-        slots: slots.map((s) => ({
-          predictionKind: s.predictionKind,
-          tournamentStageId: s.tournamentStageId,
-          slotKey: s.slotKey,
-          groupCode: s.groupCode,
-          bonusKey: s.bonusKey,
-          teamId: s.teamId,
-        })),
+        slots: submittedSlots,
       });
       if (!res.ok) {
-        setActionError(res.error);
+        setSaveUiState((prev) => ({
+          kind: "error",
+          failedSignature: submittedSignature,
+          message: res.error,
+          lastSavedAt: prev.lastSavedAt,
+        }));
         return;
       }
       if (postSaveRedirectTo) {
         router.push(postSaveRedirectTo);
         return;
       }
-      setSuccess(true);
+      setSavedSignature(submittedSignature);
+      setSaveUiState({
+        kind: "saved",
+        lastSavedAt: Date.now(),
+      });
       router.refresh();
     });
   }
@@ -787,15 +826,15 @@ export function KnockoutPicksWizard({
         </p>
       ) : null}
 
-      {actionError ? (
+      {saveUiState.kind === "error" ? (
         <p
           className="rounded-md border border-red-800/80 bg-red-950/40 px-3 py-2 text-sm text-red-200"
           role="alert"
         >
-          {actionError}
+          {saveUiState.message}
         </p>
       ) : null}
-      {success ? (
+      {saveUiState.kind === "saved" && saveUiState.lastSavedAt != null ? (
         <div
           className="rounded-md border border-ash-accent/40 bg-ash-accent/10 px-3 py-2 text-sm text-ash-muted"
           role="status"
@@ -1534,12 +1573,24 @@ export function KnockoutPicksWizard({
         <div>
           <button
             type="submit"
-            disabled={coreDisabled}
+            disabled={coreDisabled || picksSaveButtonDisabled(saveUiState)}
             className="btn-primary disabled:cursor-not-allowed disabled:opacity-60"
           >
-            {isPending ? "Saving…" : "Save picks"}
+            {picksSaveButtonLabel(saveUiState)}
           </button>
-          <p className="mt-2 text-xs text-ash-muted">{saveHelpText}</p>
+          <p
+            className={`mt-2 text-xs ${
+              saveUiState.kind === "error"
+                ? "text-red-200"
+                : saveUiState.kind === "dirty"
+                  ? "text-amber-100"
+                  : "text-ash-muted"
+            }`}
+            role="status"
+          >
+            {picksSaveStatusLine(saveUiState)}
+          </p>
+          <p className="mt-1 text-xs text-ash-muted">{saveHelpText}</p>
         </div>
       ) : null}
     </form>
