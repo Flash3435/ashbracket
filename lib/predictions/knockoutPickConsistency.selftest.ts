@@ -8,10 +8,12 @@ import {
   normalizeParticipantThirdPlaceSaveSlots,
   pruneParticipantPicks,
   THIRD_PLACE_DISABLED_MAX_SELECTED,
+  THIRD_PLACE_ROW_MAX_SELECTED_EXPLANATION,
   THIRD_PLACE_DISABLED_OTHER_SLOT,
   THIRD_PLACE_DISABLED_RUNNER,
   THIRD_PLACE_DISABLED_WINNER,
   thirdPlacePickDisabledReason,
+  thirdPlaceRowUnavailableReason,
   thirdPlaceSlotInvalidReason,
   validateParticipantSlotsThirdPlaceRules,
 } from "./knockoutPickConsistency";
@@ -90,6 +92,12 @@ const groupMap: Record<string, string[]> = {
   B: ["BBB", "BBC", "BBD"],
 };
 const teamIdToGroupLetter = buildTeamIdToGroupLetter(allTeams, groupMap);
+if (
+  THIRD_PLACE_ROW_MAX_SELECTED_EXPLANATION !==
+  "Clear one of your current eight to choose from this group."
+) {
+  throw new Error("unexpected Stage 2 max-selected explanation copy");
+}
 
 // --- only teams from the correct group are shown ---
 const thirdRowA = row({
@@ -231,6 +239,44 @@ const maxEightReason = thirdPlacePickDisabledReason(
 );
 if (maxEightReason !== THIRD_PLACE_DISABLED_MAX_SELECTED) {
   throw new Error(`expected max-eight block, got ${maxEightReason}`);
+}
+const maxEightRowReason = thirdPlaceRowUnavailableReason(
+  thirdRowA,
+  [
+    thirdRowA,
+    ...Array.from({ length: 8 }, (_, i) =>
+      row({
+        rowKey: `filled-row-${i}`,
+        predictionKind: "third_place_qualifier",
+        teamId: `third-row-${i}`,
+        groupCode: `G${i}`,
+      }),
+    ),
+  ],
+);
+if (maxEightRowReason !== THIRD_PLACE_ROW_MAX_SELECTED_EXPLANATION) {
+  throw new Error(`expected row-level max-eight explanation, got ${maxEightRowReason}`);
+}
+const selectedRowStillAvailable = thirdPlaceRowUnavailableReason(
+  row({
+    rowKey: "selected-at-cap",
+    predictionKind: "third_place_qualifier",
+    teamId: a3.id,
+    groupCode: "A",
+  }),
+  [
+    ...Array.from({ length: 8 }, (_, i) =>
+      row({
+        rowKey: `picked-${i}`,
+        predictionKind: "third_place_qualifier",
+        teamId: `picked-${i}`,
+        groupCode: `P${i}`,
+      }),
+    ),
+  ],
+);
+if (selectedRowStillAvailable !== null) {
+  throw new Error("selected Stage 2 rows should stay actionable at the eight-pick cap");
 }
 
 // --- invalid persisted Stage 2 values are cleaned or flagged ---

@@ -12,6 +12,8 @@ import {
   eligibleRoundOf32Pool,
   isGroupScheduleLoaded,
   pruneParticipantPicks,
+  THIRD_PLACE_DISABLED_MAX_SELECTED,
+  thirdPlaceRowUnavailableReason,
   thirdPlaceSlotInvalidReason,
 } from "../../lib/predictions/knockoutPickConsistency";
 import { applyQuickPickToSlots } from "../../lib/predictions/knockoutQuickPickStrategies";
@@ -125,7 +127,7 @@ function participantWizardSteps(
       bracketKind: "third_place_qualifier",
       title: "Best third-place teams",
       intro:
-        "Continue from the group stage: each Group A–L row represents that group’s third-place finisher. Choose at most one eligible team per group and finish with exactly eight advancers. Order still does not matter for scoring or FIFA routing — you are only naming who qualifies, not where they play in the Round of 32.",
+        "Continue from the group stage: each Group A-L row represents that group's third-place finisher. Choose from any eight of the twelve groups total, with at most one eligible team per group. Order still does not matter for scoring or FIFA routing, because you are only naming who qualifies, not where they play in the Round of 32.",
       hint: "A team cannot appear here if you already have them finishing 1st or 2nd in a group. All eight choices must be different nations. FIFA decides bracket placement via Annex C; your Stage 2 list never assigns a team to a specific R32 slot.",
     },
   ];
@@ -941,9 +943,9 @@ export function KnockoutPicksWizard({
                   Same letter groups as Stage 1
                 </p>
                 <p className="mt-1.5 text-sm leading-relaxed text-ash-text">
-                  Each row below is one group’s third-place finisher. Only that
-                  group’s eligible teams appear in the picker, and once you have
-                  eight advancers selected the remaining groups stay empty.
+                  Each row below is one group's third-place finisher. Only that
+                  group's eligible teams appear in the picker, and only eight of
+                  these twelve groups should end with a selection.
                 </p>
               </div>
               <div
@@ -1024,7 +1026,12 @@ export function KnockoutPicksWizard({
                   Choose exactly eight groups whose third-place team will advance.
                   The counter above tracks progress toward eight.
                 </p>
-              ) : null}
+              ) : (
+                <p className="rounded-md border border-sky-800/40 bg-sky-950/20 px-3 py-2 text-sm text-sky-100">
+                  You already have eight groups selected. Clear one of your current
+                  eight if you want to choose a different group.
+                </p>
+              )}
             </div>
           ) : null}
           {currentStepDef.mode === "bracket" &&
@@ -1105,6 +1112,11 @@ export function KnockoutPicksWizard({
                     teamIdToGroupLetter: thirdPlaceTeamGroupById,
                   })
                 : null;
+              const thirdRowUnavailable = isThirdPlaceRow
+                ? thirdPlaceRowUnavailableReason(row, slots)
+                : null;
+              const thirdRowChooseDisabled =
+                Boolean(thirdRowUnavailable) && !row.teamId.trim();
               const q = search.trim().toLowerCase();
               const rankQuery = /^\d{1,3}$/.test(q) ? parseInt(q, 10) : null;
               const filteredChooserEntries =
@@ -1202,8 +1214,9 @@ export function KnockoutPicksWizard({
                       ) : null}
                       <button
                         type="button"
-                        disabled={pickRowDisabled(row)}
+                        disabled={pickRowDisabled(row) || thirdRowChooseDisabled}
                         onClick={() => {
+                          if (thirdRowChooseDisabled) return;
                           setOpenRowKey((k) =>
                             k === row.rowKey ? null : row.rowKey,
                           );
@@ -1211,7 +1224,11 @@ export function KnockoutPicksWizard({
                         }}
                         className="rounded-lg border border-ash-border bg-ash-body px-3 py-1.5 text-sm font-medium text-ash-text transition-colors hover:bg-ash-surface disabled:cursor-not-allowed disabled:opacity-50"
                       >
-                        {team ? "Change" : "Choose team"}
+                        {team
+                          ? "Change"
+                          : thirdRowChooseDisabled
+                            ? THIRD_PLACE_DISABLED_MAX_SELECTED
+                            : "Choose team"}
                       </button>
                     </div>
                   </div>
@@ -1226,9 +1243,24 @@ export function KnockoutPicksWizard({
                       group finish for that nation.
                     </p>
                   ) : null}
+                  {thirdRowUnavailable ? (
+                    <p
+                      className="mt-2 rounded-md border border-sky-800/40 bg-sky-950/20 px-3 py-2 text-xs text-sky-100"
+                      role="status"
+                    >
+                      <span className="font-medium">{THIRD_PLACE_DISABLED_MAX_SELECTED}.</span>{" "}
+                      {thirdRowUnavailable}
+                    </p>
+                  ) : null}
 
                   {openRowKey === row.rowKey ? (
                     <div className="mt-3 border-t border-ash-border pt-3">
+                      {thirdRowChooseDisabled ? (
+                        <p className="rounded-md border border-sky-800/40 bg-sky-950/20 px-3 py-2 text-sm text-sky-100">
+                          {thirdRowUnavailable}
+                        </p>
+                      ) : (
+                        <>
                       <label className="block text-xs font-medium text-ash-muted">
                         {isGroupRow && row.groupCode
                           ? `Search teams in Group ${row.groupCode}`
@@ -1464,6 +1496,8 @@ export function KnockoutPicksWizard({
                           </ul>
                         )
                       ) : null}
+                        </>
+                      )}
                     </div>
                   ) : null}
                 </li>

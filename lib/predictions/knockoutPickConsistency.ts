@@ -12,7 +12,9 @@ export const THIRD_PLACE_DISABLED_RUNNER =
 export const THIRD_PLACE_DISABLED_OTHER_SLOT =
   "Already selected as third-place advancer";
 export const THIRD_PLACE_DISABLED_MAX_SELECTED =
-  "Already selected eight third-place advancers";
+  "Maximum selected";
+export const THIRD_PLACE_ROW_MAX_SELECTED_EXPLANATION =
+  "Clear one of your current eight to choose from this group.";
 
 export type ThirdPlacePickChooserEntry = {
   team: Team;
@@ -128,6 +130,19 @@ export function thirdPlaceIds(slots: KnockoutPickSlotDraft[]): Set<string> {
   return idsForKind(slots, "third_place_qualifier");
 }
 
+export function selectedThirdPlaceCount(slots: KnockoutPickSlotDraft[]): number {
+  let n = 0;
+  for (const row of slots) {
+    if (
+      row.predictionKind === "third_place_qualifier" &&
+      row.teamId.trim()
+    ) {
+      n += 1;
+    }
+  }
+  return n;
+}
+
 /** Union of group advancers and third-place picks — intended Round of 32 pool. */
 export function eligibleRoundOf32Pool(slots: KnockoutPickSlotDraft[]): Set<string> {
   const u = new Set<string>();
@@ -175,6 +190,18 @@ export function thirdPlacePickDisabledReason(
     if (s.predictionKind === "group_runner_up" && s.teamId.trim() === id) {
       return THIRD_PLACE_DISABLED_RUNNER;
     }
+  }
+  return null;
+}
+
+export function thirdPlaceRowUnavailableReason(
+  row: KnockoutPickSlotDraft,
+  slots: KnockoutPickSlotDraft[],
+): string | null {
+  if (row.predictionKind !== "third_place_qualifier") return null;
+  if (row.teamId.trim()) return null;
+  if (selectedThirdPlaceCount(slots) >= 8) {
+    return THIRD_PLACE_ROW_MAX_SELECTED_EXPLANATION;
   }
   return null;
 }
