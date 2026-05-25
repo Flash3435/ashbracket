@@ -75,11 +75,11 @@ export const PUBLIC_RULES_PAGE_COPY = {
     "Pick the team that finishes 1st and the team that finishes 2nd in every group.",
   stage2Title: "Stage 2 — Best third-place teams",
   stage2Body:
-    "Pick eight teams you think will advance as the best third-place finishers. Order does not matter — you are only predicting who qualifies, not which bracket slot each lands in. FIFA places those teams into the real Round of 32; your list does not set matchups. You cannot pick the same nation twice across Stage 1 and Stage 2 (a group top-two pick cannot also be one of your eight third-place advancers).",
+    "Pick one third-place team for any group you think sends a best-third advancer, ending with exactly eight selected groups. Each group row only uses nations from that group, order does not matter, and you are only predicting who qualifies — not which bracket slot each lands in. FIFA places those teams into the real Round of 32; your list does not set matchups. You cannot pick the same nation twice across Stage 1 and Stage 2 (a group top-two pick cannot also be one of your eight third-place advancers).",
   stage2ScoringIntro:
-    "Pick eight teams that advance as the best third-place finishers. You are not placing them into bracket positions — only predicting who qualifies.",
+    "Pick exactly eight groups whose third-place team advances. You are not placing those teams into bracket positions — only predicting who qualifies.",
   stage2ScoringFollow:
-    "After the group stage, FIFA assigns those sides to real knockout slots. You cannot pick the same nation twice across Stage 1 and Stage 2 (a group top-two pick cannot also be one of your eight third-place advancers).",
+    "After the group stage, FIFA assigns those sides to real knockout slots. Each Stage 2 choice must come from that row’s group, and a group top-two pick cannot also be one of your eight third-place advancers.",
   stage3Title: "Stage 3 — Knockout bracket",
   stage3Body:
     "After the group stage, organizers publish the official Round of 32 bracket with real FIFA matchups. Once that bracket is live in the app, you fill Round of 32 through champion using those slots. Knockout scoring counts once per team you picked, based on how far that team actually goes in the tournament.",

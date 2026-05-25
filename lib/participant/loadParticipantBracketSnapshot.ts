@@ -224,6 +224,8 @@ export async function loadParticipantBracketSnapshot(
       predictions,
       participantId: trimmed,
       bonusKeys: bonusKeysOrdered,
+      teams,
+      groupTeamCountryCodesByLetter,
     });
 
     return {

@@ -275,6 +275,8 @@ export async function loadAccountKnockoutSelection(
           predictions,
           participantId: selectedParticipant.id,
           bonusKeys: bonusKeysOrdered,
+          teams,
+          groupTeamCountryCodesByLetter,
         })
       : [];
 

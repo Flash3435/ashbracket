@@ -83,7 +83,7 @@ export default async function AccountPicksPage({ searchParams }: PageProps) {
 
       <PageTitle
         title="Your picks"
-        description="Three stages: pick 1st and 2nd in every group, then eight best third-place advancers (order does not matter), then the official Round of 32 through champion once published — plus bonus picks. Quick start fills early stages (and the full bracket when unlocked). Group/third/bonus lock at the pool deadline; knockout can stay open after that."
+        description="Three stages: pick 1st and 2nd in every group, then choose one third-place team per group row until you have eight advancers, then fill the official Round of 32 through champion once published — plus bonus picks. Quick start fills early stages (and the full bracket when unlocked). Group/third/bonus lock at the pool deadline; knockout can stay open after that."
       />
 
       {ctx.loadError ? (

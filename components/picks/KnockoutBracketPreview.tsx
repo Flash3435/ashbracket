@@ -136,9 +136,9 @@ function ThirdPlaceStrip({
         Third-place qualifiers
       </p>
       <p className="mt-1 text-[11px] leading-relaxed text-ash-muted">
-        Your eight advancing third-place teams (order does not matter for scoring).
-        They cannot overlap teams you picked 1st or 2nd in a group. FIFA decides
-        which bracket positions they occupy after the group stage.
+        One third-place pick per group row; exactly eight groups should be selected.
+        They cannot overlap teams you picked 1st or 2nd in that group. FIFA decides
+        which bracket positions the advancing teams occupy after the group stage.
       </p>
       <ul className="mt-2 flex flex-wrap gap-2">
         {sorted.map((row) => {

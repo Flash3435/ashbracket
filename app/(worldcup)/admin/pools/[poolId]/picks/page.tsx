@@ -218,6 +218,8 @@ export default async function AdminPoolPicksPage({ params, searchParams }: PageP
         predictions,
         participantId: selectedParticipant.id,
         bonusKeys: bonusKeysOrdered,
+        teams,
+        groupTeamCountryCodesByLetter,
       });
     } catch (slotErr) {
       const message =
@@ -278,7 +280,7 @@ export default async function AdminPoolPicksPage({ params, searchParams }: PageP
     <PageContainer>
       <PageTitle
         title="Participant picks"
-        description="Edit any participant’s full path: Stage 1 group finishes, Stage 2 best third-place advancers, Stage 3 knockout (Round of 32 through champion) when published, and bonus picks."
+        description="Edit any participant’s full path: Stage 1 group finishes, Stage 2 one-third-place-team-per-group rows (eight advancers total), Stage 3 knockout (Round of 32 through champion) when published, and bonus picks."
       />
 
       {loadError ? (

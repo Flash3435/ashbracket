@@ -11,6 +11,8 @@ export const THIRD_PLACE_DISABLED_RUNNER =
   "Already picked as group runner-up";
 export const THIRD_PLACE_DISABLED_OTHER_SLOT =
   "Already selected as third-place advancer";
+export const THIRD_PLACE_DISABLED_MAX_SELECTED =
+  "Already selected eight third-place advancers";
 
 export type ThirdPlacePickChooserEntry = {
   team: Team;
@@ -26,6 +28,8 @@ export type ThirdPlacePickChooserGroup = {
   heading: string;
   entries: ThirdPlacePickChooserEntry[];
 };
+
+export type GroupTeamCountryCodesByLetter = Record<string, string[]>;
 
 /** True when official group rosters are available (same signal as the group-stage pickers). */
 export function isGroupScheduleLoaded(
@@ -48,6 +52,26 @@ function countryCodeToGroupLetter(
     }
   }
   return m;
+}
+
+function normalizedGroupLetter(value: string | null | undefined): string {
+  return (value ?? "").trim().toUpperCase();
+}
+
+export function buildTeamIdToGroupLetter(
+  teams: Team[],
+  groupTeamCountryCodesByLetter: GroupTeamCountryCodesByLetter | undefined,
+): Map<string, string> {
+  if (!isGroupScheduleLoaded(groupTeamCountryCodesByLetter)) {
+    return new Map<string, string>();
+  }
+  const codeToLetter = countryCodeToGroupLetter(groupTeamCountryCodesByLetter!);
+  const out = new Map<string, string>();
+  for (const team of teams) {
+    const letter = codeToLetter.get(team.countryCode.toUpperCase());
+    if (letter) out.set(team.id, letter);
+  }
+  return out;
 }
 
 function makeThirdPlacePickChooserEntries(
@@ -125,6 +149,16 @@ export function thirdPlacePickDisabledReason(
   if (!id) return null;
   if (id === row.teamId.trim()) return null;
 
+  const selectedElsewhere = slots.filter(
+    (s) =>
+      s.predictionKind === "third_place_qualifier" &&
+      s.rowKey !== row.rowKey &&
+      s.teamId.trim(),
+  ).length;
+  if (!row.teamId.trim() && selectedElsewhere >= 8) {
+    return THIRD_PLACE_DISABLED_MAX_SELECTED;
+  }
+
   for (const s of slots) {
     if (
       s.predictionKind === "third_place_qualifier" &&
@@ -143,6 +177,47 @@ export function thirdPlacePickDisabledReason(
     }
   }
   return null;
+}
+
+export function buildThirdPlacePickChooserOptionsForGroup(
+  row: KnockoutPickSlotDraft,
+  slots: KnockoutPickSlotDraft[],
+  allTeams: Team[],
+  groupTeamCountryCodesByLetter?: GroupTeamCountryCodesByLetter,
+): ThirdPlacePickChooserEntry[] {
+  const groupLetter = normalizedGroupLetter(row.groupCode);
+  if (!groupLetter || !isGroupScheduleLoaded(groupTeamCountryCodesByLetter)) {
+    return [];
+  }
+
+  const codes = groupTeamCountryCodesByLetter![groupLetter] ?? [];
+  const allowedCodes = new Set(codes.map((c) => c.toUpperCase()));
+  const blockedTopTwo = new Set(
+    slots
+      .filter(
+        (s) =>
+          normalizedGroupLetter(s.groupCode) === groupLetter &&
+          (s.predictionKind === "group_winner" ||
+            s.predictionKind === "group_runner_up") &&
+          s.teamId.trim(),
+      )
+      .map((s) => s.teamId.trim()),
+  );
+
+  return allTeams
+    .filter(
+      (team) =>
+        allowedCodes.has(team.countryCode.toUpperCase()) &&
+        !blockedTopTwo.has(team.id),
+    )
+    .sort((a, b) => a.name.localeCompare(b.name))
+    .map((team) => {
+      const reason = thirdPlacePickDisabledReason(team.id, row, slots);
+      if (reason) {
+        return { team, disabled: true, disabledReason: reason };
+      }
+      return { team };
+    });
 }
 
 /** Flat list of all teams with disabled flags, sorted alphabetically by name. */
@@ -168,6 +243,22 @@ export function buildThirdPlacePickChooserOptionGroups(
   allTeams: Team[],
   groupTeamCountryCodesByLetter?: Record<string, string[]>,
 ): ThirdPlacePickChooserGroup[] {
+  const specificGroup = normalizedGroupLetter(row.groupCode);
+  if (specificGroup) {
+    return [
+      {
+        groupLetter: specificGroup,
+        heading: `Group ${specificGroup}`,
+        entries: buildThirdPlacePickChooserOptionsForGroup(
+          row,
+          slots,
+          allTeams,
+          groupTeamCountryCodesByLetter,
+        ),
+      },
+    ];
+  }
+
   const entries = makeThirdPlacePickChooserEntries(row, slots, allTeams);
   if (!isGroupScheduleLoaded(groupTeamCountryCodesByLetter)) {
     return [
@@ -227,9 +318,16 @@ export function buildThirdPlacePickChooserOptionGroups(
 export function thirdPlaceSlotInvalidReason(
   row: KnockoutPickSlotDraft,
   slots: KnockoutPickSlotDraft[],
+  options?: { teamIdToGroupLetter?: Map<string, string> },
 ): string | null {
   const id = row.teamId.trim();
   if (!id) return null;
+
+  const groupLetter = normalizedGroupLetter(row.groupCode);
+  const actualGroup = options?.teamIdToGroupLetter?.get(id);
+  if (groupLetter && actualGroup && groupLetter !== actualGroup) {
+    return `Does not belong to Group ${groupLetter}`;
+  }
 
   let winner = false;
   let runner = false;
@@ -271,10 +369,18 @@ export function validateParticipantSlotsThirdPlaceRules(
     }
   }
   const seenThird = new Set<string>();
+  const seenThirdGroups = new Set<string>();
   for (const s of slots) {
     if (s.predictionKind !== "third_place_qualifier") continue;
     const tid = s.teamId.trim();
     if (!tid) continue;
+    const gc = normalizedGroupLetter(s.groupCode);
+    if (gc) {
+      if (seenThirdGroups.has(gc)) {
+        return `Only one third-place team can be selected for Group ${gc}.`;
+      }
+      seenThirdGroups.add(gc);
+    }
     if (advancing.has(tid)) {
       return "A third-place advancer cannot be a team you already picked first or second in a group. Clear or change the conflicting group or third-place picks.";
     }
@@ -284,6 +390,124 @@ export function validateParticipantSlotsThirdPlaceRules(
     seenThird.add(tid);
   }
   return null;
+}
+
+export function normalizeParticipantThirdPlaceSaveSlots(input: {
+  slots: ParticipantPickSlotPayload[];
+  teams: Team[];
+  groupTeamCountryCodesByLetter: GroupTeamCountryCodesByLetter;
+}):
+  | {
+      ok: true;
+      thirdStageIds: string[];
+      normalizedThirdSlots: ParticipantPickSlotPayload[];
+    }
+  | { ok: false; error: string } {
+  const { slots, teams, groupTeamCountryCodesByLetter } = input;
+  const thirdStageIds = new Set(
+    slots
+      .filter((slot) => slot.predictionKind === "third_place_qualifier")
+      .map((slot) => slot.tournamentStageId),
+  );
+  const selectedThirdSlots = slots.filter(
+    (slot) =>
+      slot.predictionKind === "third_place_qualifier" && slot.teamId.trim(),
+  );
+  if (!isGroupScheduleLoaded(groupTeamCountryCodesByLetter)) {
+    if (selectedThirdSlots.length === 0) {
+      return {
+        ok: true,
+        thirdStageIds: [...thirdStageIds],
+        normalizedThirdSlots: [],
+      };
+    }
+    return {
+      ok: false,
+      error:
+        "Third-place picks cannot be saved until the official group rosters are loaded.",
+    };
+  }
+
+  const teamIdToGroupLetter = buildTeamIdToGroupLetter(
+    teams,
+    groupTeamCountryCodesByLetter,
+  );
+  const advancing = new Set<string>();
+  for (const slot of slots) {
+    const tid = slot.teamId.trim();
+    if (!tid) continue;
+    if (
+      slot.predictionKind === "group_winner" ||
+      slot.predictionKind === "group_runner_up"
+    ) {
+      advancing.add(tid);
+    }
+  }
+
+  const seenThirdTeamIds = new Set<string>();
+  const normalizedByStageAndGroup = new Map<string, ParticipantPickSlotPayload>();
+
+  for (const slot of slots) {
+    if (slot.predictionKind !== "third_place_qualifier") continue;
+
+    const tid = slot.teamId.trim();
+    if (!tid) continue;
+
+    const actualGroup = teamIdToGroupLetter.get(tid);
+    if (!actualGroup) {
+      return {
+        ok: false,
+        error:
+          "A third-place pick must belong to one of the official World Cup groups.",
+      };
+    }
+
+    const requestedGroup = normalizedGroupLetter(slot.groupCode);
+    if (requestedGroup && requestedGroup !== actualGroup) {
+      return {
+        ok: false,
+        error: `Selected team does not belong to Group ${requestedGroup}.`,
+      };
+    }
+
+    if (advancing.has(tid)) {
+      return {
+        ok: false,
+        error:
+          "A third-place advancer cannot be a team you already picked first or second in a group. Clear or change the conflicting group or third-place picks.",
+      };
+    }
+
+    if (seenThirdTeamIds.has(tid)) {
+      return {
+        ok: false,
+        error: "Each third-place advancer must be a different team.",
+      };
+    }
+    seenThirdTeamIds.add(tid);
+
+    const key = `${slot.tournamentStageId}\0${actualGroup}`;
+    if (normalizedByStageAndGroup.has(key)) {
+      return {
+        ok: false,
+        error: `Only one third-place team can be selected for Group ${actualGroup}.`,
+      };
+    }
+    normalizedByStageAndGroup.set(key, {
+      predictionKind: "third_place_qualifier",
+      tournamentStageId: slot.tournamentStageId,
+      slotKey: null,
+      groupCode: actualGroup,
+      bonusKey: null,
+      teamId: tid,
+    });
+  }
+
+  return {
+    ok: true,
+    thirdStageIds: [...thirdStageIds],
+    normalizedThirdSlots: [...normalizedByStageAndGroup.values()],
+  };
 }
 
 function thirdPlaceDuplicateRowKeys(slots: KnockoutPickSlotDraft[]): Set<string> {

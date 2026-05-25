@@ -7,7 +7,8 @@ import type { SaveKnockoutPicksResult } from "../../types/knockoutPicksSave";
 import type { Team } from "../../src/types/domain";
 import {
   assignParticipantPickDeduped,
-  buildThirdPlacePickChooserOptionGroups,
+  buildTeamIdToGroupLetter,
+  buildThirdPlacePickChooserOptionsForGroup,
   eligibleRoundOf32Pool,
   isGroupScheduleLoaded,
   pruneParticipantPicks,
@@ -124,7 +125,7 @@ function participantWizardSteps(
       bracketKind: "third_place_qualifier",
       title: "Best third-place teams",
       intro:
-        "Continue from the group stage: under each Group A–L heading you’ll see that group’s nations. Pick any eight teams you think will advance as the best third-place finishers. Slot order does not matter for scoring or FIFA routing — you are only naming who qualifies, not where they play in the Round of 32.",
+        "Continue from the group stage: each Group A–L row represents that group’s third-place finisher. Choose at most one eligible team per group and finish with exactly eight advancers. Order still does not matter for scoring or FIFA routing — you are only naming who qualifies, not where they play in the Round of 32.",
       hint: "A team cannot appear here if you already have them finishing 1st or 2nd in a group. All eight choices must be different nations. FIFA decides bracket placement via Annex C; your Stage 2 list never assigns a team to a specific R32 slot.",
     },
   ];
@@ -236,6 +237,20 @@ function stepComplete(
   stepIdx: number,
   steps: WizardStepDef[],
 ): boolean {
+  const def = steps[stepIdx];
+  if (
+    def?.mode === "bracket" &&
+    def.bracketKind === "third_place_qualifier"
+  ) {
+    const thirdRows = slots.filter(
+      (s) => s.predictionKind === "third_place_qualifier",
+    );
+    const filled = thirdRows.filter((s) => s.teamId.trim()).length;
+    return (
+      filled === 8 &&
+      thirdRows.every((row) => thirdPlaceSlotInvalidReason(row, slots) == null)
+    );
+  }
   const rows = stepRowsFor(slots, stepIdx, steps);
   return rows.length > 0 && rows.every((s) => s.teamId.trim() !== "");
 }
@@ -476,7 +491,7 @@ function emptyOptionsHint(row: KnockoutPickSlotDraft): string {
     case "champion":
       return "Pick two finalists first.";
     case "third_place_qualifier":
-      return "No teams are available to list. Check that the tournament team list loaded.";
+      return "No eligible third-place options remain in this group. Check your group winners and runners-up.";
     default:
       return "No teams available.";
   }
@@ -561,6 +576,10 @@ export function KnockoutPicksWizard({
   }, [quickHint]);
 
   const teamById = useMemo(() => new Map(teams.map((t) => [t.id, t])), [teams]);
+  const thirdPlaceTeamGroupById = useMemo(
+    () => buildTeamIdToGroupLetter(teams, groupTeamCountryCodesByLetter),
+    [teams, groupTeamCountryCodesByLetter],
+  );
 
   const coreDisabled = disabled || readOnly || isPending;
   const preBracketActive = preBracketSelectionsLocked && !readOnly;
@@ -576,6 +595,7 @@ export function KnockoutPicksWizard({
   );
 
   function setTeamForRow(rowKey: string, teamId: string) {
+    let autoClearNotice: string | null = null;
     setSlots((prev) => {
       const row = prev.find((x) => x.rowKey === rowKey);
       if (
@@ -586,10 +606,34 @@ export function KnockoutPicksWizard({
       ) {
         return prev;
       }
-      return assignParticipantPickDeduped(prev, rowKey, teamId, {
+      const next = assignParticipantPickDeduped(prev, rowKey, teamId, {
         freezeKnockoutProgressionPicks: !knockoutBracketPicksUnlocked,
       });
+      if (
+        row &&
+        (row.predictionKind === "group_winner" ||
+          row.predictionKind === "group_runner_up")
+      ) {
+        const clearedThirds = prev
+          .filter(
+            (s) =>
+              s.predictionKind === "third_place_qualifier" &&
+              s.teamId.trim() &&
+              !next.some(
+                (n) => n.rowKey === s.rowKey && n.teamId.trim() === s.teamId.trim(),
+              ),
+          )
+          .map((s) => teamById.get(s.teamId.trim())?.name ?? "a third-place pick");
+        if (clearedThirds.length > 0) {
+          autoClearNotice =
+            clearedThirds.length === 1
+              ? `${clearedThirds[0]} was cleared from Stage 2 because that team is now in your group top two.`
+              : `${clearedThirds.length} Stage 2 picks were cleared because those teams are now in your group top two.`;
+        }
+      }
+      return next;
     });
+    if (autoClearNotice) setQuickHint(autoClearNotice);
   }
 
   function applyQuick(mode: "random" | "favorites" | "balanced") {
@@ -897,10 +941,9 @@ export function KnockoutPicksWizard({
                   Same letter groups as Stage 1
                 </p>
                 <p className="mt-1.5 text-sm leading-relaxed text-ash-text">
-                  Open any slot below and browse teams under their group. You are
-                  only building the set of eight nations you think advance as best
-                  thirds — not placing them into Round of 32 slots (that is Stage
-                  3).
+                  Each row below is one group’s third-place finisher. Only that
+                  group’s eligible teams appear in the picker, and once you have
+                  eight advancers selected the remaining groups stay empty.
                 </p>
               </div>
               <div
@@ -970,17 +1013,16 @@ export function KnockoutPicksWizard({
           currentStepDef.bracketKind === "third_place_qualifier" ? (
             <div className="mt-4 space-y-3">
               <p className="rounded-md border border-ash-border/60 bg-ash-body/25 px-3 py-2 text-xs leading-relaxed text-ash-muted">
-                Duplicate picks are not allowed: a team cannot be a third-place
-                advancer if you already have them finishing first or second in a
-                group, and the eight advancer slots must all be different teams.
-                If you change group finishes, conflicting third-place picks clear
-                immediately; reloading also reapplies these rules to anything stored
-                in the database.
+                Each Stage 2 row is locked to its own group. Teams already chosen
+                1st or 2nd in that same group are excluded, no nation can appear
+                twice, and exactly eight groups should end up with a selected
+                third-place team. If you change Stage 1, conflicting Stage 2 picks
+                clear immediately; reloads also reapply these checks to stored data.
               </p>
               {thirdFilled < 8 ? (
                 <p className="rounded-md border border-amber-700/40 bg-amber-950/25 px-3 py-2 text-sm text-amber-100">
-                  Choose a distinct team in every advancer slot — the counter above
-                  tracks progress toward eight.
+                  Choose exactly eight groups whose third-place team will advance.
+                  The counter above tracks progress toward eight.
                 </p>
               ) : null}
             </div>
@@ -1046,8 +1088,8 @@ export function KnockoutPicksWizard({
                     groupTeamCountryCodesByLetter,
                   )
                 : null;
-              const thirdPlaceGroups = isThirdPlaceRow
-                ? buildThirdPlacePickChooserOptionGroups(
+              const thirdPlaceEntries = isThirdPlaceRow
+                ? buildThirdPlacePickChooserOptionsForGroup(
                     row,
                     slots,
                     teams,
@@ -1059,7 +1101,9 @@ export function KnockoutPicksWizard({
                   ? null
                   : allowedTeamsForPickRow(row, slots, teams);
               const thirdInvalidReason = isThirdPlaceRow
-                ? thirdPlaceSlotInvalidReason(row, slots)
+                ? thirdPlaceSlotInvalidReason(row, slots, {
+                    teamIdToGroupLetter: thirdPlaceTeamGroupById,
+                  })
                 : null;
               const q = search.trim().toLowerCase();
               const rankQuery = /^\d{1,3}$/.test(q) ? parseInt(q, 10) : null;
@@ -1071,26 +1115,14 @@ export function KnockoutPicksWizard({
                         teamMatchesChooserSearch(t, q, rankQuery),
                       )
                     : groupEntries;
-              const thirdTotalEntries =
-                thirdPlaceGroups?.reduce((n, g) => n + g.entries.length, 0) ?? 0;
-              const filteredThirdPlaceGroups =
-                thirdPlaceGroups == null
+              const filteredThirdPlaceEntries =
+                thirdPlaceEntries == null
                   ? null
                   : !q
-                    ? thirdPlaceGroups
-                    : thirdPlaceGroups
-                        .map((g) => ({
-                          ...g,
-                          entries: g.entries.filter(({ team: t }) =>
-                            teamMatchesChooserSearch(t, q, rankQuery),
-                          ),
-                        }))
-                        .filter((g) => g.entries.length > 0);
-              const thirdFilteredTotal =
-                filteredThirdPlaceGroups?.reduce(
-                  (n, g) => n + g.entries.length,
-                  0,
-                ) ?? 0;
+                    ? thirdPlaceEntries
+                    : thirdPlaceEntries.filter(({ team: t }) =>
+                        teamMatchesChooserSearch(t, q, rankQuery),
+                      );
               const filteredFlat =
                 flatOptions == null
                   ? null
@@ -1104,6 +1136,8 @@ export function KnockoutPicksWizard({
                 row.predictionKind === "group_winner" ||
                 row.predictionKind === "group_runner_up"
                   ? `${row.sectionLabel} — ${row.slotLabel}`
+                  : row.predictionKind === "third_place_qualifier" && row.groupCode
+                    ? `Group ${row.groupCode} — 3rd-place team`
                   : row.predictionKind === "bonus_pick"
                     ? row.slotLabel
                     : row.slotLabel;
@@ -1151,19 +1185,35 @@ export function KnockoutPicksWizard({
                         </div>
                       </div>
                     </div>
-                    <button
-                      type="button"
-                      disabled={pickRowDisabled(row)}
-                      onClick={() => {
-                        setOpenRowKey((k) =>
-                          k === row.rowKey ? null : row.rowKey,
-                        );
-                        setSearch("");
-                      }}
-                      className="shrink-0 rounded-lg border border-ash-border bg-ash-body px-3 py-1.5 text-sm font-medium text-ash-text transition-colors hover:bg-ash-surface disabled:cursor-not-allowed disabled:opacity-50"
-                    >
-                      {team ? "Change" : "Choose team"}
-                    </button>
+                    <div className="flex shrink-0 gap-2">
+                      {team ? (
+                        <button
+                          type="button"
+                          disabled={pickRowDisabled(row)}
+                          onClick={() => {
+                            setTeamForRow(row.rowKey, "");
+                            setOpenRowKey(null);
+                            setSearch("");
+                          }}
+                          className="rounded-lg border border-ash-border bg-ash-body px-3 py-1.5 text-sm font-medium text-ash-muted transition-colors hover:bg-ash-surface disabled:cursor-not-allowed disabled:opacity-50"
+                        >
+                          Clear
+                        </button>
+                      ) : null}
+                      <button
+                        type="button"
+                        disabled={pickRowDisabled(row)}
+                        onClick={() => {
+                          setOpenRowKey((k) =>
+                            k === row.rowKey ? null : row.rowKey,
+                          );
+                          setSearch("");
+                        }}
+                        className="rounded-lg border border-ash-border bg-ash-body px-3 py-1.5 text-sm font-medium text-ash-text transition-colors hover:bg-ash-surface disabled:cursor-not-allowed disabled:opacity-50"
+                      >
+                        {team ? "Change" : "Choose team"}
+                      </button>
+                    </div>
                   </div>
 
                   {thirdInvalidReason ? (
@@ -1183,9 +1233,9 @@ export function KnockoutPicksWizard({
                         {isGroupRow && row.groupCode
                           ? `Search teams in Group ${row.groupCode}`
                           : isThirdPlaceRow
-                            ? isGroupScheduleLoaded(groupTeamCountryCodesByLetter)
-                              ? "Filter by name, code, or FIFA rank — lists stay in group order (A–L)"
-                              : "Filter by name, code, or FIFA rank — ineligible teams stay visible with a short reason"
+                            ? row.groupCode
+                              ? `Search eligible teams in Group ${row.groupCode}`
+                              : "Search teams"
                           : "Search teams"}
                         <input
                           value={search}
@@ -1196,7 +1246,9 @@ export function KnockoutPicksWizard({
                             isGroupRow && row.groupCode
                               ? `Country name, code, or FIFA rank — Group ${row.groupCode} only`
                               : isThirdPlaceRow
-                                ? "Country name, code, or rank — scroll by group"
+                                ? row.groupCode
+                                  ? `Country name, code, or FIFA rank — Group ${row.groupCode} only`
+                                  : "Country name, code, or rank"
                                 : "Type a country name or code"
                           }
                           autoComplete="off"
@@ -1278,124 +1330,82 @@ export function KnockoutPicksWizard({
                             )}
                           </ul>
                         )
-                      ) : thirdPlaceGroups != null ? (
-                        thirdTotalEntries === 0 ? (
+                      ) : thirdPlaceEntries != null ? (
+                        thirdPlaceEntries.length === 0 ? (
                           <p className="mt-2 text-sm text-amber-200">
                             {emptyOptionsHint(row)}
                           </p>
-                        ) : thirdFilteredTotal === 0 ? (
+                        ) : filteredThirdPlaceEntries != null &&
+                          filteredThirdPlaceEntries.length === 0 ? (
                           <p className="mt-2 text-sm text-ash-muted">
                             No teams match your search.
                           </p>
                         ) : (
-                          <div className="mt-2 max-h-[min(28rem,72vh)] overflow-y-auto rounded-md border border-ash-border bg-ash-body p-2">
-                            {!isGroupScheduleLoaded(
-                              groupTeamCountryCodesByLetter,
-                            ) ? (
-                              <p className="mb-2 rounded-md border border-sky-800/40 bg-sky-950/20 px-2 py-1.5 text-[11px] leading-snug text-sky-100/95">
-                                Group fixtures are not loaded yet — teams appear in
-                                one alphabetical list. Once organizers publish group
-                                matchups, this step matches Stage 1 group order (A–L).
-                              </p>
-                            ) : null}
-                            {filteredThirdPlaceGroups!.map((g) => (
-                              <div
-                                key={g.groupLetter}
-                                className="mb-4 last:mb-0"
-                              >
-                                <div className="sticky top-0 z-[1] -mx-1 mb-1.5 border-b border-ash-border/70 bg-ash-body/95 px-2 py-1.5 backdrop-blur-sm">
-                                  <p className="text-[11px] font-semibold uppercase tracking-wide text-ash-muted">
-                                    {g.heading}
-                                  </p>
-                                  <p className="text-[10px] leading-snug text-ash-border-hover">
-                                    {g.groupLetter === "_"
-                                      ? "Alphabetical until official group rosters load."
-                                      : g.groupLetter === "__OTHER__"
-                                        ? "Not mapped to a group in the loaded schedule."
-                                        : "Third-place candidate from this group"}
-                                  </p>
-                                </div>
-                                <ul className="grid gap-0.5 sm:grid-cols-2">
-                                  {g.entries.map(
-                                    ({
-                                      team: t,
-                                      disabled: optDisabled,
-                                      disabledReason,
-                                    }) => {
-                                      const st = teamStrengthLabel(t.countryCode);
-                                      const meta = teamPickMetaLine(t, st);
-                                      const blocked = Boolean(optDisabled);
-                                      const isRowSelection =
-                                        row.teamId.trim() === t.id;
-                                      return (
-                                        <li key={t.id}>
-                                          <button
-                                            type="button"
-                                            disabled={
-                                              pickRowDisabled(row) || blocked
-                                            }
-                                            title={
-                                              blocked ? disabledReason : undefined
-                                            }
-                                            onClick={() => {
-                                              if (blocked) return;
-                                              setTeamForRow(row.rowKey, t.id);
-                                              setOpenRowKey(null);
-                                              setSearch("");
-                                            }}
-                                            className={`flex w-full items-center gap-2 rounded px-2 py-2 text-left text-sm transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${
-                                              blocked
-                                                ? "opacity-50"
-                                                : "hover:bg-ash-accent/15"
-                                            } ${
-                                              !blocked && isRowSelection
-                                                ? "bg-ash-accent/15 ring-1 ring-inset ring-ash-accent/50"
-                                                : ""
-                                            }`}
-                                          >
-                                            <CountryFlagIcon
-                                              countryCode={t.countryCode}
-                                              size="md"
-                                              className="self-center"
-                                            />
-                                            <span className="min-w-0 flex-1">
-                                              <span
-                                                className={`block font-medium ${
-                                                  blocked
-                                                    ? "text-ash-muted"
-                                                    : "text-ash-text"
-                                                }`}
-                                              >
-                                                {t.name}
-                                              </span>
-                                              <span
-                                                className="block text-[11px] text-ash-muted"
-                                                title={
-                                                  [
-                                                    fifaRankSnapshotTitle(t),
-                                                    `${t.countryCode} · ${strengthLabelHint(st)}`,
-                                                  ]
-                                                    .filter(Boolean)
-                                                    .join(" — ")
-                                                }
-                                              >
-                                                {t.countryCode} · {meta}
-                                              </span>
-                                              {blocked && disabledReason ? (
-                                                <span className="mt-0.5 block text-[11px] text-amber-200/90">
-                                                  {disabledReason}
-                                                </span>
-                                              ) : null}
-                                            </span>
-                                          </button>
-                                        </li>
-                                      );
-                                    },
-                                  )}
-                                </ul>
-                              </div>
-                            ))}
-                          </div>
+                          <ul className="mt-2 max-h-52 overflow-y-auto rounded-md border border-ash-border bg-ash-body p-1 sm:grid sm:max-h-64 sm:grid-cols-2 sm:gap-1">
+                            {filteredThirdPlaceEntries!.map(
+                              ({ team: t, disabled: optDisabled, disabledReason }) => {
+                                const st = teamStrengthLabel(t.countryCode);
+                                const meta = teamPickMetaLine(t, st);
+                                const blocked = Boolean(optDisabled);
+                                const isRowSelection = row.teamId.trim() === t.id;
+                                return (
+                                  <li key={t.id}>
+                                    <button
+                                      type="button"
+                                      disabled={pickRowDisabled(row) || blocked}
+                                      title={blocked ? disabledReason : undefined}
+                                      onClick={() => {
+                                        if (blocked) return;
+                                        setTeamForRow(row.rowKey, t.id);
+                                        setOpenRowKey(null);
+                                        setSearch("");
+                                      }}
+                                      className={`flex w-full items-center gap-2 rounded px-2 py-2 text-left text-sm transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${
+                                        blocked ? "opacity-50" : "hover:bg-ash-accent/15"
+                                      } ${
+                                        !blocked && isRowSelection
+                                          ? "bg-ash-accent/15 ring-1 ring-inset ring-ash-accent/50"
+                                          : ""
+                                      }`}
+                                    >
+                                      <CountryFlagIcon
+                                        countryCode={t.countryCode}
+                                        size="md"
+                                        className="self-center"
+                                      />
+                                      <span className="min-w-0 flex-1">
+                                        <span
+                                          className={`block font-medium ${
+                                            blocked ? "text-ash-muted" : "text-ash-text"
+                                          }`}
+                                        >
+                                          {t.name}
+                                        </span>
+                                        <span
+                                          className="block text-[11px] text-ash-muted"
+                                          title={
+                                            [
+                                              fifaRankSnapshotTitle(t),
+                                              `${t.countryCode} · ${strengthLabelHint(st)}`,
+                                            ]
+                                              .filter(Boolean)
+                                              .join(" — ")
+                                          }
+                                        >
+                                          {t.countryCode} · {meta}
+                                        </span>
+                                        {blocked && disabledReason ? (
+                                          <span className="mt-0.5 block text-[11px] text-amber-200/90">
+                                            {disabledReason}
+                                          </span>
+                                        ) : null}
+                                      </span>
+                                    </button>
+                                  </li>
+                                );
+                              },
+                            )}
+                          </ul>
                         )
                       ) : flatOptions != null ? (
                         flatOptions.length === 0 ? (

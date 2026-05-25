@@ -159,7 +159,7 @@ export function MyKnockoutPicksSummary({
   const compactStageProgressLine = showCompactStageProgress
     ? [
         `Group stage: ${groupProg.filled} / ${groupProg.total}`,
-        `Third-place advancers: ${thirdProg.filled} / ${thirdProg.total}`,
+        `Third-place groups selected: ${thirdProg.filled} / 8`,
         knockoutBracketPicksUnlocked
           ? `Knockout picks: ${knockoutProg.filled} / ${knockoutProg.total}`
           : "Knockout picks: open when Round of 32 is set",
@@ -230,8 +230,8 @@ export function MyKnockoutPicksSummary({
           title="Third-place advancers"
           subtitle={
             readOnly
-              ? "Eight teams they predict will qualify from third place (not their bracket slots)"
-              : "Eight teams you predict will qualify from third place (not their bracket slots)"
+              ? "One third-place team per group row; eight groups should be selected (not their bracket slots)"
+              : "One third-place team per group row; eight groups should be selected (not their bracket slots)"
           }
           rows={third}
           teamById={teamById}
