@@ -1,4 +1,5 @@
 import type { ManagedPoolRow } from "../../lib/pools/fetchManagedPoolsForViewer";
+import { publicLeaderboardHrefForPool } from "@/lib/pool/publicLeaderboardHref";
 import Link from "next/link";
 import { SimulationModeBanner } from "./SimulationModeBanner";
 import { AdminPoolSubNav } from "./AdminPoolSubNav";
@@ -14,6 +15,10 @@ export function AdminPoolHeader({ pool, showAuditLogLink = false }: Props) {
     pool.join_code && String(pool.join_code).trim()
       ? String(pool.join_code).trim()
       : null;
+  const publicLeaderboardHref = publicLeaderboardHrefForPool({
+    id: pool.id,
+    isPublic: pool.is_public,
+  });
 
   return (
     <div className="mb-6 space-y-3">
@@ -26,7 +31,13 @@ export function AdminPoolHeader({ pool, showAuditLogLink = false }: Props) {
         </p>
         <h1 className="text-xl font-semibold text-ash-text">{pool.name}</h1>
         <p className="mt-1 text-sm text-ash-muted">
-          {pool.is_public ? "Public leaderboard" : "Private leaderboard"}
+          {publicLeaderboardHref ? (
+            <Link href={publicLeaderboardHref} className="ash-link">
+              Public leaderboard
+            </Link>
+          ) : (
+            "Private leaderboard"
+          )}
           {code ? (
             <>
               {" "}
