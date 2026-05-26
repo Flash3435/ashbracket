@@ -1,5 +1,6 @@
 import { AdminResultsR32StatusSummary } from "@/components/admin/AdminResultsR32StatusSummary";
 import { ApplyOfficialRoundOf32Panel } from "@/components/admin/ApplyOfficialRoundOf32Panel";
+import { GeneratedSimulationScoresSection } from "@/components/admin/GeneratedSimulationScoresSection";
 import { KnockoutResultsEditor } from "@/components/admin/KnockoutResultsEditor";
 import { RecomputeAllPoolsPanel } from "@/components/admin/RecomputeAllPoolsPanel";
 import { SimulationResultsGeneratorPanel } from "@/components/admin/SimulationResultsGeneratorPanel";
@@ -11,6 +12,10 @@ import { PageContainer } from "@/components/ui/PageContainer";
 import { PageTitle } from "@/components/ui/PageTitle";
 import { getOfficialR32ReadinessSummary } from "@/lib/admin/officialRoundOf32Readiness";
 import { ALL_BRACKET_PICK_SECTIONS } from "@/lib/admin/knockoutResultsConfig";
+import {
+  buildGeneratedSimulationScores,
+  type SimulationMatchScoreRow,
+} from "@/lib/admin/simulationGeneratedScores";
 import { requireGlobalAdminPage } from "@/lib/admin/requireGlobalAdmin";
 import { mapResultRow, mapTeamRow, mapTournamentStageRow } from "@/lib/results/mapRows";
 import { TEAM_TABLE_SELECT } from "@/lib/teams/teamDbSelect";
@@ -69,14 +74,16 @@ export default async function SimulationEditionResultsPage({ params }: PageProps
   let stages: TournamentStage[] = [];
   let results: Result[] = [];
   let loadError: string | null = null;
+  let generatedScoresError: string | null = null;
   let r32Summary = {
     groupsComplete: 0,
     thirdPlaceQualifiersEntered: 0,
     officialR32Resolvable: false,
     resolvableHint: null as string | null,
   };
+  let generatedScores: ReturnType<typeof buildGeneratedSimulationScores> = [];
 
-  const [teamsRes, stagesRes, resultsRes] = await Promise.all([
+  const [teamsRes, stagesRes, resultsRes, matchesRes] = await Promise.all([
     supabase.from("teams").select(TEAM_TABLE_SELECT).order("name", { ascending: true }),
     supabase
       .from("tournament_stages")
@@ -90,6 +97,12 @@ export default async function SimulationEditionResultsPage({ params }: PageProps
       )
       .eq("edition_id", editionId)
       .in("kind", RESULT_KINDS),
+    supabase
+      .from("tournament_matches")
+      .select(
+        "id, match_code, stage_code, group_code, kickoff_at, status, home_team_id, away_team_id, home_goals, away_goals, home_penalties, away_penalties, winner_team_id, last_sync_at",
+      )
+      .eq("edition_id", editionId),
   ]);
 
   if (teamsRes.error) loadError = teamsRes.error.message;
@@ -99,6 +112,37 @@ export default async function SimulationEditionResultsPage({ params }: PageProps
     teams = (teamsRes.data ?? []).map(mapTeamRow);
     stages = (stagesRes.data ?? []).map(mapTournamentStageRow);
     results = (resultsRes.data ?? []).map(mapResultRow);
+
+    if (matchesRes.error) {
+      generatedScoresError = matchesRes.error.message;
+    } else {
+      const teamsById = new Map(teams.map((team) => [team.id, team]));
+      const stageByCode = Object.fromEntries(stages.map((s) => [s.code, s])) as Record<
+        string,
+        TournamentStage | undefined
+      >;
+      const matchRows = (matchesRes.data ?? []).map((row) => ({
+        id: row.id as string,
+        matchCode: row.match_code as string,
+        stageCode: row.stage_code as string,
+        groupCode: (row.group_code as string | null) ?? null,
+        kickoffAt: (row.kickoff_at as string | null) ?? null,
+        status: row.status as string,
+        homeTeamId: (row.home_team_id as string | null) ?? null,
+        awayTeamId: (row.away_team_id as string | null) ?? null,
+        homeGoals: (row.home_goals as number | null) ?? null,
+        awayGoals: (row.away_goals as number | null) ?? null,
+        homePenalties: (row.home_penalties as number | null) ?? null,
+        awayPenalties: (row.away_penalties as number | null) ?? null,
+        winnerTeamId: (row.winner_team_id as string | null) ?? null,
+        lastSyncAt: (row.last_sync_at as string | null) ?? null,
+      })) satisfies SimulationMatchScoreRow[];
+      generatedScores = buildGeneratedSimulationScores({
+        matches: matchRows,
+        teamsById,
+        stageByCode,
+      });
+    }
   }
 
   if (!loadError && teams.length > 0) {
@@ -147,6 +191,11 @@ export default async function SimulationEditionResultsPage({ params }: PageProps
       <SimulationResultsGeneratorPanel
         editionId={editionId}
         isProduction={isProduction}
+      />
+
+      <GeneratedSimulationScoresSection
+        rows={generatedScores}
+        errorMessage={generatedScoresError}
       />
 
       {editionImpact ? (
