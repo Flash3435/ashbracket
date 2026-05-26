@@ -2,6 +2,7 @@ import { AdminResultsR32StatusSummary } from "@/components/admin/AdminResultsR32
 import { ApplyOfficialRoundOf32Panel } from "@/components/admin/ApplyOfficialRoundOf32Panel";
 import { KnockoutResultsEditor } from "@/components/admin/KnockoutResultsEditor";
 import { RecomputeAllPoolsPanel } from "@/components/admin/RecomputeAllPoolsPanel";
+import { SimulationResultsGeneratorPanel } from "@/components/admin/SimulationResultsGeneratorPanel";
 import { SimulationEditionSyncPanel } from "@/components/admin/SimulationEditionSyncPanel";
 import { SimulationModeBanner } from "@/components/admin/SimulationModeBanner";
 import { isProductionDeployment } from "@/lib/admin/deploymentEnvironment";
@@ -142,6 +143,11 @@ export default async function SimulationEditionResultsPage({ params }: PageProps
           {loadError}
         </p>
       ) : null}
+
+      <SimulationResultsGeneratorPanel
+        editionId={editionId}
+        isProduction={isProduction}
+      />
 
       {editionImpact ? (
         <div className="mb-6">

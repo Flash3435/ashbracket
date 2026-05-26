@@ -5,7 +5,9 @@ export type PilotVerificationEventType =
   | "standings_snapshot_saved"
   | "live_standings_unchanged_check"
   | "simulation_pool_created"
-  | "simulation_results_recomputed";
+  | "simulation_results_recomputed"
+  | "simulation_results_previewed"
+  | "simulation_results_applied";
 
 export async function logPilotVerificationEvent(
   supabase: SupabaseClient,

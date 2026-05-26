@@ -3,6 +3,7 @@ import { getDeploymentEnvironment } from "./deploymentEnvironment";
 export type AdminRiskAction =
   | "bootstrap_simulation_pool"
   | "simulation_edition_sync"
+  | "simulation_results_generate"
   | "live_tournament_sync"
   | "edition_results_edit"
   | "edition_recompute_pools"
@@ -21,8 +22,10 @@ export type AdminRiskAuditPayload = {
   isSimulation?: boolean;
   poolId?: string | null;
   poolName?: string | null;
+  affectedMatchCount?: number;
   affectedPoolCount?: number;
   affectedParticipantCount?: number;
+  previewOnly?: boolean;
   simulationEmailOverrideEnabled?: boolean;
   outboundEmailBlocked?: boolean;
   detail?: string;
@@ -51,12 +54,16 @@ export function logAdminRiskAction(payload: AdminRiskAuditPayload): void {
     payload.editionCode ? `editionCode=${payload.editionCode}` : null,
     payload.poolId ? `poolId=${payload.poolId}` : null,
     payload.poolName ? `poolName=${JSON.stringify(payload.poolName)}` : null,
+    payload.affectedMatchCount != null
+      ? `matches=${payload.affectedMatchCount}`
+      : null,
     payload.affectedPoolCount != null
       ? `pools=${payload.affectedPoolCount}`
       : null,
     payload.affectedParticipantCount != null
       ? `participants=${payload.affectedParticipantCount}`
       : null,
+    payload.previewOnly != null ? `previewOnly=${payload.previewOnly}` : null,
     payload.simulationEmailOverrideEnabled != null
       ? `simEmailOverride=${payload.simulationEmailOverrideEnabled}`
       : null,
