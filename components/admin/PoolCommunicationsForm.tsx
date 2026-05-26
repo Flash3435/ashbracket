@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState, useTransition } from "react";
+import { useEffect, useMemo, useState, useTransition } from "react";
 import {
   sendPoolCommunicationsAction,
   sendPoolCommunicationsTestAction,
@@ -21,6 +21,7 @@ import {
 import { SimulationPoolEmailStatusBanner } from "./SimulationPoolEmailStatusBanner";
 
 type PoolCommunicationsFormProps = {
+  initialPreset?: RecipientPreset;
   poolId: string;
   poolName: string;
   lockAtIso: string | null;
@@ -42,8 +43,9 @@ const PRESET_OPTIONS: { value: RecipientPreset; label: string; hint: string }[] 
     },
     {
       value: "incomplete_picks",
-      label: "Bracket not finished",
-      hint: "Anyone missing a required pick (groups, knockout path, or bonuses).",
+      label: "Picks not complete",
+      hint:
+        "Anyone who still has not finished the required picks for this pool.",
     },
     {
       value: "selected",
@@ -87,6 +89,7 @@ function initialDrafts(): Record<MessageKind, { subject: string; body: string }>
 }
 
 export function PoolCommunicationsForm({
+  initialPreset = "all",
   poolId,
   poolName,
   lockAtIso,
@@ -99,7 +102,7 @@ export function PoolCommunicationsForm({
     sendsBlocked,
     requiresTypedPhrase,
   } = simulationEmailStatus;
-  const [preset, setPreset] = useState<RecipientPreset>("all");
+  const [preset, setPreset] = useState<RecipientPreset>(initialPreset);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [messageKind, setMessageKind] = useState<MessageKind>("payment_reminder");
   const [draftsByKind, setDraftsByKind] = useState(initialDrafts);
@@ -110,6 +113,10 @@ export function PoolCommunicationsForm({
   const [simulationEmailAck, setSimulationEmailAck] = useState(false);
   const [typedPhrase, setTypedPhrase] = useState("");
   const [pending, startTransition] = useTransition();
+
+  useEffect(() => {
+    setPreset(initialPreset);
+  }, [initialPreset]);
 
   const typedPhraseOk =
     !requiresTypedPhrase ||

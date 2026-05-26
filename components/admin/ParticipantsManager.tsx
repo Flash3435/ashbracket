@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState, useTransition } from "react";
 import {
@@ -13,33 +14,41 @@ import type { SimulationPoolEmailUiStatus } from "@/lib/admin/simulationPoolEmai
 import {
   SIMULATION_POOL_EMAIL_TYPED_PHRASE,
 } from "@/lib/admin/simulationPoolEmailPolicy";
-import type { Participant } from "../../types/participant";
+import type {
+  ParticipantPicksStatus,
+  ParticipantWithPicksStatus,
+} from "@/lib/admin/participantPickStatus";
 import { PoolShareInvitePanel } from "./PoolShareInvitePanel";
 import { SimulationPoolEmailStatusBanner } from "./SimulationPoolEmailStatusBanner";
 
 type ParticipantsManagerProps = {
   poolId: string;
-  initialParticipants: Participant[];
+  initialParticipants: ParticipantWithPicksStatus[];
   /** Pool open-join code and URL; from server via `poolShareJoinUrl` */
   joinCode: string | null;
   shareUrl: string | null;
   disabled?: boolean;
+  incompletePicksMessageHref: string;
+  lockSummary: string;
+  picksLocked: boolean;
+  picksStatusAvailable: boolean;
   simulationEmailStatus?: SimulationPoolEmailUiStatus;
 };
 
 type Panel = "none" | "invite" | "manual";
+type PicksFilter = "all" | "incomplete" | "complete" | "not_started" | "not_joined";
 
 function emptyForm() {
   return { displayName: "", email: "", paid: false as boolean };
 }
 
-function statusLabel(p: Participant): string {
+function statusLabel(p: ParticipantWithPicksStatus): string {
   if (p.inviteStatus === "joined") return "Joined";
-  if (p.inviteStatus === "invited") return "Invited";
-  return "Manual";
+  if (p.inviteStatus === "invited") return "Invite pending";
+  return "Manual only";
 }
 
-function statusClass(p: Participant): string {
+function statusClass(p: ParticipantWithPicksStatus): string {
   if (p.inviteStatus === "joined") {
     return "inline-flex rounded-full bg-emerald-950/50 px-2 py-0.5 text-xs font-medium text-emerald-300 ring-1 ring-emerald-800/60";
   }
@@ -47,6 +56,56 @@ function statusClass(p: Participant): string {
     return "inline-flex rounded-full bg-amber-950/40 px-2 py-0.5 text-xs font-medium text-amber-200 ring-1 ring-amber-800/50";
   }
   return "inline-flex rounded-full bg-ash-body px-2 py-0.5 text-xs font-medium text-ash-muted ring-1 ring-ash-border";
+}
+
+function picksStatusClass(status: ParticipantPicksStatus | null): string {
+  if (!status) {
+    return "inline-flex rounded-full bg-ash-body px-2 py-0.5 text-xs font-medium text-ash-muted ring-1 ring-ash-border";
+  }
+  if (status.kind === "complete") {
+    return "inline-flex rounded-full bg-emerald-950/50 px-2 py-0.5 text-xs font-medium text-emerald-300 ring-1 ring-emerald-800/60";
+  }
+  if (status.kind === "in_progress") {
+    return "inline-flex rounded-full bg-sky-950/40 px-2 py-0.5 text-xs font-medium text-sky-200 ring-1 ring-sky-800/50";
+  }
+  if (status.kind === "not_started") {
+    return "inline-flex rounded-full bg-orange-950/40 px-2 py-0.5 text-xs font-medium text-orange-200 ring-1 ring-orange-800/50";
+  }
+  if (status.kind === "invite_pending") {
+    return "inline-flex rounded-full bg-amber-950/40 px-2 py-0.5 text-xs font-medium text-amber-200 ring-1 ring-amber-800/50";
+  }
+  return "inline-flex rounded-full bg-ash-body px-2 py-0.5 text-xs font-medium text-ash-muted ring-1 ring-ash-border";
+}
+
+function picksStatusLabel(status: ParticipantPicksStatus | null): string {
+  return status?.label ?? "Unavailable";
+}
+
+function picksFilterMatches(
+  participant: ParticipantWithPicksStatus,
+  filter: PicksFilter,
+): boolean {
+  if (filter === "all") return true;
+  if (!participant.picksStatus) return false;
+  if (filter === "incomplete") return participant.picksStatus.isIncomplete;
+  if (filter === "complete") return participant.picksStatus.kind === "complete";
+  if (filter === "not_started") {
+    return participant.picksStatus.kind === "not_started";
+  }
+  return (
+    participant.picksStatus.kind === "invite_pending" ||
+    participant.picksStatus.kind === "not_joined"
+  );
+}
+
+function formatDateTime(value: string | null): string | null {
+  if (!value) return null;
+  const date = new Date(value);
+  if (!Number.isFinite(date.getTime())) return null;
+  return date.toLocaleString(undefined, {
+    dateStyle: "short",
+    timeStyle: "short",
+  });
 }
 
 type InviteFeedback = {
@@ -62,6 +121,10 @@ export function ParticipantsManager({
   joinCode,
   shareUrl,
   disabled = false,
+  incompletePicksMessageHref,
+  lockSummary,
+  picksLocked,
+  picksStatusAvailable,
   simulationEmailStatus,
 }: ParticipantsManagerProps) {
   const emailStatus = simulationEmailStatus;
@@ -69,9 +132,10 @@ export function ParticipantsManager({
   const requiresTypedPhrase = emailStatus?.requiresTypedPhrase ?? false;
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
-  const [participants, setParticipants] = useState<Participant[]>(
+  const [participants, setParticipants] = useState<ParticipantWithPicksStatus[]>(
     initialParticipants,
   );
+  const [statusFilter, setStatusFilter] = useState<PicksFilter>("all");
   const [panel, setPanel] = useState<Panel>("none");
   const [inviteForm, setInviteForm] = useState(emptyForm);
   const [manualForm, setManualForm] = useState(emptyForm);
@@ -97,6 +161,12 @@ export function ParticipantsManager({
     setParticipants(initialParticipants);
   }, [initialParticipants]);
 
+  useEffect(() => {
+    if (!picksStatusAvailable && statusFilter !== "all") {
+      setStatusFilter("all");
+    }
+  }, [picksStatusAvailable, statusFilter]);
+
   const sorted = useMemo(
     () =>
       [...participants].sort((a, b) =>
@@ -107,7 +177,38 @@ export function ParticipantsManager({
     [participants],
   );
 
-  function openEdit(p: Participant) {
+  const filterCounts = useMemo(() => {
+    let incomplete = 0;
+    let complete = 0;
+    let notStarted = 0;
+    let notJoined = 0;
+
+    for (const participant of sorted) {
+      const status = participant.picksStatus;
+      if (!status) continue;
+      if (status.isIncomplete) incomplete += 1;
+      if (status.kind === "complete") complete += 1;
+      if (status.kind === "not_started") notStarted += 1;
+      if (status.kind === "invite_pending" || status.kind === "not_joined") {
+        notJoined += 1;
+      }
+    }
+
+    return {
+      all: sorted.length,
+      incomplete,
+      complete,
+      notStarted,
+      notJoined,
+    };
+  }, [sorted]);
+
+  const visibleParticipants = useMemo(
+    () => sorted.filter((participant) => picksFilterMatches(participant, statusFilter)),
+    [sorted, statusFilter],
+  );
+
+  function openEdit(p: ParticipantWithPicksStatus) {
     setEditingId(p.id);
     setEditForm({
       displayName: p.displayName,
@@ -368,6 +469,109 @@ export function ParticipantsManager({
         </div>
       ) : null}
 
+      <section className="ash-surface space-y-4 p-4">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <h2 className="text-base font-bold text-ash-text">Pick completion</h2>
+            <p className="mt-1 text-sm text-ash-muted">
+              Uses the same completeness rules as the incomplete-picks email
+              audience.
+            </p>
+            <p className="mt-1 text-xs text-ash-muted">
+              Picks lock: <span className="text-ash-text">{lockSummary}</span>
+              {picksLocked ? " Statuses now reflect what was saved before lock." : ""}
+            </p>
+          </div>
+          {picksStatusAvailable ? (
+            <div className="flex flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={() => setStatusFilter("incomplete")}
+                className={
+                  statusFilter === "incomplete"
+                    ? "btn-primary"
+                    : "rounded-md border border-ash-border bg-ash-body/60 px-3 py-2 text-sm font-medium text-ash-text hover:bg-ash-body"
+                }
+              >
+                View incomplete picks
+              </button>
+              <Link
+                href={incompletePicksMessageHref}
+                className="rounded-md border border-ash-border bg-ash-body/60 px-3 py-2 text-sm font-medium text-ash-text hover:bg-ash-body"
+              >
+                Message incomplete participants
+              </Link>
+            </div>
+          ) : null}
+        </div>
+
+        {picksStatusAvailable ? (
+          <>
+            <div className="flex flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={() => setStatusFilter("all")}
+                className={
+                  statusFilter === "all"
+                    ? "btn-primary"
+                    : "rounded-md border border-ash-border bg-ash-body/50 px-3 py-1.5 text-sm font-medium text-ash-text hover:bg-ash-body"
+                }
+              >
+                All participants ({filterCounts.all})
+              </button>
+              <button
+                type="button"
+                onClick={() => setStatusFilter("incomplete")}
+                className={
+                  statusFilter === "incomplete"
+                    ? "btn-primary"
+                    : "rounded-md border border-ash-border bg-ash-body/50 px-3 py-1.5 text-sm font-medium text-ash-text hover:bg-ash-body"
+                }
+              >
+                Incomplete picks ({filterCounts.incomplete})
+              </button>
+              <button
+                type="button"
+                onClick={() => setStatusFilter("complete")}
+                className={
+                  statusFilter === "complete"
+                    ? "btn-primary"
+                    : "rounded-md border border-ash-border bg-ash-body/50 px-3 py-1.5 text-sm font-medium text-ash-text hover:bg-ash-body"
+                }
+              >
+                Complete ({filterCounts.complete})
+              </button>
+              <button
+                type="button"
+                onClick={() => setStatusFilter("not_started")}
+                className={
+                  statusFilter === "not_started"
+                    ? "btn-primary"
+                    : "rounded-md border border-ash-border bg-ash-body/50 px-3 py-1.5 text-sm font-medium text-ash-text hover:bg-ash-body"
+                }
+              >
+                Not started ({filterCounts.notStarted})
+              </button>
+              <button
+                type="button"
+                onClick={() => setStatusFilter("not_joined")}
+                className={
+                  statusFilter === "not_joined"
+                    ? "btn-primary"
+                    : "rounded-md border border-ash-border bg-ash-body/50 px-3 py-1.5 text-sm font-medium text-ash-text hover:bg-ash-body"
+                }
+              >
+                Not joined ({filterCounts.notJoined})
+              </button>
+            </div>
+            <p className="text-xs text-ash-muted">
+              Showing {visibleParticipants.length} of {sorted.length} participant
+              {sorted.length === 1 ? "" : "s"}.
+            </p>
+          </>
+        ) : null}
+      </section>
+
       <div className="space-y-4 rounded-md border border-ash-accent/20 bg-ash-accent/5 p-4">
         <div className="flex flex-wrap items-baseline justify-between gap-2">
           <h2 className="text-base font-bold text-ash-text">Add participants</h2>
@@ -591,23 +795,26 @@ export function ParticipantsManager({
             <tr>
               <th className="px-4 py-3">Name</th>
               <th className="px-4 py-3">Email</th>
-              <th className="px-4 py-3">Status</th>
+              <th className="px-4 py-3">Join status</th>
+              <th className="px-4 py-3">Picks status</th>
               <th className="px-4 py-3">Paid</th>
               <th className="px-4 py-3 text-right">Actions</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-ash-border">
-            {sorted.length === 0 ? (
+            {visibleParticipants.length === 0 ? (
               <tr>
                 <td
-                  colSpan={5}
+                  colSpan={6}
                   className="px-4 py-8 text-center text-ash-muted"
                 >
-                  No participants yet. Invite someone or add them manually.
+                  {sorted.length === 0
+                    ? "No participants yet. Invite someone or add them manually."
+                    : "No participants match this filter."}
                 </td>
               </tr>
             ) : (
-              sorted.map((p) => (
+              visibleParticipants.map((p) => (
                 <tr key={p.id} className="text-ash-muted">
                   <td className="px-4 py-3 font-medium text-ash-text">
                     {p.displayName}
@@ -617,11 +824,21 @@ export function ParticipantsManager({
                     <span className={statusClass(p)}>{statusLabel(p)}</span>
                     {p.inviteStatus === "invited" && p.inviteLastSentAt ? (
                       <span className="mt-1 block text-xs text-ash-muted">
-                        Last sent{" "}
-                        {new Date(p.inviteLastSentAt).toLocaleString(undefined, {
-                          dateStyle: "short",
-                          timeStyle: "short",
-                        })}
+                        Last sent {formatDateTime(p.inviteLastSentAt)}
+                      </span>
+                    ) : null}
+                  </td>
+                  <td className="px-4 py-3">
+                    <span className={picksStatusClass(p.picksStatus)}>
+                      {picksStatusLabel(p.picksStatus)}
+                    </span>
+                    {p.picksStatus?.lastSavedAt ? (
+                      <span className="mt-1 block text-xs text-ash-muted">
+                        Last saved {formatDateTime(p.picksStatus.lastSavedAt)}
+                      </span>
+                    ) : p.picksStatus?.kind === "not_started" ? (
+                      <span className="mt-1 block text-xs text-ash-muted">
+                        No picks saved yet
                       </span>
                     ) : null}
                   </td>
@@ -683,27 +900,37 @@ export function ParticipantsManager({
 
       {/* Cards — mobile */}
       <ul className="space-y-3 md:hidden">
-        {sorted.length === 0 ? (
+        {visibleParticipants.length === 0 ? (
           <li className="ash-surface px-4 py-8 text-center text-sm text-ash-muted">
-            No participants yet.
+            {sorted.length === 0
+              ? "No participants yet."
+              : "No participants match this filter."}
           </li>
         ) : (
-          sorted.map((p) => (
+          visibleParticipants.map((p) => (
             <li key={p.id} className="ash-surface p-4">
               <div className="flex items-start justify-between gap-2">
                 <div>
                   <p className="font-medium text-ash-text">{p.displayName}</p>
                   <p className="mt-0.5 text-sm text-ash-muted">{p.email}</p>
-                  <p className="mt-2">
+                  <div className="mt-2 flex flex-wrap gap-2">
                     <span className={statusClass(p)}>{statusLabel(p)}</span>
-                  </p>
+                    <span className={picksStatusClass(p.picksStatus)}>
+                      {picksStatusLabel(p.picksStatus)}
+                    </span>
+                  </div>
                   {p.inviteStatus === "invited" && p.inviteLastSentAt ? (
                     <p className="mt-1 text-xs text-ash-muted">
-                      Last sent{" "}
-                      {new Date(p.inviteLastSentAt).toLocaleString(undefined, {
-                        dateStyle: "short",
-                        timeStyle: "short",
-                      })}
+                      Last sent {formatDateTime(p.inviteLastSentAt)}
+                    </p>
+                  ) : null}
+                  {p.picksStatus?.lastSavedAt ? (
+                    <p className="mt-1 text-xs text-ash-muted">
+                      Last saved {formatDateTime(p.picksStatus.lastSavedAt)}
+                    </p>
+                  ) : p.picksStatus?.kind === "not_started" ? (
+                    <p className="mt-1 text-xs text-ash-muted">
+                      No picks saved yet
                     </p>
                   ) : null}
                   <p className="mt-2">

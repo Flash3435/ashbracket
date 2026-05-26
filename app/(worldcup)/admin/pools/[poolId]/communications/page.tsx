@@ -5,20 +5,42 @@ import { getSimulationPoolEmailUiStatus } from "@/lib/admin/simulationPoolEmailP
 import { requireManagedPool } from "@/lib/admin/requireManagedPool";
 import { loadParticipantIdsWithIncompletePicks } from "@/lib/communications/picksCompleteness";
 import { formatPoolLockSummary } from "@/lib/communications/messageTemplates";
-import type { PoolCommunicationParticipant } from "@/lib/communications/recipientResolve";
+import type {
+  PoolCommunicationParticipant,
+  RecipientPreset,
+} from "@/lib/communications/recipientResolve";
 
 export const dynamic = "force-dynamic";
 
+function parseRecipientPreset(
+  value: string | string[] | undefined,
+): RecipientPreset {
+  const first = Array.isArray(value) ? value[0] : value;
+  if (
+    first === "all" ||
+    first === "unpaid" ||
+    first === "incomplete_picks" ||
+    first === "selected"
+  ) {
+    return first;
+  }
+  return "all";
+}
+
 export default async function AdminPoolCommunicationsPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ poolId: string }>;
+  searchParams?: Promise<Record<string, string | string[] | undefined>>;
 }) {
   const { poolId } = await params;
+  const sp = searchParams ? await searchParams : undefined;
   const { pool, supabase } = await requireManagedPool(poolId);
   const simulationEmailStatus = getSimulationPoolEmailUiStatus(
     Boolean(pool.is_simulation),
   );
+  const initialPreset = parseRecipientPreset(sp?.preset);
 
   let participants: PoolCommunicationParticipant[] = [];
   let poolName = "Your pool";
@@ -114,6 +136,7 @@ export default async function AdminPoolCommunicationsPage({
 
       {loadError ? null : (
         <PoolCommunicationsForm
+          initialPreset={initialPreset}
           poolId={poolId}
           poolName={poolName}
           lockAtIso={lockAtIso}
