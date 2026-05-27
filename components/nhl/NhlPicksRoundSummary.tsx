@@ -1,4 +1,9 @@
-import type { Round1UserSummary, Round2UserSummary } from "@/lib/nhl/nhlPicksProgression";
+import type {
+  ConferenceFinalUserSummary,
+  Round1UserSummary,
+  Round2UserSummary,
+  StanleyCupFinalUserSummary,
+} from "@/lib/nhl/nhlPicksProgression";
 import Link from "next/link";
 
 export function NhlPicksRoundSummary({
@@ -15,20 +20,42 @@ export function NhlPicksRoundSummary({
   r2LegacyUnresolved,
   totalPoints,
   round2PointsFromStandings,
+  round2Complete,
+  cfSummary,
+  scfSummary,
+  cfPicksLoadError,
+  scfPicksLoadError,
+  conferenceFinalPointsFromStandings,
+  stanleyCupFinalPointsFromStandings,
+  cfLinkageBroken,
+  scfLinkageBroken,
+  cfLegacyUnresolved,
+  scfLegacyUnresolved,
 }: {
   isAuthenticated: boolean;
   round1Complete: boolean;
   round2Open: boolean;
+  round2Complete?: boolean;
   picksLocked: boolean;
   r1Summary: Round1UserSummary | null;
   r2Summary: Round2UserSummary | null;
+  cfSummary?: ConferenceFinalUserSummary | null;
+  scfSummary?: StanleyCupFinalUserSummary | null;
   r2PicksLoadError: string | null;
+  cfPicksLoadError?: string | null;
+  scfPicksLoadError?: string | null;
   r1LinkageBroken?: boolean;
   r2LinkageBroken?: boolean;
+  cfLinkageBroken?: boolean;
+  scfLinkageBroken?: boolean;
   r1LegacyUnresolved?: boolean;
   r2LegacyUnresolved?: boolean;
+  cfLegacyUnresolved?: boolean;
+  scfLegacyUnresolved?: boolean;
   totalPoints: number | null;
   round2PointsFromStandings: number | null;
+  conferenceFinalPointsFromStandings?: number | null;
+  stanleyCupFinalPointsFromStandings?: number | null;
 }) {
   if (!isAuthenticated) {
     return (
@@ -75,9 +102,45 @@ export function NhlPicksRoundSummary({
         <PickLinkageNotice roundLabel="Round 2" unresolved={Boolean(r2LegacyUnresolved)} />
       ) : null}
 
+      {round2Complete && cfSummary && cfSummary.totalSeries > 0 ? (
+        <ConferenceFinalSummaryBlock
+          summary={cfSummary}
+          linkageBroken={Boolean(cfLinkageBroken)}
+          conferenceFinalPointsFromStandings={conferenceFinalPointsFromStandings ?? null}
+        />
+      ) : null}
+
+      {round2Complete && scfSummary && scfSummary.totalSeries > 0 ? (
+        <StanleyCupFinalSummaryBlock
+          summary={scfSummary}
+          linkageBroken={Boolean(scfLinkageBroken)}
+          stanleyCupFinalPointsFromStandings={stanleyCupFinalPointsFromStandings ?? null}
+        />
+      ) : null}
+
+      {round2Complete && (cfLinkageBroken || cfLegacyUnresolved) ? (
+        <PickLinkageNotice roundLabel="Conference Finals" unresolved={Boolean(cfLegacyUnresolved)} />
+      ) : null}
+
+      {round2Complete && (scfLinkageBroken || scfLegacyUnresolved) ? (
+        <PickLinkageNotice roundLabel="Stanley Cup Final" unresolved={Boolean(scfLegacyUnresolved)} />
+      ) : null}
+
       {r2PicksLoadError ? (
         <p className="rounded-xl border border-amber-500/25 bg-amber-950/20 px-4 py-3 text-xs text-amber-200/90 sm:text-sm">
           Round 2 picks could not be loaded. Try refreshing the page after signing in.
+        </p>
+      ) : null}
+
+      {cfPicksLoadError ? (
+        <p className="rounded-xl border border-amber-500/25 bg-amber-950/20 px-4 py-3 text-xs text-amber-200/90 sm:text-sm">
+          Conference Finals picks could not be loaded. Try refreshing the page after signing in.
+        </p>
+      ) : null}
+
+      {scfPicksLoadError ? (
+        <p className="rounded-xl border border-amber-500/25 bg-amber-950/20 px-4 py-3 text-xs text-amber-200/90 sm:text-sm">
+          Stanley Cup Final pick could not be loaded. Try refreshing the page after signing in.
         </p>
       ) : null}
     </div>
@@ -246,6 +309,101 @@ function Round2SummaryBlock({
             <span className="font-medium text-slate-300">{totalPoints}</span>
           </p>
         ) : null}
+      </div>
+    </div>
+  );
+}
+
+function ConferenceFinalSummaryBlock({
+  summary,
+  linkageBroken,
+  conferenceFinalPointsFromStandings,
+}: {
+  summary: ConferenceFinalUserSummary;
+  linkageBroken: boolean;
+  conferenceFinalPointsFromStandings: number | null;
+}) {
+  const {
+    correctCount,
+    resolvedSeries,
+    totalSeries,
+    conferenceFinalPointsEarned,
+    pickedSeries,
+  } = summary;
+  const denom = resolvedSeries > 0 ? resolvedSeries : totalSeries;
+  const standingsCf =
+    conferenceFinalPointsFromStandings != null && conferenceFinalPointsFromStandings > 0
+      ? conferenceFinalPointsFromStandings
+      : conferenceFinalPointsEarned;
+
+  return (
+    <div className="rounded-2xl border border-amber-500/20 bg-slate-950/50 px-5 py-5 sm:px-6">
+      <h2 className="text-base font-semibold text-ash-text">Your Conference Finals results</h2>
+      <div className="mt-4 space-y-2 text-sm leading-relaxed text-slate-300">
+        {resolvedSeries > 0 ? (
+          <p>
+            <span className="font-semibold text-slate-100">
+              {correctCount} / {denom} correct
+            </span>{" "}
+            on decided Conference Finals series.
+          </p>
+        ) : pickedSeries > 0 ? (
+          <p>You have Conference Finals picks saved; series results are still pending.</p>
+        ) : linkageBroken ? (
+          <p className="text-amber-200/90">
+            Saved Conference Finals picks could not be matched to the current bracket.
+          </p>
+        ) : (
+          <p>No Conference Finals picks saved yet.</p>
+        )}
+        <p className="text-slate-400">
+          Conference Finals points on the leaderboard:{" "}
+          <span className="font-medium text-emerald-200/95">{standingsCf}</span> (4 points per
+          correct series).
+        </p>
+      </div>
+    </div>
+  );
+}
+
+function StanleyCupFinalSummaryBlock({
+  summary,
+  linkageBroken,
+  stanleyCupFinalPointsFromStandings,
+}: {
+  summary: StanleyCupFinalUserSummary;
+  linkageBroken: boolean;
+  stanleyCupFinalPointsFromStandings: number | null;
+}) {
+  const { correctCount, resolvedSeries, stanleyCupFinalPointsEarned, pickedSeries } = summary;
+  const standingsScf =
+    stanleyCupFinalPointsFromStandings != null && stanleyCupFinalPointsFromStandings > 0
+      ? stanleyCupFinalPointsFromStandings
+      : stanleyCupFinalPointsEarned;
+
+  return (
+    <div className="rounded-2xl border border-yellow-500/20 bg-slate-950/50 px-5 py-5 sm:px-6">
+      <h2 className="text-base font-semibold text-ash-text">Your Stanley Cup Final result</h2>
+      <div className="mt-4 space-y-2 text-sm leading-relaxed text-slate-300">
+        {resolvedSeries > 0 ? (
+          <p>
+            <span className="font-semibold text-slate-100">{correctCount} / 1 correct</span> on the
+            Stanley Cup Final.
+          </p>
+        ) : pickedSeries > 0 ? (
+          <p>Your Stanley Cup winner pick is saved; the series result is still pending.</p>
+        ) : linkageBroken ? (
+          <p className="text-amber-200/90">
+            Saved Stanley Cup Final pick could not be matched to the current bracket.
+          </p>
+        ) : (
+          <p>No Stanley Cup winner pick saved yet.</p>
+        )}
+        <p className="text-slate-400">
+          Stanley Cup Final points on the leaderboard:{" "}
+          <span className="font-medium text-emerald-200/95">{standingsScf}</span> (8 points when
+          correct).
+        </p>
       </div>
     </div>
   );

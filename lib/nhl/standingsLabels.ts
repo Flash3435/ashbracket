@@ -24,7 +24,7 @@ export function formatNhlStandingsLoadError(message: string): string {
   ) {
     return (
       "The database is missing an NHL standings or public entry function. Apply the NHL migrations " +
-      "(for example `20260520160000_nhl_public_entry_detail.sql` via `supabase db push` from the ashbracket " +
+      "(for example `20260520170000_nhl_public_entry_detail_fix_return_types.sql` via `supabase db push` from the ashbracket " +
       "repo), then refresh this page."
     );
   }

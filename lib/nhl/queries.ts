@@ -6,8 +6,10 @@ import {
 } from "./nhleBracketOverlay";
 import { syncWinnerDisplayFieldsFromSeeds } from "./nhlSeriesRowLabels";
 import {
+  fetchNhlCfPicksResolvedForEdition,
   fetchNhlR1PicksResolvedForEdition,
   fetchNhlR2PicksResolvedForEdition,
+  fetchNhlScfPicksResolvedForEdition,
   type NhlPickResolutionMeta,
 } from "./nhlPickResolution";
 import type { NhlEdition, NhlSeries, NhlSeriesRow, NhlStandingsRow, NhlTeam } from "./types";
@@ -270,6 +272,60 @@ export async function fetchNhlR2PicksForEdition(
     };
   }
   return fetchNhlR2PicksResolvedForEdition(supabase, editionId, seriesRows, teams);
+}
+
+/**
+ * Current user's Conference Finals picks mapped onto the active edition's current bracket series ids.
+ */
+export async function fetchNhlCfPicksForEdition(
+  supabase: SupabaseClient,
+  editionId: string,
+  options?: {
+    currentCfSeriesRows?: NhlSeriesRow[];
+    activeEditionTeams?: Pick<NhlTeam, "id" | "team_slug">[];
+  },
+): Promise<{
+  pickBySeriesId: Record<string, string>;
+  error: string | null;
+  resolution: NhlPickResolutionMeta | null;
+}> {
+  const seriesRows = options?.currentCfSeriesRows;
+  const teams = options?.activeEditionTeams;
+  if (!seriesRows || !teams) {
+    return {
+      pickBySeriesId: {},
+      error: "Conference Finals pick resolution requires current series rows and teams.",
+      resolution: null,
+    };
+  }
+  return fetchNhlCfPicksResolvedForEdition(supabase, editionId, seriesRows, teams);
+}
+
+/**
+ * Current user's Stanley Cup Final pick mapped onto the active edition's current bracket series id.
+ */
+export async function fetchNhlScfPicksForEdition(
+  supabase: SupabaseClient,
+  editionId: string,
+  options?: {
+    currentScfSeriesRows?: NhlSeriesRow[];
+    activeEditionTeams?: Pick<NhlTeam, "id" | "team_slug">[];
+  },
+): Promise<{
+  pickBySeriesId: Record<string, string>;
+  error: string | null;
+  resolution: NhlPickResolutionMeta | null;
+}> {
+  const seriesRows = options?.currentScfSeriesRows;
+  const teams = options?.activeEditionTeams;
+  if (!seriesRows || !teams) {
+    return {
+      pickBySeriesId: {},
+      error: "Stanley Cup Final pick resolution requires current series rows and teams.",
+      resolution: null,
+    };
+  }
+  return fetchNhlScfPicksResolvedForEdition(supabase, editionId, seriesRows, teams);
 }
 
 export async function countNhlMembershipsForEdition(

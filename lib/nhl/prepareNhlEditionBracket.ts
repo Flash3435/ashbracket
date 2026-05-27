@@ -1,6 +1,6 @@
 import { createServiceRoleClient } from "@/lib/supabase/service";
 import { maybeSyncNhlBracketToDatabase } from "./syncNhlSeriesFromNhleBracket";
-import { syncNhlR2SlotsFromR1 } from "./syncNhlEditionBracketSlots";
+import { syncNhlLateRoundSlots } from "./syncNhlEditionBracketSlots";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 /**
@@ -15,10 +15,10 @@ export async function prepareNhlEditionBracketForScoring(
 
   try {
     const service = createServiceRoleClient();
-    await syncNhlR2SlotsFromR1(service, editionId);
+    await syncNhlLateRoundSlots(service, editionId);
   } catch {
     if (userClient) {
-      await syncNhlR2SlotsFromR1(userClient, editionId);
+      await syncNhlLateRoundSlots(userClient, editionId);
     }
   }
 }

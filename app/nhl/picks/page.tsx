@@ -1,4 +1,4 @@
-import { NhlBracketPreviewLive } from "@/components/nhl/NhlBracketPreviewLive";
+import { NhlFinalRoundsPicks } from "@/components/nhl/NhlFinalRoundsPicks";
 import { NhlPicksRound1Grid } from "@/components/nhl/NhlPicksRound1Grid";
 import { NhlPicksRound2Grid } from "@/components/nhl/NhlPicksRound2Grid";
 import { NhlPicksRoundSummary } from "@/components/nhl/NhlPicksRoundSummary";
@@ -7,10 +7,16 @@ import { buildNhlAdminBracketViewModel } from "@/lib/nhl/bracketViewModel";
 import { getOfficial2026EditionTeamStatus } from "@/lib/nhl/official2026Edition";
 import { isNhlEditionLocked } from "@/lib/nhl/nhlEditionLock";
 import {
+  buildConferenceFinalUserSummary,
   buildRound1UserSummary,
   buildRound2UserSummary,
+  buildStanleyCupFinalUserSummary,
+  conferenceFinalsMatchupsReady,
   isRound1FullyResolvedForProgression,
+  isRound2FullyResolvedForProgression,
+  mergeFinalRoundsDisplayFromPriorWinners,
   mergeRound2DisplayFromRound1,
+  stanleyCupFinalMatchupReady,
 } from "@/lib/nhl/nhlPicksProgression";
 import { prepareNhlEditionBracketForScoring } from "@/lib/nhl/prepareNhlEditionBracket";
 import {
@@ -22,8 +28,10 @@ import {
   countNhlTeamsForEdition,
   fetchActiveNhlEdition,
   fetchNhlEditionStandings,
+  fetchNhlCfPicksForEdition,
   fetchNhlR1PicksForEdition,
   fetchNhlR2PicksForEdition,
+  fetchNhlScfPicksForEdition,
   fetchNhlSeriesRowsWithPublicLiveOverlay,
   fetchNhlTeamSlugsForEdition,
   fetchNhlTeamsForEdition,
@@ -39,7 +47,7 @@ import Link from "next/link";
 export const metadata: Metadata = {
   title: "Playoff picks",
   description:
-    "Stanley Cup Playoff series-winner picks for the active AshBracket NHL edition — Round 1 results, Round 2 progression, and later rounds preview.",
+    "Stanley Cup Playoff series-winner picks for the active AshBracket NHL edition — Round 1–2 and unified Final Rounds (Conference Finals + Stanley Cup).",
 };
 
 export const dynamic = "force-dynamic";
@@ -80,8 +88,16 @@ export default async function NhlPicksPage() {
   let r2PicksLoadError: string | null = null;
   let r1PickResolution: NhlPickResolutionMeta | null = null;
   let r2PickResolution: NhlPickResolutionMeta | null = null;
+  let cfPickBySeriesId: Record<string, string> = {};
+  let cfPicksLoadError: string | null = null;
+  let scfPickBySeriesId: Record<string, string> = {};
+  let scfPicksLoadError: string | null = null;
+  let cfPickResolution: NhlPickResolutionMeta | null = null;
+  let scfPickResolution: NhlPickResolutionMeta | null = null;
   let userTotalPoints: number | null = null;
   let userRound2Points: number | null = null;
+  let userConferenceFinalPoints: number | null = null;
+  let userStanleyCupFinalPoints: number | null = null;
 
   if (edition && !editionError) {
     await prepareNhlEditionBracketForScoring(edition.id, supabase);
@@ -114,6 +130,8 @@ export default async function NhlPicksPage() {
 
     if (!seriesError) {
       await supabase.rpc("sync_nhl_r2_slots_from_r1", { p_edition_id: edition.id });
+      await supabase.rpc("sync_nhl_cf_slots_from_r2", { p_edition_id: edition.id });
+      await supabase.rpc("sync_nhl_scf_slots_from_cf", { p_edition_id: edition.id });
       seriesRes = await fetchNhlSeriesRowsWithPublicLiveOverlay(supabase, edition.id);
       if (!seriesRes.error) {
         seriesRows = seriesRes.rows;
@@ -121,18 +139,33 @@ export default async function NhlPicksPage() {
     }
 
     const teams = teamsRes.teams ?? [];
-    displayRows = teamsLoadError ? seriesRows : mergeRound2DisplayFromRound1(seriesRows, teams);
+    displayRows = teamsLoadError
+      ? seriesRows
+      : mergeFinalRoundsDisplayFromPriorWinners(
+          mergeRound2DisplayFromRound1(seriesRows, teams),
+          teams,
+        );
 
     if (user) {
       const r1SeriesForPicks = displayRows.filter((r) => r.round_code === "R1");
       const r2SeriesForPicks = displayRows.filter((r) => r.round_code === "R2");
-      const [pickRes, pickR2, standingsRes] = await Promise.all([
+      const cfSeriesForPicks = displayRows.filter((r) => r.round_code === "CF");
+      const scfSeriesForPicks = displayRows.filter((r) => r.round_code === "SCF");
+      const [pickRes, pickR2, pickCf, pickScf, standingsRes] = await Promise.all([
         fetchNhlR1PicksForEdition(supabase, edition.id, {
           currentR1SeriesRows: r1SeriesForPicks,
           activeEditionTeams: teams,
         }),
         fetchNhlR2PicksForEdition(supabase, edition.id, {
           currentR2SeriesRows: r2SeriesForPicks,
+          activeEditionTeams: teams,
+        }),
+        fetchNhlCfPicksForEdition(supabase, edition.id, {
+          currentCfSeriesRows: cfSeriesForPicks,
+          activeEditionTeams: teams,
+        }),
+        fetchNhlScfPicksForEdition(supabase, edition.id, {
+          currentScfSeriesRows: scfSeriesForPicks,
           activeEditionTeams: teams,
         }),
         fetchNhlEditionStandings(supabase, edition.id),
@@ -143,11 +176,19 @@ export default async function NhlPicksPage() {
       round2PickBySeriesId = pickR2.pickBySeriesId;
       r2PicksLoadError = pickR2.error;
       r2PickResolution = pickR2.resolution;
+      cfPickBySeriesId = pickCf.pickBySeriesId;
+      cfPicksLoadError = pickCf.error;
+      cfPickResolution = pickCf.resolution;
+      scfPickBySeriesId = pickScf.pickBySeriesId;
+      scfPicksLoadError = pickScf.error;
+      scfPickResolution = pickScf.resolution;
       if (!standingsRes.error) {
         const mine = standingsRes.rows.find((r) => r.user_id === user.id);
         if (mine) {
           userTotalPoints = mine.total_points;
           userRound2Points = mine.round2_points;
+          userConferenceFinalPoints = mine.conference_final_points;
+          userStanleyCupFinalPoints = mine.stanley_cup_final_points;
         }
       }
     }
@@ -171,6 +212,9 @@ export default async function NhlPicksPage() {
   const westR1 = model?.west.r1 ?? [];
   const eastR2 = model?.east.r2 ?? [];
   const westR2 = model?.west.r2 ?? [];
+  const eastCf = model?.east.cf ?? null;
+  const westCf = model?.west.cf ?? null;
+  const scfSeries = model?.scf ?? null;
   const showRound1Grid = r1All.length > 0 && !seriesError;
   const round1Fallback =
     eastR1.length === 0 && westR1.length === 0 && r1All.length > 0 ? r1All : undefined;
@@ -193,13 +237,37 @@ export default async function NhlPicksPage() {
   const r2All = displayRows.filter((r) => r.round_code === "R2");
   const r2UserSummary =
     user && r2All.length > 0 ? buildRound2UserSummary(r2All, round2PickBySeriesId) : null;
+  const round2ProgressComplete = isRound2FullyResolvedForProgression(displayRows);
   const round2Open = Boolean(
     edition && user && round1ProgressComplete && !picksLocked && !r2PicksLoadError,
   );
+  const conferenceFinalsReady = conferenceFinalsMatchupsReady(displayRows);
+  const stanleyCupFinalReady = stanleyCupFinalMatchupReady(displayRows);
+  const conferenceFinalsOpen = Boolean(
+    edition && user && round2ProgressComplete && !picksLocked && !cfPicksLoadError,
+  );
+  const stanleyCupFinalOpen = Boolean(
+    edition &&
+      user &&
+      round2ProgressComplete &&
+      stanleyCupFinalReady &&
+      !picksLocked &&
+      !scfPicksLoadError,
+  );
+  const cfAll = displayRows.filter((r) => r.round_code === "CF");
+  const cfUserSummary =
+    user && cfAll.length > 0
+      ? buildConferenceFinalUserSummary(cfAll, cfPickBySeriesId)
+      : null;
+  const scfUserSummary = user ? buildStanleyCupFinalUserSummary(scfSeries, scfPickBySeriesId) : null;
   const r1LinkageBroken = picksLinkageLooksBroken(r1PickResolution, round1PickBySeriesId);
   const r2LinkageBroken = picksLinkageLooksBroken(r2PickResolution, round2PickBySeriesId);
+  const cfLinkageBroken = picksLinkageLooksBroken(cfPickResolution, cfPickBySeriesId);
+  const scfLinkageBroken = picksLinkageLooksBroken(scfPickResolution, scfPickBySeriesId);
   const r1LegacyUnresolved = hasUnresolvedLegacyPicks(r1PickResolution);
   const r2LegacyUnresolved = hasUnresolvedLegacyPicks(r2PickResolution);
+  const cfLegacyUnresolved = hasUnresolvedLegacyPicks(cfPickResolution);
+  const scfLegacyUnresolved = hasUnresolvedLegacyPicks(scfPickResolution);
 
   return (
     <PageContainer compactBottom>
@@ -252,16 +320,27 @@ export default async function NhlPicksPage() {
             isAuthenticated={Boolean(user)}
             round1Complete={round1ProgressComplete}
             round2Open={round2Open}
+            round2Complete={round2ProgressComplete}
             picksLocked={picksLocked}
             r1Summary={r1UserSummary}
             r2Summary={r2UserSummary}
+            cfSummary={cfUserSummary}
+            scfSummary={scfUserSummary}
             r2PicksLoadError={r2PicksLoadError}
+            cfPicksLoadError={cfPicksLoadError}
+            scfPicksLoadError={scfPicksLoadError}
             r1LinkageBroken={r1LinkageBroken}
             r2LinkageBroken={r2LinkageBroken}
+            cfLinkageBroken={cfLinkageBroken}
+            scfLinkageBroken={scfLinkageBroken}
             r1LegacyUnresolved={r1LegacyUnresolved}
             r2LegacyUnresolved={r2LegacyUnresolved}
+            cfLegacyUnresolved={cfLegacyUnresolved}
+            scfLegacyUnresolved={scfLegacyUnresolved}
             totalPoints={userTotalPoints}
             round2PointsFromStandings={userRound2Points}
+            conferenceFinalPointsFromStandings={userConferenceFinalPoints}
+            stanleyCupFinalPointsFromStandings={userStanleyCupFinalPoints}
           />
         </section>
       ) : null}
@@ -357,12 +436,30 @@ export default async function NhlPicksPage() {
               : "waiting until every Round 1 series has a decided winner."}
           </li>
           <li>
-            <span className="text-slate-300">Conference Finals</span> — locked for now. They will
-            unlock once Round 2 is fully complete and the bracket advances the same way.
+            <span className="text-slate-300">Conference Finals</span> —{" "}
+            {round2ProgressComplete
+              ? conferenceFinalsOpen
+                ? conferenceFinalsReady
+                  ? "picks are open in Final Rounds below (East and West champions, 4 pts each)."
+                  : "waiting for both Conference Final matchups from Round 2 winners."
+                : picksLocked
+                  ? "locked with the edition."
+                  : cfPicksLoadError
+                    ? "ready, but saved picks could not be loaded."
+                    : "sign in to save Conference Finals picks."
+              : "waiting until every Round 2 series has a decided winner."}
           </li>
           <li>
-            <span className="text-slate-300">Stanley Cup Final</span> — locked until the conference
-            champions are known.
+            <span className="text-slate-300">Stanley Cup Final</span> —{" "}
+            {stanleyCupFinalOpen
+              ? "Cup winner pick is open in Final Rounds below (8 pts when correct)."
+              : round2ProgressComplete
+                ? stanleyCupFinalReady
+                  ? picksLocked
+                    ? "locked with the edition."
+                    : "sign in to save your Stanley Cup winner pick."
+                  : "visible below; unlocks once both conference finalists are known."
+                : "opens after Round 2 completes and conference champions are set."}
           </li>
         </ul>
       </section>
@@ -452,25 +549,51 @@ export default async function NhlPicksPage() {
         ) : null}
       </section>
 
-      <section className="ash-surface space-y-4 px-4 py-5 sm:px-5">
-        <h2 className="text-lg font-semibold text-ash-text">Later rounds · preview</h2>
-        <p className="text-sm leading-relaxed text-slate-400">
-          Conference Finals and the Stanley Cup Final stay locked on this page until those rounds
-          ship here. The compact bracket still previews how winners propagate through the tree.
-        </p>
-        {model ? (
-          <div className="mt-2">
-            <p className="text-xs font-medium uppercase tracking-wide text-slate-500">
-              Bracket path (Rounds 1–2 summarized above)
-            </p>
-            <div className="mt-3">
-              <NhlBracketPreviewLive initialRows={displayRows} includeRound1={false} />
-            </div>
-          </div>
-        ) : edition && !editionError && !seriesError && displayRows.length === 0 ? (
-          <p className="text-sm text-slate-500">
-            A bracket path preview will appear here once series rows exist for the active edition.
+      <section className="space-y-4">
+        <div className="px-1 sm:px-0">
+          <h2 className="text-lg font-semibold text-ash-text">Final Rounds</h2>
+          <p className="mt-1 max-w-3xl text-sm leading-relaxed text-slate-400">
+            Your last three picks: East and West conference champions, then the Stanley Cup winner.
+            Scoring stays separate on the leaderboard (Conference Finals = 4 pts, Cup Final = 8 pts).
           </p>
+        </div>
+
+        {cfPicksLoadError && user ? (
+          <p className="text-sm text-amber-200/90">
+            <span className="font-medium text-amber-100/95">Conference Finals picks unavailable. </span>
+            {formatNhlPicksLoadError(cfPicksLoadError)}
+          </p>
+        ) : null}
+
+        {scfPicksLoadError && user ? (
+          <p className="text-sm text-amber-200/90">
+            <span className="font-medium text-amber-100/95">Stanley Cup Final pick unavailable. </span>
+            {formatNhlPicksLoadError(scfPicksLoadError)}
+          </p>
+        ) : null}
+
+        {edition && !seriesError && (eastCf || westCf || scfSeries) ? (
+          <div className="rounded-2xl border border-amber-500/20 bg-slate-950/25 px-4 py-6 sm:px-6">
+            <NhlFinalRoundsPicks
+              editionId={edition.id}
+              eastCf={eastCf}
+              westCf={westCf}
+              scf={scfSeries}
+              cfPickBySeriesId={cfPickBySeriesId}
+              scfPickBySeriesId={scfPickBySeriesId}
+              picksLocked={picksLocked}
+              isAuthenticated={Boolean(user)}
+              round2Complete={round2ProgressComplete}
+              conferenceFinalsReady={conferenceFinalsReady}
+              stanleyCupFinalReady={stanleyCupFinalReady}
+              conferenceFinalsOpen={conferenceFinalsOpen}
+              stanleyCupFinalOpen={stanleyCupFinalOpen}
+            />
+          </div>
+        ) : edition && !editionError && !seriesError ? (
+          <div className="rounded-xl border border-dashed border-amber-500/25 bg-slate-950/40 px-4 py-8 text-center text-sm leading-relaxed text-slate-500">
+            Conference Finals and Stanley Cup Final series rows are not set up for this edition yet.
+          </div>
         ) : null}
       </section>
 

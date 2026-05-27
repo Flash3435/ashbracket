@@ -34,6 +34,11 @@ import {
   reconcilePicksSaveUiState,
   type PicksSaveUiState,
 } from "../../lib/predictions/picksSaveState";
+import {
+  readPicksMainViewPreference,
+  writePicksMainViewPreference,
+  type PicksMainView,
+} from "../../lib/picks/picksMainViewPreference";
 import { KnockoutBracketPreview } from "./KnockoutBracketPreview";
 
 export type SaveKnockoutPicksFn = (input: {
@@ -83,6 +88,13 @@ export type KnockoutPicksWizardProps = {
    * of 32 is published.
    */
   preBracketSelectionsLocked?: boolean;
+  /**
+   * Initial display when no saved preference (`rememberPicksMainView`). Account picks
+   * use `"bracket"`; admin pick wizard keeps `"list"`.
+   */
+  defaultPicksMainView?: PicksMainView;
+  /** When true, persist list/bracket choice in localStorage (account picks only). */
+  rememberPicksMainView?: boolean;
 };
 
 function isPreBracketPickSlot(slot: KnockoutPickSlotDraft): boolean {
@@ -523,6 +535,8 @@ export function KnockoutPicksWizard({
   successDetail = null,
   saveHelpText = "Saving writes every slot (including empty ones you cleared) and updates standings.",
   postSaveRedirectTo,
+  defaultPicksMainView = "bracket",
+  rememberPicksMainView = false,
 }: KnockoutPicksWizardProps) {
   const router = useRouter();
   const [isSaving, startSaveTransition] = useTransition();
@@ -563,10 +577,22 @@ export function KnockoutPicksWizard({
   const [quickHint, setQuickHint] = useState<string | null>(null);
   const [openRowKey, setOpenRowKey] = useState<string | null>(null);
   const [search, setSearch] = useState("");
-  const [picksMainView, setPicksMainView] = useState<"list" | "bracket">(
-    "list",
+  const [picksMainView, setPicksMainView] = useState<PicksMainView>(
+    defaultPicksMainView,
   );
   const lastParticipantIdRef = useRef(participantId);
+
+  useEffect(() => {
+    if (!rememberPicksMainView) return;
+    setPicksMainView(readPicksMainViewPreference(defaultPicksMainView));
+  }, [rememberPicksMainView, defaultPicksMainView]);
+
+  function selectPicksMainView(view: PicksMainView) {
+    setPicksMainView(view);
+    if (rememberPicksMainView) writePicksMainViewPreference(view);
+    setOpenRowKey(null);
+    setSearch("");
+  }
   const draftSignature = useMemo(() => picksDraftSignature(slots), [slots]);
 
   useEffect(() => {
@@ -814,7 +840,7 @@ export function KnockoutPicksWizard({
           ? " — this view is read-only."
           : preBracketActive
             ? ". Group stage, third-place advancers, and bonus picks are locked. You can still update knockout bracket picks after the official Round of 32 is published."
-            : ". Follow the steps in order or jump ahead — then save. Partial saves are OK."}
+            : ". Start in bracket view to see what’s filled and what’s missing, or switch to list view to edit step by step — then save."}
       </p>
 
       {lockedMessage ? (
@@ -881,29 +907,8 @@ export function KnockoutPicksWizard({
         <button
           type="button"
           role="tab"
-          aria-selected={picksMainView === "list"}
-          onClick={() => {
-            setPicksMainView("list");
-            setOpenRowKey(null);
-            setSearch("");
-          }}
-          className={`rounded-full px-3 py-1.5 text-xs font-medium transition ${
-            picksMainView === "list"
-              ? "bg-ash-accent text-white"
-              : "bg-ash-surface text-ash-muted ring-1 ring-ash-border hover:bg-ash-border/30"
-          }`}
-        >
-          List view
-        </button>
-        <button
-          type="button"
-          role="tab"
           aria-selected={picksMainView === "bracket"}
-          onClick={() => {
-            setPicksMainView("bracket");
-            setOpenRowKey(null);
-            setSearch("");
-          }}
+          onClick={() => selectPicksMainView("bracket")}
           className={`rounded-full px-3 py-1.5 text-xs font-medium transition ${
             picksMainView === "bracket"
               ? "bg-ash-accent text-white"
@@ -912,7 +917,25 @@ export function KnockoutPicksWizard({
         >
           Bracket view
         </button>
+        <button
+          type="button"
+          role="tab"
+          aria-selected={picksMainView === "list"}
+          onClick={() => selectPicksMainView("list")}
+          className={`rounded-full px-3 py-1.5 text-xs font-medium transition ${
+            picksMainView === "list"
+              ? "bg-ash-accent text-white"
+              : "bg-ash-surface text-ash-muted ring-1 ring-ash-border hover:bg-ash-border/30"
+          }`}
+        >
+          List view
+        </button>
       </div>
+      <p className="-mt-2 text-xs leading-relaxed text-ash-muted">
+        Bracket view is the default — it shows your full path and empty slots at a
+        glance. List view is best when you want to work through groups, third-place
+        advancers, and bonus picks one step at a time.
+      </p>
 
       {picksMainView === "bracket" ? (
         <section className="ash-surface p-4">

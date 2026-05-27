@@ -8,6 +8,8 @@ export type PoolPrizeTier = {
   remainder?: boolean;
 };
 
+import type { ResolvedPoolScoringConfig } from "../lib/scoring/poolScoringConfig";
+
 /** One row from `scoring_rules_public` after mapping (/rules; gated by `show_public_rules`). */
 export type PublicScoringRuleRow = {
   predictionKind: string;
@@ -17,6 +19,7 @@ export type PublicScoringRuleRow = {
 };
 
 export type SamplePoolScoringRulesPayload = {
+  poolId: string;
   poolName: string;
   lockAt: string | null;
   entryFeeCents: number | null;
@@ -29,4 +32,6 @@ export type SamplePoolScoringRulesPayload = {
   /** Prize-split tie copy for tied totals; null uses `PUBLIC_RULES_DEFAULT_TIE_BREAK` on /rules. */
   tieBreakNote: string | null;
   rules: PublicScoringRuleRow[];
+  /** Resolved config shared with `computePoolScores` inputs for this pool. */
+  scoringConfig: ResolvedPoolScoringConfig;
 };

@@ -73,7 +73,7 @@ function normalizePickRowJoined(row: unknown): PickRowJoined | null {
 
 function buildSlotToSeriesIdMap(
   seriesRows: NhlSeriesRow[],
-  roundCode: "R1" | "R2",
+  roundCode: "R1" | "R2" | "CF" | "SCF",
 ): Map<string, string> {
   const map = new Map<string, string>();
   for (const row of seriesRows) {
@@ -114,7 +114,7 @@ function resolvePickedTeamIdForActiveEdition(
  */
 export function resolveNhlPicksOntoCurrentBracket(
   activeEditionId: string,
-  roundCode: "R1" | "R2",
+  roundCode: "R1" | "R2" | "CF" | "SCF",
   currentSeriesRows: NhlSeriesRow[],
   activeEditionTeams: { id: string; team_slug: string }[],
   joinedPickRows: PickRowJoined[],
@@ -195,6 +195,12 @@ const R1_PICK_SELECT =
 const R2_PICK_SELECT =
   "edition_id, series_id, picked_team_id, series:nhl_series!inner(round_code, side_or_conference, slot_index), team:nhl_teams!picked_team_id(team_slug)";
 
+const CF_PICK_SELECT =
+  "edition_id, series_id, picked_team_id, series:nhl_series!inner(round_code, side_or_conference, slot_index), team:nhl_teams!picked_team_id(team_slug)";
+
+const SCF_PICK_SELECT =
+  "edition_id, series_id, picked_team_id, series:nhl_series!inner(round_code, side_or_conference, slot_index), team:nhl_teams!picked_team_id(team_slug)";
+
 export async function fetchNhlR1PicksResolvedForEdition(
   supabase: SupabaseClient,
   activeEditionId: string,
@@ -250,6 +256,68 @@ export async function fetchNhlR2PicksResolvedForEdition(
     activeEditionId,
     "R2",
     currentR2SeriesRows,
+    activeEditionTeams,
+    joinedRows,
+  );
+
+  return { pickBySeriesId, error: null, resolution: meta };
+}
+
+export async function fetchNhlCfPicksResolvedForEdition(
+  supabase: SupabaseClient,
+  activeEditionId: string,
+  currentCfSeriesRows: NhlSeriesRow[],
+  activeEditionTeams: { id: string; team_slug: string }[],
+): Promise<{
+  pickBySeriesId: Record<string, string>;
+  error: string | null;
+  resolution: NhlPickResolutionMeta | null;
+}> {
+  const { data, error } = await supabase.from("nhl_cf_series_picks").select(CF_PICK_SELECT);
+
+  if (error) {
+    return { pickBySeriesId: {}, error: error.message, resolution: null };
+  }
+
+  const joinedRows = (data ?? [])
+    .map(normalizePickRowJoined)
+    .filter((r): r is PickRowJoined => r !== null);
+
+  const { pickBySeriesId, meta } = resolveNhlPicksOntoCurrentBracket(
+    activeEditionId,
+    "CF",
+    currentCfSeriesRows,
+    activeEditionTeams,
+    joinedRows,
+  );
+
+  return { pickBySeriesId, error: null, resolution: meta };
+}
+
+export async function fetchNhlScfPicksResolvedForEdition(
+  supabase: SupabaseClient,
+  activeEditionId: string,
+  currentScfSeriesRows: NhlSeriesRow[],
+  activeEditionTeams: { id: string; team_slug: string }[],
+): Promise<{
+  pickBySeriesId: Record<string, string>;
+  error: string | null;
+  resolution: NhlPickResolutionMeta | null;
+}> {
+  const { data, error } = await supabase.from("nhl_scf_series_picks").select(SCF_PICK_SELECT);
+
+  if (error) {
+    return { pickBySeriesId: {}, error: error.message, resolution: null };
+  }
+
+  const joinedRows = (data ?? [])
+    .map(normalizePickRowJoined)
+    .filter((r): r is PickRowJoined => r !== null);
+
+  const { pickBySeriesId, meta } = resolveNhlPicksOntoCurrentBracket(
+    activeEditionId,
+    "SCF",
+    currentScfSeriesRows,
     activeEditionTeams,
     joinedRows,
   );

@@ -1,5 +1,4 @@
 import { notFound } from "next/navigation";
-import { formatPoolPoints } from "@/lib/format/poolPoints";
 import { PublicParticipantProfile } from "@/components/participant/PublicParticipantProfile";
 import { PageContainer } from "@/components/ui/PageContainer";
 import { PageTitle } from "@/components/ui/PageTitle";
@@ -37,10 +36,6 @@ export default async function PublicParticipantPage({ params }: PageProps) {
 
   return (
     <PageContainer>
-      <PageTitle
-        title={data.displayName}
-        description={`${data.poolName} · ${formatPoolPoints(data.totalPoints)} pts · Rank ${data.rank}`}
-      />
       <PublicParticipantProfile detail={data} />
     </PageContainer>
   );

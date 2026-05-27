@@ -364,6 +364,7 @@ export default async function AdminPoolPicksPage({ params, searchParams }: PageP
                     teams={teams}
                     groupTeamCountryCodesByLetter={groupTeamCountryCodesByLetter}
                     disabled={teams.length === 0}
+                    defaultPicksMainView="list"
                     savePicks={saveParticipantKnockoutPicksForPoolAction.bind(
                       null,
                       poolId,

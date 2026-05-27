@@ -324,22 +324,24 @@ BEGIN
   SELECT
     sfs.id AS series_id,
     sfs.round_code::text,
-    sfs.round_order,
+    sfs.round_order::integer,
     sfs.side_or_conference::text,
-    sfs.slot_index,
-    th.abbreviation AS higher_team_abbr,
-    th.team_name AS higher_team_name,
-    tl.abbreviation AS lower_team_abbr,
-    tl.team_name AS lower_team_name,
-    tp.abbreviation AS picked_team_abbr,
-    tp.team_name AS picked_team_name,
-    tw.abbreviation AS scoring_winner_abbr,
-    tw.team_name AS scoring_winner_name,
-    CASE
-      WHEN sfs.scoring_winner_team_id IS NULL THEN 'pending'
-      WHEN up.picked_team_id = sfs.scoring_winner_team_id THEN 'correct'
-      ELSE 'incorrect'
-    END AS outcome
+    sfs.slot_index::integer,
+    th.abbreviation::text AS higher_team_abbr,
+    th.team_name::text AS higher_team_name,
+    tl.abbreviation::text AS lower_team_abbr,
+    tl.team_name::text AS lower_team_name,
+    tp.abbreviation::text AS picked_team_abbr,
+    tp.team_name::text AS picked_team_name,
+    tw.abbreviation::text AS scoring_winner_abbr,
+    tw.team_name::text AS scoring_winner_name,
+    (
+      CASE
+        WHEN sfs.scoring_winner_team_id IS NULL THEN 'pending'
+        WHEN up.picked_team_id = sfs.scoring_winner_team_id THEN 'correct'
+        ELSE 'incorrect'
+      END
+    )::text AS outcome
   FROM user_picks up
   INNER JOIN series_for_scoring sfs ON sfs.id = up.series_id
   LEFT JOIN public.nhl_teams th ON th.id = sfs.higher_seed_team_id
@@ -376,13 +378,15 @@ BEGIN
     m.id,
     m.user_id,
     m.edition_id,
-    COALESCE(
-      NULLIF(TRIM(m.display_name), ''),
-      NULLIF(TRIM(split_part(u.email, '@', 1)), ''),
-      'NHL participant'
-    ) AS entry_name,
-    e.name AS edition_name,
-    e.season_label
+    (
+      COALESCE(
+        NULLIF(TRIM(m.display_name), ''),
+        NULLIF(TRIM(split_part(u.email::text, '@', 1)), ''),
+        'NHL participant'
+      )
+    )::text AS entry_name,
+    e.name::text AS edition_name,
+    e.season_label::text
   FROM public.nhl_memberships m
   INNER JOIN public.nhl_editions e ON e.id = m.edition_id AND e.is_active = true
   LEFT JOIN auth.users u ON u.id = m.user_id

@@ -83,7 +83,7 @@ export default async function AccountPicksPage({ searchParams }: PageProps) {
 
       <PageTitle
         title="Your picks"
-        description="Three stages: pick 1st and 2nd in every group, then choose one third-place team per group row until you have eight advancers, then fill the official Round of 32 through champion once published — plus bonus picks. Quick start fills early stages (and the full bracket when unlocked). Group/third/bonus lock at the pool deadline; knockout can stay open after that."
+        description="Your picks open in bracket view so you can see what’s done and what’s still missing. Stage 1: 1st and 2nd in every group. Stage 2: one third-place advancer per group row (eight total). Stage 3: Round of 32 through champion once the official bracket is published, plus bonus picks. Use list view anytime for step-by-step editing."
       />
 
       {ctx.loadError ? (
@@ -161,9 +161,10 @@ export default async function AccountPicksPage({ searchParams }: PageProps) {
 
               {ctx.predictions.length === 0 && !locked ? (
                 <p className="mb-6 rounded-md border border-ash-border bg-ash-surface px-3 py-2 text-sm text-ash-muted">
-                  No saved knockout picks yet — all slots start empty. Choose a
-                  team per slot, then save. After saving, we’ll take you to a
-                  clear summary you can revisit anytime.
+                  No saved picks yet — the bracket starts empty. Fill groups and
+                  third-place advancers first (switch to list view for guided
+                  steps), then save. Knockout rounds unlock after the official
+                  Round of 32 is published.
                 </p>
               ) : null}
 
@@ -183,6 +184,8 @@ export default async function AccountPicksPage({ searchParams }: PageProps) {
                 successDetail="Your pool’s scored leaderboard is recalculated from official results as soon as you save (same scoring rules as everyone else in the pool)."
                 saveHelpText="Saving writes every slot (including empty ones you cleared). Your bracket is stored immediately and the pool leaderboard is refreshed from the official results snapshot."
                 postSaveRedirectTo={postSaveRedirectTo}
+                defaultPicksMainView="bracket"
+                rememberPicksMainView
               />
 
               {ctx.teams.length === 0 ? (

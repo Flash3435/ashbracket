@@ -1,10 +1,11 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { createClient } from "@/lib/supabase/server";
-import { solePublicPoolIdFromScoringView } from "../pools/solePublicPoolIdFromScoringView";
+import { resolvePublicRulesPoolId } from "../pool/resolvePublicRulesPoolId";
 import {
-  SAMPLE_POOL_ID,
-  poolIdsMatchConfiguredSample,
-} from "../config/sample-pool";
+  resolveGroupAdvanceFromPoolColumns,
+  resolvePoolScoringConfig,
+} from "../scoring/poolScoringConfig";
+import { poolIdsMatchConfiguredSample } from "../config/sample-pool";
 import { comparePublicScoringRuleRows } from "./comparePublicScoringRules";
 import { labelPublicScoringRule } from "./scoringRulePublicLabels";
 import { applyPublicRulesDisplayDefaults } from "./publicRulesDisplayDefaults";
@@ -111,15 +112,10 @@ function poolMetaFromRow(row: PoolRulesPublicRowDb): Pick<
   | "groupAdvance"
   | "tieBreakNote"
 > {
-  const exact = row.group_advance_exact_points;
-  const wrong = row.group_advance_wrong_slot_points;
-  const groupAdvance =
-    exact != null && wrong != null
-      ? {
-          exactPoints: Number(exact),
-          wrongSlotPoints: Number(wrong),
-        }
-      : null;
+  const groupAdvance = resolveGroupAdvanceFromPoolColumns(
+    row.group_advance_exact_points,
+    row.group_advance_wrong_slot_points,
+  );
 
   return {
     poolName: row.pool_name,
@@ -270,26 +266,16 @@ export async function fetchSamplePoolScoringRules(): Promise<FetchSamplePoolScor
   try {
     const supabase = await createClient();
 
-    let effectivePoolId = SAMPLE_POOL_ID;
-    let usedSolePublicPoolFallback = false;
-    let loaded = await loadScoringRulesRawForPool(supabase, effectivePoolId);
+    const resolvedPool = await resolvePublicRulesPoolId(supabase);
+    const effectivePoolId = resolvedPool.poolId;
+    const usedSolePublicPoolFallback =
+      resolvedPool.source === "sole_public_rules_pool";
+
+    const loaded = await loadScoringRulesRawForPool(supabase, effectivePoolId);
     if (!loaded.ok) {
       return { ok: false, kind: "error", message: loaded.message };
     }
-    let rulesRaw = loaded.rulesRaw;
-
-    if (rulesRaw.length === 0) {
-      const sole = await solePublicPoolIdFromScoringView(supabase);
-      if (sole && !poolIdsMatchConfiguredSample(sole)) {
-        effectivePoolId = sole;
-        usedSolePublicPoolFallback = true;
-        loaded = await loadScoringRulesRawForPool(supabase, effectivePoolId);
-        if (!loaded.ok) {
-          return { ok: false, kind: "error", message: loaded.message };
-        }
-        rulesRaw = loaded.rulesRaw;
-      }
-    }
+    const rulesRaw = loaded.rulesRaw;
 
     const displayDefaultOpts = usedSolePublicPoolFallback
       ? { solePublicPoolFallback: true as const }
@@ -326,11 +312,19 @@ export async function fetchSamplePoolScoringRules(): Promise<FetchSamplePoolScor
         poolMetaFromRow(poolOnly),
         displayDefaultOpts,
       );
+      const scoringConfig = resolvePoolScoringConfig({
+        poolId: effectivePoolId,
+        groupAdvanceExactPoints: meta.groupAdvance?.exactPoints ?? null,
+        groupAdvanceWrongSlotPoints: meta.groupAdvance?.wrongSlotPoints ?? null,
+        scoringRules: [],
+      });
       return {
         ok: true,
         data: {
           ...meta,
           rules: [],
+          poolId: effectivePoolId,
+          scoringConfig,
         },
       };
     }
@@ -353,9 +347,21 @@ export async function fetchSamplePoolScoringRules(): Promise<FetchSamplePoolScor
       }))
       .sort(comparePublicScoringRuleRows);
 
+    const scoringConfig = resolvePoolScoringConfig({
+      poolId: effectivePoolId,
+      groupAdvanceExactPoints: meta.groupAdvance?.exactPoints ?? null,
+      groupAdvanceWrongSlotPoints: meta.groupAdvance?.wrongSlotPoints ?? null,
+      scoringRules: rules,
+    });
+
     return {
       ok: true,
-      data: { ...meta, rules },
+      data: {
+        ...meta,
+        rules,
+        poolId: effectivePoolId,
+        scoringConfig,
+      },
     };
   } catch (e) {
     return {

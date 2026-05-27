@@ -1,10 +1,13 @@
+import { PoolScoringDebugSummary } from "@/components/admin/PoolScoringDebugSummary";
 import { PoolSettingsForm } from "@/components/admin/PoolSettingsForm";
 import { PoolShareInvitePanel } from "@/components/admin/PoolShareInvitePanel";
 import { PageContainer } from "@/components/ui/PageContainer";
 import { PageTitle } from "@/components/ui/PageTitle";
+import { fetchPoolScoringDebugSummary } from "@/lib/admin/fetchPoolScoringDebugSummary";
 import { requireManagedPool } from "@/lib/admin/requireManagedPool";
 import { mapPoolSettingsRow } from "@/lib/pools/poolSettingsDb";
 import { poolShareJoinUrl } from "@/lib/site-url";
+import { createClient } from "@/lib/supabase/server";
 
 export const dynamic = "force-dynamic";
 
@@ -15,6 +18,9 @@ export default async function AdminPoolSettingsPage({
 }) {
   const { poolId } = await params;
   const { pool } = await requireManagedPool(poolId);
+  const supabase = await createClient();
+  const { summary: scoringDebug, error: scoringDebugError } =
+    await fetchPoolScoringDebugSummary(supabase, poolId);
 
   const initial = mapPoolSettingsRow({
     id: pool.id,
@@ -41,6 +47,13 @@ export default async function AdminPoolSettingsPage({
       />
 
       <PoolSettingsForm poolId={poolId} initial={initial} />
+
+      {scoringDebug ? (
+        <PoolScoringDebugSummary
+          summary={scoringDebug}
+          errorMessage={scoringDebugError}
+        />
+      ) : null}
     </PageContainer>
   );
 }

@@ -17,6 +17,10 @@
  */
 
 import { poolIdsMatchConfiguredSample } from "../config/sample-pool";
+import {
+  defaultWorldCupGroupAdvance,
+  defaultWorldCupThirdPlaceQualifierPoints,
+} from "../scoring/poolScoringConfig";
 import type {
   PoolPrizeTier,
   SamplePoolScoringRulesPayload,
@@ -38,13 +42,15 @@ export const DEFAULT_PUBLIC_RULES_PRIZE_TIERS: readonly PoolPrizeTier[] = [
   { place: 4, label: "4th place", percent: 10 },
 ];
 
-export const DEFAULT_PUBLIC_RULES_GROUP_ADVANCE = {
-  exactPoints: 3,
-  wrongSlotPoints: 1,
-} as const;
+/** Sample-pool display fallback — matches `worldcupPoolDefaults` / simulation seed. */
+export const DEFAULT_PUBLIC_RULES_GROUP_ADVANCE = defaultWorldCupGroupAdvance();
 
-/** Default Stage 2 points per correct best third-place advancer when the pool has no `third_place` scoring rows. */
-export const DEFAULT_PUBLIC_RULES_STAGE2_CORRECT = 5;
+/**
+ * Sample-pool display fallback for Stage 2 when `scoring_rules` has no third-place row.
+ * Must match `DEFAULT_WORLD_CUP_SCORING_RULE_ROWS` (not a separate legacy value).
+ */
+export const DEFAULT_PUBLIC_RULES_STAGE2_CORRECT =
+  defaultWorldCupThirdPlaceQualifierPoints();
 
 /** Fallback knockout table only when `scoring_rules` has no knockout rows. */
 export const PUBLIC_RULES_KNOCKOUT_ROWS: readonly {
