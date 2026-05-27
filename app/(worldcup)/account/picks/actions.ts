@@ -67,7 +67,7 @@ export async function saveMyKnockoutPicksAction(input: {
 
     const { data: poolRow, error: poolErr } = await supabase
       .from("pools")
-      .select("lock_at")
+      .select("lock_at, tournament_edition_id")
       .eq("id", row.pool_id)
       .maybeSingle();
 
@@ -107,10 +107,11 @@ export async function saveMyKnockoutPicksAction(input: {
     if (r32StageErr) {
       return { ok: false, error: r32StageErr.message };
     }
-    if (r32StageRow?.id) {
+    if (r32StageRow?.id && poolRow?.tournament_edition_id) {
       const unlocked = await fetchOfficialRoundOf32Complete(
         supabase,
         r32StageRow.id as string,
+        poolRow.tournament_edition_id as string,
       );
       if (!unlocked) {
         const { data: predData, error: predFetchErr } = await supabase
@@ -129,6 +130,8 @@ export async function saveMyKnockoutPicksAction(input: {
         );
         slots = mergeKnockoutProgressionSlotsFromPredictions(slots, existing);
       }
+    } else if (r32StageRow?.id) {
+      return { ok: false, error: "Pool tournament edition is missing." };
     }
 
     const { data: predBeforeRows, error: predBeforeErr } = await supabase

@@ -29,12 +29,16 @@ export const ACCOUNT_TOURNAMENT_STAGE_CODES = [
 const UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
-export type PoolEmbed = { name: string; lock_at: string | null } | null;
+export type PoolEmbed = {
+  name: string;
+  lock_at: string | null;
+  tournament_edition_id: string | null;
+} | null;
 
 export function embeddedPool(
   raw:
-    | { name: string; lock_at: string | null }
-    | { name: string; lock_at: string | null }[]
+    | { name: string; lock_at: string | null; tournament_edition_id: string | null }
+    | { name: string; lock_at: string | null; tournament_edition_id: string | null }[]
     | null
     | undefined,
 ): PoolEmbed {
@@ -125,7 +129,8 @@ export async function loadAccountKnockoutSelection(
         pool_id,
         pools (
           name,
-          lock_at
+          lock_at,
+          tournament_edition_id
         )
       `,
       )
@@ -143,8 +148,12 @@ export async function loadAccountKnockoutSelection(
         pool_id: r.pool_id as string,
         pools: embeddedPool(
           r.pools as
-            | { name: string; lock_at: string | null }
-            | { name: string; lock_at: string | null }[]
+            | { name: string; lock_at: string | null; tournament_edition_id: string | null }
+            | {
+                name: string;
+                lock_at: string | null;
+                tournament_edition_id: string | null;
+              }[]
             | null
             | undefined,
         ),
@@ -173,16 +182,6 @@ export async function loadAccountKnockoutSelection(
         teams = (teamsRes.data ?? []).map(mapTeamRow);
         stages = (stagesRes.data ?? []).map(mapTournamentStageRow);
         groupTeamCountryCodesByLetter = groupCodes;
-      }
-    }
-
-    if (!loadError) {
-      const r32Stage = stages.find((s) => s.code === "round_of_32");
-      if (r32Stage) {
-        knockoutBracketPicksUnlocked = await fetchOfficialRoundOf32Complete(
-          supabase,
-          r32Stage.id,
-        );
       }
     }
 
@@ -219,6 +218,15 @@ export async function loadAccountKnockoutSelection(
         } as ParticipantRow);
         selectedPoolName = row.pools?.name ?? "Pool";
         selectedLockAt = row.pools?.lock_at ?? null;
+        const selectedEditionId = row.pools?.tournament_edition_id ?? null;
+        const r32Stage = stages.find((s) => s.code === "round_of_32");
+        if (!loadError && r32Stage && selectedEditionId) {
+          knockoutBracketPicksUnlocked = await fetchOfficialRoundOf32Complete(
+            supabase,
+            r32Stage.id,
+            selectedEditionId,
+          );
+        }
 
         const [{ data: predData, error: predErr }, { data: ruleRows, error: ruleErr }] =
           await Promise.all([

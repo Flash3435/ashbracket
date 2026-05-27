@@ -1,5 +1,6 @@
 import { AdminResultsR32StatusSummary } from "@/components/admin/AdminResultsR32StatusSummary";
 import { ApplyOfficialRoundOf32Panel } from "@/components/admin/ApplyOfficialRoundOf32Panel";
+import { FullTournamentSimulationPanel } from "@/components/admin/FullTournamentSimulationPanel";
 import { GeneratedSimulationScoresSection } from "@/components/admin/GeneratedSimulationScoresSection";
 import { KnockoutResultsEditor } from "@/components/admin/KnockoutResultsEditor";
 import { RecomputeAllPoolsPanel } from "@/components/admin/RecomputeAllPoolsPanel";
@@ -192,6 +193,8 @@ export default async function SimulationEditionResultsPage({ params }: PageProps
         editionId={editionId}
         isProduction={isProduction}
       />
+
+      <FullTournamentSimulationPanel editionId={editionId} isProduction={isProduction} />
 
       <GeneratedSimulationScoresSection
         rows={generatedScores}

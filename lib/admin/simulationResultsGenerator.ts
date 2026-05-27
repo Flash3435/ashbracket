@@ -53,6 +53,8 @@ export type SimulationBatchPreview = {
   matches: SimulationGeneratedMatch[];
 };
 
+export type SimulationRandomSource = () => number;
+
 function clamp(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value));
 }
@@ -61,7 +63,7 @@ function stageSortValue(stageCode: string): number {
   return STAGE_SORT_ORDER[stageCode] ?? 99;
 }
 
-function compareCandidateMatches(
+export function compareCandidateMatches(
   a: Pick<SimulationMatchCandidate, "kickoffAt" | "stageCode" | "matchCode">,
   b: Pick<SimulationMatchCandidate, "kickoffAt" | "stageCode" | "matchCode">,
 ): number {
@@ -73,6 +75,26 @@ function compareCandidateMatches(
   if (stageDiff !== 0) return stageDiff;
 
   return a.matchCode.localeCompare(b.matchCode);
+}
+
+function hashSeedKey(input: string): number {
+  let hash = 2166136261;
+  for (let index = 0; index < input.length; index += 1) {
+    hash ^= input.charCodeAt(index);
+    hash = Math.imul(hash, 16777619);
+  }
+  return hash >>> 0;
+}
+
+export function createSimulationRandom(seedKey: string): SimulationRandomSource {
+  let seed = hashSeedKey(seedKey) || 0x12345678;
+  return () => {
+    seed = (seed + 0x6d2b79f5) >>> 0;
+    let t = seed;
+    t = Math.imul(t ^ (t >>> 15), t | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
 }
 
 function kickoffDateKey(kickoffAt: string | null): string | null {
@@ -133,14 +155,14 @@ function pickEligibleBatch(matches: SimulationMatchCandidate[]): {
   };
 }
 
-function poisson(lambda: number): number {
+function poisson(lambda: number, random: SimulationRandomSource): number {
   const cappedLambda = clamp(lambda, 0.2, 3.2);
   const cutoff = Math.exp(-cappedLambda);
   let k = 0;
   let product = 1;
   do {
     k += 1;
-    product *= Math.random();
+    product *= random();
   } while (product > cutoff);
   return clamp(k - 1, 0, MAX_SIMULATED_GOALS);
 }
@@ -167,12 +189,15 @@ function strengthBoost(team: Team | undefined): number {
   return rankBoost + labelBoost;
 }
 
-function knockoutPenalties(homeFavored: boolean): {
+function knockoutPenalties(
+  homeFavored: boolean,
+  random: SimulationRandomSource,
+): {
   homePenalties: number;
   awayPenalties: number;
 } {
-  const baseWinnerScore = Math.random() < 0.65 ? 4 : 5;
-  const margin = Math.random() < 0.8 ? 1 : 2;
+  const baseWinnerScore = random() < 0.65 ? 4 : 5;
+  const margin = random() < 0.8 ? 1 : 2;
   const loserScore = Math.max(2, baseWinnerScore - margin);
 
   return homeFavored
@@ -184,69 +209,43 @@ function isGroupStage(stageCode: string): boolean {
   return stageCode === "group";
 }
 
-export function generateSimulationBatchPreview(
-  matches: SimulationMatchCandidate[],
+export function generateSimulationMatch(
+  match: SimulationMatchCandidate,
   teamsById: Map<string, Team>,
-): SimulationBatchPreview | null {
-  const picked = pickEligibleBatch(matches);
-  if (!picked) return null;
+  options?: {
+    random?: SimulationRandomSource;
+    seedKey?: string;
+  },
+): SimulationGeneratedMatch {
+  const random =
+    options?.random ?? createSimulationRandom(options?.seedKey ?? match.matchCode);
+  const homeTeam = teamsById.get(match.homeTeamId);
+  const awayTeam = teamsById.get(match.awayTeamId);
+  const advantage = clamp(
+    strengthBoost(homeTeam) - strengthBoost(awayTeam) + 0.12,
+    -1,
+    1,
+  );
 
-  const generated = picked.matches.map<SimulationGeneratedMatch>((match) => {
-    const homeTeam = teamsById.get(match.homeTeamId);
-    const awayTeam = teamsById.get(match.awayTeamId);
-    const advantage = clamp(
-      strengthBoost(homeTeam) - strengthBoost(awayTeam) + 0.12,
-      -1,
-      1,
-    );
+  const homeGoals = poisson(1.18 + advantage * 0.42, random);
+  const awayGoals = poisson(1.06 - advantage * 0.42, random);
 
-    const homeGoals = poisson(1.18 + advantage * 0.42);
-    const awayGoals = poisson(1.06 - advantage * 0.42);
-
-    if (isGroupStage(match.stageCode) || homeGoals !== awayGoals) {
-      const winnerTeamId = winnerFromMatchScores({
-        homeTeamId: match.homeTeamId,
-        awayTeamId: match.awayTeamId,
-        homeGoals,
-        awayGoals,
-        homePenalties: null,
-        awayPenalties: null,
-      });
-
-      return {
-        ...match,
-        homeGoals,
-        awayGoals,
-        homePenalties: null,
-        awayPenalties: null,
-        winnerTeamId,
-        winnerTeamName:
-          winnerTeamId === match.homeTeamId
-            ? match.homeTeamName
-            : winnerTeamId === match.awayTeamId
-              ? match.awayTeamName
-              : null,
-        decisionType: winnerTeamId ? "regulation" : "draw",
-      };
-    }
-
-    const homeFavoredOnPens = Math.random() < 0.5 + advantage * 0.18;
-    const penalties = knockoutPenalties(homeFavoredOnPens);
+  if (isGroupStage(match.stageCode) || homeGoals !== awayGoals) {
     const winnerTeamId = winnerFromMatchScores({
       homeTeamId: match.homeTeamId,
       awayTeamId: match.awayTeamId,
       homeGoals,
       awayGoals,
-      homePenalties: penalties.homePenalties,
-      awayPenalties: penalties.awayPenalties,
+      homePenalties: null,
+      awayPenalties: null,
     });
 
     return {
       ...match,
       homeGoals,
       awayGoals,
-      homePenalties: penalties.homePenalties,
-      awayPenalties: penalties.awayPenalties,
+      homePenalties: null,
+      awayPenalties: null,
       winnerTeamId,
       winnerTeamName:
         winnerTeamId === match.homeTeamId
@@ -254,9 +253,53 @@ export function generateSimulationBatchPreview(
           : winnerTeamId === match.awayTeamId
             ? match.awayTeamName
             : null,
-      decisionType: "penalties",
+      decisionType: winnerTeamId ? "regulation" : "draw",
     };
+  }
+
+  const homeFavoredOnPens = random() < 0.5 + advantage * 0.18;
+  const penalties = knockoutPenalties(homeFavoredOnPens, random);
+  const winnerTeamId = winnerFromMatchScores({
+    homeTeamId: match.homeTeamId,
+    awayTeamId: match.awayTeamId,
+    homeGoals,
+    awayGoals,
+    homePenalties: penalties.homePenalties,
+    awayPenalties: penalties.awayPenalties,
   });
+
+  return {
+    ...match,
+    homeGoals,
+    awayGoals,
+    homePenalties: penalties.homePenalties,
+    awayPenalties: penalties.awayPenalties,
+    winnerTeamId,
+    winnerTeamName:
+      winnerTeamId === match.homeTeamId
+        ? match.homeTeamName
+        : winnerTeamId === match.awayTeamId
+          ? match.awayTeamName
+          : null,
+    decisionType: "penalties",
+  };
+}
+
+export function generateSimulationBatchPreview(
+  matches: SimulationMatchCandidate[],
+  teamsById: Map<string, Team>,
+  options?: {
+    seedKey?: string;
+  },
+): SimulationBatchPreview | null {
+  const picked = pickEligibleBatch(matches);
+  if (!picked) return null;
+
+  const generated = picked.matches.map<SimulationGeneratedMatch>((match) =>
+    generateSimulationMatch(match, teamsById, {
+      seedKey: options?.seedKey ? `${options.seedKey}:${match.matchCode}` : match.matchCode,
+    }),
+  );
 
   const stageCodes = [...new Set(generated.map((match) => match.stageCode))].sort(
     (a, b) => stageSortValue(a) - stageSortValue(b) || a.localeCompare(b),

@@ -117,6 +117,7 @@ export async function loadPicksCompletenessInputsForPool(
 
   const stageCodes = [...ACCOUNT_TOURNAMENT_STAGE_CODES];
   const [
+    { data: poolRow, error: poolErr },
     { data: stageRows, error: stageErr },
     { data: predRows, error: predErr },
     { data: ruleRows, error: ruleErr },
@@ -124,6 +125,11 @@ export async function loadPicksCompletenessInputsForPool(
     groupTeamCountryCodesByLetter,
   ] =
     await Promise.all([
+      supabase
+        .from("pools")
+        .select("tournament_edition_id")
+        .eq("id", poolId)
+        .maybeSingle(),
       supabase
         .from("tournament_stages")
         .select(
@@ -150,7 +156,11 @@ export async function loadPicksCompletenessInputsForPool(
       fetchGroupTeamCountryCodesByLetter(supabase),
     ]);
 
-  if (stageErr || predErr || ruleErr || teamsErr) {
+  if (poolErr || stageErr || predErr || ruleErr || teamsErr) {
+    return null;
+  }
+  const editionId = (poolRow?.tournament_edition_id as string | null) ?? null;
+  if (!editionId) {
     return null;
   }
 
@@ -184,7 +194,7 @@ export async function loadPicksCompletenessInputsForPool(
 
   const r32Stage = stages.find((s) => s.code === "round_of_32");
   const knockoutBracketPicksUnlocked = r32Stage
-    ? await fetchOfficialRoundOf32Complete(supabase, r32Stage.id)
+    ? await fetchOfficialRoundOf32Complete(supabase, r32Stage.id, editionId)
     : true;
 
   return {

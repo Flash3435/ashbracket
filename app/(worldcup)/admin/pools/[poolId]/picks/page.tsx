@@ -51,7 +51,7 @@ type PageProps = {
 
 export default async function AdminPoolPicksPage({ params, searchParams }: PageProps) {
   const { poolId } = await params;
-  const { supabase } = await requireManagedPool(poolId);
+  const { supabase, pool } = await requireManagedPool(poolId);
 
   const sp = searchParams != null ? await searchParams : {};
   const view = sp.view === "bracket" ? "bracket" : "list";
@@ -255,6 +255,7 @@ export default async function AdminPoolPicksPage({ params, searchParams }: PageP
       knockoutBracketPicksUnlocked = await fetchOfficialRoundOf32Complete(
         supabase,
         r32Stage.id,
+        pool.tournament_edition_id,
       );
     }
   }
