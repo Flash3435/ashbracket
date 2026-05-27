@@ -4,10 +4,12 @@ import { FullTournamentSimulationPanel } from "@/components/admin/FullTournament
 import { GeneratedSimulationScoresSection } from "@/components/admin/GeneratedSimulationScoresSection";
 import { KnockoutResultsEditor } from "@/components/admin/KnockoutResultsEditor";
 import { RecomputeAllPoolsPanel } from "@/components/admin/RecomputeAllPoolsPanel";
+import { SimulationEditionDebugSummary } from "@/components/admin/SimulationEditionDebugSummary";
 import { SimulationResultsGeneratorPanel } from "@/components/admin/SimulationResultsGeneratorPanel";
 import { SimulationEditionSyncPanel } from "@/components/admin/SimulationEditionSyncPanel";
 import { SimulationModeBanner } from "@/components/admin/SimulationModeBanner";
 import { isProductionDeployment } from "@/lib/admin/deploymentEnvironment";
+import { fetchSimulationEditionDebugSummary } from "@/lib/admin/fetchSimulationEditionDebugSummary";
 import { fetchEditionImpactSummary } from "@/lib/admin/fetchAdminImpactSummary";
 import { PageContainer } from "@/components/ui/PageContainer";
 import { PageTitle } from "@/components/ui/PageTitle";
@@ -22,6 +24,7 @@ import { mapResultRow, mapTeamRow, mapTournamentStageRow } from "@/lib/results/m
 import { TEAM_TABLE_SELECT } from "@/lib/teams/teamDbSelect";
 import { fetchGroupTeamCountryCodesForEdition } from "@/lib/tournament/fetchGroupTeamCountryCodesForEdition";
 import { createClient } from "@/lib/supabase/server";
+import { createServiceRoleClient } from "@/lib/supabase/service";
 import Link from "next/link";
 import type { Result, Team, TournamentStage } from "../../../../../../../src/types/domain";
 
@@ -76,6 +79,7 @@ export default async function SimulationEditionResultsPage({ params }: PageProps
   let results: Result[] = [];
   let loadError: string | null = null;
   let generatedScoresError: string | null = null;
+  let debugSummaryError: string | null = null;
   let r32Summary = {
     groupsComplete: 0,
     thirdPlaceQualifiersEntered: 0,
@@ -83,6 +87,9 @@ export default async function SimulationEditionResultsPage({ params }: PageProps
     resolvableHint: null as string | null,
   };
   let generatedScores: ReturnType<typeof buildGeneratedSimulationScores> = [];
+  let debugSummary = null as Awaited<
+    ReturnType<typeof fetchSimulationEditionDebugSummary>
+  >["summary"];
 
   const [teamsRes, stagesRes, resultsRes, matchesRes] = await Promise.all([
     supabase.from("teams").select(TEAM_TABLE_SELECT).order("name", { ascending: true }),
@@ -167,6 +174,13 @@ export default async function SimulationEditionResultsPage({ params }: PageProps
   const editionLabel = `${edition.name} (${edition.code})`;
   const isProduction = isProductionDeployment();
   const editionImpact = await fetchEditionImpactSummary(supabase, editionId);
+  try {
+    const debug = await fetchSimulationEditionDebugSummary(createServiceRoleClient(), editionId);
+    debugSummary = debug.summary;
+    debugSummaryError = debug.error;
+  } catch (error) {
+    debugSummaryError = error instanceof Error ? error.message : "Could not load simulation debug summary.";
+  }
 
   return (
     <PageContainer>
@@ -200,6 +214,17 @@ export default async function SimulationEditionResultsPage({ params }: PageProps
         rows={generatedScores}
         errorMessage={generatedScoresError}
       />
+
+      {debugSummary ? (
+        <SimulationEditionDebugSummary
+          summary={debugSummary}
+          errorMessage={debugSummaryError}
+        />
+      ) : debugSummaryError ? (
+        <p className="mb-4 rounded-md border border-red-800/80 bg-red-950/40 px-3 py-2 text-sm text-red-200">
+          {debugSummaryError}
+        </p>
+      ) : null}
 
       {editionImpact ? (
         <div className="mb-6">

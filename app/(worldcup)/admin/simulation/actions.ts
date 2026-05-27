@@ -21,6 +21,7 @@ import { checkProductionAdminAck } from "@/lib/admin/requireProductionAdminAck";
 import { isGlobalAdmin } from "@/lib/auth/permissions";
 import { mapResultRow, mapTeamRow } from "@/lib/results/mapRows";
 import { OFFICIAL_EDITION_CODE } from "@/lib/config/officialTournament";
+import { ensureSimulationPoolScoringConfig } from "@/lib/scoring/ensureSimulationPoolScoringConfig";
 import { TEAM_TABLE_SELECT } from "@/lib/teams/teamDbSelect";
 import { poolIdsForEdition } from "@/lib/tournament/editionScope";
 import { syncOfficialTournament } from "@/lib/tournament/syncOfficialTournament";
@@ -844,6 +845,10 @@ export async function applyPreviewedSimulationResultsAction(input: {
     }
 
     const poolIds = await poolIdsForEdition(supabase, gate.edition.id);
+    const seededPoolScoring = await ensureSimulationPoolScoringConfig(supabase, poolIds);
+    if (!seededPoolScoring.ok) {
+      return { ok: false, error: seededPoolScoring.error };
+    }
     const patches = input.preview.matches.map((match) => ({
       matchCode: match.matchCode,
       homeGoals: match.homeGoals,
@@ -997,6 +1002,10 @@ export async function applyFullTournamentSimulationAction(input: {
     }
 
     const poolIds = await poolIdsForEdition(supabase, gate.edition.id);
+    const seededPoolScoring = await ensureSimulationPoolScoringConfig(supabase, poolIds);
+    if (!seededPoolScoring.ok) {
+      return { ok: false, error: seededPoolScoring.error };
+    }
     if (bundle.plan.groupPatches.length > 0) {
       const groupSync = await syncOfficialTournament(supabase, {
         editionCode: gate.edition.code,
@@ -1138,6 +1147,11 @@ export async function bootstrapSimulationPoolAction(input: {
       return { ok: false, error: "Simulation pool was not created." };
     }
 
+    const seededPoolScoring = await ensureSimulationPoolScoringConfig(supabase, [row.pool_id]);
+    if (!seededPoolScoring.ok) {
+      return { ok: false, error: seededPoolScoring.error };
+    }
+
     revalidatePath("/admin");
     revalidatePath("/admin/simulation");
     revalidatePath(`/admin/pools/${row.pool_id}`);
@@ -1226,6 +1240,10 @@ export async function runSimulationEditionSyncWithAckAction(input: {
 
   const editionId = edition.id as string;
   const poolIds = await poolIdsForEdition(supabase, editionId);
+  const seededPoolScoring = await ensureSimulationPoolScoringConfig(supabase, poolIds);
+  if (!seededPoolScoring.ok) {
+    return { ok: false, error: seededPoolScoring.error };
+  }
   const impact = await fetchEditionImpactSummary(supabase, editionId);
 
   const out = await syncOfficialTournament(supabase, {

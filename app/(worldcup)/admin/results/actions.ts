@@ -17,9 +17,11 @@ import { checkProductionAdminAck } from "@/lib/admin/requireProductionAdminAck";
 import { createClient } from "@/lib/supabase/server";
 import { isGlobalAdmin } from "../../../../lib/auth/permissions";
 import { mapResultRow, mapTeamRow } from "@/lib/results/mapRows";
+import { ensureSimulationPoolScoringConfig } from "@/lib/scoring/ensureSimulationPoolScoringConfig";
 import { TEAM_TABLE_SELECT } from "@/lib/teams/teamDbSelect";
 import {
   fetchOfficialLiveEdition,
+  poolIdsForEdition,
   type TournamentEditionRow,
 } from "@/lib/tournament/editionScope";
 import { fetchGroupTeamCountryCodesForEdition } from "@/lib/tournament/fetchGroupTeamCountryCodesForEdition";
@@ -131,6 +133,10 @@ export async function recomputeStandingsForPoolAction(input: {
       data: { user },
     } = await supabase.auth.getUser();
     const impact = await fetchPoolImpactSummary(supabase, poolId);
+    const seededPoolScoring = await ensureSimulationPoolScoringConfig(supabase, [poolId]);
+    if (!seededPoolScoring.ok) {
+      return { ok: false, error: seededPoolScoring.error };
+    }
 
     const ledger = await recomputePoolLedgerForPool(poolId, {
       ledgerTrigger: "admin_manual_recompute",
@@ -229,6 +235,13 @@ export async function recomputeEditionPoolsLedgerAction(input: {
       data: { user },
     } = await supabase.auth.getUser();
     const impact = await fetchEditionImpactSummary(supabase, gate.edition.id);
+    if (gate.edition.isSimulation) {
+      const poolIds = await poolIdsForEdition(supabase, gate.edition.id);
+      const seededPoolScoring = await ensureSimulationPoolScoringConfig(supabase, poolIds);
+      if (!seededPoolScoring.ok) {
+        return { ok: false, error: seededPoolScoring.error };
+      }
+    }
 
     const out = await recomputePoolsForEdition(
       supabase,
