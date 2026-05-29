@@ -6,12 +6,27 @@ import type {
   PublicParticipantPick,
 } from "../../types/publicParticipant";
 
-type PickDisplayState = "scored" | "unscored";
+/**
+ * What we can infer from public picks + ledger only (no per-slot result resolution):
+ * - empty: no team saved on the pick
+ * - scored: at least one ledger line for this prediction (points awarded)
+ * - awaiting: team saved but no ledger yet (may be pending results OR settled with 0 pts)
+ */
+export type PickDisplayState = "empty" | "scored" | "awaiting";
+
+export type PickStatusPresentation = {
+  state: PickDisplayState;
+  /** Short badge label */
+  label: string;
+  /** One-line explanation for tooltips / helper copy */
+  meaning: string;
+};
 
 export type PublicParticipantDisplayPick = PublicParticipantPick & {
   displayLabel: string;
   detailLabel: string | null;
   state: PickDisplayState;
+  status: PickStatusPresentation;
   pointsEarned: number;
   ledgerCount: number;
 };
@@ -23,23 +38,29 @@ export type PublicParticipantDisplaySection = {
   sortOrder: number;
   picks: PublicParticipantDisplayPick[];
   scoredPicksCount: number;
+  awaitingScoreCount: number;
+  emptyPicksCount: number;
   totalPoints: number;
 };
 
 export type PublicParticipantDisplayLedgerItem = PublicParticipantLedgerRow & {
   title: string;
   detail: string | null;
-  timestampLabel: string;
+  stageLabel: string | null;
+  dateLabel: string;
   pointsLabel: string;
 };
 
 export type PublicParticipantDisplaySummary = {
   totalPicks: number;
   scoredPicksCount: number;
-  sectionsWithPointsCount: number;
-  totalSectionsCount: number;
-  categoriesWithPointsCount: number;
-  scoringEventsCount: number;
+  /** Saved picks (team chosen) with no ledger lines yet */
+  awaitingScoreCount: number;
+  emptyPicksCount: number;
+  stagesWithPointsCount: number;
+  totalStagesCount: number;
+  pointAwardsCount: number;
+  totalPointsFromLedger: number;
 };
 
 type SectionMeta = {
@@ -139,6 +160,53 @@ function pickPoints(rows: PublicParticipantLedgerRow[]): number {
   return rows.reduce((sum, row) => sum + row.pointsDelta, 0);
 }
 
+function hasSavedTeam(pick: PublicParticipantPick): boolean {
+  return Boolean(pick.teamName?.trim());
+}
+
+function resolvePickDisplayState(
+  pick: PublicParticipantPick,
+  pickLedger: PublicParticipantLedgerRow[],
+): PickDisplayState {
+  if (pickLedger.length > 0) return "scored";
+  if (hasSavedTeam(pick)) return "awaiting";
+  return "empty";
+}
+
+export function pickStatusPresentation(state: PickDisplayState): PickStatusPresentation {
+  switch (state) {
+    case "scored":
+      return {
+        state,
+        label: "Scored",
+        meaning: "This pick earned points on the official results board.",
+      };
+    case "awaiting":
+      return {
+        state,
+        label: "Awaiting score",
+        meaning:
+          "You saved a team here, but no points are on the board yet. That can mean results are still pending, or this pick did not score once results were in.",
+      };
+    case "empty":
+      return {
+        state,
+        label: "No pick",
+        meaning: "This slot was not filled in.",
+      };
+  }
+}
+
+function ledgerStageLabel(
+  predictionKind: string | null | undefined,
+  pick: PublicParticipantPick | undefined,
+): string | null {
+  const kind = pick?.predictionKind ?? predictionKind;
+  if (!kind) return null;
+  const meta = SECTION_BY_KIND[kind];
+  return meta?.title ?? pick?.stageLabel ?? null;
+}
+
 function formatNumberSlot(slotKey: string | null, label: string): string {
   const trimmed = (slotKey ?? "").trim();
   if (!trimmed) return label;
@@ -209,11 +277,10 @@ function describePick(pick: PublicParticipantPick): {
   }
 }
 
-function formatTimestamp(timestamp: string): string {
-  return new Intl.DateTimeFormat(undefined, {
-    dateStyle: "medium",
-    timeStyle: "short",
-  }).format(new Date(timestamp));
+function formatLedgerDate(timestamp: string): string {
+  const d = new Date(timestamp);
+  if (Number.isNaN(d.getTime())) return "";
+  return new Intl.DateTimeFormat(undefined, { dateStyle: "medium" }).format(d);
 }
 
 function describeLedgerItem(
@@ -307,11 +374,13 @@ export function buildPublicParticipantPresentation(detail: PublicParticipantDeta
     const sectionMeta = SECTION_BY_KIND[pick.predictionKind] ?? fallbackSectionMeta(pick);
     const pickLedger = ledgerByPredictionId.get(pick.predictionId) ?? [];
     const described = describePick(pick);
+    const state = resolvePickDisplayState(pick, pickLedger);
     const displayPick: PublicParticipantDisplayPick = {
       ...pick,
       displayLabel: described.displayLabel,
       detailLabel: described.detailLabel,
-      state: pickLedger.length > 0 ? "scored" : "unscored",
+      state,
+      status: pickStatusPresentation(state),
       pointsEarned: pickPoints(pickLedger),
       ledgerCount: pickLedger.length,
     };
@@ -320,9 +389,9 @@ export function buildPublicParticipantPresentation(detail: PublicParticipantDeta
     if (existing) {
       existing.picks.push(displayPick);
       existing.totalPoints += displayPick.pointsEarned;
-      if (displayPick.state === "scored") {
-        existing.scoredPicksCount += 1;
-      }
+      if (displayPick.state === "scored") existing.scoredPicksCount += 1;
+      else if (displayPick.state === "awaiting") existing.awaitingScoreCount += 1;
+      else existing.emptyPicksCount += 1;
     } else {
       sectionMap.set(sectionMeta.key, {
         key: sectionMeta.key,
@@ -331,6 +400,8 @@ export function buildPublicParticipantPresentation(detail: PublicParticipantDeta
         sortOrder: sectionMeta.sortOrder,
         picks: [displayPick],
         scoredPicksCount: displayPick.state === "scored" ? 1 : 0,
+        awaitingScoreCount: displayPick.state === "awaiting" ? 1 : 0,
+        emptyPicksCount: displayPick.state === "empty" ? 1 : 0,
         totalPoints: displayPick.pointsEarned,
       });
     }
@@ -360,30 +431,46 @@ export function buildPublicParticipantPresentation(detail: PublicParticipantDeta
         new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
     )
     .map((row) => {
+      const pick = row.predictionId ? pickById.get(row.predictionId) : undefined;
       const described = describeLedgerItem(row, pickById);
       return {
         ...row,
         title: described.title,
         detail: described.detail,
-        timestampLabel: formatTimestamp(row.createdAt),
+        stageLabel: ledgerStageLabel(row.predictionKind, pick),
+        dateLabel: formatLedgerDate(row.createdAt),
         pointsLabel: `${row.pointsDelta > 0 ? "+" : ""}${formatPoolPoints(row.pointsDelta)}`,
       };
     });
 
-  const scoredPicksCount = detail.picks.filter((pick) =>
-    ledgerByPredictionId.has(pick.predictionId),
-  ).length;
+  let scoredPicksCount = 0;
+  let awaitingScoreCount = 0;
+  let emptyPicksCount = 0;
+  for (const pick of detail.picks) {
+    const state = resolvePickDisplayState(
+      pick,
+      ledgerByPredictionId.get(pick.predictionId) ?? [],
+    );
+    if (state === "scored") scoredPicksCount += 1;
+    else if (state === "awaiting") awaitingScoreCount += 1;
+    else emptyPicksCount += 1;
+  }
+
+  const totalPointsFromLedger = detail.ledger.reduce(
+    (sum, row) => sum + row.pointsDelta,
+    0,
+  );
 
   const summary: PublicParticipantDisplaySummary = {
     totalPicks: detail.picks.length,
     scoredPicksCount,
-    sectionsWithPointsCount: sections.filter((section) => section.totalPoints > 0)
+    awaitingScoreCount,
+    emptyPicksCount,
+    stagesWithPointsCount: sections.filter((section) => section.totalPoints > 0)
       .length,
-    totalSectionsCount: sections.length,
-    categoriesWithPointsCount: new Set(
-      detail.ledger.map((row) => row.predictionKind ?? "unknown"),
-    ).size,
-    scoringEventsCount: detail.ledger.length,
+    totalStagesCount: sections.length,
+    pointAwardsCount: detail.ledger.length,
+    totalPointsFromLedger,
   };
 
   return {

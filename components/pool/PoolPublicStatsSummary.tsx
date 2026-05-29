@@ -38,12 +38,12 @@ export function PoolPublicStatsSummary({
   } = stats;
 
   return (
-    <section className="mb-6 rounded-xl border border-ash-border bg-ash-surface px-4 py-4">
-      <h2 className="text-sm font-semibold uppercase tracking-wide text-ash-muted">
-        Pool snapshot
+    <section className="rounded-xl border border-ash-border/70 bg-ash-body/20 px-4 py-4">
+      <h2 className="text-[11px] font-semibold uppercase tracking-[0.18em] text-ash-muted">
+        Pool details
       </h2>
       <p className="mt-1 text-xs text-ash-border-hover">{poolLabel}</p>
-      <dl className="mt-4 grid gap-3 sm:grid-cols-3">
+      <dl className="mt-4 grid gap-4 sm:grid-cols-3">
         <div>
           <dt className="text-xs text-ash-muted">Registered</dt>
           <dd className="mt-0.5 text-lg font-semibold tabular-nums text-ash-text">

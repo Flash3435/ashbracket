@@ -1,12 +1,7 @@
-import { PublicLeaderboard } from "@/components/leaderboard/PublicLeaderboard";
-import { PoolPublicStatsSummary } from "@/components/pool/PoolPublicStatsSummary";
+import { PublicPoolLeaderboardView } from "@/components/leaderboard/PublicPoolLeaderboardView";
 import { SimulationModeBanner } from "@/components/admin/SimulationModeBanner";
 import { PageContainer } from "@/components/ui/PageContainer";
-import { PageTitle } from "@/components/ui/PageTitle";
-import {
-  groupPublicLeaderboardByPool,
-  mapPublicLeaderboardRow,
-} from "@/lib/leaderboard/publicLeaderboard";
+import { mapPublicLeaderboardRow } from "@/lib/leaderboard/publicLeaderboard";
 import { fetchPoolPublicStats } from "@/lib/pool/fetchPoolPublicStats";
 import { createClient } from "@/lib/supabase/server";
 import { createServiceRoleClient } from "@/lib/supabase/service";
@@ -47,12 +42,10 @@ export default async function PublicPoolLeaderboardPage({ params }: PageProps) {
     fetchPoolPublicStats(supabase, poolIdTrimmed),
   ]);
 
-  const sections = leaderboardRes.error
+  const rows = leaderboardRes.error
     ? []
-    : groupPublicLeaderboardByPool(
-        (leaderboardRes.data ?? []).map((row) =>
-          mapPublicLeaderboardRow(row as LeaderboardPublicRowDb),
-        ),
+    : (leaderboardRes.data ?? []).map((row) =>
+        mapPublicLeaderboardRow(row as LeaderboardPublicRowDb),
       );
 
   return (
@@ -60,26 +53,18 @@ export default async function PublicPoolLeaderboardPage({ params }: PageProps) {
       {pool.is_simulation ? (
         <SimulationModeBanner
           variant="simulation"
+          audience="public"
           poolName={pool.name as string}
           className="mb-6"
         />
       ) : null}
 
-      <PageTitle
-        title={pool.name as string}
-        description="Public pool leaderboard and participant standings."
-      />
-
-      <PoolPublicStatsSummary
-        poolLabel={pool.name as string}
+      <PublicPoolLeaderboardView
+        poolName={pool.name as string}
+        rows={rows}
         stats={statsRes.stats}
-        errorMessage={statsRes.error}
-      />
-
-      <PublicLeaderboard
-        errorMessage={leaderboardRes.error?.message ?? null}
-        sections={sections}
-        nameLinks
+        statsError={statsRes.error}
+        leaderboardError={leaderboardRes.error?.message ?? null}
       />
     </PageContainer>
   );

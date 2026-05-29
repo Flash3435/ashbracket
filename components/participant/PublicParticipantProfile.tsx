@@ -3,6 +3,7 @@ import { formatPoolPoints } from "@/lib/format/poolPoints";
 import {
   buildPublicParticipantPresentation,
   type PublicParticipantDisplayPick,
+  type PublicParticipantDisplaySection,
 } from "../../lib/participant/publicParticipantPresentation";
 import {
   CountryFlagIcon,
@@ -19,7 +20,7 @@ function emptyBox(message: string, hint: string) {
   );
 }
 
-function statCard(label: string, value: string, tone: "default" | "accent" = "default") {
+function heroStat(label: string, value: string, tone: "default" | "accent" = "default") {
   return (
     <div className="rounded-2xl border border-ash-border/70 bg-ash-body/35 px-4 py-4">
       <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-ash-muted">
@@ -43,35 +44,54 @@ function summaryCard(label: string, value: string, hint: string) {
         {label}
       </p>
       <p className="mt-2 text-xl font-semibold tabular-nums text-ash-text">{value}</p>
-      <p className="mt-1 text-sm text-ash-muted">{hint}</p>
+      <p className="mt-1.5 text-sm leading-relaxed text-ash-muted">{hint}</p>
     </div>
   );
 }
 
 function pickStateBadge(pick: PublicParticipantDisplayPick) {
-  if (pick.state === "scored") {
+  const { status } = pick;
+  const base =
+    "inline-flex max-w-[11rem] rounded-full px-2.5 py-0.5 text-[11px] font-semibold uppercase tracking-wide";
+
+  if (status.state === "scored") {
     return (
-      <span className="inline-flex rounded-full border border-emerald-500/40 bg-emerald-950/40 px-2.5 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-emerald-100">
-        On the board
+      <span
+        className={`${base} border border-emerald-500/40 bg-emerald-950/40 text-emerald-100`}
+        title={status.meaning}
+      >
+        {status.label}
       </span>
     );
   }
-
+  if (status.state === "awaiting") {
+    return (
+      <span
+        className={`${base} border border-amber-600/35 bg-amber-950/35 text-amber-100`}
+        title={status.meaning}
+      >
+        {status.label}
+      </span>
+    );
+  }
   return (
-    <span className="inline-flex rounded-full border border-slate-500/35 bg-slate-900/50 px-2.5 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-slate-300">
-      No points yet
+    <span
+      className={`${base} border border-slate-500/35 bg-slate-900/50 text-slate-400`}
+      title={status.meaning}
+    >
+      {status.label}
     </span>
   );
 }
 
 function pickTeamRow(pick: PublicParticipantDisplayPick) {
-  if (!pick.teamName) {
+  if (pick.state === "empty") {
     return (
       <div className="mt-4 flex items-center gap-3">
         <CountryFlagPlaceholder size="md" />
         <div className="min-w-0">
           <p className="text-sm font-semibold text-ash-text">No pick saved</p>
-          <p className="text-xs text-ash-muted">This slot has not been filled yet.</p>
+          <p className="text-xs text-ash-muted">This slot was left blank.</p>
         </div>
       </div>
     );
@@ -91,10 +111,126 @@ function pickTeamRow(pick: PublicParticipantDisplayPick) {
       <div className="min-w-0">
         <p className="text-sm font-semibold text-ash-text">{pick.teamName}</p>
         <p className="text-xs text-ash-muted">
-          {pick.teamCountryCode ? pick.teamCountryCode : "Country code unavailable"}
+          {pick.teamCountryCode ?? "Country code unavailable"}
         </p>
       </div>
     </div>
+  );
+}
+
+function sectionSummaryLine(section: PublicParticipantDisplaySection): string {
+  const parts = [`${section.picks.length} picks`];
+  if (section.scoredPicksCount > 0) {
+    parts.push(
+      `${section.scoredPicksCount} scored`,
+    );
+  }
+  if (section.awaitingScoreCount > 0) {
+    parts.push(`${section.awaitingScoreCount} awaiting score`);
+  }
+  if (section.emptyPicksCount > 0) {
+    parts.push(`${section.emptyPicksCount} empty`);
+  }
+  return parts.join(" · ");
+}
+
+function StageSection({
+  section,
+  defaultOpen,
+}: {
+  section: PublicParticipantDisplaySection;
+  defaultOpen: boolean;
+}) {
+  return (
+    <details
+      open={defaultOpen}
+      className="group ash-surface overflow-hidden"
+    >
+      <summary className="cursor-pointer list-none border-b border-ash-border/70 px-5 py-4 sm:px-6 [&::-webkit-details-marker]:hidden">
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+          <div className="min-w-0 flex-1">
+            <div className="flex items-center gap-2">
+              <span
+                className="text-ash-muted transition group-open:rotate-90"
+                aria-hidden
+              >
+                ▸
+              </span>
+              <h3 className="text-lg font-semibold text-ash-text">{section.title}</h3>
+            </div>
+            <p className="mt-1 pl-5 text-sm leading-relaxed text-ash-muted">
+              {section.description}
+            </p>
+            <p className="mt-2 pl-5 text-xs text-ash-border-hover">
+              {sectionSummaryLine(section)}
+            </p>
+          </div>
+          <div className="flex shrink-0 flex-wrap items-center gap-2 pl-5 lg:pl-0">
+            {section.scoredPicksCount > 0 ? (
+              <span className="rounded-full border border-emerald-500/30 bg-emerald-950/20 px-2.5 py-1 text-xs font-medium text-emerald-100">
+                {section.scoredPicksCount} scored
+              </span>
+            ) : null}
+            {section.awaitingScoreCount > 0 ? (
+              <span className="rounded-full border border-amber-600/30 bg-amber-950/25 px-2.5 py-1 text-xs font-medium text-amber-100">
+                {section.awaitingScoreCount} awaiting
+              </span>
+            ) : null}
+            <span
+              className={`rounded-full border px-2.5 py-1 text-xs font-semibold tabular-nums ${
+                section.totalPoints > 0
+                  ? "border-emerald-500/30 bg-emerald-950/20 text-emerald-100"
+                  : "border-ash-border/70 bg-ash-body/35 text-ash-muted"
+              }`}
+            >
+              {formatPoolPoints(section.totalPoints)} pts
+            </span>
+          </div>
+        </div>
+      </summary>
+
+      <div className="grid gap-3 border-t border-ash-border/40 p-4 sm:p-5 md:grid-cols-2 xl:grid-cols-3">
+        {section.picks.map((pick) => (
+          <article
+            key={pick.predictionId}
+            className="rounded-xl border border-ash-border/70 bg-ash-body/25 px-4 py-4"
+          >
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-ash-muted">
+                  {pick.displayLabel}
+                </p>
+                {pick.detailLabel ? (
+                  <p className="mt-1 text-xs text-ash-border-hover">{pick.detailLabel}</p>
+                ) : null}
+              </div>
+              {pickStateBadge(pick)}
+            </div>
+
+            {pickTeamRow(pick)}
+
+            <div className="mt-4 flex items-center justify-between gap-3 border-t border-ash-border/50 pt-3 text-xs">
+              <span className="text-ash-muted">
+                {pick.state === "scored"
+                  ? pick.ledgerCount === 1
+                    ? "1 point award"
+                    : `${pick.ledgerCount} point awards`
+                  : pick.state === "awaiting"
+                    ? "Not on the scoreboard yet"
+                    : "—"}
+              </span>
+              {pick.pointsEarned > 0 ? (
+                <span className="text-base font-bold tabular-nums text-emerald-200">
+                  +{formatPoolPoints(pick.pointsEarned)}
+                </span>
+              ) : (
+                <span className="text-ash-border-hover">—</span>
+              )}
+            </div>
+          </article>
+        ))}
+      </div>
+    </details>
   );
 }
 
@@ -105,6 +241,13 @@ type Props = {
 export function PublicParticipantProfile({ detail }: Props) {
   const { summary, sections, ledgerItems } = buildPublicParticipantPresentation(detail);
 
+  const unresolvedHint =
+    summary.awaitingScoreCount > 0
+      ? `${summary.awaitingScoreCount} saved ${summary.awaitingScoreCount === 1 ? "pick is" : "picks are"} still waiting to appear on the scoreboard.`
+      : summary.scoredPicksCount === summary.totalPicks && summary.totalPicks > 0
+        ? "Every saved pick slot has scored so far."
+        : null;
+
   return (
     <div className="space-y-8 sm:space-y-10">
       <section className="ash-surface relative overflow-hidden px-5 py-5 sm:px-6 sm:py-6">
@@ -112,7 +255,7 @@ export function PublicParticipantProfile({ detail }: Props) {
         <div className="relative space-y-6">
           <div className="flex flex-wrap gap-2">
             <span className="rounded-full border border-ash-border/70 bg-ash-body/40 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-ash-muted">
-              Public participant profile
+              Scoring profile
             </span>
             <span className="rounded-full border border-ash-border/70 bg-ash-body/40 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-ash-muted">
               {detail.poolName}
@@ -126,8 +269,13 @@ export function PublicParticipantProfile({ detail }: Props) {
                 {detail.displayName}
               </h1>
               <p className="mt-3 text-sm leading-relaxed text-ash-muted sm:text-base">
-                A cleaner view of this entry&apos;s picks, points, and scoring activity.
+                See which picks have scored, which are still waiting on results, and
+                how your total was built — updated when the pool recalculates from
+                official results.
               </p>
+              {unresolvedHint ? (
+                <p className="mt-2 text-sm text-amber-100/90">{unresolvedHint}</p>
+              ) : null}
               <div className="mt-4 flex flex-wrap gap-3">
                 <Link href={`/pool/${detail.poolId}`} className="ash-link text-sm">
                   ← Back to standings
@@ -142,8 +290,8 @@ export function PublicParticipantProfile({ detail }: Props) {
             </div>
 
             <div className="grid w-full gap-3 sm:grid-cols-2 xl:max-w-xl">
-              {statCard("Total points", formatPoolPoints(detail.totalPoints), "accent")}
-              {statCard("Rank", `#${detail.rank}`)}
+              {heroStat("Total points", formatPoolPoints(detail.totalPoints), "accent")}
+              {heroStat("Pool rank", `#${detail.rank}`)}
             </div>
           </div>
         </div>
@@ -151,50 +299,54 @@ export function PublicParticipantProfile({ detail }: Props) {
 
       <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         {summaryCard(
-          "Picks with points",
-          `${summary.scoredPicksCount} / ${summary.totalPicks}`,
-          "How many picks have already earned points.",
+          "Picks scored",
+          `${summary.scoredPicksCount} of ${summary.totalPicks}`,
+          "Picks that have earned at least one point award on the board.",
         )}
         {summaryCard(
-          "Sections on board",
-          `${summary.sectionsWithPointsCount} / ${summary.totalSectionsCount}`,
-          "Stages or groups already contributing points.",
+          "Awaiting score",
+          String(summary.awaitingScoreCount),
+          "Saved picks with no points yet — results may still be pending, or the pick may not score.",
         )}
         {summaryCard(
-          "Scoring categories",
-          `${summary.categoriesWithPointsCount}`,
-          "Different pick categories that have scored so far.",
+          "Stages with points",
+          summary.totalStagesCount > 0
+            ? `${summary.stagesWithPointsCount} of ${summary.totalStagesCount}`
+            : "—",
+          "How many pick stages (group, third-place, knockout, bonus) are already contributing points.",
         )}
         {summaryCard(
-          "Scoring events",
-          `${summary.scoringEventsCount}`,
-          "Individual points entries recorded in the ledger.",
+          "Point awards",
+          String(summary.pointAwardsCount),
+          "Individual times points were added to your running total.",
         )}
       </section>
 
-      <section className="space-y-4">
+      <section className="space-y-4 border-t border-ash-border/50 pt-2">
         <div className="space-y-2">
           <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-ash-muted">
-            Picks
+            Your picks
           </p>
-          <div className="flex flex-col gap-2 lg:flex-row lg:items-end lg:justify-between">
-            <div>
-              <h2 className="text-2xl font-bold tracking-tight text-ash-text">
-                Picks by stage
-              </h2>
-              <p className="mt-1 max-w-3xl text-sm leading-relaxed text-ash-muted">
-                Grouped into the same logical stages participants use when making
-                picks, with clearer labels and point callouts when an entry is
-                already on the board.
-              </p>
-            </div>
-          </div>
+          <h2 className="text-2xl font-bold tracking-tight text-ash-text">Picks by stage</h2>
+          <p className="max-w-3xl text-sm leading-relaxed text-ash-muted">
+            Expand a stage to review each slot. Status badges reflect what we can see
+            from your saved picks and awarded points — we cannot show whether an
+            unscored pick is still waiting on results or has already missed.
+          </p>
         </div>
 
-        <div className="rounded-xl border border-ash-border/70 bg-ash-body/25 px-4 py-3 text-sm leading-relaxed text-ash-muted">
-          Public scoring only shows awarded points. A green badge means that pick
-          has already earned points; cards without one may still be pending, or
-          they may simply not have scored yet.
+        <div className="rounded-xl border border-ash-border/60 bg-ash-body/20 px-4 py-3 text-sm leading-relaxed text-ash-muted">
+          <p>
+            <span className="font-medium text-ash-text">Scored</span> — points are on
+            the board for this pick.
+          </p>
+          <p className="mt-1.5">
+            <span className="font-medium text-amber-100">Awaiting score</span> — you
+            picked a team, but no points yet (pending results or no points earned).
+          </p>
+          <p className="mt-1.5">
+            <span className="font-medium text-slate-300">No pick</span> — empty slot.
+          </p>
         </div>
 
         {sections.length === 0 ? (
@@ -203,126 +355,96 @@ export function PublicParticipantProfile({ detail }: Props) {
             "Picks will appear here once they are entered for this pool.",
           )
         ) : (
-          <div className="space-y-6">
-            {sections.map((section) => (
-              <section key={section.key} className="ash-surface overflow-hidden">
-                <div className="border-b border-ash-border/70 px-5 py-4 sm:px-6">
-                  <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
-                    <div>
-                      <h3 className="text-lg font-semibold text-ash-text">
-                        {section.title}
-                      </h3>
-                      <p className="mt-1 text-sm leading-relaxed text-ash-muted">
-                        {section.description}
-                      </p>
-                    </div>
-                    <div className="flex flex-wrap gap-2 text-xs">
-                      <span className="rounded-full border border-ash-border/70 bg-ash-body/35 px-2.5 py-1 font-medium text-ash-muted">
-                        {section.picks.length} picks
-                      </span>
-                      <span className="rounded-full border border-ash-border/70 bg-ash-body/35 px-2.5 py-1 font-medium text-ash-muted">
-                        {section.scoredPicksCount} with points
-                      </span>
-                      <span className="rounded-full border border-emerald-500/30 bg-emerald-950/20 px-2.5 py-1 font-semibold text-emerald-100">
-                        {formatPoolPoints(section.totalPoints)} pts
-                      </span>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="grid gap-3 p-4 sm:p-5 md:grid-cols-2 xl:grid-cols-3">
-                  {section.picks.map((pick) => (
-                    <article
-                      key={pick.predictionId}
-                      className="rounded-xl border border-ash-border/70 bg-ash-body/25 px-4 py-4"
-                    >
-                      <div className="flex items-start justify-between gap-3">
-                        <div className="min-w-0">
-                          <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-ash-muted">
-                            {pick.displayLabel}
-                          </p>
-                          {pick.detailLabel ? (
-                            <p className="mt-1 text-xs text-ash-border-hover">
-                              {pick.detailLabel}
-                            </p>
-                          ) : null}
-                        </div>
-                        {pickStateBadge(pick)}
-                      </div>
-
-                      {pickTeamRow(pick)}
-
-                      <div className="mt-4 flex items-center justify-between gap-3 border-t border-ash-border/50 pt-3 text-xs">
-                        <span className="text-ash-muted">
-                          {pick.ledgerCount > 0
-                            ? `${pick.ledgerCount} scoring ${pick.ledgerCount === 1 ? "event" : "events"}`
-                            : "Awaiting points"}
-                        </span>
-                        {pick.pointsEarned > 0 ? (
-                          <span className="font-semibold tabular-nums text-emerald-200">
-                            +{formatPoolPoints(pick.pointsEarned)}
-                          </span>
-                        ) : (
-                          <span className="text-ash-border-hover">—</span>
-                        )}
-                      </div>
-                    </article>
-                  ))}
-                </div>
-              </section>
+          <div className="space-y-4">
+            {sections.map((section, index) => (
+              <StageSection
+                key={section.key}
+                section={section}
+                defaultOpen={index < 2}
+              />
             ))}
           </div>
         )}
       </section>
 
-      <section className="space-y-4">
-        <div className="space-y-2">
-          <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-ash-muted">
-            Scoring breakdown
-          </p>
-          <h2 className="text-2xl font-bold tracking-tight text-ash-text">
-            Points history
-          </h2>
-          <p className="max-w-3xl text-sm leading-relaxed text-ash-muted">
-            Each entry explains where points came from, with the newest scoring
-            activity shown first.
-          </p>
+      <section className="space-y-4 border-t border-ash-border/50 pt-2">
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+          <div className="space-y-2">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-ash-muted">
+              How your total was built
+            </p>
+            <h2 className="text-2xl font-bold tracking-tight text-ash-text">
+              Points history
+            </h2>
+            <p className="max-w-3xl text-sm leading-relaxed text-ash-muted">
+              Newest awards first. Each line is one addition to your score from an
+              official result.
+            </p>
+          </div>
+          {ledgerItems.length > 0 ? (
+            <p className="text-sm font-semibold tabular-nums text-emerald-200">
+              {formatPoolPoints(summary.totalPointsFromLedger)} total from{" "}
+              {summary.pointAwardsCount}{" "}
+              {summary.pointAwardsCount === 1 ? "award" : "awards"}
+            </p>
+          ) : null}
         </div>
 
         {ledgerItems.length === 0 ? (
           emptyBox(
             "No points recorded yet",
-            "Ledger entries appear after match results are saved and scores are recomputed.",
+            "Awards appear here after results are saved and the pool score is recalculated.",
           )
         ) : (
-          <div className="space-y-3">
-            {ledgerItems.map((row) => (
-              <article
-                key={row.id}
-                className="ash-surface px-4 py-4 sm:px-5"
-              >
-                <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                  <div className="min-w-0">
-                    <p className="text-sm font-semibold text-ash-text sm:text-base">
-                      {row.title}
-                    </p>
-                    {row.detail ? (
-                      <p className="mt-1 text-sm text-ash-muted">{row.detail}</p>
-                    ) : null}
-                    <p className="mt-2 text-xs font-medium uppercase tracking-[0.14em] text-ash-border-hover">
-                      {row.timestampLabel}
-                    </p>
-                  </div>
-
-                  <div className="flex shrink-0 items-center gap-2">
-                    <span className="rounded-full border border-emerald-500/40 bg-emerald-950/35 px-3 py-1 text-sm font-semibold tabular-nums text-emerald-100">
-                      {row.pointsLabel} pts
+          <details open className="ash-surface overflow-hidden">
+            <summary className="cursor-pointer list-none border-b border-ash-border/70 px-4 py-3 text-sm font-medium text-ash-text sm:px-5 [&::-webkit-details-marker]:hidden">
+              Point awards ({ledgerItems.length}) — tap to collapse
+            </summary>
+            <ol className="divide-y divide-ash-border/50">
+              {ledgerItems.map((row, index) => (
+                <li key={row.id} className="px-4 py-3.5 sm:px-5 sm:py-4">
+                  <div className="flex gap-3 sm:gap-4">
+                    <span
+                      className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-ash-border/70 bg-ash-body/40 text-xs font-semibold tabular-nums text-ash-muted"
+                      aria-hidden
+                    >
+                      {ledgerItems.length - index}
                     </span>
+                    <div className="flex min-w-0 flex-1 flex-col gap-2 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
+                      <div className="min-w-0 flex-1">
+                        <div className="flex flex-wrap items-center gap-2">
+                          {row.stageLabel ? (
+                            <span className="rounded-md border border-ash-border/60 bg-ash-body/35 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-ash-muted">
+                              {row.stageLabel}
+                            </span>
+                          ) : null}
+                          {row.dateLabel ? (
+                            <span className="text-xs text-ash-border-hover">
+                              {row.dateLabel}
+                            </span>
+                          ) : null}
+                        </div>
+                        <p className="mt-1.5 text-sm font-semibold leading-snug text-ash-text sm:text-base">
+                          {row.title}
+                        </p>
+                        {row.detail ? (
+                          <p className="mt-0.5 text-sm text-ash-muted">{row.detail}</p>
+                        ) : null}
+                      </div>
+                      <div className="flex shrink-0 items-center sm:pt-1">
+                        <span className="text-lg font-bold tabular-nums text-emerald-200 sm:text-xl">
+                          {row.pointsLabel}
+                          <span className="ml-1 text-sm font-semibold text-emerald-200/80">
+                            pts
+                          </span>
+                        </span>
+                      </div>
+                    </div>
                   </div>
-                </div>
-              </article>
-            ))}
-          </div>
+                </li>
+              ))}
+            </ol>
+          </details>
         )}
       </section>
     </div>
