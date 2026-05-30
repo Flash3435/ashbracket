@@ -227,12 +227,8 @@ export function MyKnockoutPicksSummary({
           teamById={teamById}
         />
         <StageBlock
-          title="Third-place advancers"
-          subtitle={
-            readOnly
-              ? "One third-place team per group row; eight groups should be selected (not their bracket slots)"
-              : "One third-place team per group row; eight groups should be selected (not their bracket slots)"
-          }
+          title="Stage 2 — third-place qualification"
+          subtitle="One third-place team per group row (eight groups total). These are qualification picks — FIFA assigns bracket slots later, not here."
           rows={third}
           teamById={teamById}
         />

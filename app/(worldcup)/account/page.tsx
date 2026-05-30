@@ -244,6 +244,9 @@ export default async function AccountPage({ searchParams }: PageProps) {
                   current={view}
                   listHref={dashboardListHref}
                   bracketHref={dashboardBracketHref}
+                  knockoutBracketPicksUnlocked={
+                    picksCtx.knockoutBracketPicksUnlocked
+                  }
                 />
               </div>
 
@@ -285,6 +288,7 @@ export default async function AccountPage({ searchParams }: PageProps) {
                         picksCtx.knockoutBracketPicksUnlocked
                       }
                       editPicksHref={editPicksFromDashboardHref}
+                      listViewHref={dashboardListHref}
                       readOnly={false}
                     />
                   </div>

@@ -161,6 +161,7 @@ export default async function ParticipantBracketSnapshotPage({
               current={view}
               listHref={snapshotListHref}
               bracketHref={snapshotBracketHref}
+              knockoutBracketPicksUnlocked={result.knockoutBracketPicksUnlocked}
             />
           </div>
 
@@ -198,6 +199,7 @@ export default async function ParticipantBracketSnapshotPage({
                   teams={result.teams}
                   knockoutBracketPicksUnlocked={result.knockoutBracketPicksUnlocked}
                   editPicksHref={isSelf ? snapshotEditPicksHref : null}
+                  listViewHref={isSelf ? snapshotListHref : null}
                   readOnly={!isSelf}
                 />
               </div>

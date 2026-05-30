@@ -889,10 +889,9 @@ export function KnockoutPicksWizard({
           className="rounded-md border border-sky-800/50 bg-sky-950/25 px-3 py-2 text-sm text-sky-100"
           role="status"
         >
-          Round of 32 through champion stay closed until the real group stage is
-          finished and organizers publish the official Round of 32 pairings (all
-          32 teams in FIFA slots). Until then, enter your group finishes, your eight
-          third-place advancers, and bonus picks — then save.
+          Stage 3 (Round of 32 through champion) opens after organizers publish the
+          official Round of 32. Use List view to edit group stage, third-place
+          qualification, and bonus picks.
         </p>
       ) : null}
 
@@ -932,24 +931,32 @@ export function KnockoutPicksWizard({
         </button>
       </div>
       <p className="-mt-2 text-xs leading-relaxed text-ash-muted">
-        Bracket view is the default — it shows your full path and empty slots at a
-        glance. List view is best when you want to work through groups, third-place
-        advancers, and bonus picks one step at a time.
+        {knockoutBracketPicksUnlocked
+          ? "Bracket view is the default — it shows your full path and empty slots at a glance. List view is best when you want to work through picks one step at a time."
+          : "Bracket view shows a preview of your future knockout path. Switch to List view to edit group stage, third-place qualification, and bonus picks."}
       </p>
 
       {picksMainView === "bracket" ? (
         <section className="ash-surface p-4">
-          <h2 className="text-lg font-bold text-ash-text">Knockout bracket</h2>
+          <h2 className="text-lg font-bold text-ash-text">
+            {knockoutBracketPicksUnlocked ? "Knockout bracket" : "Bracket preview"}
+          </h2>
           <p className="mt-1 text-xs text-ash-muted">
             {knockoutBracketPicksUnlocked
               ? "How your Round of 32 through champion picks line up. This mirrors your list selections (including unsaved changes until you save)."
-              : "Third-place advancers are shown as a simple list. The bracket tree stays in “waiting on official matchups” mode until the pool unlocks Round of 32 picks."}
+              : "Your qualification picks and a preview of Round of 32 from group results. Full knockout picks unlock after the official Round of 32 is published."}
           </p>
           <div className="mt-4">
             <KnockoutBracketPreview
               slots={slots}
               teams={teams}
               knockoutBracketPicksUnlocked={knockoutBracketPicksUnlocked}
+              onSwitchToListView={
+                !readOnly && !knockoutBracketPicksUnlocked
+                  ? () => selectPicksMainView("list")
+                  : undefined
+              }
+              showListViewCta={!readOnly}
             />
           </div>
         </section>

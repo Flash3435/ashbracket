@@ -353,6 +353,7 @@ export default async function AdminPoolPicksPage({ params, searchParams }: PageP
                   bracketHref={adminBracketHref}
                   listLabel="Pick wizard"
                   bracketLabel="Bracket view"
+                  knockoutBracketPicksUnlocked={knockoutBracketPicksUnlocked}
                 />
               </div>
               {view === "list" ? (

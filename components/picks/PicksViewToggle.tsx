@@ -9,6 +9,8 @@ type Props = {
   /** Defaults: “List view” / “Bracket view”. */
   listLabel?: string;
   bracketLabel?: string;
+  /** When false, show pre-R32 preview guidance under the toggle. */
+  knockoutBracketPicksUnlocked?: boolean;
 };
 
 /**
@@ -20,6 +22,7 @@ export function PicksViewToggle({
   bracketHref,
   listLabel = "List view",
   bracketLabel = "Bracket view",
+  knockoutBracketPicksUnlocked = true,
 }: Props) {
   const pill =
     "inline-flex items-center rounded-md px-3 py-1.5 text-xs font-semibold transition-colors";
@@ -46,9 +49,28 @@ export function PicksViewToggle({
         </div>
       </div>
       <p className="max-w-2xl text-xs leading-relaxed text-ash-muted">
-        Bracket View shows how your picks line up with the tournament. Third-place qualifiers are
-        not placed into the Round of 32 until the official knockout field exists; you complete the
-        full knockout path in Stage 3 after organizers publish the Round of 32.
+        {knockoutBracketPicksUnlocked ? (
+          <>
+            Bracket View shows how your picks line up with the tournament. Third-place
+            qualifiers are not placed into the Round of 32 until the official knockout
+            field exists; you complete the full knockout path in Stage 3 after organizers
+            publish the Round of 32.
+          </>
+        ) : current === "bracket" ? (
+          <>
+            Bracket View is a preview until the official Round of 32 is published. Use{" "}
+            <Link href={listHref} className="font-medium text-ash-text underline-offset-2 hover:underline">
+              List view
+            </Link>{" "}
+            to edit group stage, third-place qualification, and bonus picks.
+          </>
+        ) : (
+          <>
+            List view is the best way to edit group stage, third-place qualification, and
+            bonus picks before the official Round of 32 exists. Bracket View shows a
+            preview of your future knockout path.
+          </>
+        )}
       </p>
     </div>
   );

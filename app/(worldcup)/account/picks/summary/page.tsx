@@ -166,7 +166,12 @@ export default async function AccountPicksSummaryPage({ searchParams }: PageProp
           ctx.initialSlots.length > 0 ? (
             <>
               <div className="mb-6">
-                <PicksViewToggle current={view} listHref={listHref} bracketHref={bracketHref} />
+                <PicksViewToggle
+                  current={view}
+                  listHref={listHref}
+                  bracketHref={bracketHref}
+                  knockoutBracketPicksUnlocked={ctx.knockoutBracketPicksUnlocked}
+                />
               </div>
 
               {view === "list" ? (
@@ -201,6 +206,7 @@ export default async function AccountPicksSummaryPage({ searchParams }: PageProp
                       teams={ctx.teams}
                       knockoutBracketPicksUnlocked={ctx.knockoutBracketPicksUnlocked}
                       editPicksHref={editPicksHref}
+                      listViewHref={listHref}
                       readOnly={false}
                     />
                   </div>
