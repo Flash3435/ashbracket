@@ -92,15 +92,6 @@ export default async function AccountPage({ searchParams }: PageProps) {
   }
 
   const locked = picksCtx ? poolLocked(picksCtx.selectedLockAt) : false;
-  const lockHint =
-    picksCtx && locked && picksCtx.selectedLockAt
-      ? `Group stage, third-place advancers, and bonus picks locked ${new Intl.DateTimeFormat(undefined, {
-          dateStyle: "medium",
-          timeStyle: "short",
-        }).format(new Date(picksCtx.selectedLockAt))}. Knockout bracket may still be editable after the official Round of 32 is published.`
-      : picksCtx && locked
-        ? "Pre‑knockout picks are locked; knockout bracket may still be open."
-        : null;
 
   const picksHref =
     list.length === 1
@@ -257,7 +248,7 @@ export default async function AccountPage({ searchParams }: PageProps) {
                   participantId={picksCtx.selectedParticipant.id}
                   poolName={picksCtx.selectedPoolName}
                   locked={locked}
-                  lockHint={lockHint}
+                  lockAtIso={picksCtx?.selectedLockAt ?? null}
                   showSavedBanner={false}
                   knockoutBracketPicksUnlocked={
                     picksCtx.knockoutBracketPicksUnlocked
@@ -272,7 +263,7 @@ export default async function AccountPage({ searchParams }: PageProps) {
                     participantId={picksCtx.selectedParticipant.id}
                     poolName={picksCtx.selectedPoolName}
                     locked={locked}
-                    lockHint={lockHint}
+                    lockAtIso={picksCtx?.selectedLockAt ?? null}
                     showSavedBanner={false}
                     knockoutBracketPicksUnlocked={
                       picksCtx.knockoutBracketPicksUnlocked

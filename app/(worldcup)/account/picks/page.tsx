@@ -36,15 +36,6 @@ export default async function AccountPicksPage({ searchParams }: PageProps) {
   }
 
   const locked = poolLocked(ctx.selectedLockAt);
-  const lockHint =
-    locked && ctx.selectedLockAt
-      ? `Group stage, third-place advancers, and bonus picks locked ${new Intl.DateTimeFormat(undefined, {
-          dateStyle: "medium",
-          timeStyle: "short",
-        }).format(new Date(ctx.selectedLockAt))}. Knockout bracket picks still open after the official Round of 32 is published.`
-      : locked
-        ? "Group stage, third-place, and bonus picks are locked; knockout bracket may still be open."
-        : null;
 
   const summaryHref = ctx.selectedId
     ? `/account/picks/summary?participant=${ctx.selectedId}`
@@ -148,15 +139,6 @@ export default async function AccountPicksPage({ searchParams }: PageProps) {
                 <span className="font-medium text-ash-text">
                   {ctx.selectedPoolName}
                 </span>
-                {locked ? (
-                  <span className="ml-2 rounded-full bg-amber-950/50 px-2 py-0.5 text-xs font-medium text-amber-100">
-                    Pre‑knockout locked
-                  </span>
-                ) : (
-                  <span className="ml-2 rounded-full bg-ash-accent/20 px-2 py-0.5 text-xs font-medium text-ash-accent">
-                    Open for picks
-                  </span>
-                )}
               </p>
 
               {ctx.predictions.length === 0 && !locked ? (
@@ -178,7 +160,7 @@ export default async function AccountPicksPage({ searchParams }: PageProps) {
                 disabled={ctx.teams.length === 0}
                 readOnly={false}
                 preBracketSelectionsLocked={locked}
-                lockedMessage={lockHint}
+                poolLockAtIso={ctx.selectedLockAt}
                 savePicks={saveMyKnockoutPicksAction}
                 successMessage="Your picks were saved."
                 successDetail="Your pool’s scored leaderboard is recalculated from official results as soon as you save (same scoring rules as everyone else in the pool)."

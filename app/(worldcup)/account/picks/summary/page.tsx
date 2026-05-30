@@ -50,15 +50,6 @@ export default async function AccountPicksSummaryPage({ searchParams }: PageProp
   }
 
   const locked = poolLocked(ctx.selectedLockAt);
-  const lockHint =
-    locked && ctx.selectedLockAt
-      ? `Group stage, third-place advancers, and bonus picks locked ${new Intl.DateTimeFormat(undefined, {
-          dateStyle: "medium",
-          timeStyle: "short",
-        }).format(new Date(ctx.selectedLockAt))}. Knockout bracket may still be editable after the official Round of 32 is published.`
-      : locked
-        ? "Pre‑knockout picks are locked; knockout bracket may still be open."
-        : null;
 
   const teamById = new Map(ctx.teams.map((t) => [t.id, t]));
   const codes = countryCodesFromKnockoutSlots(ctx.initialSlots, teamById);
@@ -181,7 +172,7 @@ export default async function AccountPicksSummaryPage({ searchParams }: PageProp
                   participantId={ctx.selectedParticipant.id}
                   poolName={ctx.selectedPoolName}
                   locked={locked}
-                  lockHint={lockHint}
+                  lockAtIso={ctx.selectedLockAt}
                   showSavedBanner={showSavedBanner}
                   knockoutBracketPicksUnlocked={ctx.knockoutBracketPicksUnlocked}
                   showCompactStageProgress
@@ -194,7 +185,7 @@ export default async function AccountPicksSummaryPage({ searchParams }: PageProp
                     participantId={ctx.selectedParticipant.id}
                     poolName={ctx.selectedPoolName}
                     locked={locked}
-                    lockHint={lockHint}
+                    lockAtIso={ctx.selectedLockAt}
                     showSavedBanner={showSavedBanner}
                     knockoutBracketPicksUnlocked={ctx.knockoutBracketPicksUnlocked}
                     showCompactStageProgress

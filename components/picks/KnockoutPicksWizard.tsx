@@ -41,6 +41,8 @@ import {
 } from "../../lib/picks/picksMainViewPreference";
 import { KnockoutBracketPreview } from "./KnockoutBracketPreview";
 import { PicksProgressSummaryPanel } from "./PicksProgressSummaryPanel";
+import { PoolPickDeadlineBanner } from "./PoolPickDeadlineBanner";
+import { buildPoolPickDeadlineStatus } from "../../lib/picks/poolPickDeadlineDisplay";
 import {
   buildPicksProgressSummary,
   wizardStepIndexForNextSection,
@@ -81,6 +83,9 @@ export type KnockoutPicksWizardProps = {
   groupTeamCountryCodesByLetter?: Record<string, string[]>;
   disabled?: boolean;
   readOnly?: boolean;
+  /** Pool pick deadline (ISO). Pass `null` when no deadline; omit for admin views. */
+  poolLockAtIso?: string | null;
+  /** @deprecated Prefer `poolLockAtIso` — raw lock hint string. */
   lockedMessage?: string | null;
   savePicks: SaveKnockoutPicksFn;
   successMessage?: string;
@@ -533,6 +538,7 @@ export function KnockoutPicksWizard({
   groupTeamCountryCodesByLetter,
   disabled = false,
   readOnly = false,
+  poolLockAtIso,
   lockedMessage = null,
   preBracketSelectionsLocked = false,
   savePicks,
@@ -578,8 +584,19 @@ export function KnockoutPicksWizard({
     () =>
       buildPicksProgressSummary(slots, {
         knockoutBracketPicksUnlocked,
+        preKnockoutLocked: preBracketSelectionsLocked,
       }),
-    [slots, knockoutBracketPicksUnlocked],
+    [slots, knockoutBracketPicksUnlocked, preBracketSelectionsLocked],
+  );
+  const deadlineStatus = useMemo(
+    () =>
+      poolLockAtIso !== undefined
+        ? buildPoolPickDeadlineStatus({
+            lockAtIso: poolLockAtIso,
+            knockoutBracketPicksUnlocked,
+          })
+        : null,
+    [poolLockAtIso, knockoutBracketPicksUnlocked],
   );
   const [savedSignature, setSavedSignature] = useState(() => initialSignature);
   const [saveUiState, setSaveUiState] = useState<PicksSaveUiState>({
@@ -868,11 +885,13 @@ export function KnockoutPicksWizard({
         {readOnly
           ? " — this view is read-only."
           : preBracketActive
-            ? ". Group stage, third-place advancers, and bonus picks are locked. You can still update knockout bracket picks after the official Round of 32 is published."
+            ? " Group stage, third-place, and bonus picks are locked — see the deadline banner above for what you can still edit."
             : ". Start in bracket view to see what’s filled and what’s missing, or switch to list view to edit step by step — then save."}
       </p>
 
-      {lockedMessage ? (
+      {deadlineStatus ? (
+        <PoolPickDeadlineBanner status={deadlineStatus} />
+      ) : lockedMessage ? (
         <p
           className="rounded-md border border-amber-700/50 bg-amber-950/30 px-3 py-2 text-sm text-amber-100"
           role="status"
@@ -925,12 +944,14 @@ export function KnockoutPicksWizard({
       ) : null}
 
       {!readOnly ? (
-        <PicksProgressSummaryPanel
-          summary={picksProgress}
-          onContinue={continueToNextSection}
-          showListViewHint={picksMainView === "bracket"}
-          onSwitchToListView={() => selectPicksMainView("list")}
-        />
+        <div className="space-y-3">
+          <PicksProgressSummaryPanel
+            summary={picksProgress}
+            onContinue={continueToNextSection}
+            showListViewHint={picksMainView === "bracket"}
+            onSwitchToListView={() => selectPicksMainView("list")}
+          />
+        </div>
       ) : null}
 
       <div

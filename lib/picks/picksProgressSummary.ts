@@ -93,6 +93,7 @@ function sectionStatusFromCounts(
 function actionableMissingCount(
   slots: KnockoutPickSlotDraft[],
   knockoutBracketPicksUnlocked: boolean,
+  preKnockoutLocked: boolean,
 ): number {
   const group = groupRows(slots);
   const third = slots.filter((s) => s.predictionKind === "third_place_qualifier");
@@ -100,12 +101,14 @@ function actionableMissingCount(
   const knockout = knockoutProgressionRows(slots);
 
   let missing = 0;
-  missing += group.filter((s) => !s.teamId.trim()).length;
-  missing += Math.max(
-    0,
-    8 - third.filter((s) => s.teamId.trim()).length,
-  );
-  missing += bonus.filter((s) => !s.teamId.trim()).length;
+  if (!preKnockoutLocked) {
+    missing += group.filter((s) => !s.teamId.trim()).length;
+    missing += Math.max(
+      0,
+      8 - third.filter((s) => s.teamId.trim()).length,
+    );
+    missing += bonus.filter((s) => !s.teamId.trim()).length;
+  }
   if (knockoutBracketPicksUnlocked) {
     missing += knockout.filter((s) => !s.teamId.trim()).length;
   }
@@ -193,6 +196,7 @@ function buildOverallCopy(args: {
   actionableMissingCount: number;
   waitingForR32: boolean;
   knockoutBracketPicksUnlocked: boolean;
+  preKnockoutLocked: boolean;
   sections: PickSectionProgress[];
 }): { headline: string; detail: string | null } {
   const {
@@ -200,23 +204,29 @@ function buildOverallCopy(args: {
     actionableMissingCount: missing,
     waitingForR32,
     knockoutBracketPicksUnlocked,
+    preKnockoutLocked,
     sections,
   } = args;
 
   if (waitingForR32) {
     return {
       headline: "Waiting for official Round of 32",
-      detail:
-        "Your group, third-place, and bonus picks are complete. Knockout picks unlock after the official bracket is published — nothing else to do right now.",
+      detail: preKnockoutLocked
+        ? "Your group, third-place, and bonus picks are locked in. Knockout picks unlock after the official bracket is published — nothing else to do right now."
+        : "Your group, third-place, and bonus picks are complete. Knockout picks unlock after the official bracket is published — nothing else to do right now.",
     };
   }
 
   if (picksComplete) {
     return {
       headline: "All required picks complete",
-      detail: knockoutBracketPicksUnlocked
-        ? "You can still edit until the pool locks."
-        : "Knockout bracket picks open when organizers publish the official Round of 32.",
+      detail: preKnockoutLocked
+        ? knockoutBracketPicksUnlocked
+          ? "Group & bonus picks are locked. You can still edit knockout bracket picks."
+          : "Group & bonus picks are locked. Knockout bracket picks open when organizers publish the official Round of 32."
+        : knockoutBracketPicksUnlocked
+          ? "You can still edit until the pick deadline."
+          : "Knockout bracket picks open when organizers publish the official Round of 32.",
     };
   }
 
@@ -248,12 +258,36 @@ function buildOverallCopy(args: {
  * Participant-facing progress summary for World Cup picks. Reuses completeness rules
  * from picksCompleteness without changing them.
  */
+function applyPreKnockoutLockToSection(
+  section: PickSectionProgress,
+  preKnockoutLocked: boolean,
+): PickSectionProgress {
+  if (
+    !preKnockoutLocked ||
+    section.id === "knockout" ||
+    section.status === "complete"
+  ) {
+    return section;
+  }
+  return {
+    ...section,
+    status: "locked",
+    detailLine: "Locked at deadline",
+    missing: 0,
+  };
+}
+
 export function buildPicksProgressSummary(
   slots: KnockoutPickSlotDraft[],
-  options?: { knockoutBracketPicksUnlocked?: boolean },
+  options?: {
+    knockoutBracketPicksUnlocked?: boolean;
+    /** When true, group / third-place / bonus sections show as locked if incomplete. */
+    preKnockoutLocked?: boolean;
+  },
 ): PicksProgressSummary {
   const knockoutBracketPicksUnlocked =
     options?.knockoutBracketPicksUnlocked !== false;
+  const preKnockoutLocked = options?.preKnockoutLocked === true;
 
   const group = groupRows(slots);
   const third = slots.filter((s) => s.predictionKind === "third_place_qualifier");
@@ -275,7 +309,7 @@ export function buildPicksProgressSummary(
     (knockout.length > 0 &&
       knockout.every((s) => s.teamId.trim() !== ""));
 
-  const sections: PickSectionProgress[] = [
+  const rawSections: PickSectionProgress[] = [
     {
       id: "group",
       label: "Group stage",
@@ -352,10 +386,18 @@ export function buildPicksProgressSummary(
     },
   ];
 
+  const sections = rawSections.map((section) =>
+    applyPreKnockoutLockToSection(section, preKnockoutLocked),
+  );
+
   const picksComplete = participantPicksCompleteFromDrafts(slots, {
     knockoutBracketPicksUnlocked,
   });
-  const missing = actionableMissingCount(slots, knockoutBracketPicksUnlocked);
+  const missing = actionableMissingCount(
+    slots,
+    knockoutBracketPicksUnlocked,
+    preKnockoutLocked,
+  );
   const preKnockoutPhaseComplete =
     !knockoutBracketPicksUnlocked &&
     groupComplete &&
@@ -368,6 +410,7 @@ export function buildPicksProgressSummary(
     actionableMissingCount: missing,
     waitingForR32,
     knockoutBracketPicksUnlocked,
+    preKnockoutLocked,
     sections,
   });
 

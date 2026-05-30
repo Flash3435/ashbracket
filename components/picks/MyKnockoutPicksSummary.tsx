@@ -16,7 +16,9 @@ import {
   type PickSectionProgress,
   type PickSectionStatus,
 } from "../../lib/picks/picksProgressSummary";
+import { buildPoolPickDeadlineStatus } from "../../lib/picks/poolPickDeadlineDisplay";
 import { PicksProgressSummaryPanel } from "./PicksProgressSummaryPanel";
+import { PoolPickDeadlineBanner } from "./PoolPickDeadlineBanner";
 
 type StageBlockProps = {
   title: string;
@@ -142,7 +144,10 @@ type Props = {
   participantId: string;
   poolName: string;
   locked: boolean;
-  lockHint: string | null;
+  /** Pool pick deadline (ISO). Preferred over `lockHint`. */
+  lockAtIso?: string | null;
+  /** @deprecated Prefer `lockAtIso`. */
+  lockHint?: string | null;
   showSavedBanner: boolean;
   knockoutBracketPicksUnlocked?: boolean;
   /** One-line progress by stage (group, third-place, knockout, bonus). */
@@ -172,7 +177,8 @@ export function MyKnockoutPicksSummary({
   participantId,
   poolName,
   locked,
-  lockHint,
+  lockAtIso,
+  lockHint = null,
   showSavedBanner,
   knockoutBracketPicksUnlocked = true,
   showCompactStageProgress = false,
@@ -207,7 +213,16 @@ export function MyKnockoutPicksSummary({
 
   const picksProgress = buildPicksProgressSummary(slots, {
     knockoutBracketPicksUnlocked,
+    preKnockoutLocked: locked,
   });
+  const deadlineStatus =
+    lockAtIso !== undefined
+      ? buildPoolPickDeadlineStatus({
+          lockAtIso,
+          knockoutBracketPicksUnlocked,
+          readOnly,
+        })
+      : null;
   const sectionById = new Map(
     picksProgress.sections.map((s) => [s.id, s]),
   );
@@ -221,54 +236,52 @@ export function MyKnockoutPicksSummary({
         >
           <p className="font-semibold text-ash-text">You’re all set — picks saved.</p>
           <p className="mt-1 text-ash-muted">
-            Snapshot of your full tournament picks. You can still edit until the
-            pool locks.
+            Snapshot of your full tournament picks.
+            {locked
+              ? " Group & bonus picks are locked — this is a read-only summary."
+              : " You can still edit until the pick deadline."}
           </p>
         </div>
       ) : null}
 
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-        <div>
+        <div className="min-w-0 flex-1 space-y-3">
           <p className="text-sm text-ash-muted">
             Pool:{" "}
             <span className="font-medium text-ash-text">{poolName}</span>
-          </p>
-          <div className="mt-2 flex flex-wrap items-center gap-2">
-            {locked ? (
-              <span className="rounded-full bg-amber-950/50 px-2.5 py-0.5 text-xs font-medium text-amber-100">
-                Locked — picks frozen
-              </span>
-            ) : (
-              <span className="rounded-full bg-ash-accent/20 px-2.5 py-0.5 text-xs font-medium text-ash-accent">
-                {readOnly ? "Open — picks not locked yet" : "Open — you can edit picks"}
-              </span>
-            )}
-            <span className="text-xs text-ash-muted">
+            <span className="ml-2 text-xs text-ash-muted">
               {filledCount} of {slots.length} slots filled
             </span>
-          </div>
-          {showCompactStageProgress ? (
-            <div className="mt-4 space-y-3">
-              <PicksProgressSummaryPanel summary={picksProgress} />
-              {showEditButton &&
-              picksProgress.nextSection &&
-              !picksProgress.waitingForR32 ? (
-                <Link
-                  href={editHref}
-                  className="inline-flex rounded-lg bg-ash-accent px-3.5 py-2 text-sm font-semibold text-white transition hover:bg-ash-accent/90"
-                >
-                  {picksProgress.nextSection.ctaLabel}
-                </Link>
-              ) : null}
-            </div>
+          </p>
+          {deadlineStatus ? (
+            <PoolPickDeadlineBanner status={deadlineStatus} />
+          ) : lockHint ? (
+            <p className="text-sm text-amber-100">{lockHint}</p>
           ) : null}
-          {lockHint ? (
-            <p className="mt-2 text-sm text-amber-100">{lockHint}</p>
+          {showCompactStageProgress ? (
+            <PicksProgressSummaryPanel summary={picksProgress} />
+          ) : null}
+          {showCompactStageProgress &&
+          showEditButton &&
+          picksProgress.nextSection &&
+          !picksProgress.waitingForR32 &&
+          (!locked || picksProgress.nextSection.sectionId === "knockout") ? (
+            <Link
+              href={editHref}
+              className="inline-flex rounded-lg bg-ash-accent px-3.5 py-2 text-sm font-semibold text-white transition hover:bg-ash-accent/90"
+            >
+              {picksProgress.nextSection.ctaLabel}
+            </Link>
           ) : null}
         </div>
         {showEditButton ? (
           <Link href={editHref} className="btn-primary inline-flex shrink-0">
-            {locked ? "View edit screen" : "Edit picks"}
+            {locked
+              ? knockoutBracketPicksUnlocked &&
+                  picksProgress.actionableMissingCount > 0
+                ? "Edit knockout picks"
+                : "View picks"
+              : "Edit picks"}
           </Link>
         ) : null}
       </div>

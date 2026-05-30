@@ -110,4 +110,19 @@ function eightThirdPlace(): KnockoutPickSlotDraft[] {
   assert.strictEqual(summary.sections.find((s) => s.id === "third_place")?.missing, 5);
 }
 
+// Pre-knockout locked — frozen sections not actionable
+{
+  const slots = [
+    ...filledGroupSlots().map((s) => ({ ...s, teamId: "" })),
+    ...eightThirdPlace(),
+  ];
+  const summary = buildPicksProgressSummary(slots, {
+    knockoutBracketPicksUnlocked: false,
+    preKnockoutLocked: true,
+  });
+  assert.strictEqual(summary.sections.find((s) => s.id === "group")?.status, "locked");
+  assert.strictEqual(summary.actionableMissingCount, 0);
+  assert.strictEqual(summary.nextSection, null);
+}
+
 console.log("picksProgressSummary.selftest: ok");

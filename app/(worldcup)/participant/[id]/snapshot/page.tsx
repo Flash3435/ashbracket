@@ -59,25 +59,6 @@ export default async function ParticipantBracketSnapshotPage({
   } = await supabase.auth.getUser();
 
   const locked = poolLocked(result.header.lockAt);
-  const lockHintSelf =
-    locked && result.header.lockAt
-      ? `Group stage, third-place advancers, and bonus picks locked ${new Intl.DateTimeFormat(undefined, {
-          dateStyle: "medium",
-          timeStyle: "short",
-        }).format(new Date(result.header.lockAt))}. Knockout bracket may still be editable after the official Round of 32 is published.`
-      : locked
-        ? "Pre‑knockout picks are locked; knockout bracket may still be open."
-        : null;
-
-  const lockHintPeer =
-    locked && result.header.lockAt
-      ? `This pool had its pre‑knockout picks deadline at ${new Intl.DateTimeFormat(undefined, {
-          dateStyle: "medium",
-          timeStyle: "short",
-        }).format(new Date(result.header.lockAt))} (host timezone as stored). Knockout may still update after the official Round of 32 is published.`
-      : locked
-        ? "Pre‑knockout picks are locked for this pool; knockout bracket may still be open."
-        : null;
 
   const teamById = new Map(result.teams.map((t) => [t.id, t]));
   const codes = countryCodesFromKnockoutSlots(result.initialSlots, teamById);
@@ -172,7 +153,7 @@ export default async function ParticipantBracketSnapshotPage({
               participantId={result.participantId}
               poolName={result.header.poolName}
               locked={locked}
-              lockHint={isSelf ? lockHintSelf : lockHintPeer}
+              lockAtIso={result.header.lockAt}
               showSavedBanner={false}
               knockoutBracketPicksUnlocked={result.knockoutBracketPicksUnlocked}
               showCompactStageProgress
@@ -186,7 +167,7 @@ export default async function ParticipantBracketSnapshotPage({
                 participantId={result.participantId}
                 poolName={result.header.poolName}
                 locked={locked}
-                lockHint={isSelf ? lockHintSelf : lockHintPeer}
+                lockAtIso={result.header.lockAt}
                 showSavedBanner={false}
                 knockoutBracketPicksUnlocked={result.knockoutBracketPicksUnlocked}
                 showCompactStageProgress
