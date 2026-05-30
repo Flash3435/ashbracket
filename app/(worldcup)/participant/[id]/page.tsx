@@ -2,6 +2,7 @@ import { notFound } from "next/navigation";
 import { PublicParticipantProfile } from "@/components/participant/PublicParticipantProfile";
 import { PageContainer } from "@/components/ui/PageContainer";
 import { PageTitle } from "@/components/ui/PageTitle";
+import { getMyParticipantIdInPool } from "@/lib/join/actions";
 import { fetchPublicParticipantDetail } from "../../../../lib/participant/fetchPublicParticipantDetail";
 
 export const dynamic = "force-dynamic";
@@ -33,10 +34,13 @@ export default async function PublicParticipantPage({ params }: PageProps) {
   }
 
   const { data } = result;
+  const viewerParticipantId = await getMyParticipantIdInPool(data.poolId);
+  const isViewer =
+    viewerParticipantId !== null && viewerParticipantId === data.participantId;
 
   return (
     <PageContainer>
-      <PublicParticipantProfile detail={data} />
+      <PublicParticipantProfile detail={data} isViewer={isViewer} />
     </PageContainer>
   );
 }

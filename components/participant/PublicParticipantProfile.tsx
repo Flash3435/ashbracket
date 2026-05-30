@@ -9,6 +9,7 @@ import {
   CountryFlagIcon,
   CountryFlagPlaceholder,
 } from "../tournament/Flag";
+import { ViewerYouChip } from "../ui/ViewerYouChip";
 import type { PublicParticipantDetail } from "../../types/publicParticipant";
 
 function emptyBox(message: string, hint: string) {
@@ -236,9 +237,11 @@ function StageSection({
 
 type Props = {
   detail: PublicParticipantDetail;
+  /** True when the signed-in viewer owns this participant entry in the pool. */
+  isViewer?: boolean;
 };
 
-export function PublicParticipantProfile({ detail }: Props) {
+export function PublicParticipantProfile({ detail, isViewer = false }: Props) {
   const { summary, sections, ledgerItems } = buildPublicParticipantPresentation(detail);
 
   const unresolvedHint =
@@ -257,6 +260,7 @@ export function PublicParticipantProfile({ detail }: Props) {
             <span className="rounded-full border border-ash-border/70 bg-ash-body/40 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-ash-muted">
               Scoring profile
             </span>
+            {isViewer ? <ViewerYouChip className="px-3 py-1 text-[11px] tracking-[0.18em]" /> : null}
             <span className="rounded-full border border-ash-border/70 bg-ash-body/40 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-ash-muted">
               {detail.poolName}
             </span>
@@ -264,14 +268,16 @@ export function PublicParticipantProfile({ detail }: Props) {
 
           <div className="flex flex-col gap-6 xl:flex-row xl:items-end xl:justify-between">
             <div className="max-w-3xl">
-              <p className="text-sm font-medium text-ash-muted">Participant</p>
+              <p className="text-sm font-medium text-ash-muted">
+                {isViewer ? "Your entry" : "Participant"}
+              </p>
               <h1 className="mt-2 text-3xl font-bold tracking-tight text-ash-text sm:text-4xl">
                 {detail.displayName}
               </h1>
               <p className="mt-3 text-sm leading-relaxed text-ash-muted sm:text-base">
-                See which picks have scored, which are still waiting on results, and
-                how your total was built — updated when the pool recalculates from
-                official results.
+                {isViewer
+                  ? "See which of your picks have scored, which are still waiting on results, and how your total was built — updated when the pool recalculates from official results."
+                  : "See which picks have scored, which are still waiting on results, and how this total was built — updated when the pool recalculates from official results."}
               </p>
               {unresolvedHint ? (
                 <p className="mt-2 text-sm text-amber-100/90">{unresolvedHint}</p>
@@ -318,20 +324,25 @@ export function PublicParticipantProfile({ detail }: Props) {
         {summaryCard(
           "Point awards",
           String(summary.pointAwardsCount),
-          "Individual times points were added to your running total.",
+          isViewer
+            ? "Individual times points were added to your running total."
+            : "Individual times points were added to this running total.",
         )}
       </section>
 
       <section className="space-y-4 border-t border-ash-border/50 pt-2">
         <div className="space-y-2">
           <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-ash-muted">
-            Your picks
+            {isViewer ? "Your picks" : "Picks"}
           </p>
-          <h2 className="text-2xl font-bold tracking-tight text-ash-text">Picks by stage</h2>
+          <h2 className="text-2xl font-bold tracking-tight text-ash-text">
+            {isViewer ? "Your picks by stage" : "Picks by stage"}
+          </h2>
           <p className="max-w-3xl text-sm leading-relaxed text-ash-muted">
             Expand a stage to review each slot. Status badges reflect what we can see
-            from your saved picks and awarded points — we cannot show whether an
-            unscored pick is still waiting on results or has already missed.
+            from {isViewer ? "your" : "these"} saved picks and awarded points — we
+            cannot show whether an unscored pick is still waiting on results or has
+            already missed.
           </p>
         </div>
 
@@ -341,8 +352,9 @@ export function PublicParticipantProfile({ detail }: Props) {
             the board for this pick.
           </p>
           <p className="mt-1.5">
-            <span className="font-medium text-amber-100">Awaiting score</span> — you
-            picked a team, but no points yet (pending results or no points earned).
+            <span className="font-medium text-amber-100">Awaiting score</span> —{" "}
+            {isViewer ? "you picked" : "they picked"} a team, but no points yet
+            (pending results or no points earned).
           </p>
           <p className="mt-1.5">
             <span className="font-medium text-slate-300">No pick</span> — empty slot.
@@ -371,14 +383,14 @@ export function PublicParticipantProfile({ detail }: Props) {
         <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
           <div className="space-y-2">
             <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-ash-muted">
-              How your total was built
+              {isViewer ? "How your total was built" : "How this total was built"}
             </p>
             <h2 className="text-2xl font-bold tracking-tight text-ash-text">
               Points history
             </h2>
             <p className="max-w-3xl text-sm leading-relaxed text-ash-muted">
-              Newest awards first. Each line is one addition to your score from an
-              official result.
+              Newest awards first. Each line is one addition to{" "}
+              {isViewer ? "your" : "this participant's"} score from an official result.
             </p>
           </div>
           {ledgerItems.length > 0 ? (

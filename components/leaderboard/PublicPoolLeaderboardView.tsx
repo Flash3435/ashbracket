@@ -7,6 +7,7 @@ import {
 import type { LeaderboardPublicRow } from "../../types/leaderboard";
 import type { PoolPublicStats } from "../../lib/pool/fetchPoolPublicStats";
 import { PoolPublicStatsSummary } from "../pool/PoolPublicStatsSummary";
+import { ViewerYouChip } from "../ui/ViewerYouChip";
 import { formatUsdCents } from "@/lib/format/usdCents";
 
 function summaryCard(label: string, value: string, hint: string) {
@@ -56,17 +57,43 @@ function rankCell(row: PublicPoolLeaderboardRowDisplay) {
   );
 }
 
-function rowSurfaceClass(row: PublicPoolLeaderboardRowDisplay): string {
+function rowSurfaceClass(
+  row: PublicPoolLeaderboardRowDisplay,
+  isViewerRow: boolean,
+): string {
+  let base: string;
   if (row.podium === "gold") {
-    return "border-l-4 border-amber-500/80 bg-amber-500/[0.08]";
+    base = "border-l-4 border-amber-500/80 bg-amber-500/[0.08]";
+  } else if (row.podium === "silver") {
+    base = "border-l-4 border-slate-400/70 bg-slate-400/[0.06]";
+  } else if (row.podium === "bronze") {
+    base = "border-l-4 border-orange-500/70 bg-orange-500/[0.06]";
+  } else {
+    base = "border-l-4 border-transparent";
   }
-  if (row.podium === "silver") {
-    return "border-l-4 border-slate-400/70 bg-slate-400/[0.06]";
+
+  if (isViewerRow && row.podium == null) {
+    return `${base} ring-1 ring-inset ring-sky-400/25 bg-gradient-to-r from-sky-500/[0.07] to-transparent`;
   }
-  if (row.podium === "bronze") {
-    return "border-l-4 border-orange-500/70 bg-orange-500/[0.06]";
-  }
-  return "border-l-4 border-transparent";
+
+  return base;
+}
+
+function participantNameCell(
+  row: PublicPoolLeaderboardRowDisplay,
+  isViewerRow: boolean,
+) {
+  return (
+    <>
+      <span className="inline-flex max-w-full flex-wrap items-center gap-2">
+        <span className="font-medium text-ash-text">{row.displayName}</span>
+        {isViewerRow ? <ViewerYouChip /> : null}
+      </span>
+      {row.isTiedAtRank ? (
+        <p className="mt-0.5 text-xs text-ash-border-hover">Tied at rank {row.rank}</p>
+      ) : null}
+    </>
+  );
 }
 
 type Props = {
@@ -75,6 +102,8 @@ type Props = {
   stats: PoolPublicStats | null;
   statsError: string | null;
   leaderboardError: string | null;
+  /** Set when the signed-in user has a claimed participant row in this pool. */
+  viewerParticipantId?: string | null;
 };
 
 export function PublicPoolLeaderboardView({
@@ -83,6 +112,7 @@ export function PublicPoolLeaderboardView({
   stats,
   statsError,
   leaderboardError,
+  viewerParticipantId = null,
 }: Props) {
   if (leaderboardError) {
     return (
@@ -201,21 +231,25 @@ export function PublicPoolLeaderboardView({
               </tr>
             </thead>
             <tbody className="divide-y divide-ash-border/60">
-              {presentation.rows.map((row) => (
-                <tr key={row.participantId} className={rowSurfaceClass(row)}>
+              {presentation.rows.map((row) => {
+                const isViewerRow =
+                  viewerParticipantId != null &&
+                  row.participantId === viewerParticipantId;
+
+                return (
+                <tr
+                  key={row.participantId}
+                  className={rowSurfaceClass(row, isViewerRow)}
+                  aria-current={isViewerRow ? "true" : undefined}
+                >
                   <td className="px-4 py-3.5">{rankCell(row)}</td>
                   <td className="px-4 py-3.5">
                     <Link
                       href={`/participant/${row.participantId}`}
-                      className="font-medium text-ash-text underline-offset-2 hover:text-ash-accent hover:underline"
+                      className="inline-block underline-offset-2 hover:text-ash-accent hover:underline"
                     >
-                      {row.displayName}
+                      {participantNameCell(row, isViewerRow)}
                     </Link>
-                    {row.isTiedAtRank ? (
-                      <p className="mt-0.5 text-xs text-ash-border-hover">
-                        Tied at rank {row.rank}
-                      </p>
-                    ) : null}
                   </td>
                   <td className="px-4 py-3.5 text-right">
                     <span className="text-lg font-bold tabular-nums text-ash-text">
@@ -223,23 +257,33 @@ export function PublicPoolLeaderboardView({
                     </span>
                   </td>
                 </tr>
-              ))}
+                );
+              })}
             </tbody>
           </table>
         </div>
 
         <ul className="space-y-3 md:hidden">
-          {presentation.rows.map((row) => (
+          {presentation.rows.map((row) => {
+            const isViewerRow =
+              viewerParticipantId != null &&
+              row.participantId === viewerParticipantId;
+
+            return (
             <li key={row.participantId}>
               <Link
                 href={`/participant/${row.participantId}`}
-                className={`block rounded-xl border border-ash-border/70 px-4 py-4 transition-colors hover:bg-ash-body/40 ${rowSurfaceClass(row)}`}
+                aria-current={isViewerRow ? "true" : undefined}
+                className={`block rounded-xl border border-ash-border/70 px-4 py-4 transition-colors hover:bg-ash-body/40 ${rowSurfaceClass(row, isViewerRow)}`}
               >
                 <div className="flex items-start justify-between gap-3">
                   <div className="flex items-center gap-3">
                     {rankCell(row)}
                     <div className="min-w-0">
-                      <p className="font-semibold text-ash-text">{row.displayName}</p>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <p className="font-semibold text-ash-text">{row.displayName}</p>
+                        {isViewerRow ? <ViewerYouChip /> : null}
+                      </div>
                       {row.isTiedAtRank ? (
                         <p className="text-xs text-ash-muted">Tied at rank {row.rank}</p>
                       ) : null}
@@ -251,7 +295,8 @@ export function PublicPoolLeaderboardView({
                 </div>
               </Link>
             </li>
-          ))}
+            );
+          })}
         </ul>
       </section>
     </div>

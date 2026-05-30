@@ -1,6 +1,7 @@
 import { PublicPoolLeaderboardView } from "@/components/leaderboard/PublicPoolLeaderboardView";
 import { SimulationModeBanner } from "@/components/admin/SimulationModeBanner";
 import { PageContainer } from "@/components/ui/PageContainer";
+import { getMyParticipantIdInPool } from "@/lib/join/actions";
 import { mapPublicLeaderboardRow } from "@/lib/leaderboard/publicLeaderboard";
 import { fetchPoolPublicStats } from "@/lib/pool/fetchPoolPublicStats";
 import { createClient } from "@/lib/supabase/server";
@@ -33,13 +34,14 @@ export default async function PublicPoolLeaderboardPage({ params }: PageProps) {
   }
 
   const supabase = await createClient();
-  const [leaderboardRes, statsRes] = await Promise.all([
+  const [leaderboardRes, statsRes, viewerParticipantId] = await Promise.all([
     supabase
       .from("leaderboard_public")
       .select("pool_id, pool_name, participant_id, display_name, total_points, rank")
       .eq("pool_id", poolIdTrimmed)
       .order("rank", { ascending: true }),
     fetchPoolPublicStats(supabase, poolIdTrimmed),
+    getMyParticipantIdInPool(poolIdTrimmed),
   ]);
 
   const rows = leaderboardRes.error
@@ -65,6 +67,7 @@ export default async function PublicPoolLeaderboardPage({ params }: PageProps) {
         stats={statsRes.stats}
         statsError={statsRes.error}
         leaderboardError={leaderboardRes.error?.message ?? null}
+        viewerParticipantId={viewerParticipantId}
       />
     </PageContainer>
   );
