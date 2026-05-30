@@ -15,6 +15,9 @@ import type { Prediction, Team, TournamentStage } from "../../src/types/domain";
 import type { Participant } from "../../types/participant";
 import type { KnockoutPickSlotDraft } from "../../types/adminKnockoutPicks";
 import { fetchOfficialRoundOf32Complete } from "../tournament/fetchOfficialRoundOf32Complete";
+import { poolLocked } from "../pools/poolLocked";
+
+export { poolLocked };
 
 /** Stages needed to build the full participant picks wizard. */
 export const ACCOUNT_TOURNAMENT_STAGE_CODES = [
@@ -45,13 +48,6 @@ export function embeddedPool(
   if (raw == null) return null;
   if (Array.isArray(raw)) return raw[0] ?? null;
   return raw;
-}
-
-export function poolLocked(lockAt: string | null | undefined): boolean {
-  if (lockAt == null || lockAt === "") return false;
-  const t = new Date(lockAt).getTime();
-  if (Number.isNaN(t)) return false;
-  return t <= Date.now();
 }
 
 export type MyParticipantRow = {

@@ -1,5 +1,5 @@
 import { ASHBRACKET_SCHEDULE_TIMEZONE } from "../datetime/scheduleDisplay";
-import { poolLocked } from "../account/loadAccountKnockoutSelection";
+import { poolLocked } from "../pools/poolLocked";
 
 export type PoolPickDeadlineTone = "open" | "soon" | "locked" | "neutral";
 
