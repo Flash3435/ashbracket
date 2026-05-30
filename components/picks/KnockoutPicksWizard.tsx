@@ -40,6 +40,11 @@ import {
   type PicksMainView,
 } from "../../lib/picks/picksMainViewPreference";
 import { KnockoutBracketPreview } from "./KnockoutBracketPreview";
+import { PicksProgressSummaryPanel } from "./PicksProgressSummaryPanel";
+import {
+  buildPicksProgressSummary,
+  wizardStepIndexForNextSection,
+} from "../../lib/picks/picksProgressSummary";
 
 export type SaveKnockoutPicksFn = (input: {
   participantId: string;
@@ -569,6 +574,13 @@ export function KnockoutPicksWizard({
       ),
     [knockoutBracketPicksUnlocked, bonusQuestionCount],
   );
+  const picksProgress = useMemo(
+    () =>
+      buildPicksProgressSummary(slots, {
+        knockoutBracketPicksUnlocked,
+      }),
+    [slots, knockoutBracketPicksUnlocked],
+  );
   const [savedSignature, setSavedSignature] = useState(() => initialSignature);
   const [saveUiState, setSaveUiState] = useState<PicksSaveUiState>({
     kind: "saved",
@@ -592,6 +604,23 @@ export function KnockoutPicksWizard({
     if (rememberPicksMainView) writePicksMainViewPreference(view);
     setOpenRowKey(null);
     setSearch("");
+  }
+
+  function continueToNextSection() {
+    const next = picksProgress.nextSection;
+    if (!next) return;
+    const stepIdx = wizardStepIndexForNextSection(next, wizardSteps);
+    selectPicksMainView("list");
+    if (stepIdx != null) {
+      setStep(stepIdx);
+      setOpenRowKey(null);
+      setSearch("");
+      window.setTimeout(() => {
+        document
+          .getElementById("picks-progress-summary")
+          ?.scrollIntoView({ behavior: "smooth", block: "start" });
+      }, 0);
+    }
   }
   const draftSignature = useMemo(() => picksDraftSignature(slots), [slots]);
 
@@ -895,6 +924,15 @@ export function KnockoutPicksWizard({
         </p>
       ) : null}
 
+      {!readOnly ? (
+        <PicksProgressSummaryPanel
+          summary={picksProgress}
+          onContinue={continueToNextSection}
+          showListViewHint={picksMainView === "bracket"}
+          onSwitchToListView={() => selectPicksMainView("list")}
+        />
+      ) : null}
+
       <div
         className="flex flex-wrap items-center gap-2 border-b border-ash-border pb-4"
         role="tablist"
@@ -968,11 +1006,27 @@ export function KnockoutPicksWizard({
         {wizardSteps.map((s, i) => {
           const done = stepComplete(slots, i, wizardSteps);
           const active = i === step;
+          const rows = stepRowsFor(slots, i, wizardSteps);
+          const missingInStep =
+            s.mode === "bracket" && s.bracketKind === "third_place_qualifier"
+              ? Math.max(
+                  0,
+                  8 -
+                    rows.filter((r) => r.teamId.trim()).length,
+                )
+              : rows.filter((r) => !r.teamId.trim()).length;
           return (
             <button
               key={s.id}
               type="button"
               disabled={coreDisabled}
+              title={
+                done
+                  ? `${s.title} — complete`
+                  : missingInStep > 0
+                    ? `${s.title} — ${missingInStep} missing`
+                    : s.title
+              }
               onClick={() => {
                 setStep(i);
                 setOpenRowKey(null);
@@ -983,10 +1037,17 @@ export function KnockoutPicksWizard({
                   ? "bg-ash-accent text-white"
                   : done
                     ? "bg-ash-accent/20 text-ash-accent hover:bg-ash-accent/30"
-                    : "bg-ash-surface text-ash-muted ring-1 ring-ash-border hover:bg-ash-border/30"
+                    : missingInStep > 0
+                      ? "bg-amber-950/35 text-amber-100 ring-1 ring-amber-700/45 hover:bg-amber-950/50"
+                      : "bg-ash-surface text-ash-muted ring-1 ring-ash-border hover:bg-ash-border/30"
               } disabled:cursor-not-allowed disabled:opacity-50`}
             >
               {i + 1}. {s.title}
+              {!done && missingInStep > 0 ? (
+                <span className="ml-1 tabular-nums opacity-80">
+                  ({missingInStep})
+                </span>
+              ) : null}
             </button>
           );
         })}
@@ -1223,6 +1284,8 @@ export function KnockoutPicksWizard({
                     ? row.slotLabel
                     : row.slotLabel;
 
+              const isEmptyPick = !row.teamId.trim();
+
               return (
                 <li
                   key={row.rowKey}
@@ -1230,8 +1293,10 @@ export function KnockoutPicksWizard({
                     isThirdPlaceStepUi && isThirdPlaceRow
                       ? row.teamId.trim()
                         ? "border-ash-accent/45 bg-ash-accent/[0.07]"
-                        : "border-ash-border/80 bg-ash-body/25"
-                      : "border-ash-border bg-ash-body/40"
+                        : "border-dashed border-amber-700/35 bg-amber-950/10"
+                      : isEmptyPick && !thirdRowChooseDisabled
+                        ? "border-dashed border-amber-700/40 bg-amber-950/15"
+                        : "border-ash-border bg-ash-body/40"
                   }`}
                 >
                   <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
@@ -1245,8 +1310,12 @@ export function KnockoutPicksWizard({
                           size="lg"
                         />
                         <div>
-                          <p className="text-sm font-medium text-ash-text">
-                            {team?.name ?? "No team selected"}
+                          <p
+                            className={`text-sm font-medium ${
+                              isEmptyPick ? "text-amber-100/90" : "text-ash-text"
+                            }`}
+                          >
+                            {team?.name ?? "Pick needed"}
                           </p>
                           {team && strength ? (
                             <p

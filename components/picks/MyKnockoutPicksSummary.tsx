@@ -11,23 +11,69 @@ import {
 import type { KnockoutPickSlotDraft } from "../../types/adminKnockoutPicks";
 import type { Team } from "../../src/types/domain";
 import { isKnockoutProgressionKind } from "../../lib/predictions/knockoutProgressionKinds";
+import {
+  buildPicksProgressSummary,
+  type PickSectionProgress,
+  type PickSectionStatus,
+} from "../../lib/picks/picksProgressSummary";
+import { PicksProgressSummaryPanel } from "./PicksProgressSummaryPanel";
 
 type StageBlockProps = {
   title: string;
   subtitle: string;
   rows: KnockoutPickSlotDraft[];
   teamById: Map<string, Team>;
+  section?: PickSectionProgress;
 };
 
-function StageBlock({ title, subtitle, rows, teamById }: StageBlockProps) {
+const SECTION_STATUS_LABEL: Record<PickSectionStatus, string> = {
+  complete: "Complete",
+  partial: "In progress",
+  not_started: "Not started",
+  locked: "Opens later",
+};
+
+function sectionStatusClass(status: PickSectionStatus): string {
+  switch (status) {
+    case "complete":
+      return "border-ash-accent/40 bg-ash-accent/10 text-ash-accent";
+    case "partial":
+      return "border-amber-700/45 bg-amber-950/30 text-amber-100";
+    case "not_started":
+      return "border-ash-border bg-ash-body/30 text-ash-muted";
+    case "locked":
+      return "border-sky-800/45 bg-sky-950/25 text-sky-100";
+  }
+}
+
+function StageBlock({ title, subtitle, rows, teamById, section }: StageBlockProps) {
+  const missingCount = rows.filter((r) => !r.teamId.trim()).length;
+
   return (
     <section className="ash-surface p-4">
-      <h2 className="text-base font-bold text-ash-text">{title}</h2>
-      <p className="mt-1 text-xs text-ash-muted">{subtitle}</p>
+      <div className="flex flex-wrap items-start justify-between gap-2">
+        <div className="min-w-0 flex-1">
+          <h2 className="text-base font-bold text-ash-text">{title}</h2>
+          <p className="mt-1 text-xs text-ash-muted">{subtitle}</p>
+        </div>
+        {section ? (
+          <span
+            className={`shrink-0 rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${sectionStatusClass(section.status)}`}
+          >
+            {SECTION_STATUS_LABEL[section.status]}
+          </span>
+        ) : null}
+      </div>
+      {section?.status === "partial" && section.missing > 0 ? (
+        <p className="mt-2 text-xs font-medium text-amber-100/90">
+          {section.missing} pick{section.missing === 1 ? "" : "s"} missing
+        </p>
+      ) : null}
       <ul className="mt-3 space-y-2">
         {rows.map((row) => {
           const tid = row.teamId.trim();
           const team = tid ? teamById.get(tid) : undefined;
+          const isEmpty = !tid;
           const strength = team
             ? teamStrengthLabel(team.countryCode)
             : null;
@@ -39,7 +85,11 @@ function StageBlock({ title, subtitle, rows, teamById }: StageBlockProps) {
           return (
             <li
               key={row.rowKey}
-              className="flex items-center gap-2 rounded-md border border-ash-border bg-ash-body/40 px-3 py-2 text-sm"
+              className={`flex items-center gap-2 rounded-md border px-3 py-2 text-sm ${
+                isEmpty
+                  ? "border-dashed border-amber-700/35 bg-amber-950/10"
+                  : "border-ash-border bg-ash-body/40"
+              }`}
             >
               {team ? (
                 <CountryFlagIcon countryCode={team.countryCode} size="md" />
@@ -50,7 +100,11 @@ function StageBlock({ title, subtitle, rows, teamById }: StageBlockProps) {
                 <p className="text-xs font-medium uppercase tracking-wide text-ash-muted">
                   {lineLabel}
                 </p>
-                <p className="font-medium text-ash-text">
+                <p
+                  className={`font-medium ${
+                    isEmpty ? "text-amber-100/90" : "text-ash-text"
+                  }`}
+                >
                   {team?.name ?? (tid ? "Unknown team" : "Not picked")}
                 </p>
                 {team && strength ? (
@@ -73,6 +127,11 @@ function StageBlock({ title, subtitle, rows, teamById }: StageBlockProps) {
           );
         })}
       </ul>
+      {missingCount > 0 && !section ? (
+        <p className="mt-2 text-xs text-ash-muted">
+          {missingCount} empty slot{missingCount === 1 ? "" : "s"}
+        </p>
+      ) : null}
     </section>
   );
 }
@@ -105,12 +164,6 @@ function sortGroupRows(rows: KnockoutPickSlotDraft[]): KnockoutPickSlotDraft[] {
     if (a.predictionKind === b.predictionKind) return 0;
     return a.predictionKind === "group_winner" ? -1 : 1;
   });
-}
-
-function filledOfTotal(rows: KnockoutPickSlotDraft[]): { filled: number; total: number } {
-  const total = rows.length;
-  const filled = rows.filter((s) => s.teamId.trim() !== "").length;
-  return { filled, total };
 }
 
 export function MyKnockoutPicksSummary({
@@ -152,20 +205,12 @@ export function MyKnockoutPicksSummary({
   const editHref = `/account/picks?participant=${participantId}`;
   const showEditButton = !readOnly;
 
-  const groupProg = filledOfTotal(group);
-  const thirdProg = filledOfTotal(third);
-  const bonusProg = filledOfTotal(bonus);
-  const knockoutProg = filledOfTotal(knockoutRows);
-  const compactStageProgressLine = showCompactStageProgress
-    ? [
-        `Group stage: ${groupProg.filled} / ${groupProg.total}`,
-        `Third-place groups selected: ${thirdProg.filled} / 8`,
-        knockoutBracketPicksUnlocked
-          ? `Knockout picks: ${knockoutProg.filled} / ${knockoutProg.total}`
-          : "Knockout picks: open when Round of 32 is set",
-        `Bonus picks: ${bonusProg.filled} / ${bonusProg.total}`,
-      ].join(" · ")
-    : null;
+  const picksProgress = buildPicksProgressSummary(slots, {
+    knockoutBracketPicksUnlocked,
+  });
+  const sectionById = new Map(
+    picksProgress.sections.map((s) => [s.id, s]),
+  );
 
   return (
     <div className="space-y-6">
@@ -202,10 +247,20 @@ export function MyKnockoutPicksSummary({
               {filledCount} of {slots.length} slots filled
             </span>
           </div>
-          {compactStageProgressLine ? (
-            <p className="mt-2 text-xs leading-relaxed text-ash-muted">
-              <span className="text-ash-text/90">{compactStageProgressLine}</span>
-            </p>
+          {showCompactStageProgress ? (
+            <div className="mt-4 space-y-3">
+              <PicksProgressSummaryPanel summary={picksProgress} />
+              {showEditButton &&
+              picksProgress.nextSection &&
+              !picksProgress.waitingForR32 ? (
+                <Link
+                  href={editHref}
+                  className="inline-flex rounded-lg bg-ash-accent px-3.5 py-2 text-sm font-semibold text-white transition hover:bg-ash-accent/90"
+                >
+                  {picksProgress.nextSection.ctaLabel}
+                </Link>
+              ) : null}
+            </div>
           ) : null}
           {lockHint ? (
             <p className="mt-2 text-sm text-amber-100">{lockHint}</p>
@@ -225,12 +280,14 @@ export function MyKnockoutPicksSummary({
           subtitle="First and second in each letter group"
           rows={group}
           teamById={teamById}
+          section={sectionById.get("group")}
         />
         <StageBlock
           title="Stage 2 — third-place qualification"
           subtitle="One third-place team per group row (eight groups total). These are qualification picks — FIFA assigns bracket slots later, not here."
           rows={third}
           teamById={teamById}
+          section={sectionById.get("third_place")}
         />
         {knockoutBracketPicksUnlocked ? (
           <>
@@ -273,16 +330,23 @@ export function MyKnockoutPicksSummary({
           </>
         ) : (
           <section className="ash-surface p-4 lg:col-span-2">
-            <h2 className="text-base font-bold text-ash-text">
-              Knockout bracket (Round of 32 → champion)
-            </h2>
-            <p className="mt-1 text-xs text-ash-muted">
-              This section opens after organizers enter the full official Round of
-              32 lineup.{" "}
-              {readOnly
-                ? "The pool intentionally waits for real FIFA bracket slots before knockout picks and scoring."
-                : "You are not missing a step — the pool intentionally waits for real FIFA bracket slots before knockout picks and scoring."}
-            </p>
+            <div className="flex flex-wrap items-start justify-between gap-2">
+              <div>
+                <h2 className="text-base font-bold text-ash-text">
+                  Knockout bracket (Round of 32 → champion)
+                </h2>
+                <p className="mt-1 text-xs text-ash-muted">
+                  This section opens after organizers enter the full official Round of
+                  32 lineup.{" "}
+                  {readOnly
+                    ? "The pool intentionally waits for real FIFA bracket slots before knockout picks and scoring."
+                    : "You are not missing a step — the pool intentionally waits for real FIFA bracket slots before knockout picks and scoring."}
+                </p>
+              </div>
+              <span className="shrink-0 rounded-full border border-sky-800/45 bg-sky-950/25 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-sky-100">
+                Opens later
+              </span>
+            </div>
             {hasLegacyKnockoutPicks ? (
               <p className="mt-3 text-xs text-amber-100">
                 Older saved knockout rows are still on file but stay frozen until
@@ -297,6 +361,7 @@ export function MyKnockoutPicksSummary({
           subtitle="Extra tournament-wide questions"
           rows={bonus}
           teamById={teamById}
+          section={sectionById.get("bonus")}
         />
       </div>
       )}

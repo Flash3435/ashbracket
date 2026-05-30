@@ -53,7 +53,7 @@ function TeamCell({
       className={`flex min-h-[32px] items-center gap-2 rounded border px-2 py-1 ${
         picked
           ? "border-ash-accent/50 bg-ash-accent/15 ring-1 ring-ash-accent/25"
-          : "border-ash-border/70 bg-ash-body/30"
+          : "border-dashed border-amber-700/35 bg-amber-950/10"
       }`}
     >
       {picked ? (
@@ -64,7 +64,7 @@ function TeamCell({
       <div className="min-w-0 flex-1">
         <p
           className={`truncate text-xs font-medium ${
-            picked ? "text-ash-text" : "text-ash-muted"
+            picked ? "text-ash-text" : "text-amber-100/85"
           }`}
         >
           {picked ? team!.name : tid ? "Unknown team" : "Not picked"}
