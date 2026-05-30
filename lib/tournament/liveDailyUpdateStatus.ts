@@ -25,12 +25,15 @@ export function formatPublicLiveScoresLastUpdated(iso: string | null | undefined
   if (iso == null || iso === "") return null;
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return null;
-  return new Intl.DateTimeFormat("en-US", {
-    dateStyle: "medium",
-    timeStyle: "short",
-    timeZone: PUBLIC_LIVE_SCORES_UPDATE_TIMEZONE,
-    timeZoneName: "short",
-  }).format(d);
+  try {
+    return new Intl.DateTimeFormat("en-US", {
+      dateStyle: "medium",
+      timeStyle: "short",
+      timeZone: PUBLIC_LIVE_SCORES_UPDATE_TIMEZONE,
+    }).format(d);
+  } catch {
+    return null;
+  }
 }
 
 export function buildLiveDailyUpdateSuccessMessage(input: {
