@@ -9,6 +9,8 @@ import {
   CountryFlagIcon,
   CountryFlagPlaceholder,
 } from "../tournament/Flag";
+import type { ViewerLeaderComparison } from "@/lib/leaderboard/buildViewerLeaderComparison";
+import { ViewerLeaderComparisonSummary } from "../leaderboard/ViewerLeaderComparisonSummary";
 import { ViewerYouChip } from "../ui/ViewerYouChip";
 import type { PublicParticipantDetail } from "../../types/publicParticipant";
 
@@ -239,9 +241,15 @@ type Props = {
   detail: PublicParticipantDetail;
   /** True when the signed-in viewer owns this participant entry in the pool. */
   isViewer?: boolean;
+  /** Set when the viewer is viewing their own entry and pool standings are available. */
+  viewerLeaderComparison?: ViewerLeaderComparison | null;
 };
 
-export function PublicParticipantProfile({ detail, isViewer = false }: Props) {
+export function PublicParticipantProfile({
+  detail,
+  isViewer = false,
+  viewerLeaderComparison = null,
+}: Props) {
   const { summary, sections, ledgerItems } = buildPublicParticipantPresentation(detail);
 
   const unresolvedHint =
@@ -281,6 +289,11 @@ export function PublicParticipantProfile({ detail, isViewer = false }: Props) {
               </p>
               {unresolvedHint ? (
                 <p className="mt-2 text-sm text-amber-100/90">{unresolvedHint}</p>
+              ) : null}
+              {isViewer && viewerLeaderComparison ? (
+                <div className="mt-4 max-w-3xl">
+                  <ViewerLeaderComparisonSummary comparison={viewerLeaderComparison} />
+                </div>
               ) : null}
               <div className="mt-4 flex flex-wrap gap-3">
                 <Link href={`/pool/${detail.poolId}`} className="ash-link text-sm">

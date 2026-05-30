@@ -4,6 +4,9 @@ import {
   poolLeaderboardSummaryCards,
   type PublicPoolLeaderboardRowDisplay,
 } from "@/lib/leaderboard/buildPublicPoolLeaderboardPresentation";
+import { buildViewerLeaderComparison } from "@/lib/leaderboard/buildViewerLeaderComparison";
+import { JumpToMyLeaderboardRowButton } from "./JumpToMyLeaderboardRowButton";
+import { ViewerLeaderComparisonSummary } from "./ViewerLeaderComparisonSummary";
 import type { LeaderboardPublicRow } from "../../types/leaderboard";
 import type { PoolPublicStats } from "../../lib/pool/fetchPoolPublicStats";
 import { PoolPublicStatsSummary } from "../pool/PoolPublicStatsSummary";
@@ -79,6 +82,19 @@ function rowSurfaceClass(
   return base;
 }
 
+function viewerRowScrollProps(isViewerRow: boolean): {
+  "data-viewer-leaderboard-entry"?: true;
+  tabIndex?: -1;
+  className?: string;
+} {
+  if (!isViewerRow) return {};
+  return {
+    "data-viewer-leaderboard-entry": true,
+    tabIndex: -1,
+    className: "scroll-mt-24",
+  };
+}
+
 function participantNameCell(
   row: PublicPoolLeaderboardRowDisplay,
   isViewerRow: boolean,
@@ -127,6 +143,10 @@ export function PublicPoolLeaderboardView({
 
   const presentation = buildPublicPoolLeaderboardPresentation(rows);
   const cards = poolLeaderboardSummaryCards(presentation, stats);
+  const viewerComparison = buildViewerLeaderComparison(rows, viewerParticipantId);
+  const hasViewerRow =
+    viewerParticipantId != null &&
+    presentation.rows.some((r) => r.participantId === viewerParticipantId);
 
   if (presentation.participantCount === 0) {
     return (
@@ -190,6 +210,14 @@ export function PublicPoolLeaderboardView({
               Pool rules & scoring
             </Link>
           </p>
+          {hasViewerRow ? (
+            <div className="space-y-3">
+              {viewerComparison ? (
+                <ViewerLeaderComparisonSummary comparison={viewerComparison} />
+              ) : null}
+              <JumpToMyLeaderboardRowButton />
+            </div>
+          ) : null}
         </div>
       </section>
 
@@ -236,11 +264,15 @@ export function PublicPoolLeaderboardView({
                   viewerParticipantId != null &&
                   row.participantId === viewerParticipantId;
 
+                const scrollProps = viewerRowScrollProps(isViewerRow);
+
                 return (
                 <tr
                   key={row.participantId}
-                  className={rowSurfaceClass(row, isViewerRow)}
+                  className={`${rowSurfaceClass(row, isViewerRow)} ${scrollProps.className ?? ""}`.trim()}
                   aria-current={isViewerRow ? "true" : undefined}
+                  data-viewer-leaderboard-entry={scrollProps["data-viewer-leaderboard-entry"]}
+                  tabIndex={scrollProps.tabIndex}
                 >
                   <td className="px-4 py-3.5">{rankCell(row)}</td>
                   <td className="px-4 py-3.5">
@@ -269,11 +301,18 @@ export function PublicPoolLeaderboardView({
               viewerParticipantId != null &&
               row.participantId === viewerParticipantId;
 
+            const scrollProps = viewerRowScrollProps(isViewerRow);
+
             return (
-            <li key={row.participantId}>
+            <li
+              key={row.participantId}
+              className={scrollProps.className}
+              data-viewer-leaderboard-entry={scrollProps["data-viewer-leaderboard-entry"]}
+              tabIndex={scrollProps.tabIndex}
+              aria-current={isViewerRow ? "true" : undefined}
+            >
               <Link
                 href={`/participant/${row.participantId}`}
-                aria-current={isViewerRow ? "true" : undefined}
                 className={`block rounded-xl border border-ash-border/70 px-4 py-4 transition-colors hover:bg-ash-body/40 ${rowSurfaceClass(row, isViewerRow)}`}
               >
                 <div className="flex items-start justify-between gap-3">
