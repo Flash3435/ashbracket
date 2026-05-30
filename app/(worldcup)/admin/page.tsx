@@ -105,16 +105,16 @@ export default async function AdminHomePage() {
           </p>
           <ul className="mt-3 list-inside list-disc space-y-2 text-sm text-ash-muted">
             <li>
+              <Link href="/admin/tournament" className="ash-link">
+                Update today&apos;s scores
+              </Link>
+              <span> — once-daily live score and standings refresh.</span>
+            </li>
+            <li>
               <Link href="/admin/results" className="ash-link">
                 Tournament results
               </Link>
-              <span> — enter official bracket outcomes.</span>
-            </li>
-            <li>
-              <Link href="/admin/tournament" className="ash-link">
-                Tournament sync
-              </Link>
-              <span> — pull official match data.</span>
+              <span> — enter or correct official bracket outcomes.</span>
             </li>
             <li>
               <Link href="/admin/tournament/status" className="ash-link">

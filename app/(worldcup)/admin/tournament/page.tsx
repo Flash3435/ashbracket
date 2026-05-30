@@ -1,9 +1,11 @@
-import { LiveTournamentSyncPanel } from "@/components/admin/LiveTournamentSyncPanel";
+import { LiveDailyUpdatePanel } from "@/components/admin/LiveDailyUpdatePanel";
+import { AdminTournamentAdvancedTools } from "@/components/admin/AdminTournamentAdvancedTools";
 import { SimulationModeBanner } from "@/components/admin/SimulationModeBanner";
 import { PageContainer } from "@/components/ui/PageContainer";
 import { requireGlobalAdminPage } from "@/lib/admin/requireGlobalAdmin";
 import { isProductionDeployment } from "@/lib/admin/deploymentEnvironment";
 import { fetchLiveTournamentSyncImpactSummary } from "@/lib/admin/fetchAdminImpactSummary";
+import { fetchLiveDailyUpdateStatusForEdition } from "@/lib/tournament/liveDailyUpdateStatus";
 import { createClient } from "@/lib/supabase/server";
 import { PageTitle } from "@/components/ui/PageTitle";
 import Link from "next/link";
@@ -44,6 +46,14 @@ export default async function AdminTournamentPage() {
     edition?.id != null
       ? await fetchLiveTournamentSyncImpactSummary(supabase)
       : null;
+  const lastUpdate =
+    edition?.id != null
+      ? await fetchLiveDailyUpdateStatusForEdition(
+          supabase,
+          edition.id,
+          edition.code as string,
+        )
+      : null;
   const isProduction = isProductionDeployment();
 
   return (
@@ -60,8 +70,8 @@ export default async function AdminTournamentPage() {
       </p>
 
       <PageTitle
-        title="Tournament data (live)"
-        description="Bring in official match scores and turn them into live results. After a successful sync, live pool points are updated. Use Simulation testing for fake data."
+        title="Live scores & standings"
+        description="Once per day, after match scores are recorded, run the update below to refresh official results and every live pool leaderboard."
       />
 
       <SimulationModeBanner
@@ -92,7 +102,17 @@ export default async function AdminTournamentPage() {
       </div>
 
       {syncImpact ? (
-        <LiveTournamentSyncPanel isProduction={isProduction} impact={syncImpact} />
+        <>
+          <LiveDailyUpdatePanel
+            isProduction={isProduction}
+            impact={syncImpact}
+            lastUpdate={lastUpdate}
+          />
+          <AdminTournamentAdvancedTools
+            isProduction={isProduction}
+            impact={syncImpact}
+          />
+        </>
       ) : null}
 
       <p className="mt-8 text-sm text-ash-muted">

@@ -7,6 +7,7 @@ import {
 import { buildViewerLeaderComparison } from "@/lib/leaderboard/buildViewerLeaderComparison";
 import { JumpToMyLeaderboardRowButton } from "./JumpToMyLeaderboardRowButton";
 import { ViewerLeaderComparisonSummary } from "./ViewerLeaderComparisonSummary";
+import { LiveScoresUpdateNotice } from "../tournament/LiveScoresUpdateNotice";
 import type { LeaderboardPublicRow } from "../../types/leaderboard";
 import type { PoolPublicStats } from "../../lib/pool/fetchPoolPublicStats";
 import { PoolPublicStatsSummary } from "../pool/PoolPublicStatsSummary";
@@ -120,6 +121,8 @@ type Props = {
   leaderboardError: string | null;
   /** Set when the signed-in user has a claimed participant row in this pool. */
   viewerParticipantId?: string | null;
+  /** Live pools only: last successful daily score update for the official tournament. */
+  liveScoresLastUpdatedAt?: string | null;
 };
 
 export function PublicPoolLeaderboardView({
@@ -129,6 +132,7 @@ export function PublicPoolLeaderboardView({
   statsError,
   leaderboardError,
   viewerParticipantId = null,
+  liveScoresLastUpdatedAt = null,
 }: Props) {
   if (leaderboardError) {
     return (
@@ -194,10 +198,12 @@ export function PublicPoolLeaderboardView({
             </h1>
             <p className="mt-3 max-w-3xl text-sm leading-relaxed text-ash-muted sm:text-base">
               See who is leading, how tight the race is, and tap any name for picks
-              and a full scoring breakdown. Totals update when official results are
-              saved and this pool recalculates — we do not show a “last updated” time
-              on this page.
+              and a full scoring breakdown.
             </p>
+            <LiveScoresUpdateNotice
+              lastUpdatedAt={liveScoresLastUpdatedAt}
+              className="mt-4 max-w-3xl"
+            />
             {presentation.allScoresZero ? (
               <p className="mt-2 text-sm text-amber-100/90">
                 Everyone is still at zero — the board will come alive as match results

@@ -146,8 +146,8 @@ export async function fetchLiveTournamentSyncImpactSummary(
   return {
     ...base,
     effectLines: [
-      `Rebuilds live results from match scores on edition “${edition.name}”.`,
-      `Recalculates standings for ${base.poolCount} live pool(s) only.`,
+      `Reads completed match scores on live edition “${edition.name}” (${edition.code}).`,
+      `Rebuilds official derived results and recalculates ${base.poolCount} live pool(s).`,
       `Simulation editions and simulation pools are not touched.`,
     ],
   };

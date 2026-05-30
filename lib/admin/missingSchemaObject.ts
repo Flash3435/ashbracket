@@ -29,3 +29,8 @@ export function wcPoolLedgerRecomputeStatusUnavailableMessage(): string {
     "Pool lists, snapshots, and the pilot log below still work."
   );
 }
+
+export const WC_LIVE_DAILY_UPDATE_STATUS_TABLE = "wc_live_daily_update_status";
+
+export const WC_LIVE_DAILY_UPDATE_STATUS_MIGRATION =
+  "20260530120000_wc_live_daily_update_status.sql";

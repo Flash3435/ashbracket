@@ -1,7 +1,7 @@
 import { AdminResultsR32StatusSummary } from "@/components/admin/AdminResultsR32StatusSummary";
+import { AdminResultsAdvancedTools } from "@/components/admin/AdminResultsAdvancedTools";
 import { ApplyOfficialRoundOf32Panel } from "@/components/admin/ApplyOfficialRoundOf32Panel";
 import { KnockoutResultsEditor } from "@/components/admin/KnockoutResultsEditor";
-import { RecomputeAllPoolsPanel } from "@/components/admin/RecomputeAllPoolsPanel";
 import { PageContainer } from "@/components/ui/PageContainer";
 import { PageTitle } from "@/components/ui/PageTitle";
 import {
@@ -14,6 +14,7 @@ import { fetchEditionImpactSummary } from "@/lib/admin/fetchAdminImpactSummary";
 import { requireGlobalAdminPage } from "@/lib/admin/requireGlobalAdmin";
 import { fetchOfficialLiveEdition } from "@/lib/tournament/editionScope";
 import { createClient } from "@/lib/supabase/server";
+import Link from "next/link";
 import { ALL_BRACKET_PICK_SECTIONS } from "@/lib/admin/knockoutResultsConfig";
 import { fetchGroupTeamCountryCodesByLetter } from "@/lib/tournament/fetchGroupTeamCountryCodesByLetter";
 import {
@@ -147,19 +148,20 @@ export default async function AdminResultsPage() {
         </p>
       ) : null}
       {!loadError && teams.length > 0 ? <AdminResultsR32StatusSummary summary={r32Summary} /> : null}
-      <div className="mb-8">
-        {liveEditionId && liveImpact ? (
-          <RecomputeAllPoolsPanel
-            isProduction={isProduction}
-            impact={liveImpact}
-            editionId={liveEditionId}
-            title="Recalculate live pool leaderboards"
-            description="Runs scoring for every live pool on the official tournament edition."
-            buttonLabel="Recalculate live pools"
-            successMessage="Live pool leaderboards updated."
-          />
-        ) : null}
-      </div>
+      <p className="mb-6 text-sm text-ash-muted">
+        For the normal daily workflow, use{" "}
+        <Link href="/admin/tournament" className="ash-link">
+          Update today&apos;s scores
+        </Link>{" "}
+        to refresh standings from match scores. Manual result edits below may need the
+        advanced recalculate option.
+      </p>
+      {liveEditionId && liveImpact ? (
+        <AdminResultsAdvancedTools
+          liveEditionId={liveEditionId}
+          liveImpact={liveImpact}
+        />
+      ) : null}
       {!loadError && teams.length > 0 && liveEditionId ? (
         <ApplyOfficialRoundOf32Panel editionId={liveEditionId} />
       ) : null}

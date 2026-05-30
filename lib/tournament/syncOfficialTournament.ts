@@ -6,6 +6,13 @@ import {
 } from "./groupStandings";
 import { winnerFromMatchScores } from "./matchOutcome";
 
+export type SyncOfficialTournamentSummary = {
+  finishedMatchCount: number;
+  derivedResultsInserted: number;
+  poolsRecalculated: number;
+  syncLockedMatchCount: number;
+};
+
 export type OfficialMatchScorePatch = {
   matchCode: string;
   homeGoals: number;
@@ -155,7 +162,9 @@ export async function syncOfficialTournament(
     poolIds: string[];
     patches?: OfficialMatchScorePatch[];
   },
-): Promise<{ ok: true } | { ok: false; error: string }> {
+): Promise<
+  { ok: true; summary: SyncOfficialTournamentSummary } | { ok: false; error: string }
+> {
   const { editionCode, poolIds, patches = [] } = options;
 
   const { data: edition, error: edErr } = await supabase
@@ -346,5 +355,22 @@ export async function syncOfficialTournament(
   }
 
   console.info("[ashbracket:sync] ledger recompute finished for all pools");
-  return { ok: true };
+
+  const finishedMatchCount = matches.filter(
+    (m) =>
+      m.status === "finished" &&
+      m.home_goals != null &&
+      m.away_goals != null,
+  ).length;
+  const syncLockedMatchCount = matches.filter((m) => m.sync_locked).length;
+
+  return {
+    ok: true,
+    summary: {
+      finishedMatchCount,
+      derivedResultsInserted: inserts.length,
+      poolsRecalculated: poolIds.length,
+      syncLockedMatchCount,
+    },
+  };
 }

@@ -15,6 +15,8 @@ import {
 } from "../../../lib/rules/publicRulesDisplayDefaults";
 import { resolveStage2PointsForRulesPage } from "../../../lib/scoring/poolScoringConfig";
 import { comparePublicScoringRuleRows } from "../../../lib/rules/comparePublicScoringRules";
+import { LiveScoresUpdateNotice } from "@/components/tournament/LiveScoresUpdateNotice";
+import { fetchPublicLiveScoresLastUpdated } from "@/lib/tournament/liveDailyUpdateStatus";
 import type { PublicScoringRuleRow } from "../../../types/publicScoringRules";
 
 export const dynamic = "force-dynamic";
@@ -104,6 +106,7 @@ export default async function RulesPage() {
     data: { user },
   } = await supabase.auth.getUser();
   const result = await fetchSamplePoolScoringRules();
+  const liveScoresLastUpdatedAt = await fetchPublicLiveScoresLastUpdated(supabase);
 
   if (!result.ok && result.kind === "error") {
     return (
@@ -180,6 +183,11 @@ export default async function RulesPage() {
   return (
     <PageContainer>
       <PageTitle title={pageTitle} description={pageDescription} />
+
+      <LiveScoresUpdateNotice
+        lastUpdatedAt={liveScoresLastUpdatedAt}
+        className="mb-6"
+      />
 
       <div className="space-y-6">
         <section className="ash-surface px-4 py-4">

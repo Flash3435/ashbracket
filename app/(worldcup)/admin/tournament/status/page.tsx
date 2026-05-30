@@ -3,6 +3,10 @@ import { PageContainer } from "@/components/ui/PageContainer";
 import { PageTitle } from "@/components/ui/PageTitle";
 import { fetchWcLedgerRecomputeDiagnosticsForPools } from "@/lib/admin/wcLedgerRecomputeDiagnostics";
 import { requireGlobalAdminPage } from "@/lib/admin/requireGlobalAdmin";
+import {
+  fetchLiveDailyUpdateStatusForEdition,
+  formatPublicLiveScoresLastUpdated,
+} from "@/lib/tournament/liveDailyUpdateStatus";
 import { createClient } from "@/lib/supabase/server";
 import { OFFICIAL_EDITION_CODE } from "../../../../../lib/config/officialTournament";
 import { computeStandingsFreshness } from "../../../../../lib/tournament/standingsFreshness";
@@ -162,16 +166,25 @@ export default async function AdminTournamentStatusPage({ searchParams }: PagePr
     null,
   );
 
+  const lastDailyUpdate =
+    editionId != null
+      ? await fetchLiveDailyUpdateStatusForEdition(
+          supabase,
+          editionId,
+          edition?.code as string,
+        )
+      : null;
+
   return (
     <PageContainer>
       <PageTitle
         title="Tournament status"
-        description="A read-only overview of teams, matches, results, and how fresh the leaderboard looks. To pull new data in, use Tournament sync."
+        description="A read-only overview of teams, matches, results, and how fresh the leaderboard looks. To refresh scores, use Update today's scores."
       />
 
       {sp.ok === "1" ? (
         <p className="mb-4 rounded-md border border-ash-accent/40 bg-ash-accent/10 px-3 py-2 text-sm text-ash-muted">
-          Last sync finished successfully and the leaderboard was recalculated.
+          Last daily update finished successfully and live standings were recalculated.
         </p>
       ) : null}
       {sp.err ? (
@@ -188,7 +201,7 @@ export default async function AdminTournamentStatusPage({ searchParams }: PagePr
         <p className="mb-4 text-xs text-ash-muted">
           After you run{" "}
           <Link href="/admin/tournament" className="ash-link">
-            Tournament sync
+            Update today&apos;s scores
           </Link>
           , success or error messages show here for this visit only.
         </p>
@@ -261,6 +274,35 @@ export default async function AdminTournamentStatusPage({ searchParams }: PagePr
       </section>
 
       <section className="ash-surface mb-6 space-y-3 p-4 text-sm text-ash-muted">
+        <h2 className="text-base font-bold text-ash-text">Daily live update</h2>
+        {lastDailyUpdate ? (
+          <>
+            <p>
+              <span className="font-medium text-ash-text">Last successful update:</span>{" "}
+              {formatPublicLiveScoresLastUpdated(lastDailyUpdate.lastSuccessAt) ??
+                formatWhen(lastDailyUpdate.lastSuccessAt)}
+            </p>
+            <p>
+              {lastDailyUpdate.finishedMatchCount} finished match
+              {lastDailyUpdate.finishedMatchCount === 1 ? "" : "es"};{" "}
+              {lastDailyUpdate.derivedResultsCount} derived result
+              {lastDailyUpdate.derivedResultsCount === 1 ? "" : "s"};{" "}
+              {lastDailyUpdate.poolsRecalculated} live pool
+              {lastDailyUpdate.poolsRecalculated === 1 ? "" : "s"} recalculated.
+            </p>
+          </>
+        ) : (
+          <p className="text-amber-200">
+            No daily update recorded yet. Run{" "}
+            <Link href="/admin/tournament" className="ash-link">
+              Update today&apos;s scores
+            </Link>
+            .
+          </p>
+        )}
+      </section>
+
+      <section className="ash-surface mb-6 space-y-3 p-4 text-sm text-ash-muted">
         <h2 className="text-base font-bold text-ash-text">Sync & standings</h2>
         <p>
           <span className="font-medium text-ash-text">
@@ -274,10 +316,10 @@ export default async function AdminTournamentStatusPage({ searchParams }: PagePr
             <p className="mt-2 text-amber-200">
               No scores calculated yet. Run{" "}
               <Link href="/admin/tournament" className="ash-link">
-                Tournament sync
+                Update today&apos;s scores
               </Link>{" "}
               or use <strong className="font-medium text-ash-text">Recalculate</strong>{" "}
-              on each pool&apos;s Standings page (or Recalculate all pools on Tournament results).
+              on each pool&apos;s Standings page (advanced).
             </p>
           ) : freshness.appearsCurrent ? (
             <p className="mt-2 text-ash-accent">
@@ -291,7 +333,7 @@ export default async function AdminTournamentStatusPage({ searchParams }: PagePr
               Something may have changed after the last score run (
               {formatWhen(freshness.lastLedgerAt)}). Run{" "}
               <Link href="/admin/tournament" className="ash-link">
-                Tournament sync
+                Update today&apos;s scores
               </Link>{" "}
               or recalculate from a pool&apos;s admin Standings page.
             </p>
@@ -334,7 +376,7 @@ export default async function AdminTournamentStatusPage({ searchParams }: PagePr
 
       <p className="text-sm text-ash-muted">
         <Link href="/admin/tournament" className="ash-link">
-          Tournament sync
+          Update today&apos;s scores
         </Link>
         {" · "}
         <Link href="/admin" className="ash-link">

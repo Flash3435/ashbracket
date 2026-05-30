@@ -4,6 +4,7 @@ import { PageContainer } from "@/components/ui/PageContainer";
 import { getMyParticipantIdInPool } from "@/lib/join/actions";
 import { mapPublicLeaderboardRow } from "@/lib/leaderboard/publicLeaderboard";
 import { fetchPoolPublicStats } from "@/lib/pool/fetchPoolPublicStats";
+import { fetchPublicLiveScoresLastUpdated } from "@/lib/tournament/liveDailyUpdateStatus";
 import { createClient } from "@/lib/supabase/server";
 import { createServiceRoleClient } from "@/lib/supabase/service";
 import type { LeaderboardPublicRowDb } from "../../../../types/leaderboard";
@@ -34,7 +35,9 @@ export default async function PublicPoolLeaderboardPage({ params }: PageProps) {
   }
 
   const supabase = await createClient();
-  const [leaderboardRes, statsRes, viewerParticipantId] = await Promise.all([
+  const isLivePool = !pool.is_simulation;
+  const [leaderboardRes, statsRes, viewerParticipantId, liveScoresLastUpdatedAt] =
+    await Promise.all([
     supabase
       .from("leaderboard_public")
       .select("pool_id, pool_name, participant_id, display_name, total_points, rank")
@@ -42,6 +45,7 @@ export default async function PublicPoolLeaderboardPage({ params }: PageProps) {
       .order("rank", { ascending: true }),
     fetchPoolPublicStats(supabase, poolIdTrimmed),
     getMyParticipantIdInPool(poolIdTrimmed),
+    isLivePool ? fetchPublicLiveScoresLastUpdated(supabase) : Promise.resolve(null),
   ]);
 
   const rows = leaderboardRes.error
@@ -68,6 +72,7 @@ export default async function PublicPoolLeaderboardPage({ params }: PageProps) {
         statsError={statsRes.error}
         leaderboardError={leaderboardRes.error?.message ?? null}
         viewerParticipantId={viewerParticipantId}
+        liveScoresLastUpdatedAt={isLivePool ? liveScoresLastUpdatedAt : null}
       />
     </PageContainer>
   );
