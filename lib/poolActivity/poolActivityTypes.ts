@@ -2,7 +2,8 @@ export type PoolActivityType =
   | "participant_joined"
   | "participant_submitted_picks"
   | "participant_updated_picks"
-  | "ash_daily_recap";
+  | "ash_daily_recap"
+  | "announcement";
 
 export type PoolActivityFeedRow = {
   id: string;

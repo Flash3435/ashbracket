@@ -1,9 +1,11 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { RecapFacts } from "./buildDeterministicRecapBody";
 import { ensureDailyAshRecapForPool } from "./ensureDailyAshRecap";
+import { fetchActivityReactionsForPool } from "./fetchActivityReactions";
 import { fetchPoolActivityForPool } from "./fetchPoolActivity";
 import { loadRecapFacts } from "./loadRecapFacts";
 import { recapCalendarDateYmdEdmonton } from "./recapCalendarDate";
+import type { ActivityReactionsSnapshot } from "./activityReactionTypes";
 
 export type PoolActivityForViewerResult = {
   items: Awaited<ReturnType<typeof fetchPoolActivityForPool>>;
@@ -11,6 +13,7 @@ export type PoolActivityForViewerResult = {
   liveRecapFacts: RecapFacts;
   /** Edmonton calendar date string used for “today’s” recap headline override. */
   liveRecapDateYmd: string;
+  reactions: ActivityReactionsSnapshot;
 };
 
 /**
@@ -20,7 +23,11 @@ export type PoolActivityForViewerResult = {
 export async function loadPoolActivityForViewer(
   supabase: SupabaseClient,
   poolId: string,
-  options: { ensureDailyRecap: boolean; limit: number },
+  options: {
+    ensureDailyRecap: boolean;
+    limit: number;
+    viewerParticipantId?: string | null;
+  },
 ): Promise<PoolActivityForViewerResult> {
   if (options.ensureDailyRecap) {
     await ensureDailyAshRecapForPool(poolId);
@@ -28,5 +35,11 @@ export async function loadPoolActivityForViewer(
   const items = await fetchPoolActivityForPool(supabase, poolId, options.limit);
   const liveRecapDateYmd = recapCalendarDateYmdEdmonton();
   const { facts: liveRecapFacts } = await loadRecapFacts(supabase, poolId);
-  return { items, liveRecapFacts, liveRecapDateYmd };
+  const reactions = await fetchActivityReactionsForPool(
+    supabase,
+    poolId,
+    items.map((i) => i.id),
+    options.viewerParticipantId ?? null,
+  );
+  return { items, liveRecapFacts, liveRecapDateYmd, reactions };
 }

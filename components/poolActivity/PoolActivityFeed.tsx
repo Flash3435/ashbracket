@@ -4,7 +4,12 @@ import {
   ashDailyRecapDisplayBody,
   type RecapFacts,
 } from "../../lib/poolActivity/buildDeterministicRecapBody";
+import type { ActivityReactionsSnapshot } from "../../lib/poolActivity/activityReactionTypes";
 import type { PoolActivityFeedRow } from "../../lib/poolActivity/poolActivityTypes";
+import {
+  ActivityReactionBar,
+  reactionBarPropsForActivity,
+} from "./ActivityReactionBar";
 
 type PoolActivityFeedProps = {
   items: PoolActivityFeedRow[];
@@ -13,6 +18,11 @@ type PoolActivityFeedProps = {
   /** Recomputed on each load so today’s recap cannot show stale completion counts. */
   liveRecapFacts?: RecapFacts | null;
   liveRecapDateYmd?: string | null;
+  /** Required for reaction buttons when the viewer is a pool member. */
+  poolId?: string;
+  viewerParticipantId?: string | null;
+  reactions?: ActivityReactionsSnapshot;
+  emptyFilterMessage?: string;
 };
 
 function typeLabel(type: PoolActivityFeedRow["type"]): string {
@@ -25,6 +35,8 @@ function typeLabel(type: PoolActivityFeedRow["type"]): string {
       return "Update";
     case "ash_daily_recap":
       return "Ash Daily Recap";
+    case "announcement":
+      return "Announcement";
     default:
       return "Activity";
   }
@@ -46,6 +58,8 @@ function typeIcon(type: PoolActivityFeedRow["type"]): string {
       return "↻";
     case "ash_daily_recap":
       return "📻";
+    case "announcement":
+      return "📢";
     default:
       return "•";
   }
@@ -56,15 +70,21 @@ export function PoolActivityFeed({
   compact,
   liveRecapFacts = null,
   liveRecapDateYmd = null,
+  poolId,
+  viewerParticipantId,
+  reactions,
+  emptyFilterMessage,
 }: PoolActivityFeedProps) {
+  const canReact = Boolean(poolId && viewerParticipantId && reactions);
+
   if (items.length === 0) {
     return (
       <div
         className={`rounded-xl border border-dashed border-ash-border bg-ash-body/30 text-center ${compact ? "px-4 py-6" : "px-6 py-12"}`}
       >
         <p className="text-sm text-ash-muted">
-          No activity yet. Join events and pick milestones will show up here, plus
-          Ash recaps when the pool picture changes.
+          {emptyFilterMessage ??
+            "No activity yet. Join events and pick milestones will show up here, plus Ash recaps when the pool picture changes."}
         </p>
       </div>
     );
@@ -74,6 +94,7 @@ export function PoolActivityFeed({
     <ul className={`flex flex-col ${compact ? "gap-2" : "gap-3"}`}>
       {items.map((item) => {
         const isRecap = item.type === "ash_daily_recap";
+        const isAnnouncement = item.type === "announcement";
         const rawDiag = item.metadata_json.completion_diagnostics;
         const completionDiag = isCompletionDiagnostics(rawDiag) ? rawDiag : null;
         const recapBody =
@@ -81,13 +102,19 @@ export function PoolActivityFeed({
             ? ashDailyRecapDisplayBody(item, liveRecapFacts, liveRecapDateYmd)
             : item.body_text;
         const rel = formatRelativeTimeEn(item.created_at);
+        const reactionProps =
+          canReact && reactions
+            ? reactionBarPropsForActivity(item.id, reactions)
+            : null;
         return (
           <li key={item.id}>
             <article
               className={`rounded-xl border px-4 py-3 ${
                 isRecap
                   ? "border-ash-accent/40 bg-gradient-to-br from-ash-accent/10 to-ash-body/40 ring-1 ring-ash-accent/20"
-                  : "border-ash-border bg-ash-surface"
+                  : isAnnouncement
+                    ? "border-amber-500/30 bg-gradient-to-br from-amber-500/10 to-ash-body/40"
+                    : "border-ash-border bg-ash-surface"
               }`}
             >
               <div className="flex items-start gap-3">
@@ -121,6 +148,16 @@ export function PoolActivityFeed({
                         {JSON.stringify(completionDiag, null, 2)}
                       </pre>
                     </details>
+                  ) : null}
+                  {canReact && reactionProps && poolId && viewerParticipantId ? (
+                    <ActivityReactionBar
+                      activityId={item.id}
+                      poolId={poolId}
+                      participantId={viewerParticipantId}
+                      initialCounts={reactionProps.initialCounts}
+                      initialViewerReaction={reactionProps.initialViewerReaction}
+                      compact={compact}
+                    />
                   ) : null}
                   {item.related_path &&
                   item.related_path.startsWith("/") &&

@@ -1,7 +1,8 @@
 import { AccountPicksProfileLinks } from "@/components/account/AccountPicksProfileLinks";
-import { PoolActivityFeed } from "@/components/poolActivity/PoolActivityFeed";
+import { PoolActivityFeedPanel } from "@/components/poolActivity/PoolActivityFeedPanel";
 import { PageContainer } from "@/components/ui/PageContainer";
 import { PageTitle } from "@/components/ui/PageTitle";
+import { canManagePool } from "@/lib/auth/permissions";
 import { createClient } from "@/lib/supabase/server";
 import { loadAccountKnockoutSelection } from "../../../../lib/account/loadAccountKnockoutSelection";
 import { loadPoolActivityForViewer } from "../../../../lib/poolActivity/loadPoolActivityForViewer";
@@ -31,15 +32,18 @@ export default async function AccountActivityPage({ searchParams }: PageProps) {
   let feedError: string | null = null;
   let activity: Awaited<ReturnType<typeof loadPoolActivityForViewer>> | null =
     null;
+  let isPoolAdmin = false;
   const selectedPoolId = ctx.selectedId
     ? ctx.myParticipants.find((p) => p.id === ctx.selectedId)?.pool_id
     : null;
 
   if (ctx.selectedId && selectedPoolId && !ctx.loadError) {
     try {
+      isPoolAdmin = await canManagePool(supabase, selectedPoolId);
       activity = await loadPoolActivityForViewer(supabase, selectedPoolId, {
         ensureDailyRecap: true,
         limit: 20,
+        viewerParticipantId: ctx.selectedId,
       });
     } catch (e) {
       feedError =
@@ -70,7 +74,7 @@ export default async function AccountActivityPage({ searchParams }: PageProps) {
 
       <PageTitle
         title="Activity"
-        description="A read-only timeline for your pool: joins, pick milestones, and Ash recaps when the pool picture changes."
+        description="Your pool timeline: joins, pick milestones, Ash recaps, admin updates, and reactions from members."
       />
 
       {ctx.loadError ? (
@@ -142,9 +146,13 @@ export default async function AccountActivityPage({ searchParams }: PageProps) {
                 >
                   {feedError}
                 </p>
-              ) : activity ? (
-                <PoolActivityFeed
+              ) : activity && ctx.selectedId ? (
+                <PoolActivityFeedPanel
                   items={activity.items}
+                  poolId={selectedPoolId}
+                  viewerParticipantId={ctx.selectedId}
+                  reactions={activity.reactions}
+                  isPoolAdmin={isPoolAdmin}
                   liveRecapFacts={activity.liveRecapFacts}
                   liveRecapDateYmd={activity.liveRecapDateYmd}
                 />

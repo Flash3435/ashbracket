@@ -1,11 +1,13 @@
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { loadPoolActivityForViewer } from "../../lib/poolActivity/loadPoolActivityForViewer";
-import { PoolActivityFeed } from "./PoolActivityFeed";
+import { PoolActivityFeedPanel } from "./PoolActivityFeedPanel";
 
 type Props = {
   poolId: string;
   viewAllHref: string;
+  /** Viewer participant profile in this pool (for reactions). */
+  viewerParticipantId?: string | null;
   /** Preview depth on Home; full page uses a larger limit at the call site. */
   itemLimit?: number;
   compact?: boolean;
@@ -13,14 +15,21 @@ type Props = {
    * When false, render nothing if there are no items and no error (legacy preview behavior).
    */
   showWhenEmpty?: boolean;
+  showFilters?: boolean;
+  showAnnouncementComposer?: boolean;
+  isPoolAdmin?: boolean;
 };
 
 export async function PoolRecentActivitySection({
   poolId,
   viewAllHref,
+  viewerParticipantId = null,
   itemLimit = 5,
   compact = true,
   showWhenEmpty = true,
+  showFilters = false,
+  showAnnouncementComposer = false,
+  isPoolAdmin = false,
 }: Props) {
   const supabase = await createClient();
   let activity: Awaited<ReturnType<typeof loadPoolActivityForViewer>> | null =
@@ -30,6 +39,7 @@ export async function PoolRecentActivitySection({
     activity = await loadPoolActivityForViewer(supabase, poolId, {
       ensureDailyRecap: true,
       limit: itemLimit,
+      viewerParticipantId,
     });
   } catch (e) {
     loadError =
@@ -59,11 +69,17 @@ export async function PoolRecentActivitySection({
           {loadError}
         </p>
       ) : (
-        <PoolActivityFeed
+        <PoolActivityFeedPanel
           items={activity?.items ?? []}
+          poolId={poolId}
+          viewerParticipantId={viewerParticipantId}
+          reactions={activity?.reactions ?? { counts: {}, viewerReactions: {} }}
+          isPoolAdmin={isPoolAdmin}
           compact={compact}
           liveRecapFacts={activity?.liveRecapFacts ?? null}
           liveRecapDateYmd={activity?.liveRecapDateYmd ?? null}
+          showFilters={showFilters}
+          showAnnouncementComposer={showAnnouncementComposer}
         />
       )}
     </section>
