@@ -5,11 +5,15 @@ import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState, useTransition } from "react";
 import {
   createParticipantAction,
-  deleteParticipantAction,
   inviteParticipantAction,
+  removeParticipantFromPoolAction,
   sendParticipantInviteAction,
   updateParticipantAction,
 } from "../../app/(worldcup)/admin/participants/actions";
+import {
+  buildRemoveParticipantWarnings,
+  removeParticipantModalSubject,
+} from "@/lib/participants/removeParticipantFromPoolPolicy";
 import type { SimulationPoolEmailUiStatus } from "@/lib/admin/simulationPoolEmailPolicy";
 import {
   SIMULATION_POOL_EMAIL_TYPED_PHRASE,
@@ -149,6 +153,11 @@ export function ParticipantsManager({
   const [typedPhrase, setTypedPhrase] = useState("");
   const [productionAck, setProductionAck] = useState(false);
   const [simulationEmailAck, setSimulationEmailAck] = useState(false);
+  const [removingParticipant, setRemovingParticipant] =
+    useState<ParticipantWithPicksStatus | null>(null);
+  const [removeSuccessMessage, setRemoveSuccessMessage] = useState<string | null>(
+    null,
+  );
 
   const typedPhraseOk =
     !requiresTypedPhrase ||
@@ -372,28 +381,48 @@ export function ParticipantsManager({
     });
   }
 
-  function handleDelete(id: string) {
+  function openRemoveConfirm(p: ParticipantWithPicksStatus) {
     if (disabled) return;
-    const p = participants.find((x) => x.id === id);
-    if (
-      !p ||
-      !window.confirm(
-        `Remove ${p.displayName} from this pool? This cannot be undone.`,
-      )
-    ) {
-      return;
-    }
+    setActionError(null);
+    setRemoveSuccessMessage(null);
+    setRemovingParticipant(p);
+  }
+
+  function closeRemoveConfirm() {
+    setRemovingParticipant(null);
+  }
+
+  function handleConfirmRemove() {
+    if (disabled || !removingParticipant) return;
+    const participant = removingParticipant;
+    const id = participant.id;
     setActionError(null);
     startTransition(async () => {
-      const res = await deleteParticipantAction({ poolId, id });
+      const res = await removeParticipantFromPoolAction({
+        poolId,
+        participantId: id,
+      });
       if (!res.ok) {
         setActionError(res.error);
         return;
       }
       if (editingId === id) closeEdit();
+      setParticipants((prev) => prev.filter((x) => x.id !== id));
+      setRemoveSuccessMessage(
+        res.message ??
+          `${participant.displayName.trim() || participant.email.trim() || "Participant"} was removed from this pool.`,
+      );
+      closeRemoveConfirm();
       router.refresh();
     });
   }
+
+  const removeWarnings = removingParticipant
+    ? buildRemoveParticipantWarnings({
+        paid: removingParticipant.paid,
+        picksStatus: removingParticipant.picksStatus,
+      })
+    : [];
 
   return (
     <div className="space-y-6">
@@ -434,6 +463,12 @@ export function ParticipantsManager({
           </label>
         </div>
       ) : null}
+      {removeSuccessMessage ? (
+        <p className="rounded-md border border-emerald-800/70 bg-emerald-950/35 px-3 py-2 text-sm text-emerald-100">
+          {removeSuccessMessage}
+        </p>
+      ) : null}
+
       {actionError ? (
         <p className="rounded-md border border-red-800/80 bg-red-950/40 px-3 py-2 text-sm text-red-200">
           {actionError}
@@ -885,10 +920,10 @@ export function ParticipantsManager({
                     <button
                       type="button"
                       disabled={disabled || isPending}
-                      onClick={() => handleDelete(p.id)}
+                      onClick={() => openRemoveConfirm(p)}
                       className="text-sm font-medium text-red-400 hover:underline disabled:cursor-not-allowed disabled:opacity-50"
                     >
-                      Delete
+                      Remove from pool
                     </button>
                   </td>
                 </tr>
@@ -977,10 +1012,10 @@ export function ParticipantsManager({
                   <button
                     type="button"
                     disabled={disabled || isPending}
-                    onClick={() => handleDelete(p.id)}
+                    onClick={() => openRemoveConfirm(p)}
                     className="text-sm font-medium text-red-400 hover:underline disabled:cursor-not-allowed disabled:opacity-50"
                   >
-                    Delete
+                    Remove from pool
                   </button>
                 </div>
               </div>
@@ -988,6 +1023,70 @@ export function ParticipantsManager({
           ))
         )}
       </ul>
+
+      {removingParticipant ? (
+        <div
+          className="fixed inset-0 z-50 flex items-end justify-center p-4 sm:items-center"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="remove-participant-title"
+        >
+          <button
+            type="button"
+            className="absolute inset-0 bg-black/60"
+            aria-label="Close dialog"
+            onClick={closeRemoveConfirm}
+          />
+          <div className="relative z-10 w-full max-w-md rounded-xl border border-red-900/40 bg-ash-surface p-5 shadow-[0_4px_12px_rgba(0,0,0,0.5)]">
+            <h2
+              id="remove-participant-title"
+              className="text-base font-bold text-ash-text"
+            >
+              Remove from pool
+            </h2>
+            <div className="mt-3 space-y-2 text-sm text-ash-muted">
+              <p>
+                This will remove{" "}
+                <span className="font-medium text-ash-text">
+                  {removeParticipantModalSubject({
+                    displayName: removingParticipant.displayName,
+                    email: removingParticipant.email,
+                  })}
+                </span>{" "}
+                from this pool.
+              </p>
+              <p>Their AshBracket account will not be deleted.</p>
+              <p>Other pools are not affected.</p>
+              <p>Their picks and standings entry for this pool may be removed.</p>
+            </div>
+            {removeWarnings.length > 0 ? (
+              <ul className="mt-4 list-disc space-y-1 pl-5 text-sm text-amber-200">
+                {removeWarnings.map((warning) => (
+                  <li key={warning}>{warning}</li>
+                ))}
+              </ul>
+            ) : null}
+            <div className="mt-5 flex justify-end gap-2">
+              <button
+                type="button"
+                disabled={disabled || isPending}
+                onClick={closeRemoveConfirm}
+                className="btn-ghost disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={disabled || isPending}
+                onClick={handleConfirmRemove}
+                className="rounded-lg bg-red-700 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-red-600 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                Remove participant
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
 
       {editingId ? (
         <div

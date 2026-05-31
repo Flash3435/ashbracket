@@ -30,6 +30,8 @@
     "test:bracket": "tsx lib/bracket/deriveParticipantBracket.selftest.ts",
     "test:r32-hardening": "tsx lib/admin/r32OfficialHardening.selftest.ts",
     "test:pool-name": "tsx lib/pools/validatePoolNameInput.selftest.ts",
+    "test:remove-participant": "tsx lib/participants/removeParticipantFromPoolPolicy.selftest.ts",
+    "test:pool-activity-engagement": "tsx lib/poolActivity/poolActivityFeedEngagement.selftest.ts",
     "seed:wc2026": "tsx scripts/seed-official-wc2026.ts",
     "seed:fifa-ranks": "tsx scripts/seed-fifa-ranks.ts",
     "seed:nhl-phase2": "tsx scripts/seed-nhl-phase2.ts",

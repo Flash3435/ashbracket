@@ -13,6 +13,10 @@ import { generateInviteToken } from "../../../../lib/invites/generateInviteToken
 import { resolveInviterLabelForPoolInvite } from "../../../../lib/invites/resolveInviterLabelForPoolInvite";
 import { sendParticipantInviteEmail } from "../../../../lib/invites/sendParticipantInviteEmail";
 import {
+  formatRemoveParticipantSuccessMessage,
+  REMOVE_PARTICIPANT_ALREADY_GONE_MESSAGE,
+} from "@/lib/participants/removeParticipantFromPoolPolicy";
+import {
   mapParticipantRow,
   paidAtForInsert,
   type ParticipantRow,
@@ -26,6 +30,9 @@ export type ParticipantActionResult =
       inviteUrl?: string;
       emailSent?: boolean;
       emailMessage?: string;
+      message?: string;
+      removedDisplayName?: string;
+      alreadyRemoved?: boolean;
     }
   | { ok: false; error: string };
 
@@ -394,9 +401,13 @@ export async function updateParticipantAction(input: {
   }
 }
 
-export async function deleteParticipantAction(input: {
+/**
+ * Removes a participant row for one pool only. Does not delete auth.users or
+ * pool_admins rows; predictions and points_ledger for this pool cascade via FK.
+ */
+export async function removeParticipantFromPoolAction(input: {
   poolId: string;
-  id: string;
+  participantId: string;
 }): Promise<ParticipantActionResult> {
   try {
     const supabase = await createClient();
@@ -404,16 +415,88 @@ export async function deleteParticipantAction(input: {
     if (!gate.ok) return { ok: false, error: gate.error };
 
     const pid = input.poolId.trim();
-    const { error } = await supabase
+    const participantId = input.participantId.trim();
+    if (!participantId) {
+      return { ok: false, error: "Participant is required." };
+    }
+
+    const {
+      data: { user: actor },
+    } = await supabase.auth.getUser();
+
+    const { data: row, error: fetchErr } = await supabase
+      .from("participants")
+      .select("id, pool_id, display_name, email, user_id, is_paid")
+      .eq("id", participantId)
+      .eq("pool_id", pid)
+      .maybeSingle();
+
+    if (fetchErr) return { ok: false, error: fetchErr.message };
+    if (!row) {
+      console.info("[removeParticipantFromPool] already removed", {
+        poolId: pid,
+        participantId,
+        actorUserId: actor?.id ?? null,
+      });
+      revalidateParticipants(pid);
+      return {
+        ok: true,
+        alreadyRemoved: true,
+        message: REMOVE_PARTICIPANT_ALREADY_GONE_MESSAGE,
+      };
+    }
+
+    const displayName = String(row.display_name ?? "").trim();
+    const email = String(row.email ?? "").trim();
+    const linkedUserId = row.user_id as string | null;
+
+    const { count: predictionCount, error: predCountErr } = await supabase
+      .from("predictions")
+      .select("id", { count: "exact", head: true })
+      .eq("pool_id", pid)
+      .eq("participant_id", participantId);
+    if (predCountErr) return { ok: false, error: predCountErr.message };
+
+    const { error: delErr } = await supabase
       .from("participants")
       .delete()
-      .eq("id", input.id)
+      .eq("id", participantId)
       .eq("pool_id", pid);
 
-    if (error) return { ok: false, error: error.message };
+    if (delErr) return { ok: false, error: delErr.message };
+
+    console.info("[removeParticipantFromPool] removed", {
+      poolId: pid,
+      participantId,
+      displayName,
+      email,
+      linkedUserId,
+      actorUserId: actor?.id ?? null,
+      actorEmail: actor?.email ?? null,
+      wasPaid: Boolean(row.is_paid),
+      predictionCount: predictionCount ?? 0,
+    });
+
     revalidateParticipants(pid);
-    return { ok: true };
+
+    return {
+      ok: true,
+      removedDisplayName: displayName || email || "Participant",
+      message: formatRemoveParticipantSuccessMessage(displayName || email),
+    };
   } catch (e) {
+    console.error("[removeParticipantFromPool] unexpected", e);
     return { ok: false, error: messageFromUnknown(e) };
   }
+}
+
+/** @deprecated Prefer `removeParticipantFromPoolAction`. */
+export async function deleteParticipantAction(input: {
+  poolId: string;
+  id: string;
+}): Promise<ParticipantActionResult> {
+  return removeParticipantFromPoolAction({
+    poolId: input.poolId,
+    participantId: input.id,
+  });
 }
