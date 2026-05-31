@@ -4,7 +4,10 @@ import {
 } from "./activityFeedFilter";
 import type { PoolActivityFeedRow } from "./poolActivityTypes";
 import { aggregateActivityReactions } from "./fetchActivityReactions";
-import { isAllowedActivityReaction } from "./reactionConstants";
+import {
+  activeReactionEmojis,
+  isAllowedActivityReaction,
+} from "./reactionConstants";
 
 let failed = 0;
 function t(cond: boolean, msg: string) {
@@ -90,6 +93,9 @@ t(agg.counts.x?.["👍"] === 2, "aggregate thumbs count");
 t(agg.counts.x?.["🔥"] === 1, "aggregate fire count");
 t(agg.viewerReactions.x === "👍", "viewer reaction on x");
 t(agg.viewerReactions.y === "😂", "viewer reaction on y");
+
+t(activeReactionEmojis({ "👍": 2, "🔥": 0, "😂": 1 }).join("") === "👍😂", "active reactions omit zero counts");
+t(activeReactionEmojis({}).length === 0, "no active reactions when empty");
 
 if (failed) {
   process.exit(1);
