@@ -113,7 +113,10 @@ export function LoginForm({
           from AshBracket.
         </p>
       ) : null}
-      <SignInWithEmailForm redirectAfterLogin={postLoginHref} />
+      <SignInWithEmailForm
+        redirectAfterLogin={postLoginHref}
+        forgotPasswordHref={isNhlSurface ? undefined : "/forgot-password"}
+      />
       <p className="text-center text-sm text-ash-muted">
         No account yet?{" "}
         <Link href={signupHref} className="ash-link">
