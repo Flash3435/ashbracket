@@ -28,6 +28,7 @@ export async function requestPasswordReset(
   logPasswordResetRedirect(redirectTo);
 
   return {
+    ok: true,
     redirectTo,
     ...(process.env.NODE_ENV === "development"
       ? { debugRedirectTo: redirectTo }
