@@ -9,9 +9,10 @@ import { canAccessAdminDashboard } from "../../../lib/auth/permissions";
 export default async function LoginPage({
   searchParams,
 }: {
-  searchParams: Promise<{ next?: string; error?: string }>;
+  searchParams: Promise<{ next?: string; error?: string; reset?: string }>;
 }) {
   const sp = await searchParams;
+  const showPasswordResetSuccess = sp.reset === "success";
   const supabase = await createClient();
   const {
     data: { user },
@@ -48,6 +49,7 @@ export default async function LoginPage({
             blockedEmail={user.email ?? null}
             showForbiddenMessage={showForbidden}
             showEmailConfirmFailed={showEmailConfirmFailed}
+            showPasswordResetSuccess={showPasswordResetSuccess}
           />
         </PageContainer>
       );
@@ -74,6 +76,7 @@ export default async function LoginPage({
             blockedEmail={resolved.email}
             showForbiddenMessage={showForbidden}
             showEmailConfirmFailed={showEmailConfirmFailed}
+            showPasswordResetSuccess={showPasswordResetSuccess}
           />
         </PageContainer>
       );
@@ -91,6 +94,7 @@ export default async function LoginPage({
         signupHref={signupHref}
         showForbiddenMessage={showForbidden}
         showEmailConfirmFailed={showEmailConfirmFailed}
+        showPasswordResetSuccess={showPasswordResetSuccess}
       />
     </PageContainer>
   );

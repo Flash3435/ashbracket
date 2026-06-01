@@ -6,11 +6,14 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useState } from "react";
 import {
   mapPasswordUpdateError,
-  PASSWORD_RESET_SUCCESS_MESSAGE,
+  mapResetLinkAuthParams,
+  mapResetLinkExchangeError,
+  PASSWORD_MISMATCH_MESSAGE,
   RESET_LINK_INVALID_MESSAGE,
+  RESET_LINK_MISSING_MESSAGE,
 } from "@/lib/auth/authFormValidation";
 
-type Phase = "loading" | "form" | "link-invalid" | "success";
+type Phase = "loading" | "form" | "link-invalid";
 
 export function ResetPasswordForm() {
   const router = useRouter();
@@ -31,12 +34,14 @@ export function ResetPasswordForm() {
       const errorCode = searchParams.get("error_code");
       const errorDescription = searchParams.get("error_description");
 
-      if (authError || errorCode) {
+      const authParamMessage = mapResetLinkAuthParams({
+        error: authError,
+        errorCode,
+        errorDescription,
+      });
+      if (authParamMessage) {
         if (!cancelled) {
-          setLinkError(
-            errorDescription?.replace(/\+/g, " ") ??
-              RESET_LINK_INVALID_MESSAGE,
-          );
+          setLinkError(authParamMessage);
           setPhase("link-invalid");
         }
         return;
@@ -48,10 +53,7 @@ export function ResetPasswordForm() {
           await supabase.auth.exchangeCodeForSession(code);
         if (cancelled) return;
         if (exchangeErr) {
-          setLinkError(
-            mapPasswordUpdateError(exchangeErr.message) ||
-              RESET_LINK_INVALID_MESSAGE,
-          );
+          setLinkError(mapResetLinkExchangeError(exchangeErr.message));
           setPhase("link-invalid");
           return;
         }
@@ -69,13 +71,25 @@ export function ResetPasswordForm() {
         return;
       }
 
-      setLinkError(RESET_LINK_INVALID_MESSAGE);
+      setLinkError(RESET_LINK_MISSING_MESSAGE);
       setPhase("link-invalid");
     }
+
+    const supabase = createClient();
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((event) => {
+      if (cancelled) return;
+      if (event === "PASSWORD_RECOVERY") {
+        setLinkError(null);
+        setPhase("form");
+      }
+    });
 
     void establishRecoverySession();
     return () => {
       cancelled = true;
+      subscription.unsubscribe();
     };
   }, [searchParams, router]);
 
@@ -89,7 +103,7 @@ export function ResetPasswordForm() {
     }
 
     if (password !== confirmPassword) {
-      setError("Passwords do not match.");
+      setError(PASSWORD_MISMATCH_MESSAGE);
       return;
     }
 
@@ -103,7 +117,8 @@ export function ResetPasswordForm() {
       return;
     }
 
-    setPhase("success");
+    await supabase.auth.signOut();
+    router.replace("/login?reset=success");
   }
 
   if (phase === "loading") {
@@ -125,23 +140,6 @@ export function ResetPasswordForm() {
           className="btn-primary inline-flex w-full justify-center text-sm no-underline"
         >
           Request a new reset link
-        </Link>
-      </div>
-    );
-  }
-
-  if (phase === "success") {
-    return (
-      <div
-        className="ash-surface space-y-4 p-6 text-sm text-ash-accent"
-        role="status"
-      >
-        <p>{PASSWORD_RESET_SUCCESS_MESSAGE}</p>
-        <Link
-          href="/login"
-          className="btn-primary inline-flex w-full justify-center text-sm no-underline"
-        >
-          Go to sign in
         </Link>
       </div>
     );

@@ -5,7 +5,8 @@ import { NextResponse, type NextRequest } from "next/server";
 /**
  * Email confirmation landing (Supabase Auth PKCE).
  * Configure this path under Supabase → Authentication → URL Configuration → Redirect URLs.
- * Also allow `/reset-password` and `/forgot-password` for password recovery emails.
+ * Password reset emails use `redirect_to` → `/auth/confirm?next=/reset-password` (see `passwordResetRedirect.ts`).
+ * Allow that path and `/forgot-password` under Supabase → Authentication → URL Configuration.
  */
 export async function GET(request: NextRequest) {
   const url = new URL(request.url);

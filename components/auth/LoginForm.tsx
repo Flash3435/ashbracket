@@ -15,6 +15,8 @@ type LoginFormProps = {
   showForbiddenMessage: boolean;
   /** Invalid or expired Supabase email confirmation link. */
   showEmailConfirmFailed?: boolean;
+  /** Password was updated via the reset-password flow. */
+  showPasswordResetSuccess?: boolean;
   /** After sign-out from the blocked-admin state (defaults to `/login`). */
   signOutRedirectTo?: string;
   /** “My account” link in blocked-admin state (defaults to `/account`). */
@@ -29,6 +31,7 @@ export function LoginForm({
   blockedEmail,
   showForbiddenMessage,
   showEmailConfirmFailed,
+  showPasswordResetSuccess,
   signOutRedirectTo = "/login",
   blockedStateAccountHref = "/account",
   isNhlSurface = false,
@@ -106,6 +109,14 @@ export function LoginForm({
 
   return (
     <div className="space-y-4">
+      {showPasswordResetSuccess ? (
+        <p
+          className="rounded-md border border-emerald-800/60 bg-emerald-950/40 px-3 py-2 text-sm text-emerald-100"
+          role="status"
+        >
+          Your password was updated. Sign in with your new password.
+        </p>
+      ) : null}
       {showEmailConfirmFailed ? (
         <p className="rounded-md border border-red-800/60 bg-red-950/40 px-3 py-2 text-sm text-red-100">
           That confirmation link is invalid or has expired. Sign in below if you

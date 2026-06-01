@@ -70,7 +70,8 @@ export default async function AdminPilotPage() {
         </Link>
         {" · "}
         See <code className="text-xs">ashbracket/docs/production-simulation-rollout.md</code>{" "}
-        in the repo for the full rollout checklist
+        in the repo for the full rollout checklist. Auth email URLs (signup, password reset):{" "}
+        <code className="text-xs">ashbracket/DEPLOY_NOTES.md</code> → Supabase URL Configuration.
       </p>
 
       <div className="space-y-8">

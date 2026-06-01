@@ -1,10 +1,9 @@
 "use client";
 
-import { createClient } from "@/lib/supabase/client";
 import {
-  isValidEmailFormat,
-  mapForgotPasswordRequestError,
-} from "@/lib/auth/authFormValidation";
+  assertPasswordResetRedirectUrl,
+  buildPasswordResetRedirectUrlForClient,
+} from "@/lib/auth/passwordResetRedirect";
 import { useState } from "react";
 
 const RESET_EMAIL_SENT_MESSAGE =
@@ -15,32 +14,53 @@ export function ForgotPasswordForm() {
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [devRedirectHint, setDevRedirectHint] = useState<string | null>(null);
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
     setSuccess(false);
+    setDevRedirectHint(null);
 
     const trimmed = email.trim();
-    if (!isValidEmailFormat(trimmed)) {
-      setError("Enter a valid email address.");
+
+    setLoading(true);
+
+    const redirectTo = buildPasswordResetRedirectUrlForClient();
+    try {
+      assertPasswordResetRedirectUrl(redirectTo);
+    } catch {
+      setLoading(false);
+      setError("Password reset is temporarily unavailable. Please try again later.");
       return;
     }
 
-    setLoading(true);
-    const supabase = createClient();
-    const redirectTo = `${window.location.origin}/reset-password`;
-    const { error: resetErr } = await supabase.auth.resetPasswordForEmail(trimmed, {
-      redirectTo,
+    if (process.env.NODE_ENV === "development") {
+      console.info("[auth] forgot-password redirectTo:", redirectTo);
+      setDevRedirectHint(redirectTo);
+    }
+
+    const res = await fetch("/api/auth/forgot-password", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      credentials: "same-origin",
+      body: JSON.stringify({ email: trimmed }),
     });
+
+    const payload = (await res.json().catch(() => null)) as
+      | { ok?: boolean; error?: string; redirectTo?: string }
+      | null;
+
     setLoading(false);
 
-    if (resetErr) {
-      const mapped = mapForgotPasswordRequestError(resetErr.message);
-      if (mapped !== resetErr.message) {
-        setError(mapped);
-        return;
-      }
+    if (!res.ok || payload?.ok === false) {
+      setError(payload?.error ?? "Could not send reset email. Try again in a few minutes.");
+      return;
+    }
+
+    if (process.env.NODE_ENV === "development" && payload?.redirectTo) {
+      setDevRedirectHint(payload.redirectTo);
+      console.info("[auth] server confirmed redirectTo:", payload.redirectTo);
     }
 
     setSuccess(true);
@@ -76,6 +96,11 @@ export function ForgotPasswordForm() {
           className="w-full rounded-md border border-ash-border bg-ash-body px-3 py-2 text-sm text-ash-text shadow-sm outline-none ring-ash-accent/20 focus:border-ash-accent focus:ring-2"
         />
       </label>
+      {devRedirectHint ? (
+        <p className="font-mono text-xs text-ash-muted" data-testid="password-reset-redirect-debug">
+          Dev: redirect_to={devRedirectHint}
+        </p>
+      ) : null}
       {error ? (
         <p className="text-sm text-red-300" role="alert">
           {error}

@@ -2,7 +2,7 @@ This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-
 
 ## Deployment
 
-See **[DEPLOY_NOTES.md](./DEPLOY_NOTES.md)** for the release checklist, `npm run deploy:*` scripts, and production smoke tests (`verify:prod`).
+See **[DEPLOY_NOTES.md](./DEPLOY_NOTES.md)** for the release checklist, `npm run deploy:*` scripts, production smoke tests (`verify:prod`), and required env vars (`NEXT_PUBLIC_SITE_URL`, Supabase auth redirect URLs).
 
 ## Getting Started
 
