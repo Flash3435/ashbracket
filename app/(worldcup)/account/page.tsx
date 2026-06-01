@@ -158,6 +158,18 @@ export default async function AccountPage({ searchParams }: PageProps) {
             Create your own pool
           </Link>
         </div>
+        <div className="ash-surface p-4">
+          <h2 className="text-sm font-semibold text-ash-text">Security</h2>
+          <p className="mt-1 text-sm text-ash-muted">
+            Update your AshBracket sign-in password.
+          </p>
+          <Link
+            href="/account/change-password"
+            className="btn-ghost mt-3 inline-flex text-sm ring-1 ring-ash-border"
+          >
+            Change password
+          </Link>
+        </div>
       </div>
 
       {error ? (
