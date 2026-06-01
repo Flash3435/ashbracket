@@ -33,6 +33,7 @@
     "test:remove-participant": "tsx lib/participants/removeParticipantFromPoolPolicy.selftest.ts",
     "test:pool-activity-engagement": "tsx lib/poolActivity/poolActivityFeedEngagement.selftest.ts",
     "test:change-password": "tsx lib/auth/changePassword.selftest.ts",
+    "test:pool-join": "tsx lib/join/planPoolJoin.selftest.ts",
     "seed:wc2026": "tsx scripts/seed-official-wc2026.ts",
     "seed:fifa-ranks": "tsx scripts/seed-fifa-ranks.ts",
     "seed:nhl-phase2": "tsx scripts/seed-nhl-phase2.ts",

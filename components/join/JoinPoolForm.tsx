@@ -11,11 +11,10 @@ import {
 } from "react";
 import {
   claimParticipantInvite,
-  claimPoolParticipant,
   getMyParticipantIdInPool,
+  joinPool,
   peekJoinablePool,
   peekParticipantInvite,
-  registerInPool,
   type PeekInviteResult,
   type PeekJoinResult,
 } from "../../lib/join/actions";
@@ -58,7 +57,13 @@ export function JoinPoolForm({
   );
   const [invitePeek, setInvitePeek] = useState<PeekInviteResult | null>(null);
   const [displayName, setDisplayName] = useState("");
-  const [mode, setMode] = useState<"create" | "claim">("create");
+  const [joinStep, setJoinStep] = useState<"form" | "confirm" | "ambiguous">(
+    "form",
+  );
+  const [pendingMatch, setPendingMatch] = useState<{
+    participantId: string;
+    matchedDisplayName: string;
+  } | null>(null);
   const [formError, setFormError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
   /** `undefined` = not checked yet; `null` = not already in pool; string = existing participant id */
@@ -80,36 +85,62 @@ export function JoinPoolForm({
     });
   }, [joinCode]);
 
-  const onRegisterOrClaim = useCallback(
-    (e: React.FormEvent) => {
-      e.preventDefault();
+  const finishJoin = useCallback(
+    (participantId: string) => {
+      if (afterSuccessfulJoin === "picks") {
+        const q = new URLSearchParams({
+          participant: participantId,
+          joined: "1",
+        });
+        router.push(`/account/picks?${q.toString()}`);
+      } else {
+        router.push("/account");
+      }
+      router.refresh();
+    },
+    [router, afterSuccessfulJoin],
+  );
+
+  const runJoin = useCallback(
+    (intent: "initial" | "confirm_existing" | "create_new") => {
       if (!resolved) return;
       setFormError(null);
       startTransition(async () => {
-        const fn =
-          mode === "create" ? registerInPool : claimPoolParticipant;
-        const result = await fn(
+        const result = await joinPool(
           resolved.poolId,
           joinCode.trim(),
-          displayName.trim(),
+          displayName,
+          intent,
         );
-        if (!result.ok) {
-          setFormError(result.message);
+        if (result.status === "success") {
+          finishJoin(result.participantId);
           return;
         }
-        if (afterSuccessfulJoin === "picks") {
-          const q = new URLSearchParams({
-            participant: result.participantId,
-            joined: "1",
+        if (result.status === "needs_confirmation") {
+          setPendingMatch({
+            participantId: result.participantId,
+            matchedDisplayName: result.matchedDisplayName,
           });
-          router.push(`/account/picks?${q.toString()}`);
-        } else {
-          router.push("/account");
+          setJoinStep("confirm");
+          return;
         }
-        router.refresh();
+        if (result.status === "ambiguous") {
+          setFormError(result.message);
+          setJoinStep("ambiguous");
+          return;
+        }
+        setFormError(result.message);
       });
     },
-    [resolved, mode, joinCode, displayName, router, afterSuccessfulJoin],
+    [resolved, joinCode, displayName, finishJoin],
+  );
+
+  const onJoinPool = useCallback(
+    (e: React.FormEvent) => {
+      e.preventDefault();
+      runJoin("initial");
+    },
+    [runJoin],
   );
 
   const onAcceptInvite = useCallback(
@@ -316,7 +347,7 @@ export function JoinPoolForm({
           <p className="text-sm text-ash-muted">
             {inviteMode
               ? "Create your account using the email address your organizer invited. If you already have an account with that email, sign in instead."
-              : "Sign in or sign up. After that, you can create or claim your pool profile here."}
+              : "Sign in or sign up. After that, choose the name you want on the leaderboard and join the pool."}
           </p>
           <div className="flex flex-wrap gap-3">
             {inviteMode ? (
@@ -388,11 +419,14 @@ export function JoinPoolForm({
 
       {!inviteMode && isSignedIn && resolved ? (
         <section className="space-y-4">
-          <h2 className="text-sm font-bold text-ash-text">2. Pool profile</h2>
           {existingPoolParticipantId === undefined ? (
-            <p className="text-sm text-ash-muted">Checking your pool membership…</p>
+            <>
+              <h2 className="text-sm font-bold text-ash-text">2. Your name</h2>
+              <p className="text-sm text-ash-muted">Checking your pool membership…</p>
+            </>
           ) : existingPoolParticipantId ? (
             <>
+              <h2 className="text-sm font-bold text-ash-text">2. Your name</h2>
               <p className="text-sm text-ash-muted">
                 You’re already in this pool with your signed-in account. Head to
                 your picks or account anytime.
@@ -409,34 +443,84 @@ export function JoinPoolForm({
                 </Link>
               </div>
             </>
+          ) : joinStep === "confirm" && pendingMatch ? (
+            <>
+              <h2 className="text-lg font-bold text-ash-text">
+                Join {resolved.poolName}
+              </h2>
+              <p className="text-sm text-ash-muted">
+                We found an existing profile named{" "}
+                <span className="font-semibold text-ash-text">
+                  {pendingMatch.matchedDisplayName}
+                </span>{" "}
+                in this pool. Is this you?
+              </p>
+              {formError ? (
+                <p className="text-sm text-red-300" role="alert">
+                  {formError}
+                </p>
+              ) : null}
+              <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap">
+                <button
+                  type="button"
+                  disabled={pending}
+                  onClick={() => runJoin("confirm_existing")}
+                  className="btn-primary disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {pending ? "Joining…" : "Yes, use this profile"}
+                </button>
+                <button
+                  type="button"
+                  disabled={pending}
+                  onClick={() => runJoin("create_new")}
+                  className="btn-ghost disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  No, create a new profile
+                </button>
+                <button
+                  type="button"
+                  disabled={pending}
+                  onClick={() => {
+                    setJoinStep("form");
+                    setPendingMatch(null);
+                    setFormError(null);
+                  }}
+                  className="text-sm text-ash-muted underline-offset-2 hover:underline disabled:opacity-50"
+                >
+                  Back
+                </button>
+              </div>
+            </>
+          ) : joinStep === "ambiguous" ? (
+            <>
+              <h2 className="text-lg font-bold text-ash-text">
+                Join {resolved.poolName}
+              </h2>
+              {formError ? (
+                <p className="text-sm text-red-300" role="alert">
+                  {formError}
+                </p>
+              ) : null}
+              <button
+                type="button"
+                onClick={() => {
+                  setJoinStep("form");
+                  setFormError(null);
+                }}
+                className="text-sm text-ash-muted underline-offset-2 hover:underline"
+              >
+                Try a different name
+              </button>
+            </>
           ) : (
             <>
-              <div className="flex gap-4 text-sm">
-                <label className="inline-flex cursor-pointer items-center gap-2">
-                  <input
-                    type="radio"
-                    name="joinMode"
-                    checked={mode === "create"}
-                    onChange={() => setMode("create")}
-                  />
-                  New profile
-                </label>
-                <label className="inline-flex cursor-pointer items-center gap-2">
-                  <input
-                    type="radio"
-                    name="joinMode"
-                    checked={mode === "claim"}
-                    onChange={() => setMode("claim")}
-                  />
-                  Claim existing (organizer added me)
-                </label>
-              </div>
+              <h2 className="text-lg font-bold text-ash-text">
+                Join {resolved.poolName}
+              </h2>
               <p className="text-sm text-ash-muted">
-                {mode === "create"
-                  ? "Choose the display name shown on the leaderboard."
-                  : "Use the exact display name your organizer used when they created your row (case-insensitive)."}
+                Choose the name that should appear on the leaderboard.
               </p>
-              <form onSubmit={onRegisterOrClaim} className="space-y-4">
+              <form onSubmit={onJoinPool} className="space-y-4">
                 <label className="block space-y-1.5">
                   <span className="text-xs font-medium uppercase tracking-wide text-ash-muted">
                     Display name
@@ -446,7 +530,10 @@ export function JoinPoolForm({
                     autoComplete="name"
                     required
                     value={displayName}
-                    onChange={(e) => setDisplayName(e.target.value)}
+                    onChange={(e) => {
+                      setDisplayName(e.target.value);
+                      setFormError(null);
+                    }}
                     className="w-full rounded-md border border-ash-border bg-ash-body px-3 py-2 text-sm text-ash-text shadow-sm outline-none focus:border-ash-accent focus:ring-2 focus:ring-ash-accent/20"
                   />
                 </label>
@@ -460,13 +547,7 @@ export function JoinPoolForm({
                   disabled={pending}
                   className="btn-primary disabled:cursor-not-allowed disabled:opacity-50"
                 >
-                  {pending
-                    ? "Saving…"
-                    : mode === "create"
-                      ? lockJoinCode
-                        ? "Join pool"
-                        : "Create profile"
-                      : "Claim profile"}
+                  {pending ? "Joining…" : "Join pool"}
                 </button>
               </form>
             </>
