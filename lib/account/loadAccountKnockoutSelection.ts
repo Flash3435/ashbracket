@@ -17,6 +17,7 @@ import type { KnockoutPickSlotDraft } from "../../types/adminKnockoutPicks";
 import { fetchOfficialRoundOf32Complete } from "../tournament/fetchOfficialRoundOf32Complete";
 import { poolLocked } from "../pools/poolLocked";
 import {
+  mapPoolPaymentFromPool,
   mapPoolPaymentRow,
   type PoolPaymentSettings,
 } from "../pools/poolPayment";
@@ -123,12 +124,9 @@ export async function loadAccountKnockoutSelection(
   let selectedPoolName = "";
   let selectedPoolId: string | null = null;
   let selectedLockAt: string | null = null;
-  let selectedPoolPayment: PoolPaymentSettings = {
-    paymentType: "free",
-    entryFeeLabel: null,
-    entryFeeAmount: null,
-    paymentInstructions: null,
-  };
+  let selectedPoolPayment: PoolPaymentSettings = mapPoolPaymentFromPool({
+    payment_type: "free",
+  });
 
   try {
     const supabase = await createClient();
