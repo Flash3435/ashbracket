@@ -4,10 +4,15 @@ import { isGlobalAdmin } from "@/lib/auth/permissions";
 import { createClient } from "@/lib/supabase/server";
 import { revalidatePath } from "next/cache";
 import { validateJoinCodeFormat } from "./joinCodeFormat";
+import {
+  validatePoolPaymentInput,
+  type PoolPaymentInput,
+} from "./poolPayment";
+import { savePoolPaymentSettings } from "./savePoolPaymentSettings";
 import { validatePoolNameInput } from "./validatePoolNameInput";
 
 export type CreatePoolWithOwnerResult =
-  | { ok: true; poolId: string }
+  | { ok: true; poolId: string; paymentWarnings?: string[] }
   | { ok: false; error: string };
 
 /**
@@ -19,6 +24,7 @@ export async function createPoolWithOwnerAction(input: {
   name: string;
   joinCode?: string | null;
   isPublic?: boolean;
+  payment: PoolPaymentInput;
 }): Promise<CreatePoolWithOwnerResult> {
   const nameCheck = validatePoolNameInput(input.name);
   if (!nameCheck.ok) {
@@ -29,6 +35,11 @@ export async function createPoolWithOwnerAction(input: {
   const joinCheck = validateJoinCodeFormat(input.joinCode);
   if (!joinCheck.ok) {
     return { ok: false, error: joinCheck.error };
+  }
+
+  const paymentCheck = validatePoolPaymentInput(input.payment);
+  if (!paymentCheck.ok) {
+    return { ok: false, error: paymentCheck.error };
   }
 
   try {
@@ -85,11 +96,20 @@ export async function createPoolWithOwnerAction(input: {
       return { ok: false, error: "Pool was not created." };
     }
 
+    const paymentSave = await savePoolPaymentSettings(
+      supabase,
+      poolId,
+      paymentCheck.settings,
+    );
+    if (!paymentSave.ok) {
+      return { ok: false, error: paymentSave.error };
+    }
+
     revalidatePath("/admin");
     revalidatePath("/account");
     revalidatePath(`/admin/pools/${poolId}`);
 
-    return { ok: true, poolId };
+    return { ok: true, poolId, paymentWarnings: paymentCheck.warnings };
   } catch (e) {
     return {
       ok: false,

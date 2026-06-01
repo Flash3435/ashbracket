@@ -3,6 +3,7 @@ import { PageContainer } from "@/components/ui/PageContainer";
 import { PageTitle } from "@/components/ui/PageTitle";
 import { getSimulationPoolEmailUiStatus } from "@/lib/admin/simulationPoolEmailPolicy";
 import { requireManagedPool } from "@/lib/admin/requireManagedPool";
+import { mapPoolPaymentFromPool, poolIsPaid } from "@/lib/pools/poolPayment";
 import { loadParticipantIdsWithIncompletePicks } from "@/lib/communications/picksCompleteness";
 import { formatPoolLockSummary } from "@/lib/communications/messageTemplates";
 import type {
@@ -40,7 +41,12 @@ export default async function AdminPoolCommunicationsPage({
   const simulationEmailStatus = getSimulationPoolEmailUiStatus(
     Boolean(pool.is_simulation),
   );
-  const initialPreset = parseRecipientPreset(sp?.preset);
+  const poolPayment = mapPoolPaymentFromPool(pool);
+  const poolIsPaidPool = poolIsPaid(poolPayment);
+  let initialPreset = parseRecipientPreset(sp?.preset);
+  if (!poolIsPaidPool && initialPreset === "unpaid") {
+    initialPreset = "all";
+  }
 
   let participants: PoolCommunicationParticipant[] = [];
   let poolName = "Your pool";
@@ -101,7 +107,9 @@ export default async function AdminPoolCommunicationsPage({
         description={
           pool.is_simulation
             ? "Simulation test pool — production blocks real email here by default. Complete the pilot checklist before enabling email."
-            : "Send payment reminders, deadline reminders, or a custom note to groups of people in this pool."
+            : poolIsPaidPool
+              ? "Send payment reminders, deadline reminders, or a custom note to groups of people in this pool."
+              : "Send deadline reminders or a custom note to groups of people in this pool. Payment reminders are only available for paid pools."
         }
       />
       {loadError ? (
@@ -142,6 +150,7 @@ export default async function AdminPoolCommunicationsPage({
           lockAtIso={lockAtIso}
           participants={participants}
           simulationEmailStatus={simulationEmailStatus}
+          poolIsPaid={poolIsPaidPool}
         />
       )}
     </PageContainer>

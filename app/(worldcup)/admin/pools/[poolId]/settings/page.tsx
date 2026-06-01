@@ -28,6 +28,13 @@ export default async function AdminPoolSettingsPage({
     is_public: pool.is_public,
     show_public_rules: pool.show_public_rules,
     lock_at: pool.lock_at,
+    payment_type: pool.payment_type ?? "free",
+    entry_fee_label: pool.entry_fee_label ?? null,
+    entry_fee_amount: pool.entry_fee_amount ?? null,
+    payment_instructions: pool.payment_instructions ?? null,
+    entry_fee_cents: pool.entry_fee_cents ?? null,
+    currency_code: pool.currency_code,
+    show_pot_to_participants: pool.show_pot_to_participants,
   });
   const jc = pool.join_code?.trim() ?? null;
   const shareUrl = jc ? poolShareJoinUrl(jc) : null;
@@ -36,7 +43,7 @@ export default async function AdminPoolSettingsPage({
     <PageContainer>
       <PageTitle
         title="Pool settings"
-        description="Set your pool’s name, public leaderboard visibility, whether pool rules are visible to visitors, and when picks must be in by."
+        description="Set your pool’s name, free vs paid entry, public leaderboard visibility, whether pool rules are visible to visitors, and when picks must be in by."
       />
 
       <PoolShareInvitePanel

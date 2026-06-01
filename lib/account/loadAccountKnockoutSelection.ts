@@ -16,6 +16,10 @@ import type { Participant } from "../../types/participant";
 import type { KnockoutPickSlotDraft } from "../../types/adminKnockoutPicks";
 import { fetchOfficialRoundOf32Complete } from "../tournament/fetchOfficialRoundOf32Complete";
 import { poolLocked } from "../pools/poolLocked";
+import {
+  mapPoolPaymentRow,
+  type PoolPaymentSettings,
+} from "../pools/poolPayment";
 
 export { poolLocked };
 
@@ -36,12 +40,19 @@ export type PoolEmbed = {
   name: string;
   lock_at: string | null;
   tournament_edition_id: string | null;
+  payment_type: string;
+  entry_fee_label: string | null;
+  entry_fee_amount: number | string | null;
+  payment_instructions: string | null;
+  entry_fee_cents: number | null;
+  currency_code: string;
+  show_pot_to_participants: boolean;
 } | null;
 
 export function embeddedPool(
   raw:
-    | { name: string; lock_at: string | null; tournament_edition_id: string | null }
-    | { name: string; lock_at: string | null; tournament_edition_id: string | null }[]
+    | PoolEmbed
+    | NonNullable<PoolEmbed>[]
     | null
     | undefined,
 ): PoolEmbed {
@@ -69,7 +80,9 @@ export type AccountKnockoutSelection = {
   selectedId: string | null;
   selectedParticipant: Participant | null;
   selectedPoolName: string;
+  selectedPoolId: string | null;
   selectedLockAt: string | null;
+  selectedPoolPayment: PoolPaymentSettings;
   teams: Team[];
   stages: TournamentStage[];
   predictions: Prediction[];
@@ -108,7 +121,14 @@ export async function loadAccountKnockoutSelection(
   let selectedId: string | null = null;
   let selectedParticipant: Participant | null = null;
   let selectedPoolName = "";
+  let selectedPoolId: string | null = null;
   let selectedLockAt: string | null = null;
+  let selectedPoolPayment: PoolPaymentSettings = {
+    paymentType: "free",
+    entryFeeLabel: null,
+    entryFeeAmount: null,
+    paymentInstructions: null,
+  };
 
   try {
     const supabase = await createClient();
@@ -126,7 +146,14 @@ export async function loadAccountKnockoutSelection(
         pools (
           name,
           lock_at,
-          tournament_edition_id
+          tournament_edition_id,
+          payment_type,
+          entry_fee_label,
+          entry_fee_amount,
+          payment_instructions,
+          entry_fee_cents,
+          currency_code,
+          show_pot_to_participants
         )
       `,
       )
@@ -144,12 +171,8 @@ export async function loadAccountKnockoutSelection(
         pool_id: r.pool_id as string,
         pools: embeddedPool(
           r.pools as
-            | { name: string; lock_at: string | null; tournament_edition_id: string | null }
-            | {
-                name: string;
-                lock_at: string | null;
-                tournament_edition_id: string | null;
-              }[]
+            | NonNullable<PoolEmbed>
+            | NonNullable<PoolEmbed>[]
             | null
             | undefined,
         ),
@@ -213,7 +236,19 @@ export async function loadAccountKnockoutSelection(
           invite_last_sent_at: null,
         } as ParticipantRow);
         selectedPoolName = row.pools?.name ?? "Pool";
+        selectedPoolId = row.pool_id;
         selectedLockAt = row.pools?.lock_at ?? null;
+        if (row.pools) {
+          selectedPoolPayment = mapPoolPaymentRow({
+            payment_type: row.pools.payment_type ?? "free",
+            entry_fee_label: row.pools.entry_fee_label,
+            entry_fee_amount: row.pools.entry_fee_amount,
+            payment_instructions: row.pools.payment_instructions,
+            entry_fee_cents: row.pools.entry_fee_cents,
+            currency_code: row.pools.currency_code,
+            show_pot_to_participants: row.pools.show_pot_to_participants,
+          });
+        }
         const selectedEditionId = row.pools?.tournament_edition_id ?? null;
         const r32Stage = stages.find((s) => s.code === "round_of_32");
         if (!loadError && r32Stage && selectedEditionId) {
@@ -299,7 +334,9 @@ export async function loadAccountKnockoutSelection(
     selectedId,
     selectedParticipant,
     selectedPoolName,
+    selectedPoolId,
     selectedLockAt,
+    selectedPoolPayment,
     teams,
     stages,
     predictions,

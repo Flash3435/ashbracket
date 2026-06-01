@@ -1,3 +1,9 @@
+import {
+  mapPoolPaymentRow,
+  type PoolPaymentRow,
+  type PoolPaymentSettings,
+} from "./poolPayment";
+
 /** Row shape from `pools` for the admin settings form. */
 export type PoolSettingsRow = {
   id: string;
@@ -5,13 +11,14 @@ export type PoolSettingsRow = {
   is_public: boolean;
   show_public_rules: boolean;
   lock_at: string | null;
-};
+} & PoolPaymentRow;
 
 export type PoolSettingsEditable = {
   name: string;
   isPublic: boolean;
   showPublicRules: boolean;
   lockAt: string | null;
+  payment: PoolPaymentSettings;
 };
 
 export function mapPoolSettingsRow(row: PoolSettingsRow): PoolSettingsEditable {
@@ -20,5 +27,6 @@ export function mapPoolSettingsRow(row: PoolSettingsRow): PoolSettingsEditable {
     isPublic: row.is_public,
     showPublicRules: row.show_public_rules,
     lockAt: row.lock_at,
+    payment: mapPoolPaymentRow(row),
   };
 }

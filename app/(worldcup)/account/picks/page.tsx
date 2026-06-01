@@ -1,5 +1,11 @@
 import { AccountPicksProfileLinks } from "@/components/account/AccountPicksProfileLinks";
 import { ParticipantKnockoutPicksForm } from "@/components/admin/ParticipantKnockoutPicksForm";
+import {
+  ParticipantPoolPaymentPanel,
+  UnpaidPaymentReminderBanner,
+} from "@/components/pools/ParticipantPoolPaymentPanel";
+import { fetchPoolPotForMember } from "@/lib/pools/fetchPoolPotForMember";
+import { poolIsPaid } from "@/lib/pools/poolPayment";
 import { PageContainer } from "@/components/ui/PageContainer";
 import { PageTitle } from "@/components/ui/PageTitle";
 import { createClient } from "@/lib/supabase/server";
@@ -14,7 +20,7 @@ import { saveMyKnockoutPicksAction } from "./actions";
 export const dynamic = "force-dynamic";
 
 type PageProps = {
-  searchParams: Promise<{ participant?: string }>;
+  searchParams: Promise<{ participant?: string; joined?: string }>;
 };
 
 export default async function AccountPicksPage({ searchParams }: PageProps) {
@@ -29,7 +35,15 @@ export default async function AccountPicksPage({ searchParams }: PageProps) {
   }
 
   const participantParam = sp.participant?.trim() ?? "";
+  const showJoinPaymentNotice = sp.joined === "1";
   const ctx = await loadAccountKnockoutSelection(user.id, participantParam);
+
+  const potSummary =
+    ctx.selectedPoolId &&
+    poolIsPaid(ctx.selectedPoolPayment) &&
+    ctx.selectedPoolPayment.showPotToParticipants
+      ? await fetchPoolPotForMember(supabase, ctx.selectedPoolId)
+      : null;
 
   if (ctx.invalidOtherProfile && ctx.paramId) {
     redirect(`/participant/${ctx.paramId}/snapshot?from=account`);
@@ -140,6 +154,28 @@ export default async function AccountPicksPage({ searchParams }: PageProps) {
                   {ctx.selectedPoolName}
                 </span>
               </p>
+
+              {poolIsPaid(ctx.selectedPoolPayment) ? (
+                <div className="mb-4">
+                  <ParticipantPoolPaymentPanel
+                    poolPayment={ctx.selectedPoolPayment}
+                    isPaid={ctx.selectedParticipant.paid}
+                    potSummary={potSummary}
+                    variant={
+                      showJoinPaymentNotice && !ctx.selectedParticipant.paid
+                        ? "join_notice"
+                        : "default"
+                    }
+                  />
+                </div>
+              ) : null}
+
+              {!showJoinPaymentNotice ? (
+                <UnpaidPaymentReminderBanner
+                  poolPayment={ctx.selectedPoolPayment}
+                  isPaid={ctx.selectedParticipant.paid}
+                />
+              ) : null}
 
               {ctx.predictions.length === 0 && !locked ? (
                 <p className="mb-6 rounded-md border border-ash-border bg-ash-surface px-3 py-2 text-sm text-ash-muted">

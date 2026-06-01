@@ -14,6 +14,8 @@ import {
   mapParticipantRow,
   type ParticipantRow,
 } from "@/lib/participants/participantsDb";
+import { PoolPotAdminSummary } from "@/components/pools/PoolPotAdminSummary";
+import { mapPoolPaymentFromPool, poolIsPaid } from "@/lib/pools/poolPayment";
 
 export const dynamic = "force-dynamic";
 
@@ -35,6 +37,8 @@ export default async function AdminPoolParticipantsPage({
     typeof lockAtIso === "string" &&
     Number.isFinite(new Date(lockAtIso).getTime()) &&
     new Date(lockAtIso).getTime() <= Date.now();
+  const poolPayment = mapPoolPaymentFromPool(pool);
+  const poolIsPaidPool = poolIsPaid(poolPayment);
 
   let initialParticipants: ParticipantWithPicksStatus[] = [];
   let loadError: string | null = null;
@@ -134,6 +138,14 @@ export default async function AdminPoolParticipantsPage({
           {picksStatusWarning}
         </p>
       ) : null}
+      {poolIsPaidPool && !loadError ? (
+        <div className="mb-6">
+          <PoolPotAdminSummary
+            poolPayment={poolPayment}
+            participants={initialParticipants}
+          />
+        </div>
+      ) : null}
       <ParticipantsManager
         poolId={poolId}
         initialParticipants={initialParticipants}
@@ -145,6 +157,7 @@ export default async function AdminPoolParticipantsPage({
         picksStatusAvailable={!picksStatusWarning}
         lockSummary={lockSummary}
         simulationEmailStatus={simulationEmailStatus}
+        poolIsPaid={poolIsPaidPool}
       />
     </PageContainer>
   );

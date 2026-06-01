@@ -1,6 +1,10 @@
 import Link from "next/link";
 import { AccountNextMatchesSection } from "@/components/account/AccountNextMatchesSection";
 import { AccountPicksProfileLinks } from "@/components/account/AccountPicksProfileLinks";
+import { ParticipantPoolPaymentPanel } from "@/components/pools/ParticipantPoolPaymentPanel";
+import type { PoolPotParticipantSummary } from "@/lib/pools/computePoolPotSummary";
+import { fetchPoolPotForMember } from "@/lib/pools/fetchPoolPotForMember";
+import { mapPoolPaymentFromPool, poolIsPaid } from "@/lib/pools/poolPayment";
 import { ParticipantBracketView } from "@/components/bracket/ParticipantBracketView";
 import { MyKnockoutPicksSummary } from "@/components/picks/MyKnockoutPicksSummary";
 import { PicksViewToggle } from "@/components/picks/PicksViewToggle";
@@ -55,11 +59,68 @@ export default async function AccountPage({ searchParams }: PageProps) {
 
   const { data: rows, error } = await supabase
     .from("participants")
-    .select("id, display_name, pool_id")
+    .select(
+      `
+      id,
+      display_name,
+      pool_id,
+      is_paid,
+      pools (
+        name,
+        payment_type,
+        entry_fee_label,
+        entry_fee_amount,
+        payment_instructions,
+        entry_fee_cents,
+        currency_code,
+        show_pot_to_participants
+      )
+    `,
+    )
     .eq("user_id", user.id)
     .order("created_at", { ascending: true });
 
-  const list = rows ?? [];
+  type PoolEmbedRow = {
+    name: string;
+    payment_type: string;
+    entry_fee_label: string | null;
+    entry_fee_amount: number | string | null;
+    payment_instructions: string | null;
+    entry_fee_cents: number | null;
+    currency_code: string | null;
+    show_pot_to_participants: boolean | null;
+  };
+
+  const list = (rows ?? []).map((r) => {
+    const poolRaw = r.pools as PoolEmbedRow | PoolEmbedRow[] | null;
+    const pool = Array.isArray(poolRaw) ? poolRaw[0] : poolRaw;
+    return {
+      id: r.id as string,
+      display_name: r.display_name as string,
+      pool_id: r.pool_id as string,
+      is_paid: Boolean(r.is_paid),
+      pool_name: pool?.name ?? "Pool",
+      pool_payment: pool
+        ? mapPoolPaymentFromPool(pool)
+        : mapPoolPaymentFromPool({ payment_type: "free" }),
+    };
+  });
+
+  const potByPoolId = new Map<string, PoolPotParticipantSummary | null>();
+  await Promise.all(
+    list
+      .filter(
+        (p) =>
+          poolIsPaid(p.pool_payment) &&
+          p.pool_payment.showPotToParticipants,
+      )
+      .map(async (p) => {
+        potByPoolId.set(
+          p.pool_id,
+          await fetchPoolPotForMember(supabase, p.pool_id),
+        );
+      }),
+  );
 
   const preferredParticipantId = resolveAccountParticipantId(
     list,
@@ -237,6 +298,22 @@ export default async function AccountPage({ searchParams }: PageProps) {
           ) : null}
 
           {picksCtx &&
+          picksCtx.selectedParticipant &&
+          poolIsPaid(picksCtx.selectedPoolPayment) ? (
+            <div className="mb-6">
+              <ParticipantPoolPaymentPanel
+                poolPayment={picksCtx.selectedPoolPayment}
+                isPaid={picksCtx.selectedParticipant.paid}
+                potSummary={
+                  picksCtx.selectedPoolId
+                    ? (potByPoolId.get(picksCtx.selectedPoolId) ?? null)
+                    : null
+                }
+              />
+            </div>
+          ) : null}
+
+          {picksCtx &&
           picksCtx.selectedId &&
           picksCtx.selectedParticipant &&
           !picksCtx.loadError &&
@@ -344,6 +421,16 @@ export default async function AccountPage({ searchParams }: PageProps) {
             {list.map((p) => (
               <li key={p.id} className="ash-surface p-4">
                 <p className="font-medium text-ash-text">{p.display_name}</p>
+                <p className="mt-0.5 text-xs text-ash-muted">{p.pool_name}</p>
+                {poolIsPaid(p.pool_payment) ? (
+                  <div className="mt-3">
+                    <ParticipantPoolPaymentPanel
+                      poolPayment={p.pool_payment}
+                      isPaid={p.is_paid}
+                      potSummary={potByPoolId.get(p.pool_id) ?? null}
+                    />
+                  </div>
+                ) : null}
                 <div className="mt-2 flex flex-wrap gap-3 text-sm">
                   <Link href={`/participant/${p.id}`} className="ash-link">
                     Public profile

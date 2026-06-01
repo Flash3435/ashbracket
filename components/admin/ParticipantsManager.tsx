@@ -37,6 +37,7 @@ type ParticipantsManagerProps = {
   picksLocked: boolean;
   picksStatusAvailable: boolean;
   simulationEmailStatus?: SimulationPoolEmailUiStatus;
+  poolIsPaid?: boolean;
 };
 
 type Panel = "none" | "invite" | "manual";
@@ -130,6 +131,7 @@ export function ParticipantsManager({
   picksLocked,
   picksStatusAvailable,
   simulationEmailStatus,
+  poolIsPaid = false,
 }: ParticipantsManagerProps) {
   const emailStatus = simulationEmailStatus;
   const sendsBlocked = emailStatus?.sendsBlocked ?? false;
@@ -713,18 +715,20 @@ export function ParticipantsManager({
               />
             </label>
           </div>
-          <label className="mt-4 flex cursor-pointer items-center gap-2 text-sm text-ash-muted">
-            <input
-              type="checkbox"
-              disabled={disabled || isPending}
-              checked={inviteForm.paid}
-              onChange={(e) =>
-                setInviteForm((f) => ({ ...f, paid: e.target.checked }))
-              }
-              className="size-4 rounded border-ash-border text-ash-accent focus:ring-ash-accent disabled:opacity-50"
-            />
-            Paid
-          </label>
+          {poolIsPaid ? (
+            <label className="mt-4 flex cursor-pointer items-center gap-2 text-sm text-ash-muted">
+              <input
+                type="checkbox"
+                disabled={disabled || isPending}
+                checked={inviteForm.paid}
+                onChange={(e) =>
+                  setInviteForm((f) => ({ ...f, paid: e.target.checked }))
+                }
+                className="size-4 rounded border-ash-border text-ash-accent focus:ring-ash-accent disabled:opacity-50"
+              />
+              Mark as paid
+            </label>
+          ) : null}
           <div className="mt-4 flex justify-end gap-2">
             <button
               type="button"
@@ -788,18 +792,20 @@ export function ParticipantsManager({
               />
             </label>
           </div>
-          <label className="mt-4 flex cursor-pointer items-center gap-2 text-sm text-ash-muted">
-            <input
-              type="checkbox"
-              disabled={disabled || isPending}
-              checked={manualForm.paid}
-              onChange={(e) =>
-                setManualForm((f) => ({ ...f, paid: e.target.checked }))
-              }
-              className="size-4 rounded border-ash-border text-ash-accent focus:ring-ash-accent disabled:opacity-50"
-            />
-            Paid
-          </label>
+          {poolIsPaid ? (
+            <label className="mt-4 flex cursor-pointer items-center gap-2 text-sm text-ash-muted">
+              <input
+                type="checkbox"
+                disabled={disabled || isPending}
+                checked={manualForm.paid}
+                onChange={(e) =>
+                  setManualForm((f) => ({ ...f, paid: e.target.checked }))
+                }
+                className="size-4 rounded border-ash-border text-ash-accent focus:ring-ash-accent disabled:opacity-50"
+              />
+              Mark as paid
+            </label>
+          ) : null}
           <div className="mt-4 flex justify-end gap-2">
             <button
               type="button"
@@ -832,7 +838,11 @@ export function ParticipantsManager({
               <th className="px-4 py-3">Email</th>
               <th className="px-4 py-3">Join status</th>
               <th className="px-4 py-3">Picks status</th>
-              <th className="px-4 py-3">Paid</th>
+              {poolIsPaid ? (
+                <th className="px-4 py-3">Payment</th>
+              ) : (
+                <th className="px-4 py-3 text-ash-muted/70">Payment</th>
+              )}
               <th className="px-4 py-3 text-right">Actions</th>
             </tr>
           </thead>
@@ -878,15 +888,19 @@ export function ParticipantsManager({
                     ) : null}
                   </td>
                   <td className="px-4 py-3">
-                    <span
-                      className={
-                        p.paid
-                          ? "inline-flex rounded-full bg-ash-accent/20 px-2 py-0.5 text-xs font-medium text-ash-accent"
-                          : "inline-flex rounded-full bg-ash-body px-2 py-0.5 text-xs font-medium text-ash-muted ring-1 ring-ash-border"
-                      }
-                    >
-                      {p.paid ? "Paid" : "Unpaid"}
-                    </span>
+                    {poolIsPaid ? (
+                      <span
+                        className={
+                          p.paid
+                            ? "inline-flex rounded-full bg-ash-accent/20 px-2 py-0.5 text-xs font-semibold text-ash-accent"
+                            : "inline-flex rounded-full bg-amber-950/40 px-2 py-0.5 text-xs font-semibold text-amber-200 ring-1 ring-amber-800/50"
+                        }
+                      >
+                        {p.paid ? "Paid" : "Unpaid"}
+                      </span>
+                    ) : (
+                      <span className="text-xs text-ash-muted">—</span>
+                    )}
                   </td>
                   <td className="px-4 py-3 text-right">
                     {p.inviteStatus !== "joined" ? (
@@ -968,17 +982,19 @@ export function ParticipantsManager({
                       No picks saved yet
                     </p>
                   ) : null}
-                  <p className="mt-2">
-                    <span
-                      className={
-                        p.paid
-                          ? "inline-flex rounded-full bg-ash-accent/20 px-2 py-0.5 text-xs font-medium text-ash-accent"
-                          : "inline-flex rounded-full bg-ash-body px-2 py-0.5 text-xs font-medium text-ash-muted ring-1 ring-ash-border"
-                      }
-                    >
-                      {p.paid ? "Paid" : "Unpaid"}
-                    </span>
-                  </p>
+                  {poolIsPaid ? (
+                    <p className="mt-2">
+                      <span
+                        className={
+                          p.paid
+                            ? "inline-flex rounded-full bg-ash-accent/20 px-2 py-0.5 text-xs font-semibold text-ash-accent"
+                            : "inline-flex rounded-full bg-amber-950/40 px-2 py-0.5 text-xs font-semibold text-amber-200 ring-1 ring-amber-800/50"
+                        }
+                      >
+                        {p.paid ? "Paid" : "Unpaid"}
+                      </span>
+                    </p>
+                  ) : null}
                 </div>
                 <div className="flex shrink-0 flex-col items-end gap-1">
                   {p.inviteStatus !== "joined" ? (
@@ -1138,18 +1154,20 @@ export function ParticipantsManager({
                   className="w-full rounded-md border border-ash-border bg-ash-body px-3 py-2 text-sm text-ash-text shadow-sm outline-none ring-ash-accent/20 focus:border-ash-accent focus:ring-2 disabled:opacity-50"
                 />
               </label>
-              <label className="flex cursor-pointer items-center gap-2 text-sm text-ash-muted">
-                <input
-                  type="checkbox"
-                  disabled={disabled || isPending}
-                  checked={editForm.paid}
-                  onChange={(e) =>
-                    setEditForm((f) => ({ ...f, paid: e.target.checked }))
-                  }
-                  className="size-4 rounded border-ash-border text-ash-accent focus:ring-ash-accent disabled:opacity-50"
-                />
-                Paid
-              </label>
+              {poolIsPaid ? (
+                <label className="flex cursor-pointer items-center gap-2 text-sm text-ash-muted">
+                  <input
+                    type="checkbox"
+                    disabled={disabled || isPending}
+                    checked={editForm.paid}
+                    onChange={(e) =>
+                      setEditForm((f) => ({ ...f, paid: e.target.checked }))
+                    }
+                    className="size-4 rounded border-ash-border text-ash-accent focus:ring-ash-accent disabled:opacity-50"
+                  />
+                  Mark as paid
+                </label>
+              ) : null}
               <div className="flex justify-end gap-2 pt-2">
                 <button
                   type="button"

@@ -100,6 +100,7 @@ export function JoinPoolForm({
         if (afterSuccessfulJoin === "picks") {
           const q = new URLSearchParams({
             participant: result.participantId,
+            joined: "1",
           });
           router.push(`/account/picks?${q.toString()}`);
         } else {
@@ -124,6 +125,7 @@ export function JoinPoolForm({
         }
         const q = new URLSearchParams({
           participant: result.participantId,
+          joined: "1",
         });
         router.push(`/account/picks?${q.toString()}`);
         router.refresh();

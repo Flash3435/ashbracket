@@ -3,6 +3,11 @@
 import { useRouter } from "next/navigation";
 import { useEffect, useState, useTransition } from "react";
 import { updatePoolSettingsAction } from "../../app/(worldcup)/admin/settings/actions";
+import {
+  PoolPaymentSection,
+  poolPaymentFormStateFromSettings,
+  type PoolPaymentFormState,
+} from "@/components/pools/PoolPaymentSection";
 import type { PoolSettingsEditable } from "../../lib/pools/poolSettingsDb";
 
 type PoolSettingsFormProps = {
@@ -42,6 +47,10 @@ export function PoolSettingsForm({
   const [lockLocal, setLockLocal] = useState(() =>
     toDatetimeLocalFromIso(initial.lockAt),
   );
+  const [paymentForm, setPaymentForm] = useState<PoolPaymentFormState>(() =>
+    poolPaymentFormStateFromSettings(initial.payment),
+  );
+  const [paymentWarnings, setPaymentWarnings] = useState<string[]>([]);
   const [actionError, setActionError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
 
@@ -50,6 +59,8 @@ export function PoolSettingsForm({
     setIsPublic(initial.isPublic);
     setShowPublicRules(initial.showPublicRules);
     setLockLocal(toDatetimeLocalFromIso(initial.lockAt));
+    setPaymentForm(poolPaymentFormStateFromSettings(initial.payment));
+    setPaymentWarnings([]);
   }, [initial]);
 
   useEffect(() => {
@@ -72,15 +83,19 @@ export function PoolSettingsForm({
         isPublic,
         showPublicRules,
         lockAt,
+        payment: paymentForm,
       });
       if (!res.ok) {
         setActionError(res.error);
+        setPaymentWarnings([]);
         return;
       }
       setName(res.pool.name);
       setIsPublic(res.pool.isPublic);
       setShowPublicRules(res.pool.showPublicRules);
       setLockLocal(toDatetimeLocalFromIso(res.pool.lockAt));
+      setPaymentForm(poolPaymentFormStateFromSettings(res.pool.payment));
+      setPaymentWarnings(res.paymentWarnings ?? []);
       setSuccess(true);
       router.refresh();
     });
@@ -175,6 +190,13 @@ export function PoolSettingsForm({
           </div>
         </div>
       </div>
+
+      <PoolPaymentSection
+        value={paymentForm}
+        onChange={setPaymentForm}
+        disabled={disabled || isPending}
+        validationWarnings={paymentWarnings}
+      />
 
       <div className="space-y-2">
         <label

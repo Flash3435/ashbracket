@@ -1,5 +1,10 @@
 "use client";
 
+import {
+  PoolPaymentSection,
+  emptyPoolPaymentFormState,
+  type PoolPaymentFormState,
+} from "@/components/pools/PoolPaymentSection";
 import { createPoolWithOwnerAction } from "@/lib/pools/createPoolWithOwnerAction";
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
@@ -10,6 +15,10 @@ export function GlobalAdminCreatePoolForm() {
   const [poolName, setPoolName] = useState("");
   const [joinCode, setJoinCode] = useState("");
   const [isPublic, setIsPublic] = useState(false);
+  const [paymentForm, setPaymentForm] = useState<PoolPaymentFormState>(
+    emptyPoolPaymentFormState,
+  );
+  const [paymentWarnings, setPaymentWarnings] = useState<string[]>([]);
   const [actionError, setActionError] = useState<string | null>(null);
 
   function onSubmit(e: React.FormEvent) {
@@ -26,11 +35,14 @@ export function GlobalAdminCreatePoolForm() {
         name: trimmedName,
         joinCode: joinCode.trim() === "" ? null : joinCode,
         isPublic,
+        payment: paymentForm,
       });
       if (!res.ok) {
         setActionError(res.error);
+        setPaymentWarnings([]);
         return;
       }
+      setPaymentWarnings(res.paymentWarnings ?? []);
       router.push(`/admin/pools/${res.poolId}`);
     });
   }
@@ -98,6 +110,13 @@ export function GlobalAdminCreatePoolForm() {
             uppercase. Must be unique.
           </p>
         </div>
+
+        <PoolPaymentSection
+          value={paymentForm}
+          onChange={setPaymentForm}
+          disabled={isPending}
+          validationWarnings={paymentWarnings}
+        />
 
         <div className="flex items-center gap-2">
           <input

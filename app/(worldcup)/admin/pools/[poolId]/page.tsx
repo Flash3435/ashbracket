@@ -1,6 +1,8 @@
+import { PoolPotAdminSummary } from "@/components/pools/PoolPotAdminSummary";
 import { PageContainer } from "@/components/ui/PageContainer";
 import { PageTitle } from "@/components/ui/PageTitle";
 import { requireManagedPool } from "@/lib/admin/requireManagedPool";
+import { mapPoolPaymentFromPool, poolIsPaid } from "@/lib/pools/poolPayment";
 import Link from "next/link";
 
 export const dynamic = "force-dynamic";
@@ -11,7 +13,20 @@ export default async function AdminPoolDashboardPage({
   params: Promise<{ poolId: string }>;
 }) {
   const { poolId } = await params;
-  await requireManagedPool(poolId);
+  const { supabase, pool } = await requireManagedPool(poolId);
+  const poolPayment = mapPoolPaymentFromPool(pool);
+  const poolIsPaidPool = poolIsPaid(poolPayment);
+
+  let potParticipants: { paid: boolean }[] = [];
+  if (poolIsPaidPool) {
+    const { data } = await supabase
+      .from("participants")
+      .select("is_paid")
+      .eq("pool_id", poolId);
+    potParticipants = (data ?? []).map((r) => ({
+      paid: Boolean(r.is_paid),
+    }));
+  }
 
   const base = `/admin/pools/${poolId}`;
 
@@ -22,18 +37,27 @@ export default async function AdminPoolDashboardPage({
         description="Settings, participants, picks, payments, and email for this pool. Use Standings to refresh scores from official results."
       />
 
+      {poolIsPaidPool ? (
+        <div className="mb-6">
+          <PoolPotAdminSummary
+            poolPayment={poolPayment}
+            participants={potParticipants}
+          />
+        </div>
+      ) : null}
+
       <ul className="list-inside list-disc space-y-2 text-sm text-ash-muted">
         <li>
           <Link href={`${base}/settings`} className="ash-link">
             Pool settings
           </Link>
-          <span> — name, public leaderboard, lock time.</span>
+          <span> — name, free vs paid, public leaderboard, lock time.</span>
         </li>
         <li>
           <Link href={`${base}/participants`} className="ash-link">
             Participants
           </Link>
-          <span> — invites, manual rows, payment flags.</span>
+          <span> — invites, manual rows, payment flags, pot summary.</span>
         </li>
         <li>
           <Link href={`${base}/picks`} className="ash-link">

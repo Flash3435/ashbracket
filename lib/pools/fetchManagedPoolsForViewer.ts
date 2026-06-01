@@ -12,6 +12,12 @@ export type ManagedPoolRow = {
   join_code: string | null;
   created_by_user_id: string | null;
   entry_fee_cents: number | null;
+  payment_type: string;
+  entry_fee_label: string | null;
+  entry_fee_amount: number | string | null;
+  payment_instructions: string | null;
+  currency_code: string;
+  show_pot_to_participants: boolean;
   prize_distribution_json: unknown;
   group_advance_exact_points: string | number | null;
   group_advance_wrong_slot_points: string | number | null;

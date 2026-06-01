@@ -27,6 +27,7 @@ type PoolCommunicationsFormProps = {
   lockAtIso: string | null;
   participants: PoolCommunicationParticipant[];
   simulationEmailStatus: SimulationPoolEmailUiStatus;
+  poolIsPaid: boolean;
 };
 
 const PRESET_OPTIONS: { value: RecipientPreset; label: string; hint: string }[] =
@@ -95,6 +96,7 @@ export function PoolCommunicationsForm({
   lockAtIso,
   participants,
   simulationEmailStatus,
+  poolIsPaid,
 }: PoolCommunicationsFormProps) {
   const {
     isSimulationPool: isSimulation,
@@ -104,7 +106,9 @@ export function PoolCommunicationsForm({
   } = simulationEmailStatus;
   const [preset, setPreset] = useState<RecipientPreset>(initialPreset);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
-  const [messageKind, setMessageKind] = useState<MessageKind>("payment_reminder");
+  const [messageKind, setMessageKind] = useState<MessageKind>(
+    poolIsPaid ? "payment_reminder" : "deadline_reminder",
+  );
   const [draftsByKind, setDraftsByKind] = useState(initialDrafts);
   const [formError, setFormError] = useState<string | null>(null);
   const [sendResult, setSendResult] = useState<string | null>(null);
@@ -117,6 +121,31 @@ export function PoolCommunicationsForm({
   useEffect(() => {
     setPreset(initialPreset);
   }, [initialPreset]);
+
+  const presetOptions = useMemo(
+    () =>
+      PRESET_OPTIONS.filter(
+        (opt) => poolIsPaid || opt.value !== "unpaid",
+      ),
+    [poolIsPaid],
+  );
+
+  const messageOptions = useMemo(
+    () =>
+      MESSAGE_OPTIONS.filter(
+        (opt) => poolIsPaid || opt.value !== "payment_reminder",
+      ),
+    [poolIsPaid],
+  );
+
+  useEffect(() => {
+    if (!poolIsPaid && preset === "unpaid") {
+      setPreset("all");
+    }
+    if (!poolIsPaid && messageKind === "payment_reminder") {
+      setMessageKind("deadline_reminder");
+    }
+  }, [poolIsPaid, preset, messageKind]);
 
   const typedPhraseOk =
     !requiresTypedPhrase ||
@@ -340,7 +369,7 @@ export function PoolCommunicationsForm({
         <section className="ash-surface space-y-4 p-4">
           <h2 className="text-sm font-bold text-ash-text">Who should get this?</h2>
           <div className="space-y-3">
-            {PRESET_OPTIONS.map((opt) => (
+            {presetOptions.map((opt) => (
               <label
                 key={opt.value}
                 className="flex cursor-pointer gap-3 rounded-md border border-transparent p-2 hover:border-ash-border/60"
@@ -387,15 +416,17 @@ export function PoolCommunicationsForm({
                       ) : (
                         <span className="text-xs text-amber-300">(no email)</span>
                       )}
-                      <span
-                        className={`rounded px-1.5 py-0.5 text-[10px] font-medium uppercase ${
-                          p.isPaid
-                            ? "bg-emerald-950/60 text-emerald-200"
-                            : "bg-amber-950/50 text-amber-200"
-                        }`}
-                      >
-                        {p.isPaid ? "Paid" : "Unpaid"}
-                      </span>
+                      {poolIsPaid ? (
+                        <span
+                          className={`rounded px-1.5 py-0.5 text-[10px] font-medium uppercase ${
+                            p.isPaid
+                              ? "bg-emerald-950/60 text-emerald-200"
+                              : "bg-amber-950/50 text-amber-200"
+                          }`}
+                        >
+                          {p.isPaid ? "Paid" : "Unpaid"}
+                        </span>
+                      ) : null}
                       <span
                         className={`rounded px-1.5 py-0.5 text-[10px] font-medium uppercase ${
                           p.picksComplete
@@ -490,7 +521,7 @@ export function PoolCommunicationsForm({
         <section className="ash-surface space-y-4 p-4">
           <h2 className="text-sm font-bold text-ash-text">What kind of message?</h2>
           <div className="space-y-3">
-            {MESSAGE_OPTIONS.map((opt) => (
+            {messageOptions.map((opt) => (
               <label
                 key={opt.value}
                 className="flex cursor-pointer gap-3 rounded-md border border-transparent p-2 hover:border-ash-border/60"

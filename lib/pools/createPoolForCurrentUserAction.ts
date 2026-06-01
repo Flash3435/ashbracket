@@ -3,10 +3,21 @@
 import { createClient } from "@/lib/supabase/server";
 import { revalidatePath } from "next/cache";
 import { validateJoinCodeFormat } from "./joinCodeFormat";
+import {
+  validatePoolPaymentInput,
+  type PoolPaymentInput,
+} from "./poolPayment";
+import { savePoolPaymentSettings } from "./savePoolPaymentSettings";
 import { validatePoolNameInput } from "./validatePoolNameInput";
 
 export type CreatePoolForCurrentUserResult =
-  | { ok: true; poolId: string; poolName: string; joinCode: string }
+  | {
+      ok: true;
+      poolId: string;
+      poolName: string;
+      joinCode: string;
+      paymentWarnings?: string[];
+    }
   | { ok: false; error: string };
 
 type RpcResult = {
@@ -23,6 +34,7 @@ export async function createPoolForCurrentUserAction(input: {
   name: string;
   joinCode?: string | null;
   isPublic?: boolean;
+  payment: PoolPaymentInput;
 }): Promise<CreatePoolForCurrentUserResult> {
   const nameCheck = validatePoolNameInput(input.name);
   if (!nameCheck.ok) {
@@ -32,6 +44,11 @@ export async function createPoolForCurrentUserAction(input: {
   const joinCheck = validateJoinCodeFormat(input.joinCode);
   if (!joinCheck.ok) {
     return { ok: false, error: joinCheck.error };
+  }
+
+  const paymentCheck = validatePoolPaymentInput(input.payment);
+  if (!paymentCheck.ok) {
+    return { ok: false, error: paymentCheck.error };
   }
 
   try {
@@ -95,6 +112,15 @@ export async function createPoolForCurrentUserAction(input: {
       return { ok: false, error: "Pool was not created." };
     }
 
+    const paymentSave = await savePoolPaymentSettings(
+      supabase,
+      row.pool_id,
+      paymentCheck.settings,
+    );
+    if (!paymentSave.ok) {
+      return { ok: false, error: paymentSave.error };
+    }
+
     revalidatePath("/admin");
     revalidatePath("/account");
 
@@ -105,6 +131,7 @@ export async function createPoolForCurrentUserAction(input: {
       poolId: row.pool_id,
       poolName: row.pool_name,
       joinCode: row.join_code,
+      paymentWarnings: paymentCheck.warnings,
     };
   } catch (e) {
     return {
