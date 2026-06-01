@@ -30,6 +30,8 @@
     "test:bracket": "tsx lib/bracket/deriveParticipantBracket.selftest.ts",
     "test:r32-hardening": "tsx lib/admin/r32OfficialHardening.selftest.ts",
     "test:pool-name": "tsx lib/pools/validatePoolNameInput.selftest.ts",
+    "test:admin-pool-split": "tsx lib/pools/splitManagedPoolsForAdminHome.selftest.ts",
+    "test:participant-count-label": "tsx lib/pools/formatParticipantCountLabel.selftest.ts",
     "test:remove-participant": "tsx lib/participants/removeParticipantFromPoolPolicy.selftest.ts",
     "test:pool-activity-engagement": "tsx lib/poolActivity/poolActivityFeedEngagement.selftest.ts",
     "test:change-password": "tsx lib/auth/changePassword.selftest.ts",
