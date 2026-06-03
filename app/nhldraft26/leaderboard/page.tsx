@@ -1,31 +1,53 @@
+import { NhlDraft26CommunityLeaderboard } from "@/components/nhldraft26/NhlDraft26CommunityLeaderboard";
 import { PageContainer } from "@/components/ui/PageContainer";
+import { buildNhlDraft26ConsensusBoard } from "@/lib/nhldraft26/leaderboard/consensus";
+import {
+  fetchNhlDraft26PublicLeaderboardData,
+  hasNhlDraft26PublishedResults,
+} from "@/lib/nhldraft26/leaderboard/queries";
+import { buildNhlDraft26ProspectMap } from "@/lib/nhldraft26/prospects";
+import { createClient } from "@/lib/supabase/server";
 import type { Metadata } from "next";
 import Link from "next/link";
 
 export const metadata: Metadata = {
-  title: "Leaderboard",
-  description: "NHL Draft 2026 Pick'em leaderboard — updates after draft results are entered.",
+  title: "Community Draft Board",
+  description:
+    "See community top-10 predictions and consensus rankings before the 2026 NHL Draft.",
 };
 
-export default function NhlDraft26LeaderboardPage() {
+export const dynamic = "force-dynamic";
+
+export default async function NhlDraft26LeaderboardPage() {
+  const supabase = await createClient();
+  const hasResults = hasNhlDraft26PublishedResults();
+
+  if (hasResults) {
+    return (
+      <PageContainer compactBottom>
+        <section className="rounded-2xl border border-amber-500/20 bg-gradient-to-br from-slate-950/80 via-slate-900/40 to-amber-950/25 px-5 py-8 sm:px-8">
+          <h1 className="text-3xl font-bold tracking-tight text-ash-text">Leaderboard</h1>
+          <p className="mt-3 max-w-2xl text-base leading-relaxed text-slate-300">
+            Standings will appear here once scoring is enabled for published draft results.
+          </p>
+        </section>
+      </PageContainer>
+    );
+  }
+
+  const { data, error } = await fetchNhlDraft26PublicLeaderboardData(supabase);
+  const prospectById = buildNhlDraft26ProspectMap();
+  const consensusBoard = buildNhlDraft26ConsensusBoard(data.picks, prospectById);
+
   return (
     <PageContainer compactBottom>
       <section className="rounded-2xl border border-amber-500/20 bg-gradient-to-br from-slate-950/80 via-slate-900/40 to-amber-950/25 px-5 py-8 sm:px-8">
-        <h1 className="text-3xl font-bold tracking-tight text-ash-text">Leaderboard</h1>
+        <h1 className="text-3xl font-bold tracking-tight text-ash-text">Community Draft Board</h1>
         <p className="mt-3 max-w-2xl text-base leading-relaxed text-slate-300">
-          See how your board stacks up once the real draft results are in.
+          See how everyone is predicting the top 10 before draft night. Standings will appear here
+          after the real results are entered.
         </p>
-      </section>
-
-      <section className="ash-surface px-4 py-10 text-center sm:px-5">
-        <p className="text-lg font-medium text-slate-200">
-          Leaderboard will appear after draft results are entered.
-        </p>
-        <p className="mx-auto mt-2 max-w-md text-sm leading-relaxed text-slate-500">
-          Scoring and standings for this Pick&apos;em are separate from the main AshBracket World
-          Cup pools and from the NHL playoff bracket section.
-        </p>
-        <div className="mt-6 flex flex-wrap justify-center gap-3">
+        <div className="mt-4 flex flex-wrap gap-3">
           <Link href="/nhldraft26/picks" className="btn-primary no-underline">
             Make my picks
           </Link>
@@ -34,6 +56,18 @@ export default function NhlDraft26LeaderboardPage() {
           </Link>
         </div>
       </section>
+
+      {error ? (
+        <p className="rounded-lg border border-amber-700/50 bg-amber-950/30 px-4 py-3 text-sm text-amber-100">
+          Could not load community board ({error}). Try again later.
+        </p>
+      ) : null}
+
+      <NhlDraft26CommunityLeaderboard
+        board={consensusBoard}
+        entries={data.entries}
+        prospectById={prospectById}
+      />
     </PageContainer>
   );
 }

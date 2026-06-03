@@ -1,6 +1,7 @@
 "use server";
 
 import { isNhlDraft26PicksLocked } from "@/lib/nhldraft26/config";
+import { validateNhlDraft26DisplayName } from "@/lib/nhldraft26/validateDisplayName";
 import { validateNhlDraft26PickList } from "@/lib/nhldraft26/validatePicks";
 import { createClient } from "@/lib/supabase/server";
 import { revalidatePath } from "next/cache";
@@ -23,6 +24,12 @@ function friendlySaveError(raw: string): string {
   if (m.includes("invalid prospect")) {
     return "One or more picks are not in the current prospect pool.";
   }
+  if (m.includes("invalid display name length")) {
+    return "Public leaderboard name must be 3–24 characters.";
+  }
+  if (m.includes("invalid display name characters")) {
+    return "Use only letters, numbers, spaces, underscores, and hyphens in your public name.";
+  }
   if (m.includes("schema cache") || m.includes("does not exist") || m.includes("not find")) {
     return "Saved picks are temporarily unavailable. Try again later.";
   }
@@ -31,9 +38,15 @@ function friendlySaveError(raw: string): string {
 
 export async function saveNhlDraft26PicksAction(
   rawProspectIds: unknown,
+  rawDisplayName: unknown,
 ): Promise<SaveNhlDraft26PicksResult> {
   if (isNhlDraft26PicksLocked()) {
     return { ok: false, error: "Pick entry is closed — the deadline has passed." };
+  }
+
+  const validatedName = validateNhlDraft26DisplayName(rawDisplayName);
+  if (!validatedName.ok) {
+    return { ok: false, error: validatedName.error };
   }
 
   const validated = validateNhlDraft26PickList(rawProspectIds);
@@ -52,6 +65,7 @@ export async function saveNhlDraft26PicksAction(
 
   const { data, error } = await supabase.rpc("nhl_draft26_save_picks", {
     p_pick_prospect_ids: validated.prospectIds,
+    p_display_name: validatedName.displayName,
   });
 
   if (error) {
@@ -63,8 +77,9 @@ export async function saveNhlDraft26PicksAction(
     return { ok: false, error: "Could not save your picks. Try again." };
   }
 
-  // TODO: populate display_name from a dedicated profile editor when available.
   revalidatePath("/nhldraft26/picks");
+  revalidatePath("/nhldraft26/leaderboard");
+  revalidatePath(`/nhldraft26/entry/${entryId}`);
 
   return { ok: true, entryId };
 }

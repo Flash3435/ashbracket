@@ -88,6 +88,7 @@ export default async function NhlDraft26PicksPage() {
         prospects={prospects}
         pickSlots={pickSlots}
         initialSavedProspectIds={initialSavedProspectIds}
+        initialDisplayName={saved.displayName ?? ""}
         canAttemptSave={!!user}
         picksLocked={picksLocked}
         lockAtLabel={lockAtLabel}

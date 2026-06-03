@@ -6,12 +6,18 @@ import type { NhlDraft26Prospect } from "@/lib/nhldraft26/prospectsSeed";
 import { NHL_DRAFT26_PICK_COUNT } from "@/lib/nhldraft26/config";
 import { saveNhlDraft26PicksAction } from "@/lib/nhldraft26/picks/actions";
 import { getNhlDraft26ConsensusTop10Ids } from "@/lib/nhldraft26/prospects";
+import {
+  NHL_DRAFT26_DISPLAY_NAME_MAX,
+  normalizeNhlDraft26DisplayName,
+  validateNhlDraft26DisplayName,
+} from "@/lib/nhldraft26/validateDisplayName";
 import { useCallback, useMemo, useState, useTransition } from "react";
 
 type Props = {
   prospects: NhlDraft26Prospect[];
   pickSlots: NhlDraft26PickSlot[];
   initialSavedProspectIds: string[];
+  initialDisplayName: string;
   /** When false, save stays disabled with sign-in messaging. */
   canAttemptSave: boolean;
   picksLocked: boolean;
@@ -30,6 +36,7 @@ export function NhlDraft26PicksEditor({
   prospects,
   pickSlots,
   initialSavedProspectIds,
+  initialDisplayName,
   canAttemptSave,
   picksLocked,
   lockAtLabel,
@@ -39,8 +46,12 @@ export function NhlDraft26PicksEditor({
     [prospects],
   );
   const [selectedIds, setSelectedIds] = useState(initialSavedProspectIds);
+  const [displayName, setDisplayName] = useState(initialDisplayName);
   const [savedSignature, setSavedSignature] = useState(() =>
     picksSignature(initialSavedProspectIds),
+  );
+  const [savedDisplayName, setSavedDisplayName] = useState(() =>
+    normalizeNhlDraft26DisplayName(initialDisplayName),
   );
   const [saveMessage, setSaveMessage] = useState<string | null>(null);
   const [saveError, setSaveError] = useState<string | null>(null);
@@ -64,7 +75,11 @@ export function NhlDraft26PicksEditor({
     new Set(selectedIds).size === NHL_DRAFT26_PICK_COUNT;
 
   const currentSignature = picksSignature(selectedIds);
-  const hasUnsavedChanges = currentSignature !== savedSignature;
+  const normalizedDisplayName = normalizeNhlDraft26DisplayName(displayName);
+  const displayNameValidation = validateNhlDraft26DisplayName(displayName);
+  const hasUnsavedChanges =
+    currentSignature !== savedSignature ||
+    normalizedDisplayName !== savedDisplayName;
   const editingDisabled = picksLocked || !canAttemptSave;
 
   const clearSaveFeedback = useCallback(() => {
@@ -138,13 +153,21 @@ export function NhlDraft26PicksEditor({
     if (!isComplete) {
       return;
     }
+    if (!displayNameValidation.ok) {
+      setSaveError(displayNameValidation.error);
+      return;
+    }
 
     clearSaveFeedback();
     startTransition(async () => {
-      const result = await saveNhlDraft26PicksAction(selectedIds);
+      const result = await saveNhlDraft26PicksAction(
+        selectedIds,
+        displayNameValidation.displayName,
+      );
       if (result.ok) {
         const nextSignature = picksSignature(selectedIds);
         setSavedSignature(nextSignature);
+        setSavedDisplayName(displayNameValidation.displayName);
         setSaveMessage("Saved");
       } else {
         setSaveError(result.error);
@@ -153,7 +176,12 @@ export function NhlDraft26PicksEditor({
   }
 
   const saveDisabled =
-    !canAttemptSave || picksLocked || !isComplete || isPending || !hasUnsavedChanges;
+    !canAttemptSave ||
+    picksLocked ||
+    !isComplete ||
+    !displayNameValidation.ok ||
+    isPending ||
+    !hasUnsavedChanges;
 
   return (
     <div className="space-y-6">
@@ -234,17 +262,33 @@ export function NhlDraft26PicksEditor({
             Each slot is a real draft pick and team. Choose who you think they will select, then
             reorder your prospects before you save.
           </p>
-          <ol className="mt-4 space-y-3">
+          <ol className="mt-4 space-y-2">
             {pickSlots.map((slot, i) => {
               const p = selectedProspects[i];
               return (
                 <li
                   key={`pick-slot-${slot.pickNumber}`}
-                  className="rounded-lg border border-amber-500/20 bg-slate-950/50 px-3 py-3"
+                  className="rounded-lg border border-amber-500/20 bg-slate-950/50 px-3 py-2"
                 >
                   <div className="flex items-start justify-between gap-2">
-                    <NhlDraft26PickSlotTeam slot={slot} />
-                    <div className="flex shrink-0 flex-col gap-0.5 pt-0.5">
+                    <div className="min-w-0 flex-1">
+                      <NhlDraft26PickSlotTeam slot={slot} compact />
+                      <div className="mt-1 border-t border-slate-700/35 pt-1">
+                        {p ? (
+                          <div className="min-w-0">
+                            <p className="truncate text-sm font-medium text-ash-text">
+                              {p.name}
+                            </p>
+                            <p className="truncate text-xs text-slate-400">
+                              {p.position} · {p.teamLeague} · seed #{p.consensusRank}
+                            </p>
+                          </div>
+                        ) : (
+                          <p className="text-sm text-slate-500">Select a prospect</p>
+                        )}
+                      </div>
+                    </div>
+                    <div className="flex shrink-0 flex-col gap-0.5">
                       <button
                         type="button"
                         aria-label={p ? `Move ${p.name} up` : "Move up"}
@@ -274,18 +318,6 @@ export function NhlDraft26PicksEditor({
                       </button>
                     </div>
                   </div>
-                  <div className="mt-2 border-t border-slate-700/50 pt-2">
-                    {p ? (
-                      <div className="min-w-0">
-                        <p className="truncate text-sm font-medium text-ash-text">{p.name}</p>
-                        <p className="truncate text-xs text-slate-400">
-                          {p.position} · {p.teamLeague} · seed #{p.consensusRank}
-                        </p>
-                      </div>
-                    ) : (
-                      <p className="text-sm text-slate-500">Select a prospect</p>
-                    )}
-                  </div>
                 </li>
               );
             })}
@@ -293,7 +325,41 @@ export function NhlDraft26PicksEditor({
         </section>
       </div>
 
-      <div className="ash-surface space-y-3 px-4 py-4 sm:px-5">
+      <div className="ash-surface space-y-4 px-4 py-4 sm:px-5">
+        <div>
+          <label htmlFor="nhl-draft26-display-name" className="text-sm font-medium text-ash-text">
+            Public leaderboard name
+          </label>
+          <p className="mt-1 text-xs leading-relaxed text-slate-500">
+            This name may appear publicly on the leaderboard. You can use your Reddit username if
+            you want people to recognize you.
+          </p>
+          <input
+            id="nhl-draft26-display-name"
+            type="text"
+            value={displayName}
+            onChange={(e) => {
+              clearSaveFeedback();
+              setDisplayName(e.target.value);
+            }}
+            disabled={editingDisabled}
+            maxLength={NHL_DRAFT26_DISPLAY_NAME_MAX + 8}
+            autoComplete="nickname"
+            className="mt-2 w-full rounded-lg border border-slate-600/60 bg-slate-900/60 px-3 py-2 text-sm text-ash-text placeholder:text-slate-600 focus:border-amber-500/40 focus:outline-none focus:ring-1 focus:ring-amber-500/30 disabled:opacity-60"
+            placeholder="e.g. u_your_reddit_name"
+          />
+          {!displayNameValidation.ok && displayName.length > 0 ? (
+            <p className="mt-1.5 text-xs text-red-200/90" role="alert">
+              {displayNameValidation.error}
+            </p>
+          ) : null}
+          {!displayNameValidation.ok && displayName.length === 0 && canAttemptSave && !picksLocked ? (
+            <p className="mt-1.5 text-xs text-slate-500">
+              Required before you can save your board.
+            </p>
+          ) : null}
+        </div>
+
         <button
           type="button"
           className="btn-primary w-full sm:w-auto"

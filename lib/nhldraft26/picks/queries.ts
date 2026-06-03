@@ -13,6 +13,7 @@ type NhlDraft26PickRow = {
 
 export type NhlDraft26SavedPicks = {
   entryId: string | null;
+  displayName: string | null;
   prospectIds: string[];
 };
 
@@ -28,16 +29,20 @@ export async function fetchNhlDraft26SavedPicksForUser(
 
   if (entryError) {
     return {
-      data: { entryId: null, prospectIds: [] },
+      data: { entryId: null, displayName: null, prospectIds: [] },
       error: entryError.message,
     };
   }
 
   if (!entry) {
-    return { data: { entryId: null, prospectIds: [] }, error: null };
+    return { data: { entryId: null, displayName: null, prospectIds: [] }, error: null };
   }
 
   const entryRow = entry as NhlDraft26EntryRow;
+  const displayName =
+    entryRow.display_name && entryRow.display_name.trim().length > 0
+      ? entryRow.display_name.trim()
+      : null;
 
   const { data: pickRows, error: picksError } = await supabase
     .from("nhl_draft26_picks")
@@ -47,7 +52,7 @@ export async function fetchNhlDraft26SavedPicksForUser(
 
   if (picksError) {
     return {
-      data: { entryId: entryRow.id, prospectIds: [] },
+      data: { entryId: entryRow.id, displayName, prospectIds: [] },
       error: picksError.message,
     };
   }
@@ -56,7 +61,7 @@ export async function fetchNhlDraft26SavedPicksForUser(
   const prospectIds = rows.map((r) => r.prospect_id);
 
   return {
-    data: { entryId: entryRow.id, prospectIds },
+    data: { entryId: entryRow.id, displayName, prospectIds },
     error: null,
   };
 }
