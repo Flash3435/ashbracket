@@ -6,6 +6,7 @@ import {
   NHL_DRAFT26_EVENT,
   NHL_DRAFT26_PICK_COUNT,
 } from "@/lib/nhldraft26/config";
+import { getNhlDraft26Top10PickSlots } from "@/lib/nhldraft26/draftOrder";
 import { fetchNhlDraft26SavedPicksForUser } from "@/lib/nhldraft26/picks/queries";
 import { buildNhlDraft26ProspectMap, getNhlDraft26ProspectPool } from "@/lib/nhldraft26/prospects";
 import { createClient } from "@/lib/supabase/server";
@@ -38,6 +39,7 @@ export default async function NhlDraft26PicksPage() {
   }
 
   const prospects = getNhlDraft26ProspectPool();
+  const pickSlots = getNhlDraft26Top10PickSlots();
   const prospectMap = buildNhlDraft26ProspectMap();
   const picksLocked = isNhlDraft26PicksLocked();
   const lockAtLabel = formatNhlDraft26PicksLockAtLabel();
@@ -84,6 +86,7 @@ export default async function NhlDraft26PicksPage() {
 
       <NhlDraft26PicksEditor
         prospects={prospects}
+        pickSlots={pickSlots}
         initialSavedProspectIds={initialSavedProspectIds}
         canAttemptSave={!!user}
         picksLocked={picksLocked}

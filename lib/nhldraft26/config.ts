@@ -4,7 +4,7 @@ export const NHL_DRAFT26_EVENT = {
   picksDeadlineLabel:
     "Submit your top 10 before the first pick is on the clock. Deadline copy is configurable for launch.",
   prospectPoolNote:
-    "Prospect list below is demo seed data for development — not final 2026 rankings.",
+    "Prospect list below is 2026 draft seed data — rankings will be updated again closer to draft day.",
 } as const;
 
 export const NHL_DRAFT26_PICK_COUNT = 10;

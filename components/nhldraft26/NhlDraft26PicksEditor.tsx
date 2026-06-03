@@ -1,5 +1,7 @@
 "use client";
 
+import { NhlDraft26PickSlotTeam } from "@/components/nhldraft26/NhlDraft26PickSlotTeam";
+import type { NhlDraft26PickSlot } from "@/lib/nhldraft26/draftOrder";
 import type { NhlDraft26Prospect } from "@/lib/nhldraft26/prospectsSeed";
 import { NHL_DRAFT26_PICK_COUNT } from "@/lib/nhldraft26/config";
 import { saveNhlDraft26PicksAction } from "@/lib/nhldraft26/picks/actions";
@@ -8,6 +10,7 @@ import { useCallback, useMemo, useState, useTransition } from "react";
 
 type Props = {
   prospects: NhlDraft26Prospect[];
+  pickSlots: NhlDraft26PickSlot[];
   initialSavedProspectIds: string[];
   /** When false, save stays disabled with sign-in messaging. */
   canAttemptSave: boolean;
@@ -25,6 +28,7 @@ function picksSignature(ids: string[]): string {
 
 export function NhlDraft26PicksEditor({
   prospects,
+  pickSlots,
   initialSavedProspectIds,
   canAttemptSave,
   picksLocked,
@@ -227,59 +231,60 @@ export function NhlDraft26PicksEditor({
             </span>
           </div>
           <p className="mt-1 text-sm text-slate-400">
-            Pick 1 is at the top. Use the arrows to reorder before you save.
+            Each slot is a real draft pick and team. Choose who you think they will select, then
+            reorder your prospects before you save.
           </p>
-          <ol className="mt-4 space-y-2">
-            {Array.from({ length: NHL_DRAFT26_PICK_COUNT }, (_, i) => {
+          <ol className="mt-4 space-y-3">
+            {pickSlots.map((slot, i) => {
               const p = selectedProspects[i];
               return (
                 <li
-                  key={p?.id ?? `slot-${i}`}
-                  className="flex items-stretch gap-2 rounded-lg border border-amber-500/20 bg-slate-950/50 px-2 py-2"
+                  key={`pick-slot-${slot.pickNumber}`}
+                  className="rounded-lg border border-amber-500/20 bg-slate-950/50 px-3 py-3"
                 >
-                  <span className="flex w-8 shrink-0 items-center justify-center text-sm font-semibold text-amber-200/90">
-                    {i + 1}
-                  </span>
-                  {p ? (
-                    <div className="min-w-0 flex-1">
-                      <p className="truncate font-medium text-ash-text">{p.name}</p>
-                      <p className="truncate text-xs text-slate-400">
-                        {p.position} · {p.teamLeague}
-                      </p>
+                  <div className="flex items-start justify-between gap-2">
+                    <NhlDraft26PickSlotTeam slot={slot} />
+                    <div className="flex shrink-0 flex-col gap-0.5 pt-0.5">
+                      <button
+                        type="button"
+                        aria-label={p ? `Move ${p.name} up` : "Move up"}
+                        disabled={editingDisabled || !p || i === 0}
+                        onClick={() => moveProspect(i, -1)}
+                        className="rounded px-2 py-0.5 text-xs text-slate-300 hover:bg-slate-800 disabled:opacity-30"
+                      >
+                        ↑
+                      </button>
+                      <button
+                        type="button"
+                        aria-label={p ? `Move ${p.name} down` : "Move down"}
+                        disabled={editingDisabled || !p || i === selectedIds.length - 1}
+                        onClick={() => moveProspect(i, 1)}
+                        className="rounded px-2 py-0.5 text-xs text-slate-300 hover:bg-slate-800 disabled:opacity-30"
+                      >
+                        ↓
+                      </button>
+                      <button
+                        type="button"
+                        aria-label={p ? `Remove ${p.name}` : "Remove"}
+                        disabled={editingDisabled || !p}
+                        onClick={() => p && removeProspect(p.id)}
+                        className="rounded px-2 py-0.5 text-xs text-red-300/90 hover:bg-red-950/40 disabled:opacity-30"
+                      >
+                        ✕
+                      </button>
                     </div>
-                  ) : (
-                    <div className="flex flex-1 items-center text-sm text-slate-500">
-                      Select a prospect
-                    </div>
-                  )}
-                  <div className="flex shrink-0 flex-col gap-0.5">
-                    <button
-                      type="button"
-                      aria-label={p ? `Move ${p.name} up` : "Move up"}
-                      disabled={editingDisabled || !p || i === 0}
-                      onClick={() => moveProspect(i, -1)}
-                      className="rounded px-2 py-0.5 text-xs text-slate-300 hover:bg-slate-800 disabled:opacity-30"
-                    >
-                      ↑
-                    </button>
-                    <button
-                      type="button"
-                      aria-label={p ? `Move ${p.name} down` : "Move down"}
-                      disabled={editingDisabled || !p || i === selectedIds.length - 1}
-                      onClick={() => moveProspect(i, 1)}
-                      className="rounded px-2 py-0.5 text-xs text-slate-300 hover:bg-slate-800 disabled:opacity-30"
-                    >
-                      ↓
-                    </button>
-                    <button
-                      type="button"
-                      aria-label={p ? `Remove ${p.name}` : "Remove"}
-                      disabled={editingDisabled || !p}
-                      onClick={() => p && removeProspect(p.id)}
-                      className="rounded px-2 py-0.5 text-xs text-red-300/90 hover:bg-red-950/40 disabled:opacity-30"
-                    >
-                      ✕
-                    </button>
+                  </div>
+                  <div className="mt-2 border-t border-slate-700/50 pt-2">
+                    {p ? (
+                      <div className="min-w-0">
+                        <p className="truncate text-sm font-medium text-ash-text">{p.name}</p>
+                        <p className="truncate text-xs text-slate-400">
+                          {p.position} · {p.teamLeague} · seed #{p.consensusRank}
+                        </p>
+                      </div>
+                    ) : (
+                      <p className="text-sm text-slate-500">Select a prospect</p>
+                    )}
                   </div>
                 </li>
               );
@@ -335,7 +340,13 @@ export function NhlDraft26PicksEditor({
         {isComplete ? (
           <p className="text-xs text-slate-500" aria-live="polite">
             Lineup preview:{" "}
-            {selectedProspects.map((p, i) => `${i + 1}. ${prospectLabel(p)}`).join(" · ")}
+            {selectedProspects
+              .map((p, i) => {
+                const slot = pickSlots[i];
+                const team = slot ? `${slot.pickNumber}. ${slot.teamAbbreviation}` : `${i + 1}.`;
+                return `${team} → ${prospectLabel(p)}`;
+              })
+              .join(" · ")}
           </p>
         ) : null}
       </div>
