@@ -9,8 +9,7 @@ type Props = {
 };
 
 /**
- * Draft slot team row — reuses NHL playoff logo resolver when a local asset exists;
- * otherwise shows abbreviation badge (no remote URLs).
+ * Draft slot team row — uses shared `NhlTeamLogo` + `resolveNhlTeamLogoPath`.
  */
 export function NhlDraft26PickSlotTeam({ slot, compact = false }: Props) {
   return (
@@ -18,7 +17,7 @@ export function NhlDraft26PickSlotTeam({ slot, compact = false }: Props) {
       <NhlTeamLogo
         size={compact ? "sm" : "sm"}
         teamSlug={slot.teamSlug}
-        abbreviation={slot.teamAbbreviation}
+        abbreviation={slot.logoTeamKey}
         logoPath={slot.logoPath}
         name={slot.teamName}
       />
