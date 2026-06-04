@@ -24,6 +24,7 @@ function pool(
     lock_at: null,
     is_public: false,
     show_public_rules: false,
+    ashbot_enabled: true,
     join_code: null,
     created_by_user_id: null,
     entry_fee_cents: null,
