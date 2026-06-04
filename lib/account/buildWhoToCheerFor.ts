@@ -1,3 +1,4 @@
+import { countryCodesFromKnockoutSlots } from "../participant/nextMatchesForPickedTeams";
 import { participantPicksCompleteFromDrafts } from "../predictions/participantPicksCompletenessRules";
 import type { PredictionKind, Team } from "../../src/types/domain";
 import type { KnockoutPickSlotDraft } from "../../types/adminKnockoutPicks";
@@ -23,6 +24,12 @@ export type CheerSuggestion = {
   cheerForLabel: string;
   reason: string;
   confidence: CheerConfidence;
+  /** Official row for schedule UI (flags, pick highlights). */
+  match: TournamentMatchPublicRow;
+  isHomeInUserBracket: boolean;
+  isAwayInUserBracket: boolean;
+  involvesPickedTeam: boolean;
+  dashboardPriority: number;
 };
 
 export type WhoToCheerForBuildInput = {
@@ -38,9 +45,12 @@ export type WhoToCheerForResult = {
   suggestions: CheerSuggestion[];
   showIncompleteCta: boolean;
   hasAnyPick: boolean;
+  totalRelevantMatches: number;
 };
 
-const DASHBOARD_MATCH_LIMIT = 5;
+export const DASHBOARD_MATCH_LIMIT = 3;
+
+const CANDIDATE_POOL_LIMIT = 80;
 
 /** UX-only weighting; does not affect pool scoring. */
 export function importanceScoreForKind(kind: PredictionKind): number {
@@ -186,7 +196,7 @@ export function reasonForTeamPick(
       return `You picked ${teamName} to reach ${stage}.`;
     case "group_winner":
     case "group_runner_up":
-      return `You have ${teamName} advancing from the group stage in your bracket.`;
+      return `You picked ${teamName} to advance.`;
     case "third_place_qualifier":
       return `You picked ${teamName} as a third-place advancer.`;
     case "bonus_pick":
@@ -231,8 +241,8 @@ export function decideCheerForMatchSides(
   ) {
     return {
       cheerForTeamId: null,
-      cheerForLabel: "Either result helps part of your bracket",
-      reason: "You have both teams advancing in your bracket.",
+      cheerForLabel: "Both teams are in your bracket",
+      reason: "Either result helps part of your bracket.",
       confidence: "medium",
     };
   }
@@ -263,22 +273,75 @@ function resolveSide(
   };
 }
 
+function matchInvolvesPickedCodes(
+  m: TournamentMatchPublicRow,
+  pickedCodes: Set<string>,
+): boolean {
+  const h = normCode(m.home_country_code);
+  const a = normCode(m.away_country_code);
+  return Boolean((h && pickedCodes.has(h)) || (a && pickedCodes.has(a)));
+}
+
+function kickoffSortKey(iso: string | null | undefined): number {
+  if (iso == null || iso === "") return Number.POSITIVE_INFINITY;
+  const t = new Date(iso).getTime();
+  return Number.isNaN(t) ? Number.POSITIVE_INFINITY : t;
+}
+
+/** Higher = show earlier on the dashboard. */
+export function dashboardPriorityForSuggestion(
+  s: Pick<CheerSuggestion, "status" | "confidence" | "involvesPickedTeam">,
+): number {
+  let score = 0;
+  if (s.status === "live" && s.involvesPickedTeam) score += 1000;
+  else if (s.status === "postponed" && s.involvesPickedTeam) score += 900;
+  else if (s.involvesPickedTeam) score += 800;
+  else if (s.status === "live") score += 500;
+  else if (s.status === "postponed") score += 400;
+
+  if (s.confidence === "strong") score += 350;
+  else if (s.confidence === "medium") score += 250;
+  else if (s.involvesPickedTeam) score += 150;
+
+  return score;
+}
+
+function isDashboardRelevantSuggestion(
+  s: Pick<CheerSuggestion, "involvesPickedTeam" | "confidence">,
+  hasAnyPick: boolean,
+): boolean {
+  if (!hasAnyPick) return true;
+  return s.involvesPickedTeam || s.confidence !== "none";
+}
+
 export function buildCheerSuggestionForMatch(
   m: TournamentMatchPublicRow,
   slots: KnockoutPickSlotDraft[],
   teams: Team[],
+  pickedCodes?: Set<string>,
 ): CheerSuggestion {
   const teamByCountry = new Map<string, Team>();
+  const teamById = new Map<string, Team>();
   for (const t of teams) {
+    teamById.set(t.id, t);
     const code = normCode(t.countryCode);
     if (code) teamByCountry.set(code, t);
   }
+  const codes =
+    pickedCodes ?? countryCodesFromKnockoutSlots(slots, teamById);
   const importanceByTeamId = buildTeamImportanceById(slots);
   const home = resolveSide(m.home_country_code, m.home_team_name, teamByCountry);
   const away = resolveSide(m.away_country_code, m.away_team_name, teamByCountry);
   const decision = decideCheerForMatchSides(home, away, importanceByTeamId);
+  const isHomeInUserBracket = Boolean(
+    home.countryCode && codes.has(home.countryCode),
+  );
+  const isAwayInUserBracket = Boolean(
+    away.countryCode && codes.has(away.countryCode),
+  );
+  const involvesPickedTeam = matchInvolvesPickedCodes(m, codes);
 
-  return {
+  const base = {
     matchId: m.match_id,
     kickoffAt: m.kickoff_at,
     stageLabel: m.stage_label,
@@ -290,26 +353,70 @@ export function buildCheerSuggestionForMatch(
     cheerForLabel: decision.cheerForLabel,
     reason: decision.reason,
     confidence: decision.confidence,
+    match: m,
+    isHomeInUserBracket,
+    isAwayInUserBracket,
+    involvesPickedTeam,
   };
+
+  return {
+    ...base,
+    dashboardPriority: dashboardPriorityForSuggestion(base),
+  };
+}
+
+function sortSuggestionsForDashboard(
+  a: CheerSuggestion,
+  b: CheerSuggestion,
+): number {
+  const pr = b.dashboardPriority - a.dashboardPriority;
+  if (pr !== 0) return pr;
+  return kickoffSortKey(a.kickoffAt) - kickoffSortKey(b.kickoffAt);
 }
 
 export function buildWhoToCheerFor(input: WhoToCheerForBuildInput): WhoToCheerForResult {
   const limit = input.limit ?? DASHBOARD_MATCH_LIMIT;
-  const upcoming = upcomingTournamentMatches(input.matches, limit, {
-    nowMs: input.nowMs,
-  });
+  const nowMs = input.nowMs ?? Date.now();
   const hasAnyPick = participantHasAnyPick(input.slots);
   const picksComplete = participantPicksCompleteFromDrafts(input.slots, {
     knockoutBracketPicksUnlocked: input.knockoutBracketPicksUnlocked,
   });
 
-  const suggestions = upcoming.map((m) =>
-    buildCheerSuggestionForMatch(m, input.slots, input.teams),
+  const teamById = new Map(input.teams.map((t) => [t.id, t]));
+  const pickedCodes = countryCodesFromKnockoutSlots(input.slots, teamById);
+
+  const candidates = upcomingTournamentMatches(input.matches, CANDIDATE_POOL_LIMIT, {
+    nowMs,
+  });
+
+  const allSuggestions = candidates.map((m) =>
+    buildCheerSuggestionForMatch(m, input.slots, input.teams, pickedCodes),
   );
+
+  const ranked = [...allSuggestions].sort(sortSuggestionsForDashboard);
+  const relevant = ranked.filter((s) =>
+    isDashboardRelevantSuggestion(s, hasAnyPick),
+  );
+  const totalRelevantMatches = hasAnyPick ? relevant.length : ranked.length;
+
+  let suggestions: CheerSuggestion[];
+  if (hasAnyPick) {
+    const primary = relevant.slice(0, limit);
+    if (primary.length >= limit) {
+      suggestions = primary;
+    } else {
+      const used = new Set(primary.map((s) => s.matchId));
+      const filler = ranked.filter((s) => !used.has(s.matchId));
+      suggestions = [...primary, ...filler].slice(0, limit);
+    }
+  } else {
+    suggestions = ranked.slice(0, limit);
+  }
 
   return {
     suggestions,
     showIncompleteCta: hasAnyPick && !picksComplete,
     hasAnyPick,
+    totalRelevantMatches,
   };
 }

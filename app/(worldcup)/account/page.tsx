@@ -1,5 +1,4 @@
 import Link from "next/link";
-import { AccountNextMatchesSection } from "@/components/account/AccountNextMatchesSection";
 import { WhoToCheerForCard } from "@/components/account/WhoToCheerForCard";
 import { whoToCheerForFromSchedule } from "@/lib/account/loadWhoToCheerFor";
 import { AccountPicksProfileLinks } from "@/components/account/AccountPicksProfileLinks";
@@ -19,12 +18,7 @@ import {
   poolLocked,
 } from "../../../lib/account/loadAccountKnockoutSelection";
 import { resolveAccountParticipantId } from "../../../lib/account/resolveAccountParticipantId";
-import {
-  countryCodesFromKnockoutSlots,
-  nextMatchesForTeamCountryCodes,
-} from "../../../lib/participant/nextMatchesForPickedTeams";
 import { fetchPublicTournamentProgress } from "../../../lib/tournament/fetchPublicTournamentProgress";
-import type { TournamentMatchPublicRow } from "../../../types/tournamentPublic";
 
 export const dynamic = "force-dynamic";
 
@@ -134,26 +128,11 @@ export default async function AccountPage({ searchParams }: PageProps) {
       ? await loadAccountKnockoutSelection(user.id, preferredParticipantId)
       : null;
 
-  let accountNextMatches: TournamentMatchPublicRow[] = [];
-  let accountTournamentErr: string | null = null;
   let whoToCheer: ReturnType<typeof whoToCheerForFromSchedule> | null = null;
 
   if (picksCtx && !picksCtx.loadError && picksCtx.initialSlots.length > 0) {
-    const teamById = new Map(picksCtx.teams.map((t) => [t.id, t]));
-    const codes = countryCodesFromKnockoutSlots(
-      picksCtx.initialSlots,
-      teamById,
-    );
     const { data: tp, error: te } = await fetchPublicTournamentProgress();
-    accountTournamentErr = te;
     whoToCheer = whoToCheerForFromSchedule(picksCtx, tp?.matches, te);
-    if (tp?.matches && !te) {
-      accountNextMatches = nextMatchesForTeamCountryCodes(
-        tp.matches,
-        codes,
-        8,
-      );
-    }
   }
 
   const locked = picksCtx ? poolLocked(picksCtx.selectedLockAt) : false;
@@ -382,33 +361,15 @@ export default async function AccountPage({ searchParams }: PageProps) {
               {whoToCheer ? (
                 <WhoToCheerForCard
                   suggestions={whoToCheer.suggestions}
+                  totalRelevantMatches={whoToCheer.totalRelevantMatches}
                   tournamentErr={whoToCheer.tournamentErr}
                   showIncompleteCta={whoToCheer.showIncompleteCta}
                   hasAnyPick={whoToCheer.hasAnyPick}
                   picksHref={editPicksFromDashboardHref}
-                  poolName={picksCtx.selectedPoolName}
+                  initialSlots={picksCtx.initialSlots}
+                  teams={picksCtx.teams}
                 />
               ) : null}
-
-              <AccountNextMatchesSection
-                className="rounded-xl border border-ash-border bg-ash-surface p-4"
-                title="Upcoming matches for your bracket"
-                description={
-                  <>
-                    Highlights use your saved picks for{" "}
-                    <span className="font-medium text-ash-text">
-                      {picksCtx.selectedPoolName}
-                    </span>
-                    . Times are America/Edmonton (Calgary). If you are in several
-                    pools, choose the profile above so the schedule matches that
-                    bracket.
-                  </>
-                }
-                tournamentErr={accountTournamentErr}
-                matches={accountNextMatches}
-                initialSlots={picksCtx.initialSlots}
-                teams={picksCtx.teams}
-              />
             </div>
           ) : null}
 

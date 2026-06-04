@@ -3,6 +3,7 @@ import type { TournamentMatchPublicRow } from "../../types/tournamentPublic";
 import type { AccountKnockoutSelection } from "./loadAccountKnockoutSelection";
 import {
   buildWhoToCheerFor,
+  DASHBOARD_MATCH_LIMIT,
   participantHasAnyPick,
   type CheerSuggestion,
   type WhoToCheerForResult,
@@ -16,6 +17,7 @@ const emptyWhoToCheer: WhoToCheerForLoadResult = {
   suggestions: [],
   showIncompleteCta: false,
   hasAnyPick: false,
+  totalRelevantMatches: 0,
   tournamentErr: null,
 };
 
@@ -41,6 +43,7 @@ export function whoToCheerForFromSchedule(
       suggestions: [],
       showIncompleteCta: false,
       hasAnyPick: participantHasAnyPick(picksCtx.initialSlots),
+      totalRelevantMatches: 0,
       tournamentErr: tournamentErr ?? "Schedule unavailable",
     };
   }
@@ -51,6 +54,7 @@ export function whoToCheerForFromSchedule(
       slots: picksCtx.initialSlots,
       teams: picksCtx.teams,
       knockoutBracketPicksUnlocked: picksCtx.knockoutBracketPicksUnlocked,
+      limit: DASHBOARD_MATCH_LIMIT,
     }),
     tournamentErr: null,
   };

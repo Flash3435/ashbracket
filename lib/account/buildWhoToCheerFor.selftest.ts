@@ -2,7 +2,9 @@ import assert from "node:assert";
 import {
   buildTeamImportanceById,
   buildWhoToCheerFor,
+  dashboardPriorityForSuggestion,
   decideCheerForMatchSides,
+  DASHBOARD_MATCH_LIMIT,
   importanceScoreForKind,
   upcomingTournamentMatches,
 } from "./buildWhoToCheerFor";
@@ -87,7 +89,7 @@ function matchRow(
   assert.strictEqual(decision.confidence, "strong");
 }
 
-// Both teams picked similarly → complicated
+// Both teams picked similarly → both in bracket
 {
   const slots = [
     slot({ rowKey: "sf1", predictionKind: "semifinalist", teamId: "t-es" }),
@@ -100,8 +102,8 @@ function matchRow(
     imp,
   );
   assert.strictEqual(decision.cheerForTeamId, null);
-  assert.ok(decision.cheerForLabel.includes("Either"));
-  assert.ok(decision.reason.includes("both teams"));
+  assert.strictEqual(decision.cheerForLabel, "Both teams are in your bracket");
+  assert.ok(decision.reason.includes("Either result"));
 }
 
 // Neither team picked → no strong angle
@@ -112,10 +114,11 @@ function matchRow(
     new Map(),
   );
   assert.strictEqual(decision.confidence, "none");
+  assert.strictEqual(decision.cheerForLabel, "No strong bracket angle");
   assert.ok(decision.reason.includes("does not strongly affect"));
 }
 
-// Kickoff sorting — soonest first
+// Kickoff sorting — soonest first (within same priority)
 {
   const now = new Date("2026-06-18T12:00:00Z").getTime();
   const rows = [
@@ -137,7 +140,7 @@ function matchRow(
   assert.strictEqual(upcoming[1]?.match_id, "late");
 }
 
-// Max 5 matches for dashboard
+// Dashboard max 3 rows
 {
   const now = Date.now();
   const rows = Array.from({ length: 8 }, (_, i) =>
@@ -155,7 +158,91 @@ function matchRow(
     knockoutBracketPicksUnlocked: true,
     nowMs: now,
   });
-  assert.strictEqual(built.suggestions.length, 5);
+  assert.strictEqual(built.suggestions.length, DASHBOARD_MATCH_LIMIT);
+  assert.strictEqual(DASHBOARD_MATCH_LIMIT, 3);
+  assert.ok(built.totalRelevantMatches >= 3);
+}
+
+// Live match involving a pick ranks above unrelated scheduled fixture
+{
+  const now = new Date("2026-06-18T12:00:00Z").getTime();
+  const rows = [
+    matchRow({
+      match_id: "neutral-soon",
+      kickoff_at: "2026-06-19T12:00:00Z",
+      home_country_code: "CAN",
+      away_country_code: "JPN",
+    }),
+    matchRow({
+      match_id: "bra-live",
+      status: "live",
+      kickoff_at: "2026-06-19T18:00:00Z",
+      home_country_code: "BRA",
+      away_country_code: "GER",
+    }),
+  ];
+  const built = buildWhoToCheerFor({
+    matches: rows,
+    slots: [slot({ rowKey: "c", predictionKind: "champion", teamId: "t-br" })],
+    teams: [team("t-br", "Brazil", "BRA"), team("t-de", "Germany", "GER")],
+    knockoutBracketPicksUnlocked: true,
+    nowMs: now,
+    limit: 1,
+  });
+  assert.strictEqual(built.suggestions[0]?.matchId, "bra-live");
+}
+
+// No picks still returns upcoming rows for the dashboard
+{
+  const now = Date.now();
+  const built = buildWhoToCheerFor({
+    matches: [
+      matchRow({
+        match_id: "a",
+        kickoff_at: new Date(now + 3600_000).toISOString(),
+        home_country_code: "BRA",
+        away_country_code: "GER",
+      }),
+    ],
+    slots: [slot({ rowKey: "c", predictionKind: "champion" })],
+    teams: [team("t-br", "Brazil", "BRA")],
+    nowMs: now,
+  });
+  assert.strictEqual(built.hasAnyPick, false);
+  assert.strictEqual(built.suggestions.length, 1);
+}
+
+// TBD / missing country codes do not throw
+{
+  const built = buildWhoToCheerFor({
+    matches: [
+      matchRow({
+        match_id: "tbd",
+        home_country_code: null,
+        away_country_code: null,
+        home_team_name: "TBD",
+        away_team_name: "TBD",
+      }),
+    ],
+    slots: [slot({ rowKey: "c", predictionKind: "champion", teamId: "t-br" })],
+    teams: [team("t-br", "Brazil", "BRA")],
+  });
+  assert.strictEqual(built.suggestions[0]?.home.name, "TBD");
+}
+
+// Priority helper: live + picked beats scheduled neutral
+{
+  const hi = dashboardPriorityForSuggestion({
+    status: "live",
+    confidence: "strong",
+    involvesPickedTeam: true,
+  });
+  const lo = dashboardPriorityForSuggestion({
+    status: "scheduled",
+    confidence: "none",
+    involvesPickedTeam: false,
+  });
+  assert.ok(hi > lo);
 }
 
 // No upcoming matches
