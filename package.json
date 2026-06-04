@@ -35,6 +35,7 @@
     "test:remove-participant": "tsx lib/participants/removeParticipantFromPoolPolicy.selftest.ts",
     "test:pool-activity-engagement": "tsx lib/poolActivity/poolActivityFeedEngagement.selftest.ts",
     "test:pool-milestones": "tsx lib/poolActivity/poolMilestones.selftest.ts",
+    "test:who-to-cheer": "tsx lib/account/buildWhoToCheerFor.selftest.ts",
     "test:ashbot-commentary": "tsx lib/activity/ashbotCommentary.selftest.ts",
     "test:change-password": "tsx lib/auth/changePassword.selftest.ts",
     "test:pool-join": "tsx lib/join/planPoolJoin.selftest.ts",

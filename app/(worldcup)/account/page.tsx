@@ -1,5 +1,7 @@
 import Link from "next/link";
 import { AccountNextMatchesSection } from "@/components/account/AccountNextMatchesSection";
+import { WhoToCheerForCard } from "@/components/account/WhoToCheerForCard";
+import { whoToCheerForFromSchedule } from "@/lib/account/loadWhoToCheerFor";
 import { AccountPicksProfileLinks } from "@/components/account/AccountPicksProfileLinks";
 import { ParticipantPoolPaymentPanel } from "@/components/pools/ParticipantPoolPaymentPanel";
 import type { PoolPotParticipantSummary } from "@/lib/pools/computePoolPotSummary";
@@ -134,6 +136,7 @@ export default async function AccountPage({ searchParams }: PageProps) {
 
   let accountNextMatches: TournamentMatchPublicRow[] = [];
   let accountTournamentErr: string | null = null;
+  let whoToCheer: ReturnType<typeof whoToCheerForFromSchedule> | null = null;
 
   if (picksCtx && !picksCtx.loadError && picksCtx.initialSlots.length > 0) {
     const teamById = new Map(picksCtx.teams.map((t) => [t.id, t]));
@@ -143,6 +146,7 @@ export default async function AccountPage({ searchParams }: PageProps) {
     );
     const { data: tp, error: te } = await fetchPublicTournamentProgress();
     accountTournamentErr = te;
+    whoToCheer = whoToCheerForFromSchedule(picksCtx, tp?.matches, te);
     if (tp?.matches && !te) {
       accountNextMatches = nextMatchesForTeamCountryCodes(
         tp.matches,
@@ -374,6 +378,17 @@ export default async function AccountPage({ searchParams }: PageProps) {
                   </div>
                 </>
               )}
+
+              {whoToCheer ? (
+                <WhoToCheerForCard
+                  suggestions={whoToCheer.suggestions}
+                  tournamentErr={whoToCheer.tournamentErr}
+                  showIncompleteCta={whoToCheer.showIncompleteCta}
+                  hasAnyPick={whoToCheer.hasAnyPick}
+                  picksHref={editPicksFromDashboardHref}
+                  poolName={picksCtx.selectedPoolName}
+                />
+              ) : null}
 
               <AccountNextMatchesSection
                 className="rounded-xl border border-ash-border bg-ash-surface p-4"
