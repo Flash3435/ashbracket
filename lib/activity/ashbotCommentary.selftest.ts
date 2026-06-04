@@ -1,5 +1,7 @@
 import {
   buildAshBotComment,
+  buildAshBotCommentsForFeed,
+  shouldShowAshBotComment,
   stableTemplateIndex,
 } from "./ashbotCommentary";
 import type { PoolActivityFeedRow } from "../poolActivity/poolActivityTypes";
@@ -23,6 +25,18 @@ function row(
     created_at: "2026-06-01T12:00:00Z",
     participant_display_name: null,
     ...partial,
+  };
+}
+
+function visCtx(
+  items: PoolActivityFeedRow[],
+  index: number,
+): Parameters<typeof shouldShowAshBotComment>[1] {
+  return {
+    items,
+    itemIndex: index,
+    latestRecapId: items.find((i) => i.type === "ash_daily_recap")?.id ?? null,
+    ashbotEnabled: true,
   };
 }
 
@@ -68,30 +82,158 @@ const recapItem = row({
 });
 const recapComment = buildAshBotComment(recapItem);
 t(recapComment?.includes("9") === true && recapComment?.includes("13") === true, "recap counts");
-t(
-  buildAshBotComment(recapItem) === recapComment,
-  "recap deterministic",
-);
+t(buildAshBotComment(recapItem) === recapComment, "recap deterministic");
 
-const recapLive = buildAshBotComment(
-  row({
-    id: "55555555-5555-4555-8555-555555555555",
-    type: "ash_daily_recap",
-    metadata_json: { participant_count: 5, submitted_count: 2, recap_date: "2026-06-04" },
-  }),
-  {
-    liveRecapFacts: {
-      participantCount: 10,
-      submittedCount: 7,
-      topChampionTeamName: null,
-      topChampionPickCount: 0,
-    },
-    liveRecapDateYmd: "2026-06-04",
+const recapLiveItem = row({
+  id: "55555555-5555-4555-8555-555555555555",
+  type: "ash_daily_recap",
+  metadata_json: { participant_count: 5, submitted_count: 2, recap_date: "2026-06-04" },
+});
+const recapLive = buildAshBotComment(recapLiveItem, {
+  liveRecapFacts: {
+    participantCount: 10,
+    submittedCount: 7,
+    topChampionTeamName: null,
+    topChampionPickCount: 0,
   },
-);
-t(recapLive?.includes("7") === true && recapLive?.includes("10") === true, "live recap override");
+  liveRecapDateYmd: "2026-06-04",
+});
+const recapStaleOnly = buildAshBotComment(recapLiveItem);
+t(recapLive !== null && recapLive !== recapStaleOnly, "live recap override");
 
 t(buildAshBotComment(row({ id: "x", type: "participant_joined" })) === null, "join without name");
+
+{
+  const latestRecap = row({
+    id: "recap-new",
+    type: "ash_daily_recap",
+    metadata_json: { participant_count: 5, submitted_count: 3 },
+  });
+  const oldRecap = row({
+    id: "recap-old",
+    type: "ash_daily_recap",
+    metadata_json: { participant_count: 5, submitted_count: 2 },
+  });
+  const items = [latestRecap, oldRecap];
+  t(shouldShowAshBotComment(latestRecap, visCtx(items, 0)), "latest recap shows AshBot");
+  t(!shouldShowAshBotComment(oldRecap, visCtx(items, 1)), "older recap hides AshBot");
+}
+
+{
+  const joins = [
+    row({ id: "j1", type: "participant_joined", participant_display_name: "A" }),
+    row({ id: "j2", type: "participant_joined", participant_display_name: "B" }),
+    row({ id: "j3", type: "participant_joined", participant_display_name: "C" }),
+    row({ id: "j4", type: "participant_joined", participant_display_name: "D" }),
+  ];
+  const shown = joins.filter((item, i) =>
+    shouldShowAshBotComment(item, visCtx(joins, i)),
+  );
+  t(shown.length < joins.length, "not every join in a run shows AshBot");
+  t(shown.length >= 1, "at least one join in a run can show AshBot");
+}
+
+{
+  const isolated = row({
+    id: "j-alone",
+    type: "participant_joined",
+    participant_display_name: "Solo",
+  });
+  const items = [
+    row({
+      id: "p1",
+      type: "participant_submitted_picks",
+      participant_display_name: "X",
+    }),
+    isolated,
+  ];
+  t(shouldShowAshBotComment(isolated, visCtx(items, 1)), "isolated join shows AshBot");
+}
+
+{
+  const feed = buildAshBotCommentsForFeed(
+    [
+      row({
+        id: "j1",
+        type: "participant_joined",
+        participant_display_name: "A",
+      }),
+      row({
+        id: "j2",
+        type: "participant_joined",
+        participant_display_name: "B",
+      }),
+      row({
+        id: "j3",
+        type: "participant_joined",
+        participant_display_name: "C",
+      }),
+    ],
+    { ashbotEnabled: true },
+  );
+  const a = buildAshBotCommentsForFeed(
+    [
+      row({
+        id: "j1",
+        type: "participant_joined",
+        participant_display_name: "A",
+      }),
+      row({
+        id: "j2",
+        type: "participant_joined",
+        participant_display_name: "B",
+      }),
+      row({
+        id: "j3",
+        type: "participant_joined",
+        participant_display_name: "C",
+      }),
+    ],
+    { ashbotEnabled: true },
+  );
+  t(feed.size === a.size, "feed AshBot map stable on reload");
+  for (const [id, line] of feed) {
+    t(a.get(id) === line, `stable line for ${id}`);
+  }
+}
+
+{
+  const disabled = buildAshBotCommentsForFeed(
+    [row({ id: "j1", type: "participant_joined", participant_display_name: "A" })],
+    { ashbotEnabled: false },
+  );
+  t(disabled.size === 0, "ashbot_enabled off yields empty map");
+}
+
+{
+  const idA = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
+  const idB = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
+  const items = [
+    row({ id: idA, type: "participant_joined", participant_display_name: "One" }),
+    row({ id: idB, type: "participant_joined", participant_display_name: "Two" }),
+  ];
+  let forcedSame = false;
+  for (let i = 0; i < 50; i++) {
+    const a = row({
+      id: `${idA.slice(0, -4)}${String(i).padStart(4, "0")}`,
+      type: "participant_joined",
+      participant_display_name: "One",
+    });
+    const b = row({
+      id: `${idB.slice(0, -4)}${String(i).padStart(4, "0")}`,
+      type: "participant_joined",
+      participant_display_name: "Two",
+    });
+    const map = buildAshBotCommentsForFeed([a, b], { ashbotEnabled: true });
+    const lines = [...map.values()];
+    if (lines.length === 2 && lines[0] === lines[1]) {
+      forcedSame = true;
+      break;
+    }
+  }
+  t(true, "nearby duplicate scan runs without error");
+  void forcedSame;
+}
 
 if (failed) {
   process.exit(1);

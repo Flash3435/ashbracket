@@ -2,14 +2,14 @@ type AshBotCommentaryLineProps = {
   text: string;
 };
 
-/** Secondary AshBot line nested under an activity card (not a separate feed item). */
+/** Subtle nested AshBot commentary (not a separate feed item). */
 export function AshBotCommentaryLine({ text }: AshBotCommentaryLineProps) {
   return (
     <p
-      className="mt-2 rounded-md border border-emerald-500/20 bg-emerald-950/25 px-2.5 py-1.5 text-xs leading-snug text-slate-400"
+      className="mt-1.5 border-l-2 border-emerald-500/35 pl-2 text-[11px] leading-snug text-ash-muted sm:text-xs"
       aria-label={`AshBot: ${text}`}
     >
-      <span className="font-semibold text-emerald-400/90" aria-hidden>
+      <span className="font-medium text-emerald-400/75" aria-hidden>
         🤖 AshBot:
       </span>{" "}
       {text}

@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { buildAshBotComment } from "../../lib/activity/ashbotCommentary";
+import { buildAshBotCommentsForFeed } from "../../lib/activity/ashbotCommentary";
 import { formatRelativeTimeEn } from "../../lib/datetime/formatRelativeTimeEn";
 import {
   ashDailyRecapDisplayBody,
@@ -81,6 +81,11 @@ export function PoolActivityFeed({
   ashbotEnabled = true,
 }: PoolActivityFeedProps) {
   const canReact = Boolean(poolId && viewerParticipantId && reactions);
+  const ashBotByActivityId = buildAshBotCommentsForFeed(items, {
+    ashbotEnabled,
+    liveRecapFacts,
+    liveRecapDateYmd,
+  });
 
   if (items.length === 0) {
     return (
@@ -111,12 +116,12 @@ export function PoolActivityFeed({
           canReact && reactions
             ? reactionBarPropsForActivity(item.id, reactions)
             : null;
-        const ashBotText = ashbotEnabled
-          ? buildAshBotComment(item, {
-              liveRecapFacts,
-              liveRecapDateYmd,
-            })
-          : null;
+        const ashBotText = ashBotByActivityId.get(item.id) ?? null;
+        const showViewPicks =
+          item.related_path &&
+          item.related_path.startsWith("/") &&
+          (item.type === "participant_submitted_picks" ||
+            item.type === "participant_updated_picks");
         return (
           <li key={item.id}>
             <article
@@ -150,6 +155,16 @@ export function PoolActivityFeed({
                   <p className="mt-1 whitespace-pre-wrap text-sm text-ash-text">
                     {recapBody}
                   </p>
+                  {showViewPicks ? (
+                    <div className="mt-2">
+                      <Link
+                        href={item.related_path!}
+                        className="inline-flex text-xs font-medium text-ash-accent underline-offset-2 hover:underline"
+                      >
+                        View picks
+                      </Link>
+                    </div>
+                  ) : null}
                   {ashBotText ? <AshBotCommentaryLine text={ashBotText} /> : null}
                   {isRecap && completionDiag && completionDiag.length > 0 ? (
                     <details className="mt-2 text-xs text-ash-muted">
@@ -170,19 +185,6 @@ export function PoolActivityFeed({
                       initialViewerReaction={reactionProps.initialViewerReaction}
                       compact={compact}
                     />
-                  ) : null}
-                  {item.related_path &&
-                  item.related_path.startsWith("/") &&
-                  (item.type === "participant_submitted_picks" ||
-                    item.type === "participant_updated_picks") ? (
-                    <div className="mt-2">
-                      <Link
-                        href={item.related_path}
-                        className="inline-flex text-xs font-medium text-ash-accent underline-offset-2 hover:underline"
-                      >
-                        View picks
-                      </Link>
-                    </div>
                   ) : null}
                 </div>
               </div>
