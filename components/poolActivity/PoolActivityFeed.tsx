@@ -6,7 +6,7 @@ import {
   type RecapFacts,
 } from "../../lib/poolActivity/buildDeterministicRecapBody";
 import type { ActivityReactionsSnapshot } from "../../lib/poolActivity/activityReactionTypes";
-import type { PoolActivityFeedRow } from "../../lib/poolActivity/poolActivityTypes";
+import type { PoolActivityFeedRow, PoolMilestoneLabel } from "../../lib/poolActivity/poolActivityTypes";
 import { AshBotCommentaryLine } from "./AshBotCommentaryLine";
 import {
   ActivityReactionBar,
@@ -29,7 +29,22 @@ type PoolActivityFeedProps = {
   ashbotEnabled?: boolean;
 };
 
-function typeLabel(type: PoolActivityFeedRow["type"]): string {
+function itemMetadataMilestoneLabel(
+  item: PoolActivityFeedRow,
+): PoolMilestoneLabel | null {
+  const v = item.metadata_json.milestone_label;
+  if (v === "MILESTONE" || v === "DEADLINE" || v === "POOL UPDATE") return v;
+  return null;
+}
+
+function milestoneCardLabel(label: PoolMilestoneLabel | null): string {
+  return label ?? "Milestone";
+}
+
+function typeLabel(
+  type: PoolActivityFeedRow["type"],
+  item?: PoolActivityFeedRow,
+): string {
   switch (type) {
     case "participant_joined":
       return "Joined";
@@ -41,6 +56,10 @@ function typeLabel(type: PoolActivityFeedRow["type"]): string {
       return "Ash Daily Recap";
     case "announcement":
       return "Announcement";
+    case "pool_milestone":
+      return milestoneCardLabel(
+        item ? itemMetadataMilestoneLabel(item) : null,
+      );
     default:
       return "Activity";
   }
@@ -64,8 +83,22 @@ function typeIcon(type: PoolActivityFeedRow["type"]): string {
       return "📻";
     case "announcement":
       return "📢";
+    case "pool_milestone":
+      return "🏁";
     default:
       return "•";
+  }
+}
+
+function milestoneCardClasses(label: PoolMilestoneLabel | null): string {
+  switch (label) {
+    case "DEADLINE":
+      return "border-orange-500/35 bg-gradient-to-br from-orange-500/12 to-ash-body/40 ring-1 ring-orange-500/15";
+    case "POOL UPDATE":
+      return "border-sky-500/35 bg-gradient-to-br from-sky-500/12 to-ash-body/40 ring-1 ring-sky-500/15";
+    case "MILESTONE":
+    default:
+      return "border-emerald-500/35 bg-gradient-to-br from-emerald-500/12 to-ash-body/40 ring-1 ring-emerald-500/15";
   }
 }
 
@@ -105,6 +138,10 @@ export function PoolActivityFeed({
       {items.map((item) => {
         const isRecap = item.type === "ash_daily_recap";
         const isAnnouncement = item.type === "announcement";
+        const isMilestone = item.type === "pool_milestone";
+        const milestoneLabel = isMilestone
+          ? itemMetadataMilestoneLabel(item)
+          : null;
         const rawDiag = item.metadata_json.completion_diagnostics;
         const completionDiag = isCompletionDiagnostics(rawDiag) ? rawDiag : null;
         const recapBody =
@@ -128,9 +165,11 @@ export function PoolActivityFeed({
               className={`rounded-xl border px-4 py-3 ${
                 isRecap
                   ? "border-ash-accent/40 bg-gradient-to-br from-ash-accent/10 to-ash-body/40 ring-1 ring-ash-accent/20"
-                  : isAnnouncement
-                    ? "border-amber-500/30 bg-gradient-to-br from-amber-500/10 to-ash-body/40"
-                    : "border-ash-border bg-ash-surface"
+                  : isMilestone
+                    ? milestoneCardClasses(milestoneLabel)
+                    : isAnnouncement
+                      ? "border-amber-500/30 bg-gradient-to-br from-amber-500/10 to-ash-body/40"
+                      : "border-ash-border bg-ash-surface"
               }`}
             >
               <div className="flex items-start gap-3">
@@ -143,7 +182,7 @@ export function PoolActivityFeed({
                 <div className="min-w-0 flex-1">
                   <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
                     <span className="text-xs font-semibold uppercase tracking-wide text-ash-muted">
-                      {typeLabel(item.type)}
+                      {typeLabel(item.type, item)}
                     </span>
                     {isRecap && item.is_ai_generated ? (
                       <span className="rounded-full bg-ash-accent/25 px-2 py-0.5 text-[10px] font-bold uppercase text-ash-accent">

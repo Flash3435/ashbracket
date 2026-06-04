@@ -35,6 +35,11 @@ function activitySeed(item: PoolActivityFeedRow): string {
   return item.id.trim() || `${item.type}:${item.created_at}`;
 }
 
+function milestoneSourceKey(item: PoolActivityFeedRow): string | null {
+  const sk = item.metadata_json.source_key;
+  return typeof sk === "string" && sk.trim() ? sk.trim() : null;
+}
+
 function isJoinType(type: PoolActivityFeedRow["type"]): boolean {
   return type === "participant_joined";
 }
@@ -86,6 +91,18 @@ export function shouldShowAshBotComment(
       const { length } = runBounds(ctx.items, ctx.itemIndex, isPicksType);
       if (length <= 2) return true;
       return stableTemplateIndex(`${activitySeed(item)}:picks-visible`, 2) === 0;
+    }
+    case "pool_milestone": {
+      const sk = milestoneSourceKey(item);
+      if (!sk) return false;
+      if (
+        sk === "completion_100" ||
+        sk === "completion_50" ||
+        sk === "lock_passed"
+      ) {
+        return stableTemplateIndex(`${activitySeed(item)}:milestone-visible`, 2) === 0;
+      }
+      return false;
     }
     default:
       return false;
@@ -152,6 +169,8 @@ function templatesForItem(item: PoolActivityFeedRow): readonly string[] | null {
       return null;
     case "announcement":
       return ANNOUNCEMENT_TEMPLATES;
+    case "pool_milestone":
+      return milestoneTemplatesForSourceKey(milestoneSourceKey(item));
     default:
       return null;
   }
@@ -215,6 +234,31 @@ const ANNOUNCEMENT_TEMPLATES = [
   "Official word from the pool admins. AshBot is on standby.",
 ] as const;
 
+const MILESTONE_COMPLETION_50_TEMPLATES = [
+  "Half the pool has spoken. The other half is preserving suspense.",
+  "Fifty percent complete. The bracket tension is officially measurable.",
+] as const;
+
+const MILESTONE_COMPLETION_100_TEMPLATES = [
+  "The brackets are in. Future bragging rights are officially pending.",
+  "Every bracket is complete. The pool is now a waiting room with opinions.",
+] as const;
+
+const MILESTONE_LOCK_PASSED_TEMPLATES = [
+  "No more edits. The bracket gods are now in charge.",
+  "Picks are locked. From here on, destiny handles customer service.",
+] as const;
+
+function milestoneTemplatesForSourceKey(
+  sourceKey: string | null,
+): readonly string[] | null {
+  if (!sourceKey) return null;
+  if (sourceKey === "completion_50") return MILESTONE_COMPLETION_50_TEMPLATES;
+  if (sourceKey === "completion_100") return MILESTONE_COMPLETION_100_TEMPLATES;
+  if (sourceKey === "lock_passed") return MILESTONE_LOCK_PASSED_TEMPLATES;
+  return null;
+}
+
 /**
  * Template-based AshBot one-liner for supported activity types.
  * Returns null when commentary text cannot be built (unsupported type, missing name, etc.).
@@ -258,6 +302,11 @@ export function buildAshBotComment(
     }
     case "announcement":
       return pickTemplate(seed, ANNOUNCEMENT_TEMPLATES, templateOffset);
+    case "pool_milestone": {
+      const templates = milestoneTemplatesForSourceKey(milestoneSourceKey(item));
+      if (!templates) return null;
+      return pickTemplate(seed, templates, templateOffset);
+    }
     default:
       return null;
   }

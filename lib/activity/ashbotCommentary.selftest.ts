@@ -235,6 +235,33 @@ t(buildAshBotComment(row({ id: "x", type: "participant_joined" })) === null, "jo
   void forcedSame;
 }
 
+const milestoneLocked = row({
+  id: "55555555-5555-4555-8555-555555555555",
+  type: "pool_milestone",
+  body_text: "🔒 Picks are locked. No more changes.",
+  metadata_json: {
+    source_key: "lock_passed",
+    milestone_label: "POOL UPDATE",
+  },
+});
+const milestoneComment = buildAshBotComment(milestoneLocked);
+t(milestoneComment !== null, "lock_passed milestone AshBot");
+t(
+  milestoneComment === buildAshBotComment(milestoneLocked),
+  "milestone AshBot deterministic",
+);
+t(
+  !shouldShowAshBotComment(
+    row({
+      id: "66666666-6666-4666-8666-666666666666",
+      type: "pool_milestone",
+      metadata_json: { source_key: "completion_count_5" },
+    }),
+    visCtx([milestoneLocked], 0),
+  ),
+  "AshBot throttles low-priority milestones",
+);
+
 if (failed) {
   process.exit(1);
 }

@@ -5,6 +5,7 @@ import { PageTitle } from "@/components/ui/PageTitle";
 import { canManagePool } from "@/lib/auth/permissions";
 import { createClient } from "@/lib/supabase/server";
 import { loadAccountKnockoutSelection } from "../../../../lib/account/loadAccountKnockoutSelection";
+import { filterActivityFeedForParticipantView } from "../../../../lib/poolActivity/activityFeedParticipantFilter";
 import { loadPoolActivityForViewer } from "../../../../lib/poolActivity/loadPoolActivityForViewer";
 import Link from "next/link";
 import { redirect } from "next/navigation";
@@ -148,7 +149,10 @@ export default async function AccountActivityPage({ searchParams }: PageProps) {
                 </p>
               ) : activity && ctx.selectedId ? (
                 <PoolActivityFeedPanel
-                  items={activity.items}
+                  items={filterActivityFeedForParticipantView(activity.items, {
+                    hidePoolWideMilestones: Boolean(participantParam),
+                    participantId: ctx.selectedId,
+                  })}
                   poolId={selectedPoolId}
                   viewerParticipantId={ctx.selectedId}
                   reactions={activity.reactions}
