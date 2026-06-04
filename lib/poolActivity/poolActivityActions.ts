@@ -1,7 +1,8 @@
 "use server";
 
 import { canManagePool } from "@/lib/auth/permissions";
-import { fetchReactionCountsForActivity } from "@/lib/poolActivity/fetchActivityReactions";
+import { fetchReactionDetailsForActivity } from "@/lib/poolActivity/fetchActivityReactions";
+import type { ActivityReactionSummary } from "@/lib/poolActivity/activityReactionTypes";
 import { insertPoolActivityRow } from "@/lib/poolActivity/insertPoolActivity";
 import {
   isAllowedActivityReaction,
@@ -15,6 +16,7 @@ export type PoolActivityActionResult =
       ok: true;
       counts: Partial<Record<ActivityReactionEmoji, number>>;
       viewerReaction: ActivityReactionEmoji | null;
+      summaries: ActivityReactionSummary[];
     }
   | { ok: false; error: string };
 
@@ -129,14 +131,15 @@ export async function toggleActivityReactionAction(input: {
       if (insErr) return { ok: false, error: insErr.message };
     }
 
-    const { counts, viewerReaction } = await fetchReactionCountsForActivity(
-      supabase,
-      poolId,
-      activityId,
-      participantId,
-    );
+    const { counts, viewerReaction, summaries } =
+      await fetchReactionDetailsForActivity(
+        supabase,
+        poolId,
+        activityId,
+        participantId,
+      );
 
-    return { ok: true, counts, viewerReaction };
+    return { ok: true, counts, viewerReaction, summaries };
   } catch (e) {
     return {
       ok: false,

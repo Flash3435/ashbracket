@@ -222,6 +222,7 @@ export function PoolActivityFeed({
                       participantId={viewerParticipantId}
                       initialCounts={reactionProps.initialCounts}
                       initialViewerReaction={reactionProps.initialViewerReaction}
+                      initialSummaries={reactionProps.initialSummaries}
                       compact={compact}
                     />
                   ) : null}

@@ -15,7 +15,11 @@ import {
   REACTION_ARIA_LABELS,
   type ActivityReactionEmoji,
 } from "@/lib/poolActivity/reactionConstants";
-import type { ActivityReactionCounts } from "@/lib/poolActivity/activityReactionTypes";
+import type {
+  ActivityReactionCounts,
+  ActivityReactionSummaries,
+  ActivityReactionSummary,
+} from "@/lib/poolActivity/activityReactionTypes";
 
 type ActivityReactionBarProps = {
   activityId: string;
@@ -23,16 +27,31 @@ type ActivityReactionBarProps = {
   participantId: string;
   initialCounts: Partial<Record<ActivityReactionEmoji, number>>;
   initialViewerReaction: ActivityReactionEmoji | null;
+  initialSummaries: ActivityReactionSummary[];
   compact?: boolean;
 };
 
 const pillBase =
   "inline-flex items-center gap-0.5 rounded-full border px-1.5 py-0.5 text-xs transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-ash-accent/50 disabled:opacity-60";
 
+const popoverClass =
+  "absolute left-0 top-full z-20 mt-1 max-w-[min(16rem,calc(100vw-2rem))] rounded-lg border border-ash-border/80 bg-ash-body/95 px-2.5 py-2 text-xs text-ash-text shadow-lg shadow-black/30";
+
 function selectedPillClass(selected: boolean) {
   return selected
     ? "border-ash-accent/60 bg-ash-accent/20 text-ash-text ring-1 ring-ash-accent/30"
     : "border-ash-border/80 bg-ash-body/40 text-ash-muted hover:border-ash-accent/40 hover:bg-ash-body/70 hover:text-ash-text";
+}
+
+function reactorLabel(reactor: { displayName: string; isYou?: boolean }) {
+  return reactor.isYou ? "You" : reactor.displayName;
+}
+
+function summaryForEmoji(
+  summaries: ActivityReactionSummary[],
+  emoji: ActivityReactionEmoji,
+): ActivityReactionSummary | undefined {
+  return summaries.find((s) => s.reaction === emoji);
 }
 
 export function ActivityReactionBar({
@@ -41,14 +60,18 @@ export function ActivityReactionBar({
   participantId,
   initialCounts,
   initialViewerReaction,
+  initialSummaries,
   compact,
 }: ActivityReactionBarProps) {
   const [counts, setCounts] =
     useState<Partial<Record<ActivityReactionEmoji, number>>>(initialCounts);
   const [viewerReaction, setViewerReaction] =
     useState<ActivityReactionEmoji | null>(initialViewerReaction);
+  const [summaries, setSummaries] =
+    useState<ActivityReactionSummary[]>(initialSummaries);
   const [error, setError] = useState<string | null>(null);
   const [pickerOpen, setPickerOpen] = useState(false);
+  const [whoOpen, setWhoOpen] = useState<ActivityReactionEmoji | null>(null);
   const [pending, startTransition] = useTransition();
   const rootRef = useRef<HTMLDivElement>(null);
   const pickerId = useId();
@@ -57,19 +80,30 @@ export function ActivityReactionBar({
   const hasVisibleReactions = visibleReactions.length > 0;
 
   const closePicker = useCallback(() => setPickerOpen(false), []);
+  const closeWho = useCallback(() => setWhoOpen(null), []);
 
   useEffect(() => {
-    if (!pickerOpen) return;
+    setCounts(initialCounts);
+    setViewerReaction(initialViewerReaction);
+    setSummaries(initialSummaries);
+  }, [initialCounts, initialViewerReaction, initialSummaries]);
+
+  useEffect(() => {
+    if (!pickerOpen && !whoOpen) return;
 
     function onPointerDown(e: MouseEvent | TouchEvent) {
       const root = rootRef.current;
       if (root && !root.contains(e.target as Node)) {
         closePicker();
+        closeWho();
       }
     }
 
     function onKeyDown(e: KeyboardEvent) {
-      if (e.key === "Escape") closePicker();
+      if (e.key === "Escape") {
+        closePicker();
+        closeWho();
+      }
     }
 
     document.addEventListener("mousedown", onPointerDown);
@@ -80,7 +114,7 @@ export function ActivityReactionBar({
       document.removeEventListener("touchstart", onPointerDown);
       document.removeEventListener("keydown", onKeyDown);
     };
-  }, [pickerOpen, closePicker]);
+  }, [pickerOpen, whoOpen, closePicker, closeWho]);
 
   const onReact = useCallback(
     (emoji: ActivityReactionEmoji) => {
@@ -98,18 +132,25 @@ export function ActivityReactionBar({
         }
         setCounts(result.counts);
         setViewerReaction(result.viewerReaction);
+        setSummaries(result.summaries);
         setPickerOpen(false);
+        if (whoOpen) {
+          const stillVisible = (result.counts[whoOpen] ?? 0) > 0;
+          setWhoOpen(stillVisible ? whoOpen : null);
+        }
       });
     },
-    [activityId, participantId, poolId],
+    [activityId, participantId, poolId, whoOpen],
   );
 
   function onCountPillClick(emoji: ActivityReactionEmoji) {
-    if (viewerReaction === emoji) {
-      onReact(emoji);
-      return;
-    }
-    setPickerOpen(true);
+    setPickerOpen(false);
+    setWhoOpen((current) => (current === emoji ? null : emoji));
+  }
+
+  function onAddReactClick() {
+    closeWho();
+    setPickerOpen((open) => !open);
   }
 
   return (
@@ -119,22 +160,49 @@ export function ActivityReactionBar({
           const selected = viewerReaction === emoji;
           const count = counts[emoji] ?? 0;
           const label = REACTION_ARIA_LABELS[emoji];
+          const popoverOpen = whoOpen === emoji;
+          const whoSummary = summaryForEmoji(summaries, emoji);
+          const popoverId = `${pickerId}-who-${emoji}`;
           return (
-            <button
-              key={emoji}
-              type="button"
-              disabled={pending}
-              aria-pressed={selected}
-              aria-label={`${label}, ${count} ${count === 1 ? "reaction" : "reactions"}${selected ? ", your reaction" : ""}`}
-              title={selected ? `Remove your ${label} reaction` : `${label} (${count})`}
-              onClick={() => onCountPillClick(emoji)}
-              className={`${pillBase} ${selectedPillClass(selected)}`}
-            >
-              <span aria-hidden>{emoji}</span>
-              <span className="min-w-[0.65rem] text-[10px] font-semibold tabular-nums">
-                {count}
-              </span>
-            </button>
+            <div key={emoji} className="relative">
+              <button
+                type="button"
+                disabled={pending}
+                aria-pressed={selected}
+                aria-expanded={popoverOpen}
+                aria-haspopup="dialog"
+                aria-controls={popoverOpen ? popoverId : undefined}
+                aria-label={`${label}, ${count} ${count === 1 ? "reaction" : "reactions"}${selected ? ", your reaction" : ""}. Show who reacted`}
+                title={`${label} (${count}) — see who reacted`}
+                onClick={() => onCountPillClick(emoji)}
+                className={`${pillBase} ${selectedPillClass(selected)}`}
+              >
+                <span aria-hidden>{emoji}</span>
+                <span className="min-w-[0.65rem] text-[10px] font-semibold tabular-nums">
+                  {count}
+                </span>
+              </button>
+
+              {popoverOpen ? (
+                <div
+                  id={popoverId}
+                  role="dialog"
+                  aria-label={`${emoji} reacted by`}
+                  className={popoverClass}
+                >
+                  <p className="mb-1.5 font-semibold text-ash-text">
+                    <span aria-hidden>{emoji}</span> reacted by
+                  </p>
+                  <ul className="max-h-40 space-y-0.5 overflow-y-auto overscroll-contain">
+                    {(whoSummary?.reactedBy ?? []).map((reactor, i) => (
+                      <li key={`${reactor.displayName}-${i}`} className="text-ash-muted">
+                        {reactorLabel(reactor)}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              ) : null}
+            </div>
           );
         })}
 
@@ -151,7 +219,7 @@ export function ActivityReactionBar({
                 : "React to this activity"
           }
           title={viewerReaction ? "Change reaction" : "React"}
-          onClick={() => setPickerOpen((open) => !open)}
+          onClick={onAddReactClick}
           className={`${pillBase} border-ash-border/80 bg-ash-body/30 text-ash-muted hover:border-ash-accent/40 hover:bg-ash-body/60 hover:text-ash-text`}
         >
           <span aria-hidden className="text-[11px] font-semibold leading-none">
@@ -180,8 +248,12 @@ export function ActivityReactionBar({
                 type="button"
                 disabled={pending}
                 aria-pressed={selected}
-                aria-label={`React with ${label}${count > 0 ? `, ${count} so far` : ""}`}
-                title={`React with ${label}`}
+                aria-label={`React with ${label}${count > 0 ? `, ${count} so far` : ""}${selected ? ", remove your reaction" : ""}`}
+                title={
+                  selected
+                    ? `Remove your ${label} reaction`
+                    : `React with ${label}`
+                }
                 onClick={() => onReact(emoji)}
                 className={`${pillBase} min-w-[1.75rem] justify-center ${selectedPillClass(selected)}`}
               >
@@ -207,13 +279,16 @@ export function reactionBarPropsForActivity(
   reactions: {
     counts: ActivityReactionCounts;
     viewerReactions: Record<string, ActivityReactionEmoji>;
+    summaries: ActivityReactionSummaries;
   },
 ): {
   initialCounts: Partial<Record<ActivityReactionEmoji, number>>;
   initialViewerReaction: ActivityReactionEmoji | null;
+  initialSummaries: ActivityReactionSummary[];
 } {
   return {
     initialCounts: reactions.counts[activityId] ?? {},
     initialViewerReaction: reactions.viewerReactions[activityId] ?? null,
+    initialSummaries: reactions.summaries[activityId] ?? [],
   };
 }

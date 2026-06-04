@@ -73,7 +73,9 @@ export async function PoolRecentActivitySection({
           items={activity?.items ?? []}
           poolId={poolId}
           viewerParticipantId={viewerParticipantId}
-          reactions={activity?.reactions ?? { counts: {}, viewerReactions: {} }}
+          reactions={
+            activity?.reactions ?? { counts: {}, viewerReactions: {}, summaries: {} }
+          }
           isPoolAdmin={isPoolAdmin}
           compact={compact}
           liveRecapFacts={activity?.liveRecapFacts ?? null}
