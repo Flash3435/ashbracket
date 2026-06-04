@@ -44,6 +44,7 @@ export function PoolSettingsForm({
   const [showPublicRules, setShowPublicRules] = useState(
     initial.showPublicRules,
   );
+  const [ashbotEnabled, setAshbotEnabled] = useState(initial.ashbotEnabled);
   const [lockLocal, setLockLocal] = useState(() =>
     toDatetimeLocalFromIso(initial.lockAt),
   );
@@ -58,6 +59,7 @@ export function PoolSettingsForm({
     setName(initial.name);
     setIsPublic(initial.isPublic);
     setShowPublicRules(initial.showPublicRules);
+    setAshbotEnabled(initial.ashbotEnabled);
     setLockLocal(toDatetimeLocalFromIso(initial.lockAt));
     setPaymentForm(poolPaymentFormStateFromSettings(initial.payment));
     setPaymentWarnings([]);
@@ -83,6 +85,7 @@ export function PoolSettingsForm({
         isPublic,
         showPublicRules,
         lockAt,
+        ashbotEnabled,
         payment: paymentForm,
       });
       if (!res.ok) {
@@ -93,6 +96,7 @@ export function PoolSettingsForm({
       setName(res.pool.name);
       setIsPublic(res.pool.isPublic);
       setShowPublicRules(res.pool.showPublicRules);
+      setAshbotEnabled(res.pool.ashbotEnabled);
       setLockLocal(toDatetimeLocalFromIso(res.pool.lockAt));
       setPaymentForm(poolPaymentFormStateFromSettings(res.pool.payment));
       setPaymentWarnings(res.paymentWarnings ?? []);
@@ -116,8 +120,8 @@ export function PoolSettingsForm({
           className="rounded-md border border-ash-accent/40 bg-ash-accent/10 px-3 py-2 text-sm text-ash-muted"
           role="status"
         >
-          Saved. Updated name, leaderboard visibility, public rules, and lock
-          time apply after refresh.
+          Saved. Updated name, leaderboard visibility, public rules, AshBot
+          commentary, and lock time apply after refresh.
         </p>
       ) : null}
 
@@ -197,6 +201,32 @@ export function PoolSettingsForm({
         disabled={disabled || isPending}
         validationWarnings={paymentWarnings}
       />
+
+      <div className="space-y-2">
+        <p className="text-xs font-medium uppercase tracking-wide text-ash-muted">
+          Activity feed
+        </p>
+        <div className="flex items-start gap-2">
+          <input
+            id="pool-ashbot"
+            type="checkbox"
+            checked={ashbotEnabled}
+            onChange={(e) => setAshbotEnabled(e.target.checked)}
+            disabled={disabled || isPending}
+            className="mt-0.5 h-4 w-4 shrink-0 rounded border-ash-border text-ash-accent focus:ring-ash-accent"
+          />
+          <div>
+            <label htmlFor="pool-ashbot" className="text-sm text-ash-text">
+              AshBot commentary on activity
+            </label>
+            <p className="mt-1 text-xs text-ash-muted">
+              When on, short playful AshBot lines appear under joins, pick
+              milestones, daily recaps, and announcements. Reactions stay on the
+              activity item itself.
+            </p>
+          </div>
+        </div>
+      </div>
 
       <div className="space-y-2">
         <label

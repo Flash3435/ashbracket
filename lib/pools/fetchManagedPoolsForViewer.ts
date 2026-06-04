@@ -9,6 +9,7 @@ export type ManagedPoolRow = {
   lock_at: string | null;
   is_public: boolean;
   show_public_rules: boolean;
+  ashbot_enabled: boolean;
   join_code: string | null;
   created_by_user_id: string | null;
   entry_fee_cents: number | null;

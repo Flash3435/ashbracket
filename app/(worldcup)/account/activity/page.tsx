@@ -155,6 +155,7 @@ export default async function AccountActivityPage({ searchParams }: PageProps) {
                   isPoolAdmin={isPoolAdmin}
                   liveRecapFacts={activity.liveRecapFacts}
                   liveRecapDateYmd={activity.liveRecapDateYmd}
+                  ashbotEnabled={activity.ashbotEnabled}
                 />
               ) : null}
             </>

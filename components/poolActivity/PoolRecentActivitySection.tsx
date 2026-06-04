@@ -78,6 +78,7 @@ export async function PoolRecentActivitySection({
           compact={compact}
           liveRecapFacts={activity?.liveRecapFacts ?? null}
           liveRecapDateYmd={activity?.liveRecapDateYmd ?? null}
+          ashbotEnabled={activity?.ashbotEnabled ?? true}
           showFilters={showFilters}
           showAnnouncementComposer={showAnnouncementComposer}
         />

@@ -14,6 +14,8 @@ export type PoolActivityForViewerResult = {
   /** Edmonton calendar date string used for “today’s” recap headline override. */
   liveRecapDateYmd: string;
   reactions: ActivityReactionsSnapshot;
+  /** Pool setting: show template AshBot lines on the feed (defaults true). */
+  ashbotEnabled: boolean;
 };
 
 /**
@@ -32,14 +34,22 @@ export async function loadPoolActivityForViewer(
   if (options.ensureDailyRecap) {
     await ensureDailyAshRecapForPool(poolId);
   }
-  const items = await fetchPoolActivityForPool(supabase, poolId, options.limit);
-  const liveRecapDateYmd = recapCalendarDateYmdEdmonton();
-  const { facts: liveRecapFacts } = await loadRecapFacts(supabase, poolId);
+  const [items, poolRow, liveRecapDateYmd, recapLoad] = await Promise.all([
+    fetchPoolActivityForPool(supabase, poolId, options.limit),
+    supabase.from("pools").select("ashbot_enabled").eq("id", poolId).maybeSingle(),
+    Promise.resolve(recapCalendarDateYmdEdmonton()),
+    loadRecapFacts(supabase, poolId),
+  ]);
+  if (poolRow.error) {
+    throw new Error(poolRow.error.message);
+  }
+  const ashbotEnabled = poolRow.data?.ashbot_enabled !== false;
+  const { facts: liveRecapFacts } = recapLoad;
   const reactions = await fetchActivityReactionsForPool(
     supabase,
     poolId,
     items.map((i) => i.id),
     options.viewerParticipantId ?? null,
   );
-  return { items, liveRecapFacts, liveRecapDateYmd, reactions };
+  return { items, liveRecapFacts, liveRecapDateYmd, reactions, ashbotEnabled };
 }

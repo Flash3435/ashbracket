@@ -23,6 +23,7 @@ type PoolActivityFeedPanelProps = {
   compact?: boolean;
   showFilters?: boolean;
   showAnnouncementComposer?: boolean;
+  ashbotEnabled?: boolean;
 };
 
 export function PoolActivityFeedPanel({
@@ -36,6 +37,7 @@ export function PoolActivityFeedPanel({
   compact,
   showFilters = true,
   showAnnouncementComposer = true,
+  ashbotEnabled = true,
 }: PoolActivityFeedPanelProps) {
   const [filter, setFilter] = useState<ActivityFeedFilter>("all");
   const filteredItems = useMemo(
@@ -64,6 +66,7 @@ export function PoolActivityFeedPanel({
             ? `No ${filter === "recaps" ? "recap" : filter} activity yet.`
             : undefined
         }
+        ashbotEnabled={ashbotEnabled}
       />
     </>
   );

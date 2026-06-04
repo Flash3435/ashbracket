@@ -11,6 +11,7 @@ export type PoolSettingsRow = {
   is_public: boolean;
   show_public_rules: boolean;
   lock_at: string | null;
+  ashbot_enabled: boolean;
 } & PoolPaymentRow;
 
 export type PoolSettingsEditable = {
@@ -18,6 +19,7 @@ export type PoolSettingsEditable = {
   isPublic: boolean;
   showPublicRules: boolean;
   lockAt: string | null;
+  ashbotEnabled: boolean;
   payment: PoolPaymentSettings;
 };
 
@@ -27,6 +29,7 @@ export function mapPoolSettingsRow(row: PoolSettingsRow): PoolSettingsEditable {
     isPublic: row.is_public,
     showPublicRules: row.show_public_rules,
     lockAt: row.lock_at,
+    ashbotEnabled: row.ashbot_enabled !== false,
     payment: mapPoolPaymentRow(row),
   };
 }

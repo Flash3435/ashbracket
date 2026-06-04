@@ -28,6 +28,7 @@ export default async function AdminPoolSettingsPage({
     is_public: pool.is_public,
     show_public_rules: pool.show_public_rules,
     lock_at: pool.lock_at,
+    ashbot_enabled: pool.ashbot_enabled !== false,
     payment_type: pool.payment_type ?? "free",
     entry_fee_label: pool.entry_fee_label ?? null,
     entry_fee_amount: pool.entry_fee_amount ?? null,

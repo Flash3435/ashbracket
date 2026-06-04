@@ -29,6 +29,7 @@ export async function updatePoolSettingsAction(input: {
   isPublic: boolean;
   showPublicRules: boolean;
   lockAt: string | null;
+  ashbotEnabled: boolean;
   payment: PoolPaymentInput;
 }): Promise<PoolSettingsActionResult> {
   try {
@@ -53,11 +54,12 @@ export async function updatePoolSettingsAction(input: {
         is_public: input.isPublic,
         show_public_rules: input.showPublicRules,
         lock_at: input.lockAt,
+        ashbot_enabled: input.ashbotEnabled,
         ...poolPaymentToDbColumns(paymentCheck.settings),
       })
       .eq("id", input.poolId.trim())
       .select(
-        "id, name, is_public, show_public_rules, lock_at, payment_type, entry_fee_label, entry_fee_amount, payment_instructions, entry_fee_cents, currency_code, show_pot_to_participants",
+        "id, name, is_public, show_public_rules, lock_at, ashbot_enabled, payment_type, entry_fee_label, entry_fee_amount, payment_instructions, entry_fee_cents, currency_code, show_pot_to_participants",
       )
       .single();
 

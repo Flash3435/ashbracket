@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { buildAshBotComment } from "../../lib/activity/ashbotCommentary";
 import { formatRelativeTimeEn } from "../../lib/datetime/formatRelativeTimeEn";
 import {
   ashDailyRecapDisplayBody,
@@ -6,6 +7,7 @@ import {
 } from "../../lib/poolActivity/buildDeterministicRecapBody";
 import type { ActivityReactionsSnapshot } from "../../lib/poolActivity/activityReactionTypes";
 import type { PoolActivityFeedRow } from "../../lib/poolActivity/poolActivityTypes";
+import { AshBotCommentaryLine } from "./AshBotCommentaryLine";
 import {
   ActivityReactionBar,
   reactionBarPropsForActivity,
@@ -23,6 +25,8 @@ type PoolActivityFeedProps = {
   viewerParticipantId?: string | null;
   reactions?: ActivityReactionsSnapshot;
   emptyFilterMessage?: string;
+  /** When false, omit AshBot template commentary (pool setting). */
+  ashbotEnabled?: boolean;
 };
 
 function typeLabel(type: PoolActivityFeedRow["type"]): string {
@@ -74,6 +78,7 @@ export function PoolActivityFeed({
   viewerParticipantId,
   reactions,
   emptyFilterMessage,
+  ashbotEnabled = true,
 }: PoolActivityFeedProps) {
   const canReact = Boolean(poolId && viewerParticipantId && reactions);
 
@@ -106,6 +111,12 @@ export function PoolActivityFeed({
           canReact && reactions
             ? reactionBarPropsForActivity(item.id, reactions)
             : null;
+        const ashBotText = ashbotEnabled
+          ? buildAshBotComment(item, {
+              liveRecapFacts,
+              liveRecapDateYmd,
+            })
+          : null;
         return (
           <li key={item.id}>
             <article
@@ -139,6 +150,7 @@ export function PoolActivityFeed({
                   <p className="mt-1 whitespace-pre-wrap text-sm text-ash-text">
                     {recapBody}
                   </p>
+                  {ashBotText ? <AshBotCommentaryLine text={ashBotText} /> : null}
                   {isRecap && completionDiag && completionDiag.length > 0 ? (
                     <details className="mt-2 text-xs text-ash-muted">
                       <summary className="cursor-pointer select-none font-medium text-ash-text/80">
