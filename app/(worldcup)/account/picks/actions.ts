@@ -2,6 +2,7 @@
 
 import { createClient } from "@/lib/supabase/server";
 import { isParticipantPicksCompleteForParticipant } from "../../../../lib/communications/picksCompleteness";
+import { ensurePoolInsightsForPool } from "../../../../lib/poolActivity/ensurePoolInsights";
 import { ensurePoolMilestonesForPool } from "../../../../lib/poolActivity/ensurePoolMilestones";
 import { insertPoolActivityRow } from "../../../../lib/poolActivity/insertPoolActivity";
 import { fingerprintPredictionsForParticipant } from "../../../../lib/poolActivity/predictionsFingerprint";
@@ -233,6 +234,11 @@ export async function saveMyKnockoutPicksAction(input: {
         await ensurePoolMilestonesForPool(row.pool_id as string);
       } catch (e) {
         console.error("pool_activity pool milestones failed", e);
+      }
+      try {
+        await ensurePoolInsightsForPool(row.pool_id as string);
+      } catch (e) {
+        console.error("pool_activity pool insights failed", e);
       }
     }
 

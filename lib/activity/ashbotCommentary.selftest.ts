@@ -262,6 +262,40 @@ t(
   "AshBot throttles low-priority milestones",
 );
 
+const insightPreLock = row({
+  id: "77777777-7777-4777-8777-777777777777",
+  type: "pool_insight",
+  body_text: "📊 18 brackets are in. The pool is 90% ready.",
+  metadata_json: {
+    source_key: "prelock_completion_percent_90",
+    insight_label: "POOL INSIGHT",
+    icon: "📊",
+  },
+});
+const insightComment = buildAshBotComment(insightPreLock);
+t(insightComment !== null, "prelock insight AshBot");
+t(
+  insightComment === buildAshBotComment(insightPreLock),
+  "insight AshBot deterministic",
+);
+t(!insightComment?.match(/\b(Brazil|Germany)\b/i), "prelock insight avoids team names");
+
+const insightPostLock = row({
+  id: "88888888-8888-4888-8888-888888888888",
+  type: "pool_insight",
+  body_text: "👑 Brazil is the most popular champion pick.",
+  metadata_json: {
+    source_key: "postlock_top_champion",
+    insight_label: "POOL INSIGHT",
+    icon: "👑",
+  },
+});
+t(buildAshBotComment(insightPostLock) !== null, "postlock insight AshBot");
+t(
+  shouldShowAshBotComment(insightPostLock, visCtx([insightPostLock], 0)),
+  "AshBot shows priority postlock insight",
+);
+
 if (failed) {
   process.exit(1);
 }

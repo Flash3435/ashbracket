@@ -43,7 +43,7 @@ export function globalActivityMatchesFeedFilter(
   if (filter === "picks") return PICKS_TYPES.has(type);
   if (filter === "joins") return type === "participant_joined";
   if (filter === "recaps") return type === "ash_daily_recap";
-  if (filter === "milestones") return type === "pool_milestone";
+  if (filter === "milestones") return type === "pool_milestone" || type === "pool_insight";
   if (filter === "announcements") return type === "announcement";
   return true;
 }

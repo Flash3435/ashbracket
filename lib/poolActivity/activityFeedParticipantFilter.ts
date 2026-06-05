@@ -2,11 +2,11 @@ import type { PoolActivityFeedRow } from "./poolActivityTypes";
 
 /**
  * When the activity page is opened with an explicit `?participant=` profile filter,
- * hide pool-wide milestone cards so the timeline stays focused on that profile's pool
- * without unrelated pool-wide celebration/deadline cards.
+ * hide pool-wide milestone and insight cards so the timeline stays focused on that
+ * profile's pool without unrelated pool-wide celebration/deadline/insight cards.
  *
- * Pool-wide milestones always have `participant_id` null and type `pool_milestone`.
- * Participant-specific milestones (none in this pass) would be kept when they match.
+ * Pool-wide rows always have `participant_id` null and type `pool_milestone` or
+ * `pool_insight`. Participant-specific rows (none in this pass) would be kept when they match.
  */
 export function filterActivityFeedForParticipantView(
   items: PoolActivityFeedRow[],
@@ -15,7 +15,7 @@ export function filterActivityFeedForParticipantView(
   if (!options.hidePoolWideMilestones) return items;
 
   return items.filter((item) => {
-    if (item.type !== "pool_milestone") return true;
+    if (item.type !== "pool_milestone" && item.type !== "pool_insight") return true;
     const pid = options.participantId?.trim();
     if (!pid) return false;
     const metaPid = item.metadata_json.participant_id;

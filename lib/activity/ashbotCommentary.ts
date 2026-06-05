@@ -40,6 +40,11 @@ function milestoneSourceKey(item: PoolActivityFeedRow): string | null {
   return typeof sk === "string" && sk.trim() ? sk.trim() : null;
 }
 
+function insightSourceKey(item: PoolActivityFeedRow): string | null {
+  const sk = item.metadata_json.source_key;
+  return typeof sk === "string" && sk.trim() ? sk.trim() : null;
+}
+
 function isJoinType(type: PoolActivityFeedRow["type"]): boolean {
   return type === "participant_joined";
 }
@@ -101,6 +106,22 @@ export function shouldShowAshBotComment(
         sk === "lock_passed"
       ) {
         return stableTemplateIndex(`${activitySeed(item)}:milestone-visible`, 2) === 0;
+      }
+      return false;
+    }
+    case "pool_insight": {
+      const sk = insightSourceKey(item);
+      if (!sk) return false;
+      if (
+        sk.startsWith("prelock_completion_percent_") ||
+        sk.startsWith("prelock_remaining_") ||
+        sk.startsWith("prelock_activity_today_") ||
+        sk === "postlock_top_champion" ||
+        sk.startsWith("postlock_unique_champion_pick_") ||
+        sk.startsWith("postlock_no_champion_pick_") ||
+        sk.startsWith("postlock_underdog_finalist_")
+      ) {
+        return stableTemplateIndex(`${activitySeed(item)}:insight-visible`, 2) === 0;
       }
       return false;
     }
@@ -171,6 +192,8 @@ function templatesForItem(item: PoolActivityFeedRow): readonly string[] | null {
       return ANNOUNCEMENT_TEMPLATES;
     case "pool_milestone":
       return milestoneTemplatesForSourceKey(milestoneSourceKey(item));
+    case "pool_insight":
+      return insightTemplatesForSourceKey(insightSourceKey(item));
     default:
       return null;
   }
@@ -249,6 +272,42 @@ const MILESTONE_LOCK_PASSED_TEMPLATES = [
   "Picks are locked. From here on, destiny handles customer service.",
 ] as const;
 
+const INSIGHT_PRELOCK_READY_TEMPLATES = [
+  "The pool is filling in nicely. AshBot likes this energy.",
+  "Readiness is climbing. The deadline clock remains unimpressed, but noted.",
+  "More brackets in means more opinions. AshBot is here for it.",
+] as const;
+
+const INSIGHT_PRELOCK_HEATING_TEMPLATES = [
+  "Busy day in the feed. Someone is definitely overthinking their bracket.",
+  "High activity today. The pool has officially entered chaos prep mode.",
+] as const;
+
+const INSIGHT_PRELOCK_REMAINING_TEMPLATES = [
+  "Almost everyone is in. The holdouts are preserving maximum suspense.",
+  "Just a few brackets left. AshBot will not name names. Yet.",
+] as const;
+
+const INSIGHT_POSTLOCK_CHAMPION_TEMPLATES = [
+  "A crowd favorite at the top. Bold or safe — history will judge.",
+  "The champion pick leaderboard has a leader. Drama pending.",
+] as const;
+
+const INSIGHT_POSTLOCK_UNIQUE_TEMPLATES = [
+  "One brave bracket went its own way. Respect the conviction.",
+  "A lone wolf champion pick. AshBot is taking notes.",
+] as const;
+
+const INSIGHT_POSTLOCK_ABSENT_TEMPLATES = [
+  "Interesting omission in the champion column. The plot thickens.",
+  "Not everyone believes in the usual suspects. Noted.",
+] as const;
+
+const INSIGHT_POSTLOCK_UNDERDOG_TEMPLATES = [
+  "Some brackets are betting on chaos in the final. AshBot approves the spice.",
+  "Underdog finalists on the board. This pool is not playing it safe.",
+] as const;
+
 function milestoneTemplatesForSourceKey(
   sourceKey: string | null,
 ): readonly string[] | null {
@@ -256,6 +315,34 @@ function milestoneTemplatesForSourceKey(
   if (sourceKey === "completion_50") return MILESTONE_COMPLETION_50_TEMPLATES;
   if (sourceKey === "completion_100") return MILESTONE_COMPLETION_100_TEMPLATES;
   if (sourceKey === "lock_passed") return MILESTONE_LOCK_PASSED_TEMPLATES;
+  return null;
+}
+
+function insightTemplatesForSourceKey(
+  sourceKey: string | null,
+): readonly string[] | null {
+  if (!sourceKey) return null;
+  if (sourceKey.startsWith("prelock_completion_percent_")) {
+    return INSIGHT_PRELOCK_READY_TEMPLATES;
+  }
+  if (sourceKey.startsWith("prelock_remaining_")) {
+    return INSIGHT_PRELOCK_REMAINING_TEMPLATES;
+  }
+  if (sourceKey.startsWith("prelock_activity_today_")) {
+    return INSIGHT_PRELOCK_HEATING_TEMPLATES;
+  }
+  if (sourceKey === "postlock_top_champion") {
+    return INSIGHT_POSTLOCK_CHAMPION_TEMPLATES;
+  }
+  if (sourceKey.startsWith("postlock_unique_champion_pick_")) {
+    return INSIGHT_POSTLOCK_UNIQUE_TEMPLATES;
+  }
+  if (sourceKey.startsWith("postlock_no_champion_pick_")) {
+    return INSIGHT_POSTLOCK_ABSENT_TEMPLATES;
+  }
+  if (sourceKey.startsWith("postlock_underdog_finalist_")) {
+    return INSIGHT_POSTLOCK_UNDERDOG_TEMPLATES;
+  }
   return null;
 }
 
@@ -304,6 +391,11 @@ export function buildAshBotComment(
       return pickTemplate(seed, ANNOUNCEMENT_TEMPLATES, templateOffset);
     case "pool_milestone": {
       const templates = milestoneTemplatesForSourceKey(milestoneSourceKey(item));
+      if (!templates) return null;
+      return pickTemplate(seed, templates, templateOffset);
+    }
+    case "pool_insight": {
+      const templates = insightTemplatesForSourceKey(insightSourceKey(item));
       if (!templates) return null;
       return pickTemplate(seed, templates, templateOffset);
     }

@@ -1,6 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { RecapFacts } from "./buildDeterministicRecapBody";
 import { ensureDailyAshRecapForPool } from "./ensureDailyAshRecap";
+import { ensurePoolInsightsForPool } from "./ensurePoolInsights";
 import { ensurePoolMilestonesForPool } from "./ensurePoolMilestones";
 import { fetchActivityReactionsForPool } from "./fetchActivityReactions";
 import { fetchPoolActivityForPool } from "./fetchPoolActivity";
@@ -36,6 +37,7 @@ export async function loadPoolActivityForViewer(
     await Promise.all([
       ensureDailyAshRecapForPool(poolId),
       ensurePoolMilestonesForPool(poolId),
+      ensurePoolInsightsForPool(poolId),
     ]);
   }
   const [items, poolRow, liveRecapDateYmd, recapLoad] = await Promise.all([

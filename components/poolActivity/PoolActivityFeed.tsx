@@ -6,7 +6,7 @@ import {
   type RecapFacts,
 } from "../../lib/poolActivity/buildDeterministicRecapBody";
 import type { ActivityReactionsSnapshot } from "../../lib/poolActivity/activityReactionTypes";
-import type { PoolActivityFeedRow, PoolMilestoneLabel } from "../../lib/poolActivity/poolActivityTypes";
+import type { PoolActivityFeedRow, PoolInsightLabel, PoolMilestoneLabel } from "../../lib/poolActivity/poolActivityTypes";
 import { AshBotCommentaryLine } from "./AshBotCommentaryLine";
 import {
   ActivityReactionBar,
@@ -29,12 +29,24 @@ type PoolActivityFeedProps = {
   ashbotEnabled?: boolean;
 };
 
+function itemMetadataInsightLabel(
+  item: PoolActivityFeedRow,
+): PoolInsightLabel | null {
+  const v = item.metadata_json.insight_label;
+  if (v === "POOL INSIGHT") return v;
+  return null;
+}
+
 function itemMetadataMilestoneLabel(
   item: PoolActivityFeedRow,
 ): PoolMilestoneLabel | null {
   const v = item.metadata_json.milestone_label;
   if (v === "MILESTONE" || v === "DEADLINE" || v === "POOL UPDATE") return v;
   return null;
+}
+
+function insightCardLabel(label: PoolInsightLabel | null): string {
+  return label ?? "Pool insight";
 }
 
 function milestoneCardLabel(label: PoolMilestoneLabel | null): string {
@@ -60,6 +72,8 @@ function typeLabel(
       return milestoneCardLabel(
         item ? itemMetadataMilestoneLabel(item) : null,
       );
+    case "pool_insight":
+      return insightCardLabel(item ? itemMetadataInsightLabel(item) : null);
     default:
       return "Activity";
   }
@@ -71,7 +85,7 @@ function isCompletionDiagnostics(
   return Array.isArray(v) && v.every((x) => x !== null && typeof x === "object");
 }
 
-function typeIcon(type: PoolActivityFeedRow["type"]): string {
+function typeIcon(type: PoolActivityFeedRow["type"], item?: PoolActivityFeedRow): string {
   switch (type) {
     case "participant_joined":
       return "👋";
@@ -85,9 +99,17 @@ function typeIcon(type: PoolActivityFeedRow["type"]): string {
       return "📢";
     case "pool_milestone":
       return "🏁";
+    case "pool_insight": {
+      const icon = item?.metadata_json.icon;
+      return typeof icon === "string" && icon.trim() ? icon : "💡";
+    }
     default:
       return "•";
   }
+}
+
+function insightCardClasses(): string {
+  return "border-violet-500/35 bg-gradient-to-br from-violet-500/12 to-ash-body/40 ring-1 ring-violet-500/15";
 }
 
 function milestoneCardClasses(label: PoolMilestoneLabel | null): string {
@@ -139,6 +161,7 @@ export function PoolActivityFeed({
         const isRecap = item.type === "ash_daily_recap";
         const isAnnouncement = item.type === "announcement";
         const isMilestone = item.type === "pool_milestone";
+        const isInsight = item.type === "pool_insight";
         const milestoneLabel = isMilestone
           ? itemMetadataMilestoneLabel(item)
           : null;
@@ -167,7 +190,9 @@ export function PoolActivityFeed({
                   ? "border-ash-accent/40 bg-gradient-to-br from-ash-accent/10 to-ash-body/40 ring-1 ring-ash-accent/20"
                   : isMilestone
                     ? milestoneCardClasses(milestoneLabel)
-                    : isAnnouncement
+                    : isInsight
+                      ? insightCardClasses()
+                      : isAnnouncement
                       ? "border-amber-500/30 bg-gradient-to-br from-amber-500/10 to-ash-body/40"
                       : "border-ash-border bg-ash-surface"
               }`}
@@ -177,7 +202,7 @@ export function PoolActivityFeed({
                   className="mt-0.5 text-lg leading-none opacity-90"
                   aria-hidden
                 >
-                  {typeIcon(item.type)}
+                  {typeIcon(item.type, item)}
                 </span>
                 <div className="min-w-0 flex-1">
                   <div className="flex flex-wrap items-center gap-x-2 gap-y-1">

@@ -80,6 +80,14 @@ export function teamStrengthLabel(countryCode: string): TeamStrengthLabel {
   return "Wild card";
 }
 
+export function isOftenPickedTeam(countryCode: string): boolean {
+  return OFTEN.has(countryCode.trim().toUpperCase());
+}
+
+export function isWildCardTeam(countryCode: string): boolean {
+  return teamStrengthLabel(countryCode) === "Wild card";
+}
+
 export function strengthLabelHint(label: TeamStrengthLabel): string {
   switch (label) {
     case "Often picked":

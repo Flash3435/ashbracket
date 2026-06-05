@@ -4,10 +4,14 @@ export type PoolActivityType =
   | "participant_updated_picks"
   | "ash_daily_recap"
   | "announcement"
-  | "pool_milestone";
+  | "pool_milestone"
+  | "pool_insight";
 
 /** Card header label for pool-wide milestone rows. */
 export type PoolMilestoneLabel = "MILESTONE" | "DEADLINE" | "POOL UPDATE";
+
+/** Card header label for pool-wide insight rows. */
+export type PoolInsightLabel = "POOL INSIGHT";
 
 export type PoolActivityFeedRow = {
   id: string;

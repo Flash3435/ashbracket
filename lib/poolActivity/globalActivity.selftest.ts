@@ -118,6 +118,10 @@ t(
   "global loader does not call milestone generation",
 );
 t(
+  !/ensurePoolInsightsForPool\s*\(/.test(loaderSrc),
+  "global loader does not call insight generation",
+);
+t(
   !/ensureDailyAshRecapForPool\s*\(/.test(loaderSrc),
   "global loader does not call daily recap generation",
 );

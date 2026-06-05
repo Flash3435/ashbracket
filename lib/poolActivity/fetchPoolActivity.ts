@@ -19,7 +19,8 @@ function isPoolActivityType(v: string): v is PoolActivityType {
     v === "participant_updated_picks" ||
     v === "ash_daily_recap" ||
     v === "announcement" ||
-    v === "pool_milestone"
+    v === "pool_milestone" ||
+    v === "pool_insight"
   );
 }
 
