@@ -208,6 +208,12 @@ export default async function AdminHomePage() {
               <span> — health check for data and scores.</span>
             </li>
             <li>
+              <Link href="/admin/activity" className="ash-link">
+                Global activity
+              </Link>
+              <span> — engagement feed across all pools.</span>
+            </li>
+            <li>
               <Link href="/admin/pilot" className="ash-link text-emerald-200/90">
                 Production pilot checklist
               </Link>

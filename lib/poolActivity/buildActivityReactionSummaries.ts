@@ -37,6 +37,7 @@ function reactorsForReaction(
 export function buildActivityReactionSummaries(
   rows: ReactionRowWithDisplayName[],
   viewerParticipantId: string | null,
+  viewerParticipantIds?: ReadonlySet<string>,
 ): ActivityReactionSummaries {
   const buckets = new Map<
     string,
@@ -58,11 +59,14 @@ export function buildActivityReactionSummaries(
       activityBucket.set(row.reaction, reactionBucket);
     }
 
+    const isYou = viewerParticipantIds
+      ? viewerParticipantIds.has(row.participant_id)
+      : Boolean(
+          viewerParticipantId && row.participant_id === viewerParticipantId,
+        );
     reactionBucket.push({
       displayName: safeParticipantDisplayName(row.display_name),
-      ...(viewerParticipantId && row.participant_id === viewerParticipantId
-        ? { isYou: true }
-        : {}),
+      ...(isYou ? { isYou: true } : {}),
     });
   }
 

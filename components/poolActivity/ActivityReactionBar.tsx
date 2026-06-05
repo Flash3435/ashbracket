@@ -29,6 +29,8 @@ type ActivityReactionBarProps = {
   initialViewerReaction: ActivityReactionEmoji | null;
   initialSummaries: ActivityReactionSummary[];
   compact?: boolean;
+  /** View counts and who reacted; hide add/change reaction controls. */
+  readOnly?: boolean;
 };
 
 const pillBase =
@@ -62,6 +64,7 @@ export function ActivityReactionBar({
   initialViewerReaction,
   initialSummaries,
   compact,
+  readOnly = false,
 }: ActivityReactionBarProps) {
   const [counts, setCounts] =
     useState<Partial<Record<ActivityReactionEmoji, number>>>(initialCounts);
@@ -206,32 +209,34 @@ export function ActivityReactionBar({
           );
         })}
 
-        <button
-          type="button"
-          disabled={pending}
-          aria-expanded={pickerOpen}
-          aria-controls={pickerId}
-          aria-label={
-            viewerReaction
-              ? "Change your reaction"
-              : hasVisibleReactions
-                ? "Add a reaction"
-                : "React to this activity"
-          }
-          title={viewerReaction ? "Change reaction" : "React"}
-          onClick={onAddReactClick}
-          className={`${pillBase} border-ash-border/80 bg-ash-body/30 text-ash-muted hover:border-ash-accent/40 hover:bg-ash-body/60 hover:text-ash-text`}
-        >
-          <span aria-hidden className="text-[11px] font-semibold leading-none">
-            +
-          </span>
-          {!hasVisibleReactions ? (
-            <span className="text-[10px] font-medium">React</span>
-          ) : null}
-        </button>
+        {!readOnly ? (
+          <button
+            type="button"
+            disabled={pending}
+            aria-expanded={pickerOpen}
+            aria-controls={pickerId}
+            aria-label={
+              viewerReaction
+                ? "Change your reaction"
+                : hasVisibleReactions
+                  ? "Add a reaction"
+                  : "React to this activity"
+            }
+            title={viewerReaction ? "Change reaction" : "React"}
+            onClick={onAddReactClick}
+            className={`${pillBase} border-ash-border/80 bg-ash-body/30 text-ash-muted hover:border-ash-accent/40 hover:bg-ash-body/60 hover:text-ash-text`}
+          >
+            <span aria-hidden className="text-[11px] font-semibold leading-none">
+              +
+            </span>
+            {!hasVisibleReactions ? (
+              <span className="text-[10px] font-medium">React</span>
+            ) : null}
+          </button>
+        ) : null}
       </div>
 
-      {pickerOpen ? (
+      {!readOnly && pickerOpen ? (
         <div
           id={pickerId}
           role="group"

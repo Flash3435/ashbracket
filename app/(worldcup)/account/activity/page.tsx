@@ -2,7 +2,7 @@ import { AccountPicksProfileLinks } from "@/components/account/AccountPicksProfi
 import { PoolActivityFeedPanel } from "@/components/poolActivity/PoolActivityFeedPanel";
 import { PageContainer } from "@/components/ui/PageContainer";
 import { PageTitle } from "@/components/ui/PageTitle";
-import { canManagePool } from "@/lib/auth/permissions";
+import { canManagePool, isGlobalAdmin } from "@/lib/auth/permissions";
 import { createClient } from "@/lib/supabase/server";
 import { loadAccountKnockoutSelection } from "../../../../lib/account/loadAccountKnockoutSelection";
 import { filterActivityFeedForParticipantView } from "../../../../lib/poolActivity/activityFeedParticipantFilter";
@@ -34,6 +34,7 @@ export default async function AccountActivityPage({ searchParams }: PageProps) {
   let activity: Awaited<ReturnType<typeof loadPoolActivityForViewer>> | null =
     null;
   let isPoolAdmin = false;
+  const globalAdmin = await isGlobalAdmin(supabase);
   const selectedPoolId = ctx.selectedId
     ? ctx.myParticipants.find((p) => p.id === ctx.selectedId)?.pool_id
     : null;
@@ -77,6 +78,15 @@ export default async function AccountActivityPage({ searchParams }: PageProps) {
         title="Activity"
         description="Your pool timeline: joins, pick milestones, Ash recaps, admin updates, and reactions from members."
       />
+
+      {globalAdmin ? (
+        <p className="mb-4 text-sm">
+          <Link href="/admin/activity" className="ash-link font-medium">
+            View activity across all pools
+          </Link>
+          <span className="text-ash-muted"> — global admin dashboard</span>
+        </p>
+      ) : null}
 
       {ctx.loadError ? (
         <p
