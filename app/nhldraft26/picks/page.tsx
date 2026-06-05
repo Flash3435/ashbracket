@@ -1,7 +1,7 @@
 import { NhlDraft26PicksEditor } from "@/components/nhldraft26/NhlDraft26PicksEditor";
 import { PageContainer } from "@/components/ui/PageContainer";
 import {
-  formatNhlDraft26PicksLockAtLabel,
+  getNhlDraft26PicksDeadlineDisplay,
   isNhlDraft26PicksLocked,
   NHL_DRAFT26_EVENT,
   NHL_DRAFT26_PICK_COUNT,
@@ -42,7 +42,7 @@ export default async function NhlDraft26PicksPage() {
   const pickSlots = getNhlDraft26Top10PickSlots();
   const prospectMap = buildNhlDraft26ProspectMap();
   const picksLocked = isNhlDraft26PicksLocked();
-  const lockAtLabel = formatNhlDraft26PicksLockAtLabel();
+  const deadline = getNhlDraft26PicksDeadlineDisplay();
 
   const { data: saved, error: loadError } = await fetchNhlDraft26SavedPicksForUser(
     supabase,
@@ -91,7 +91,7 @@ export default async function NhlDraft26PicksPage() {
         initialDisplayName={saved.displayName ?? ""}
         canAttemptSave={!!user}
         picksLocked={picksLocked}
-        lockAtLabel={lockAtLabel}
+        deadline={deadline}
       />
     </PageContainer>
   );

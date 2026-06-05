@@ -3,7 +3,10 @@
 import { NhlDraft26PickSlotTeam } from "@/components/nhldraft26/NhlDraft26PickSlotTeam";
 import type { NhlDraft26PickSlot } from "@/lib/nhldraft26/draftOrder";
 import type { NhlDraft26Prospect } from "@/lib/nhldraft26/prospectsSeed";
-import { NHL_DRAFT26_PICK_COUNT } from "@/lib/nhldraft26/config";
+import {
+  NHL_DRAFT26_PICK_COUNT,
+  type getNhlDraft26PicksDeadlineDisplay,
+} from "@/lib/nhldraft26/config";
 import { saveNhlDraft26PicksAction } from "@/lib/nhldraft26/picks/actions";
 import { getNhlDraft26ConsensusTop10Ids } from "@/lib/nhldraft26/prospects";
 import {
@@ -21,7 +24,7 @@ type Props = {
   /** When false, save stays disabled with sign-in messaging. */
   canAttemptSave: boolean;
   picksLocked: boolean;
-  lockAtLabel: string;
+  deadline: ReturnType<typeof getNhlDraft26PicksDeadlineDisplay>;
 };
 
 function prospectLabel(p: NhlDraft26Prospect): string {
@@ -39,7 +42,7 @@ export function NhlDraft26PicksEditor({
   initialDisplayName,
   canAttemptSave,
   picksLocked,
-  lockAtLabel,
+  deadline,
 }: Props) {
   const prospectById = useMemo(
     () => new Map(prospects.map((p) => [p.id, p])),
@@ -188,13 +191,16 @@ export function NhlDraft26PicksEditor({
       <section className="ash-surface px-4 py-3 sm:px-5">
         {picksLocked ? (
           <p className="text-sm text-amber-200/95">
-            Pick entry is <span className="font-medium text-amber-50">closed</span>. The deadline was{" "}
-            {lockAtLabel}. Your saved board is shown below if you submitted before the lock.
+            Pick entry is <span className="font-medium text-amber-50">closed</span>.{" "}
+            {deadline.friendlyLockPhrase} The lock was{" "}
+            <span className="font-medium text-amber-50">{deadline.lockAtLabel}</span>. Your saved
+            board is shown below if you submitted before then.
           </p>
         ) : (
           <p className="text-sm text-slate-400">
-            Picks are <span className="font-medium text-emerald-200/95">open</span> until{" "}
-            <span className="text-slate-200">{lockAtLabel}</span>.
+            Picks are <span className="font-medium text-emerald-200/95">open</span>.{" "}
+            {deadline.friendlyLockPhrase}{" "}
+            <span className="text-slate-200">({deadline.lockAtLabel})</span>
           </p>
         )}
       </section>

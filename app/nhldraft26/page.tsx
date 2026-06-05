@@ -1,5 +1,8 @@
 import { PageContainer } from "@/components/ui/PageContainer";
-import { NHL_DRAFT26_EVENT } from "@/lib/nhldraft26/config";
+import {
+  getNhlDraft26PicksDeadlineDisplay,
+  NHL_DRAFT26_EVENT,
+} from "@/lib/nhldraft26/config";
 import type { Metadata } from "next";
 import Link from "next/link";
 
@@ -10,6 +13,8 @@ export const metadata: Metadata = {
 };
 
 export default function NhlDraft26HomePage() {
+  const deadline = getNhlDraft26PicksDeadlineDisplay();
+
   return (
     <PageContainer compactBottom>
       <section className="rounded-2xl border border-amber-500/20 bg-gradient-to-br from-slate-950/80 via-slate-900/40 to-amber-950/30 px-5 py-8 shadow-lg shadow-amber-950/20 sm:px-8">
@@ -29,8 +34,8 @@ export default function NhlDraft26HomePage() {
           {NHL_DRAFT26_EVENT.draftDateLabel}
         </p>
         <p className="mt-1 text-sm text-slate-400">
-          <span className="font-medium text-slate-300">Deadline:</span>{" "}
-          {NHL_DRAFT26_EVENT.picksDeadlineLabel}
+          <span className="font-medium text-slate-300">Pick deadline:</span>{" "}
+          {deadline.summary}
         </p>
         <div className="mt-6 flex flex-wrap gap-3">
           <Link href="/nhldraft26/picks" className="btn-primary no-underline">
