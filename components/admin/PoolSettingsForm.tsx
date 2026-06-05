@@ -9,6 +9,7 @@ import {
   type PoolPaymentFormState,
 } from "@/components/pools/PoolPaymentSection";
 import type { PoolSettingsEditable } from "../../lib/pools/poolSettingsDb";
+import { formatPoolLockDeadline } from "../../lib/datetime/poolLockDeadline";
 
 type PoolSettingsFormProps = {
   poolId: string;
@@ -104,6 +105,10 @@ export function PoolSettingsForm({
       router.refresh();
     });
   }
+
+  const lockDeadlineEastern = initial.lockAt
+    ? formatPoolLockDeadline(initial.lockAt, { style: "compact" })
+    : null;
 
   return (
     <form onSubmit={onSubmit} className="space-y-6">
@@ -245,7 +250,17 @@ export function PoolSettingsForm({
         />
         <p className="text-xs text-ash-muted">
           Uses your browser&apos;s local timezone. Clear the field if you do not
-          want a lock deadline.
+          want a lock deadline. Public deadline displays use Eastern Time
+          {lockDeadlineEastern ? (
+            <>
+              {" "}
+              (currently{" "}
+              <span className="font-medium text-ash-text">{lockDeadlineEastern}</span>
+              ).
+            </>
+          ) : (
+            "."
+          )}
         </p>
       </div>
 

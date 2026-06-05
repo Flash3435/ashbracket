@@ -15,22 +15,12 @@ import {
 } from "../../../lib/rules/publicRulesDisplayDefaults";
 import { resolveStage2PointsForRulesPage } from "../../../lib/scoring/poolScoringConfig";
 import { comparePublicScoringRuleRows } from "../../../lib/rules/comparePublicScoringRules";
+import { formatPoolLockDeadline } from "@/lib/datetime/poolLockDeadline";
 import { LiveScoresUpdateNotice } from "@/components/tournament/LiveScoresUpdateNotice";
 import { fetchPublicLiveScoresLastUpdated } from "@/lib/tournament/liveDailyUpdateStatus";
 import type { PublicScoringRuleRow } from "../../../types/publicScoringRules";
 
 export const dynamic = "force-dynamic";
-
-function formatLockAt(iso: string | null): string | null {
-  if (iso == null) return null;
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return null;
-  return d.toLocaleString("en-US", {
-    dateStyle: "long",
-    timeStyle: "short",
-    timeZone: "UTC",
-  });
-}
 
 function formatEntryFee(cents: number | null): string | null {
   if (cents == null || cents < 0) return null;
@@ -154,7 +144,9 @@ export default async function RulesPage() {
   }
 
   const { data } = result;
-  const lockLabel = formatLockAt(data.lockAt);
+  const lockLabel = data.lockAt
+    ? formatPoolLockDeadline(data.lockAt, { style: "long" })
+    : null;
   const feeLabel = formatEntryFee(data.entryFeeCents);
   const { groupKindRules, knockoutRules, bonusRules } =
     partitionPublicRulesForDisplay(data.rules);
@@ -175,7 +167,7 @@ export default async function RulesPage() {
 
   const pageTitle = data.poolName.trim() || "Pool rules";
   const pageDescription = lockLabel
-    ? `Pre–knockout picks lock ${lockLabel} (UTC) unless the host changes the deadline. Stage 3 opens after the official Round of 32 bracket is published.`
+    ? `Pre–knockout picks lock ${lockLabel}, unless the host changes the deadline. Stage 3 opens after the official Round of 32 bracket is published.`
     : "Three stages — group finishes, best third-place advancers, then the published knockout bracket — plus bonus picks.";
 
   const c = PUBLIC_RULES_PAGE_COPY;

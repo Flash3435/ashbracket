@@ -1,4 +1,8 @@
-import { ASHBRACKET_SCHEDULE_TIMEZONE } from "../datetime/scheduleDisplay";
+import {
+  formatPoolLockDeadline,
+  formatPoolLockDeadlineTimeOnly,
+  poolLockDeadlineCalendarKey,
+} from "../datetime/poolLockDeadline";
 import { poolLocked } from "../pools/poolLocked";
 
 export type PoolPickDeadlineTone = "open" | "soon" | "locked" | "neutral";
@@ -12,39 +16,18 @@ export type PoolPickDeadlineStatus = {
   detail: string | null;
   /** Short chip, e.g. "in 2 days", "today", "locked", "open". */
   chipLabel: string;
-  /** Formatted deadline when set (Alberta time). */
+  /** Formatted deadline when set (Eastern Time). */
   deadlineLabel: string | null;
   tone: PoolPickDeadlineTone;
 };
 
-function edmontonCalendarKey(ms: number): string {
-  return new Intl.DateTimeFormat("en-CA", {
-    timeZone: ASHBRACKET_SCHEDULE_TIMEZONE,
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-  }).format(new Date(ms));
+function easternCalendarKey(ms: number): string {
+  return poolLockDeadlineCalendarKey(ms);
 }
 
-/** Participant-facing deadline label (Alberta / pool timezone). */
+/** Participant-facing deadline label (Eastern Time). */
 export function formatPoolPickDeadlineLabel(lockAtIso: string): string {
-  const t = new Date(lockAtIso).getTime();
-  if (Number.isNaN(t)) return "";
-  return new Intl.DateTimeFormat("en-CA", {
-    dateStyle: "medium",
-    timeStyle: "short",
-    timeZone: ASHBRACKET_SCHEDULE_TIMEZONE,
-  }).format(new Date(lockAtIso));
-}
-
-function formatPoolPickDeadlineTimeOnly(lockAtIso: string): string {
-  const t = new Date(lockAtIso).getTime();
-  if (Number.isNaN(t)) return "";
-  return new Intl.DateTimeFormat("en-CA", {
-    hour: "numeric",
-    minute: "2-digit",
-    timeZone: ASHBRACKET_SCHEDULE_TIMEZONE,
-  }).format(new Date(lockAtIso));
+  return formatPoolLockDeadline(lockAtIso, { style: "compact" });
 }
 
 /** Short forward-looking relative label for a future instant. Empty when far out. */
@@ -56,7 +39,7 @@ export function formatRelativeTimeUntilEn(
   if (Number.isNaN(t)) return "";
   const sec = Math.round((t - nowMs) / 1000);
   if (sec <= 0) return "locked";
-  if (edmontonCalendarKey(t) === edmontonCalendarKey(nowMs)) return "today";
+  if (easternCalendarKey(t) === easternCalendarKey(nowMs)) return "today";
   if (sec < 3600) {
     const m = Math.max(1, Math.round(sec / 60));
     return m === 1 ? "in 1 minute" : `in ${m} minutes`;
@@ -97,7 +80,7 @@ function buildOpenCopy(args: {
   const t = new Date(lockAtIso).getTime();
   const secUntil = Math.round((t - nowMs) / 1000);
   const isToday = relative === "today";
-  const timeOnly = formatPoolPickDeadlineTimeOnly(lockAtIso);
+  const timeOnly = formatPoolLockDeadlineTimeOnly(lockAtIso);
 
   let headline: string;
   let chipLabel: string;

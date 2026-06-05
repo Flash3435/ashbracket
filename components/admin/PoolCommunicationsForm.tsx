@@ -68,7 +68,7 @@ const MESSAGE_OPTIONS: {
   {
     value: "deadline_reminder",
     label: "Picks deadline reminder",
-    hint: "Mentions when picks lock (Alberta time) if a deadline is set.",
+    hint: "Mentions when picks lock (Eastern Time) if a deadline is set.",
   },
   {
     value: "custom",
@@ -585,7 +585,7 @@ export function PoolCommunicationsForm({
               <code className="rounded bg-ash-body px-1">{"{{displayName}}"}</code>,{" "}
               <code className="rounded bg-ash-body px-1">{"{{poolName}}"}</code>,{" "}
               <code className="rounded bg-ash-body px-1">{"{{deadline}}"}</code>{" "}
-              (pool lock, Alberta time: {deadlineLabel}),{" "}
+              (pool lock, Eastern Time: {deadlineLabel}),{" "}
               <code className="rounded bg-ash-body px-1">{"{{signInUrl}}"}</code>.{" "}
               Legacy: <code className="rounded bg-ash-body px-1">{"{{name}}"}</code>,{" "}
               <code className="rounded bg-ash-body px-1">{"{{pool}}"}</code>.

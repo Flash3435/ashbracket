@@ -1,4 +1,4 @@
-import { ASHBRACKET_SCHEDULE_TIMEZONE } from "../datetime/scheduleDisplay";
+import { formatPoolLockDeadline } from "../datetime/poolLockDeadline";
 import { textToHtmlParagraphs } from "../email/sendResendEmail";
 
 function normalizeOptionalSiteBase(siteUrl: string | undefined): string | undefined {
@@ -10,15 +10,11 @@ export function formatPoolLockSummary(lockAtIso: string | null): string {
   if (!lockAtIso || !lockAtIso.trim()) {
     return "the deadline your organizer set for this pool";
   }
-  const t = new Date(lockAtIso).getTime();
-  if (Number.isNaN(t)) {
+  const formatted = formatPoolLockDeadline(lockAtIso, { style: "long" });
+  if (!formatted) {
     return "the deadline your organizer set for this pool";
   }
-  return new Intl.DateTimeFormat("en-CA", {
-    dateStyle: "long",
-    timeStyle: "short",
-    timeZone: ASHBRACKET_SCHEDULE_TIMEZONE,
-  }).format(new Date(lockAtIso));
+  return formatted;
 }
 
 /** First word of display name for {{firstName}}. */
@@ -104,7 +100,7 @@ export function getEmailTemplateDefaults(
       body: [
         "Hi {{displayName}},",
         "",
-        'Picks for "{{poolName}}" lock after {{deadline}} (Alberta time) unless your organizer changes the schedule.',
+        'Picks for "{{poolName}}" lock after {{deadline}} unless your organizer changes the schedule.',
         "",
         "Please sign in and finish your bracket before then.",
         "",
