@@ -151,6 +151,7 @@ export default async function AccountActivityPage({ searchParams }: PageProps) {
             selectedId={ctx.selectedId}
             summaryBasePath="/account/picks/summary"
             activityBasePath="/account/activity"
+            revealBasePath="/account/reveal"
           />
 
           {!ctx.selectedId && ctx.myParticipants.length > 1 ? (

@@ -14,7 +14,7 @@ import {
 import { resolvePoolEmailTargets } from "../communications/recipientResolve";
 
 const poolId = "22222222-2222-4222-8222-222222222222";
-const lockAtIso = "2026-06-11T03:59:59.000Z"; // Jun 10, 2026, 11:59 p.m. ET
+const lockAtIso = "2026-06-11T03:59:00.000Z"; // Jun 10, 2026, 11:59 p.m. ET
 
 function baseInput(
   overrides: Partial<Parameters<typeof buildIncompleteBracketPanelData>[0]> = {},

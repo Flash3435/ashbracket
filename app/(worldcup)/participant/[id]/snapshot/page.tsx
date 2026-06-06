@@ -193,15 +193,13 @@ export default async function ParticipantBracketSnapshotPage({
               description={
                 isSelf ? (
                   <>
-                    From the official group schedule in the app (FIFA country codes). Date and
-                    time use America/Edmonton (Calgary). Live and upcoming fixtures for teams in
-                    this bracket are listed first.
+                    From the official tournament schedule. Kickoff times use Mountain Time. Live
+                    and upcoming fixtures for teams in this bracket are listed first.
                   </>
                 ) : (
                   <>
-                    From the official group schedule (FIFA country codes). Times use
-                    America/Edmonton (Calgary). Listed for teams in this participant&apos;s saved
-                    bracket.
+                    From the official tournament schedule. Kickoff times use Mountain Time. Listed
+                    for teams in this participant&apos;s saved bracket.
                   </>
                 )
               }

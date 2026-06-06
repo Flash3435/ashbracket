@@ -141,6 +141,8 @@ export default async function AccountPicksSummaryPage({ searchParams }: PageProp
             profiles={ctx.profileLinkItems}
             selectedId={ctx.selectedId}
             summaryBasePath="/account/picks/summary"
+            activityBasePath="/account/activity"
+            revealBasePath="/account/reveal"
             multiProfileHeading="Choose profile"
           />
 

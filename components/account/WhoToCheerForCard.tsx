@@ -108,7 +108,7 @@ export function WhoToCheerForCard({
         <div>
           <h2 className="text-base font-bold text-ash-text">Who to cheer for</h2>
           <p className="mt-0.5 text-xs text-ash-muted">
-            Upcoming matches connected to your bracket. Times shown in Calgary time.
+            Upcoming matches connected to your bracket. Kickoff times use Mountain Time.
           </p>
         </div>
         <Link href="/tournament" className="ash-link shrink-0 text-xs">

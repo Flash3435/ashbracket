@@ -37,6 +37,8 @@ type PoolActivityFeedProps = {
   ashbotEnabled?: boolean;
   /** Link to pool reveal page for post-lock insight cards. */
   revealHref?: string | null;
+  /** Pool admins only — recap rows may include internal completion diagnostics. */
+  showCompletionDiagnostics?: boolean;
 };
 
 function itemMetadataInsightLabel(
@@ -148,6 +150,7 @@ export function PoolActivityFeed({
   emptyFilterMessage,
   ashbotEnabled = true,
   revealHref = null,
+  showCompletionDiagnostics = false,
 }: PoolActivityFeedProps) {
   const canReact = Boolean(poolId && viewerParticipantId && reactions);
   const activityRows = activityRowsFromDisplayItems(items);
@@ -273,10 +276,13 @@ export function PoolActivityFeed({
                     </div>
                   ) : null}
                   {ashBotText ? <AshBotCommentaryLine text={ashBotText} /> : null}
-                  {isRecap && completionDiag && completionDiag.length > 0 ? (
+                  {showCompletionDiagnostics &&
+                  isRecap &&
+                  completionDiag &&
+                  completionDiag.length > 0 ? (
                     <details className="mt-2 text-xs text-ash-muted">
                       <summary className="cursor-pointer select-none font-medium text-ash-text/80">
-                        Bracket completion diagnostics (debug)
+                        Bracket completion diagnostics
                       </summary>
                       <pre className="mt-2 max-h-64 overflow-auto rounded border border-ash-border bg-ash-body/50 p-2 text-[11px] leading-snug">
                         {JSON.stringify(completionDiag, null, 2)}

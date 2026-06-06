@@ -77,6 +77,7 @@ export function PoolActivityFeedPanel({
         }
         ashbotEnabled={ashbotEnabled}
         revealHref={revealHref}
+        showCompletionDiagnostics={isPoolAdmin}
       />
     </>
   );

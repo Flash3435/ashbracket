@@ -285,6 +285,7 @@ export default async function AccountPage({ searchParams }: PageProps) {
               selectedId={picksCtx.selectedId}
               summaryBasePath="/account/picks/summary"
               activityBasePath="/account/activity"
+              revealBasePath="/account/reveal"
               multiProfileHeading="Choose profile"
             />
           ) : null}

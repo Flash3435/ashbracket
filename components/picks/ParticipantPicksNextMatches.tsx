@@ -77,7 +77,7 @@ export function ParticipantPicksNextMatches({
     return (
       <p className="text-sm text-ash-muted">
         When the official schedule includes your teams, their next fixtures will
-        show here (times in Calgary / Alberta — America/Edmonton).
+        show here (kickoff times in Mountain Time).
       </p>
     );
   }

@@ -124,6 +124,7 @@ export default async function AccountRevealPage({ searchParams }: PageProps) {
             selectedId={ctx.selectedId}
             summaryBasePath="/account/picks/summary"
             activityBasePath="/account/activity"
+            revealBasePath="/account/reveal"
             multiProfileHeading="Choose profile"
           />
 
