@@ -172,9 +172,9 @@ export function buildPoolPickDeadlineStatus(input: {
   if (!lockAtIso) {
     return {
       preKnockoutLocked: false,
-      headline: "No pick deadline set",
+      headline: "No pick deadline has been set by the organizer yet.",
       detail: readOnly
-        ? "This pool has no pick deadline on file."
+        ? "The organizer has not set a pick deadline for this pool yet."
         : knockoutBracketPicksUnlocked
           ? "You can edit your picks until your organizer sets a deadline."
           : "You can edit group, third-place, and bonus picks until a deadline is set. Knockout bracket picks open when the official Round of 32 is published.",

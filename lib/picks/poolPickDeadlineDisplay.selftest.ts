@@ -34,7 +34,7 @@ import { ASHBRACKET_2026_POOL_LOCK_AT_ISO } from "../datetime/poolLockDeadline";
     knockoutBracketPicksUnlocked: false,
   });
   assert.strictEqual(status.preKnockoutLocked, false);
-  assert.ok(status.headline.includes("No pick deadline"));
+  assert.ok(status.headline.includes("organizer"));
   assert.strictEqual(status.tone, "neutral");
 }
 

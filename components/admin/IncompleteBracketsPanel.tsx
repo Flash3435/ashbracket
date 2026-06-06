@@ -219,7 +219,7 @@ export function IncompleteBracketsPanel({
             </p>
           ) : (
             <p className="mt-3 text-sm text-ash-muted">
-              No pick deadline set in pool settings.
+              No pick deadline set. Add one in pool settings.
             </p>
           )}
 
