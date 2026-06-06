@@ -196,6 +196,7 @@ export async function sendPoolCommunicationsAction(input: {
         poolName: pool.name,
         lockAtIso: pool.lockAt,
         siteUrl,
+        participantId: t.id,
       });
       const res = await sendResendEmail({
         to: t.email,

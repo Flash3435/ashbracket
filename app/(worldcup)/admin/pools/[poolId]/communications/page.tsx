@@ -1,9 +1,11 @@
+import { IncompleteBracketsPanel } from "@/components/admin/IncompleteBracketsPanel";
 import { PoolCommunicationsForm } from "@/components/admin/PoolCommunicationsForm";
 import { PageContainer } from "@/components/ui/PageContainer";
 import { PageTitle } from "@/components/ui/PageTitle";
 import { getSimulationPoolEmailUiStatus } from "@/lib/admin/simulationPoolEmailPolicy";
 import { requireManagedPool } from "@/lib/admin/requireManagedPool";
 import { mapPoolPaymentFromPool, poolIsPaid } from "@/lib/pools/poolPayment";
+import { loadIncompleteBracketPanelForPool } from "@/lib/admin/loadIncompleteBracketPanelForPool";
 import { loadParticipantIdsWithIncompletePicks } from "@/lib/communications/picksCompleteness";
 import { formatPoolLockSummary } from "@/lib/communications/messageTemplates";
 import type {
@@ -52,6 +54,7 @@ export default async function AdminPoolCommunicationsPage({
   let poolName = "Your pool";
   let lockAtIso: string | null = null;
   let loadError: string | null = null;
+  let incompleteBracketPanel = null;
 
   try {
     const [{ data: poolRow }, { data: rows, error: parErr }] = await Promise.all([
@@ -94,6 +97,15 @@ export default async function AdminPoolCommunicationsPage({
         isPaid: r.is_paid,
         picksComplete: !incomplete.has(r.id),
       }));
+
+      incompleteBracketPanel = await loadIncompleteBracketPanelForPool(
+        supabase,
+        {
+          poolId,
+          poolName,
+          lockAtIso,
+        },
+      );
     }
   } catch (e) {
     loadError =
@@ -141,6 +153,15 @@ export default async function AdminPoolCommunicationsPage({
           clear message and nothing is sent.
         </p>
       </div>
+
+      {incompleteBracketPanel ? (
+        <IncompleteBracketsPanel
+          data={incompleteBracketPanel}
+          simulationEmailStatus={simulationEmailStatus}
+          showPoolName={false}
+          className="mb-6"
+        />
+      ) : null}
 
       {loadError ? null : (
         <PoolCommunicationsForm

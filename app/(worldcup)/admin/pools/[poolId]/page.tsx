@@ -1,6 +1,9 @@
+import { IncompleteBracketsPanel } from "@/components/admin/IncompleteBracketsPanel";
 import { PoolPotAdminSummary } from "@/components/pools/PoolPotAdminSummary";
 import { PageContainer } from "@/components/ui/PageContainer";
 import { PageTitle } from "@/components/ui/PageTitle";
+import { loadIncompleteBracketPanelForPool } from "@/lib/admin/loadIncompleteBracketPanelForPool";
+import { getSimulationPoolEmailUiStatus } from "@/lib/admin/simulationPoolEmailPolicy";
 import { requireManagedPool } from "@/lib/admin/requireManagedPool";
 import { mapPoolPaymentFromPool, poolIsPaid } from "@/lib/pools/poolPayment";
 import Link from "next/link";
@@ -16,6 +19,17 @@ export default async function AdminPoolDashboardPage({
   const { supabase, pool } = await requireManagedPool(poolId);
   const poolPayment = mapPoolPaymentFromPool(pool);
   const poolIsPaidPool = poolIsPaid(poolPayment);
+  const simulationEmailStatus = getSimulationPoolEmailUiStatus(
+    Boolean(pool.is_simulation),
+  );
+  const incompleteBracketPanel = await loadIncompleteBracketPanelForPool(
+    supabase,
+    {
+      poolId,
+      poolName: pool.name?.trim() || "Your pool",
+      lockAtIso: pool.lock_at ?? null,
+    },
+  );
 
   let potParticipants: { paid: boolean }[] = [];
   if (poolIsPaidPool) {
@@ -45,6 +59,13 @@ export default async function AdminPoolDashboardPage({
           />
         </div>
       ) : null}
+
+      <IncompleteBracketsPanel
+        data={incompleteBracketPanel}
+        simulationEmailStatus={simulationEmailStatus}
+        showPoolName={false}
+        className="mb-6"
+      />
 
       <ul className="list-inside list-disc space-y-2 text-sm text-ash-muted">
         <li>

@@ -30,13 +30,27 @@ export type EmailPlaceholderVars = {
   poolName: string;
   deadline: string;
   signInUrl: string;
+  picksLink: string;
 };
+
+export function buildPicksLink(
+  siteUrl: string | undefined,
+  participantId?: string,
+): string {
+  const base = normalizeOptionalSiteBase(siteUrl);
+  if (!base) return "";
+  if (participantId?.trim()) {
+    return `${base}/account/picks?participant=${encodeURIComponent(participantId.trim())}`;
+  }
+  return `${base}/account/picks`;
+}
 
 export function buildEmailPlaceholderVars(input: {
   displayName: string;
   poolName: string;
   lockAtIso: string | null;
   siteUrl?: string;
+  participantId?: string;
 }): EmailPlaceholderVars {
   const base = normalizeOptionalSiteBase(input.siteUrl);
   return {
@@ -45,6 +59,7 @@ export function buildEmailPlaceholderVars(input: {
     poolName: input.poolName.trim() || "Your pool",
     deadline: formatPoolLockSummary(input.lockAtIso),
     signInUrl: base ? `${base}/login` : "",
+    picksLink: buildPicksLink(input.siteUrl, input.participantId),
   };
 }
 
@@ -59,6 +74,7 @@ export function applyEmailPlaceholders(template: string, vars: EmailPlaceholderV
     .replace(/\{\{\s*poolName\s*\}\}/gi, vars.poolName)
     .replace(/\{\{\s*deadline\s*\}\}/gi, vars.deadline)
     .replace(/\{\{\s*signInUrl\s*\}\}/gi, vars.signInUrl)
+    .replace(/\{\{\s*picksLink\s*\}\}/gi, vars.picksLink)
     .replace(/\{\{\s*name\s*\}\}/gi, vars.displayName)
     .replace(/\{\{\s*pool\s*\}\}/gi, vars.poolName);
 }
@@ -70,7 +86,11 @@ function stripEmptySignInLine(text: string): string {
     .trimEnd();
 }
 
-export type PoolEmailTemplateKind = "payment_reminder" | "deadline_reminder" | "custom";
+export type PoolEmailTemplateKind =
+  | "payment_reminder"
+  | "deadline_reminder"
+  | "incomplete_bracket_reminder"
+  | "custom";
 
 /**
  * Default subject/body for template kinds (placeholders). Custom starts empty on the client.
@@ -110,6 +130,25 @@ export function getEmailTemplateDefaults(
       ].join("\n"),
     };
   }
+  if (kind === "incomplete_bracket_reminder") {
+    return {
+      subject: "Reminder: finish your AshBracket picks",
+      body: [
+        "Hi {{firstName}},",
+        "",
+        "Just a reminder to finish your picks for {{poolName}}.",
+        "",
+        "Picks lock {{deadline}}.",
+        "",
+        "You can finish them here:",
+        "{{picksLink}}",
+        "",
+        "Good luck!",
+        "",
+        "— Your pool organizer (via AshBracket)",
+      ].join("\n"),
+    };
+  }
   return { subject: "", body: "" };
 }
 
@@ -120,12 +159,14 @@ export function renderTemplatedPoolEmail(input: {
   poolName: string;
   lockAtIso: string | null;
   siteUrl?: string;
+  participantId?: string;
 }): { subject: string; text: string; html: string } {
   const vars = buildEmailPlaceholderVars({
     displayName: input.displayName,
     poolName: input.poolName,
     lockAtIso: input.lockAtIso,
     siteUrl: input.siteUrl,
+    participantId: input.participantId,
   });
   let subject = applyEmailPlaceholders(input.subjectTemplate.trim(), vars);
   let text = applyEmailPlaceholders(input.bodyTemplate, vars);
@@ -200,5 +241,6 @@ export function applyPlaceholders(
     poolName: vars.pool,
     deadline: vars.deadline,
     signInUrl: "",
+    picksLink: "",
   });
 }

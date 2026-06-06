@@ -43,6 +43,7 @@
     "test:ashbot-commentary": "tsx lib/activity/ashbotCommentary.selftest.ts",
     "test:change-password": "tsx lib/auth/changePassword.selftest.ts",
     "test:pool-join": "tsx lib/join/planPoolJoin.selftest.ts",
+    "test:incomplete-bracket-panel": "tsx lib/admin/incompleteBracketPanel.selftest.ts",
     "seed:wc2026": "tsx scripts/seed-official-wc2026.ts",
     "seed:fifa-ranks": "tsx scripts/seed-fifa-ranks.ts",
     "seed:nhl-phase2": "tsx scripts/seed-nhl-phase2.ts",

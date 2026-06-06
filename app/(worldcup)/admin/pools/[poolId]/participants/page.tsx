@@ -1,3 +1,4 @@
+import { IncompleteBracketsPanel } from "@/components/admin/IncompleteBracketsPanel";
 import { ParticipantsManager } from "@/components/admin/ParticipantsManager";
 import { PageContainer } from "@/components/ui/PageContainer";
 import { PageTitle } from "@/components/ui/PageTitle";
@@ -6,6 +7,7 @@ import {
   type ParticipantWithPicksStatus,
 } from "@/lib/admin/participantPickStatus";
 import { getSimulationPoolEmailUiStatus } from "@/lib/admin/simulationPoolEmailPolicy";
+import { loadIncompleteBracketPanelForPool } from "@/lib/admin/loadIncompleteBracketPanelForPool";
 import { requireManagedPool } from "@/lib/admin/requireManagedPool";
 import { buildCompletionDiagnosticRows, loadPicksCompletenessInputsForPool } from "@/lib/communications/picksCompleteness";
 import { formatPoolLockSummary } from "@/lib/communications/messageTemplates";
@@ -28,6 +30,14 @@ export default async function AdminPoolParticipantsPage({
   const { supabase, pool } = await requireManagedPool(poolId);
   const simulationEmailStatus = getSimulationPoolEmailUiStatus(
     Boolean(pool.is_simulation),
+  );
+  const incompleteBracketPanel = await loadIncompleteBracketPanelForPool(
+    supabase,
+    {
+      poolId,
+      poolName: pool.name?.trim() || "Your pool",
+      lockAtIso: pool.lock_at ?? null,
+    },
   );
   const jc = pool.join_code?.trim() ?? null;
   const shareUrl = jc ? poolShareJoinUrl(jc) : null;
@@ -145,6 +155,14 @@ export default async function AdminPoolParticipantsPage({
             participants={initialParticipants}
           />
         </div>
+      ) : null}
+      {!loadError ? (
+        <IncompleteBracketsPanel
+          data={incompleteBracketPanel}
+          simulationEmailStatus={simulationEmailStatus}
+          showPoolName={false}
+          className="mb-6"
+        />
       ) : null}
       <ParticipantsManager
         poolId={poolId}
