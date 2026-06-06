@@ -3,23 +3,29 @@ import { buildAshBotCommentsForFeed } from "@/lib/activity/ashbotCommentary";
 import { formatRelativeTimeEn } from "@/lib/datetime/formatRelativeTimeEn";
 import { ashDailyRecapDisplayBody } from "@/lib/poolActivity/buildDeterministicRecapBody";
 import type { ActivityReactionsSnapshot } from "@/lib/poolActivity/activityReactionTypes";
-import type { GlobalPoolActivityFeedRow } from "@/lib/poolActivity/globalActivityTypes";
+import {
+  activityRowsFromDisplayItems,
+  isActivityDisplayItem,
+  isGroupedSystemActivityDisplayItem,
+  type GlobalActivityDisplayItem,
+} from "@/lib/poolActivity/activityFeedDisplayTypes";
 import type { PoolInsightLabel, PoolMilestoneLabel } from "@/lib/poolActivity/poolActivityTypes";
 import { AshBotCommentaryLine } from "./AshBotCommentaryLine";
 import {
   ActivityReactionBar,
   reactionBarPropsForActivity,
 } from "./ActivityReactionBar";
+import { GroupedMilestoneSummaryCard } from "./GroupedMilestoneSummaryCard";
 
 type GlobalActivityFeedProps = {
-  items: GlobalPoolActivityFeedRow[];
+  items: GlobalActivityDisplayItem[];
   reactions: ActivityReactionsSnapshot;
   viewerParticipantIdByPoolId: Record<string, string>;
   emptyFilterMessage?: string;
 };
 
 function itemMetadataInsightLabel(
-  item: GlobalPoolActivityFeedRow,
+  item: Extract<GlobalActivityDisplayItem, { kind: "activity" }>,
 ): PoolInsightLabel | null {
   const v = item.metadata_json.insight_label;
   if (v === "POOL INSIGHT") return v;
@@ -27,7 +33,7 @@ function itemMetadataInsightLabel(
 }
 
 function itemMetadataMilestoneLabel(
-  item: GlobalPoolActivityFeedRow,
+  item: Extract<GlobalActivityDisplayItem, { kind: "activity" }>,
 ): PoolMilestoneLabel | null {
   const v = item.metadata_json.milestone_label;
   if (v === "MILESTONE" || v === "DEADLINE" || v === "POOL UPDATE") return v;
@@ -43,8 +49,8 @@ function milestoneCardLabel(label: PoolMilestoneLabel | null): string {
 }
 
 function typeLabel(
-  type: GlobalPoolActivityFeedRow["type"],
-  item?: GlobalPoolActivityFeedRow,
+  type: Extract<GlobalActivityDisplayItem, { kind: "activity" }>["type"],
+  item?: Extract<GlobalActivityDisplayItem, { kind: "activity" }>,
 ): string {
   switch (type) {
     case "participant_joined":
@@ -69,8 +75,8 @@ function typeLabel(
 }
 
 function typeIcon(
-  type: GlobalPoolActivityFeedRow["type"],
-  item?: GlobalPoolActivityFeedRow,
+  type: Extract<GlobalActivityDisplayItem, { kind: "activity" }>["type"],
+  item?: Extract<GlobalActivityDisplayItem, { kind: "activity" }>,
 ): string {
   switch (type) {
     case "participant_joined":
@@ -127,7 +133,8 @@ export function GlobalActivityFeed({
     );
   }
 
-  const ashBotByActivityId = buildAshBotCommentsForFeed(items, {
+  const activityRows = activityRowsFromDisplayItems(items);
+  const ashBotByActivityId = buildAshBotCommentsForFeed(activityRows, {
     ashbotEnabled: true,
     liveRecapFacts: null,
     liveRecapDateYmd: null,
@@ -136,6 +143,19 @@ export function GlobalActivityFeed({
   return (
     <ul className="flex flex-col gap-3">
       {items.map((item) => {
+        if (isGroupedSystemActivityDisplayItem(item)) {
+          return (
+            <li key={item.id}>
+              <GroupedMilestoneSummaryCard
+                item={item}
+                poolName={item.poolName}
+              />
+            </li>
+          );
+        }
+
+        if (!isActivityDisplayItem(item)) return null;
+
         const isRecap = item.type === "ash_daily_recap";
         const isAnnouncement = item.type === "announcement";
         const isMilestone = item.type === "pool_milestone";

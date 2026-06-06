@@ -3,12 +3,15 @@
 import { useMemo, useState } from "react";
 import type { ActivityReactionsSnapshot } from "@/lib/poolActivity/activityReactionTypes";
 import {
-  filterGlobalActivityByParticipantName,
-  filterGlobalActivityFeedItems,
+  filterGlobalActivityDisplayByParticipantName,
+  filterGlobalActivityDisplayItems,
+} from "@/lib/poolActivity/globalActivityDisplayFilter";
+import {
   GLOBAL_ACTIVITY_FEED_FILTER_LABELS,
   GLOBAL_ACTIVITY_FEED_FILTERS,
   type GlobalActivityFeedFilter,
 } from "@/lib/poolActivity/globalActivityFeedFilter";
+import { applyGlobalActivityFeedGrouping } from "@/lib/poolActivity/activityFeedGrouping";
 import type { GlobalPoolActivityFeedRow } from "@/lib/poolActivity/globalActivityTypes";
 import { GlobalActivityFeed } from "./GlobalActivityFeed";
 
@@ -32,16 +35,26 @@ export function GlobalActivityDashboard({
   const [typeFilter, setTypeFilter] = useState<GlobalActivityFeedFilter>("all");
   const [poolFilter, setPoolFilter] = useState(initialPoolId ?? "");
   const [participantQuery, setParticipantQuery] = useState("");
+  const [showAllSystemCards, setShowAllSystemCards] = useState(false);
 
   const filteredItems = useMemo(() => {
     let next = items;
     if (poolFilter) {
       next = next.filter((item) => item.pool_id === poolFilter);
     }
-    next = filterGlobalActivityFeedItems(next, typeFilter);
-    next = filterGlobalActivityByParticipantName(next, participantQuery);
-    return next;
-  }, [items, poolFilter, typeFilter, participantQuery]);
+
+    const groupingMode = showAllSystemCards ? "none" : "strict";
+    let display = applyGlobalActivityFeedGrouping(next, groupingMode);
+
+    display = filterGlobalActivityDisplayItems(display, typeFilter, {
+      showAllSystemCards,
+    });
+    display = filterGlobalActivityDisplayByParticipantName(
+      display,
+      participantQuery,
+    );
+    return display;
+  }, [items, poolFilter, typeFilter, participantQuery, showAllSystemCards]);
 
   const emptyMessage =
     typeFilter !== "all" || poolFilter || participantQuery.trim()
@@ -91,6 +104,15 @@ export function GlobalActivityDashboard({
             placeholder="Filter by display name"
             className="rounded-lg border border-ash-border bg-ash-body/50 px-3 py-2 text-sm text-ash-text placeholder:text-ash-muted/70"
           />
+        </label>
+        <label className="flex cursor-pointer items-center gap-2 pb-2 text-xs text-ash-muted">
+          <input
+            type="checkbox"
+            checked={showAllSystemCards}
+            onChange={(e) => setShowAllSystemCards(e.target.checked)}
+            className="rounded border-ash-border"
+          />
+          Show all system cards
         </label>
       </div>
 

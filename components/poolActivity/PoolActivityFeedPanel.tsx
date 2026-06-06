@@ -3,9 +3,10 @@
 import { useMemo, useState } from "react";
 import type { RecapFacts } from "@/lib/poolActivity/buildDeterministicRecapBody";
 import {
-  filterActivityFeedItems,
-  type ActivityFeedFilter,
-} from "@/lib/poolActivity/activityFeedFilter";
+  filterPoolActivityDisplayItems,
+} from "@/lib/poolActivity/activityFeedDisplayFilter";
+import { type ActivityFeedFilter } from "@/lib/poolActivity/activityFeedFilter";
+import { applyPoolActivityFeedGrouping } from "@/lib/poolActivity/activityFeedGrouping";
 import type { ActivityReactionsSnapshot } from "@/lib/poolActivity/activityReactionTypes";
 import type { PoolActivityFeedRow } from "@/lib/poolActivity/poolActivityTypes";
 import { ActivityFeedFilters } from "./ActivityFeedFilters";
@@ -40,9 +41,15 @@ export function PoolActivityFeedPanel({
   ashbotEnabled = true,
 }: PoolActivityFeedPanelProps) {
   const [filter, setFilter] = useState<ActivityFeedFilter>("all");
+
+  const displayItems = useMemo(
+    () => applyPoolActivityFeedGrouping(items, "light", poolId),
+    [items, poolId],
+  );
+
   const filteredItems = useMemo(
-    () => filterActivityFeedItems(items, filter),
-    [items, filter],
+    () => filterPoolActivityDisplayItems(displayItems, filter),
+    [displayItems, filter],
   );
 
   return (
