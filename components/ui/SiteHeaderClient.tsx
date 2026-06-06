@@ -123,13 +123,22 @@ export function SiteHeaderClient({
           {isSignedIn && (
             <>
               {showActivityNav ? (
-                <TextNavLink
-                  href="/account/activity"
-                  pathname={pathname}
-                  match="prefix"
-                >
-                  Activity
-                </TextNavLink>
+                <>
+                  <TextNavLink
+                    href="/account/activity"
+                    pathname={pathname}
+                    match="prefix"
+                  >
+                    Activity
+                  </TextNavLink>
+                  <TextNavLink
+                    href="/account/reveal"
+                    pathname={pathname}
+                    match="prefix"
+                  >
+                    Reveal
+                  </TextNavLink>
+                </>
               ) : null}
               {isAdmin ? (
                 <TextNavLink href="/admin" pathname={pathname} match="prefix">

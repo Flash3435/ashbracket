@@ -25,6 +25,7 @@ type PoolActivityFeedPanelProps = {
   showFilters?: boolean;
   showAnnouncementComposer?: boolean;
   ashbotEnabled?: boolean;
+  revealHref?: string | null;
 };
 
 export function PoolActivityFeedPanel({
@@ -39,6 +40,7 @@ export function PoolActivityFeedPanel({
   showFilters = true,
   showAnnouncementComposer = true,
   ashbotEnabled = true,
+  revealHref = null,
 }: PoolActivityFeedPanelProps) {
   const [filter, setFilter] = useState<ActivityFeedFilter>("all");
 
@@ -74,6 +76,7 @@ export function PoolActivityFeedPanel({
             : undefined
         }
         ashbotEnabled={ashbotEnabled}
+        revealHref={revealHref}
       />
     </>
   );

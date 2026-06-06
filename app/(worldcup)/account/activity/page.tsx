@@ -4,7 +4,10 @@ import { PageContainer } from "@/components/ui/PageContainer";
 import { PageTitle } from "@/components/ui/PageTitle";
 import { canManagePool, isGlobalAdmin } from "@/lib/auth/permissions";
 import { createClient } from "@/lib/supabase/server";
-import { loadAccountKnockoutSelection } from "../../../../lib/account/loadAccountKnockoutSelection";
+import {
+  loadAccountKnockoutSelection,
+  poolLocked,
+} from "../../../../lib/account/loadAccountKnockoutSelection";
 import { filterActivityFeedForParticipantView } from "../../../../lib/poolActivity/activityFeedParticipantFilter";
 import { loadPoolActivityForViewer } from "../../../../lib/poolActivity/loadPoolActivityForViewer";
 import Link from "next/link";
@@ -38,6 +41,11 @@ export default async function AccountActivityPage({ searchParams }: PageProps) {
   const selectedPoolId = ctx.selectedId
     ? ctx.myParticipants.find((p) => p.id === ctx.selectedId)?.pool_id
     : null;
+  const locked = poolLocked(ctx.selectedLockAt);
+  const revealHref =
+    locked && ctx.selectedId
+      ? `/account/reveal?participant=${ctx.selectedId}`
+      : null;
 
   if (ctx.selectedId && selectedPoolId && !ctx.loadError) {
     try {
@@ -69,6 +77,15 @@ export default async function AccountActivityPage({ searchParams }: PageProps) {
               className="ash-link text-sm"
             >
               Edit picks
+            </Link>
+            <span className="text-ash-border" aria-hidden>
+              |
+            </span>
+            <Link
+              href={`/account/reveal?participant=${ctx.selectedId}`}
+              className="ash-link text-sm"
+            >
+              Reveal
             </Link>
           </>
         ) : null}
@@ -170,6 +187,7 @@ export default async function AccountActivityPage({ searchParams }: PageProps) {
                   liveRecapFacts={activity.liveRecapFacts}
                   liveRecapDateYmd={activity.liveRecapDateYmd}
                   ashbotEnabled={activity.ashbotEnabled}
+                  revealHref={revealHref}
                 />
               ) : null}
             </>

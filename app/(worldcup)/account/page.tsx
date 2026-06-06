@@ -1,6 +1,9 @@
 import Link from "next/link";
+import { PoolRevealDashboardCard } from "@/components/account/PoolRevealDashboardCard";
 import { WhoToCheerForCard } from "@/components/account/WhoToCheerForCard";
 import { whoToCheerForFromSchedule } from "@/lib/account/loadWhoToCheerFor";
+import { formatPoolPickDeadlineLabel } from "@/lib/picks/poolPickDeadlineDisplay";
+import { participantPicksCompleteFromDrafts } from "@/lib/predictions/participantPicksCompletenessRules";
 import { AccountPicksProfileLinks } from "@/components/account/AccountPicksProfileLinks";
 import { ParticipantPoolPaymentPanel } from "@/components/pools/ParticipantPoolPaymentPanel";
 import type { PoolPotParticipantSummary } from "@/lib/pools/computePoolPotSummary";
@@ -151,6 +154,18 @@ export default async function AccountPage({ searchParams }: PageProps) {
   const editPicksFromDashboardHref = picksCtx?.selectedParticipant?.id
     ? `/account/picks?participant=${picksCtx.selectedParticipant.id}`
     : picksHref;
+  const revealHref = picksCtx?.selectedParticipant?.id
+    ? `/account/reveal?participant=${picksCtx.selectedParticipant.id}`
+    : "/account/reveal";
+  const revealDeadlineLabel = picksCtx?.selectedLockAt
+    ? formatPoolPickDeadlineLabel(picksCtx.selectedLockAt)
+    : null;
+  const viewerPicksComplete =
+    picksCtx && picksCtx.initialSlots.length > 0
+      ? participantPicksCompleteFromDrafts(picksCtx.initialSlots, {
+          knockoutBracketPicksUnlocked: picksCtx.knockoutBracketPicksUnlocked,
+        })
+      : false;
 
   return (
     <PageContainer>
@@ -259,6 +274,9 @@ export default async function AccountPage({ searchParams }: PageProps) {
             >
               Activity
             </Link>
+            <Link href={revealHref} className="btn-ghost inline-flex ring-1 ring-ash-border">
+              Reveal
+            </Link>
           </div>
 
           {picksCtx && picksCtx.profileLinkItems.length > 1 ? (
@@ -357,6 +375,14 @@ export default async function AccountPage({ searchParams }: PageProps) {
                   </div>
                 </>
               )}
+
+              <PoolRevealDashboardCard
+                locked={locked}
+                revealHref={revealHref}
+                picksHref={editPicksFromDashboardHref}
+                deadlineLabel={revealDeadlineLabel}
+                viewerPicksComplete={viewerPicksComplete}
+              />
 
               {whoToCheer ? (
                 <WhoToCheerForCard

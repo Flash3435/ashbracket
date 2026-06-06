@@ -41,6 +41,7 @@
     "test:pool-lock-deadline": "tsx lib/datetime/poolLockDeadline.selftest.ts",
     "test:pool-pick-deadline": "tsx lib/picks/poolPickDeadlineDisplay.selftest.ts",
     "test:who-to-cheer": "tsx lib/account/buildWhoToCheerFor.selftest.ts",
+    "test:pool-reveal": "tsx lib/account/buildPoolReveal.selftest.ts && tsx lib/account/resolvePoolChampionPicks.selftest.ts && tsx lib/account/poolRevealDashboardCopy.selftest.ts",
     "test:ashbot-commentary": "tsx lib/activity/ashbotCommentary.selftest.ts",
     "test:change-password": "tsx lib/auth/changePassword.selftest.ts",
     "test:pool-join": "tsx lib/join/planPoolJoin.selftest.ts",

@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { buildAshBotCommentsForFeed } from "../../lib/activity/ashbotCommentary";
+import { isPostLockPoolInsightSourceKey } from "../../lib/account/buildPoolReveal";
 import { formatRelativeTimeEn } from "../../lib/datetime/formatRelativeTimeEn";
 import {
   ashDailyRecapDisplayBody,
@@ -34,6 +35,8 @@ type PoolActivityFeedProps = {
   emptyFilterMessage?: string;
   /** When false, omit AshBot template commentary (pool setting). */
   ashbotEnabled?: boolean;
+  /** Link to pool reveal page for post-lock insight cards. */
+  revealHref?: string | null;
 };
 
 function itemMetadataInsightLabel(
@@ -144,6 +147,7 @@ export function PoolActivityFeed({
   reactions,
   emptyFilterMessage,
   ashbotEnabled = true,
+  revealHref = null,
 }: PoolActivityFeedProps) {
   const canReact = Boolean(poolId && viewerParticipantId && reactions);
   const activityRows = activityRowsFromDisplayItems(items);
@@ -203,6 +207,14 @@ export function PoolActivityFeed({
           item.related_path.startsWith("/") &&
           (item.type === "participant_submitted_picks" ||
             item.type === "participant_updated_picks");
+        const insightSourceKey =
+          typeof item.metadata_json.source_key === "string"
+            ? item.metadata_json.source_key
+            : null;
+        const showViewReveal =
+          Boolean(revealHref) &&
+          isInsight &&
+          isPostLockPoolInsightSourceKey(insightSourceKey);
         return (
           <li key={item.id}>
             <article
@@ -247,6 +259,16 @@ export function PoolActivityFeed({
                         className="inline-flex text-xs font-medium text-ash-accent underline-offset-2 hover:underline"
                       >
                         View picks
+                      </Link>
+                    </div>
+                  ) : null}
+                  {showViewReveal && revealHref ? (
+                    <div className="mt-2">
+                      <Link
+                        href={revealHref}
+                        className="inline-flex text-xs font-medium text-ash-accent underline-offset-2 hover:underline"
+                      >
+                        View reveal
                       </Link>
                     </div>
                   ) : null}
