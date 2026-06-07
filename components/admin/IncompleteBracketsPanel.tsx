@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useMemo, useState, useTransition } from "react";
 import { sendIncompleteBracketReminderAction } from "../../app/(worldcup)/admin/incompleteBrackets/actions";
 import {
+  formatIncompleteStillFinishingVerb,
   formatLastReminderSentLabel,
   type IncompleteBracketPanelData,
 } from "@/lib/admin/incompleteBracketPanel";
@@ -181,7 +182,7 @@ export function IncompleteBracketsPanel({
                 <span className="font-semibold tabular-nums text-amber-100">
                   {data.incompleteCount}
                 </span>{" "}
-                still need to finish
+                {formatIncompleteStillFinishingVerb(data.incompleteCount)}
               </>
             ) : null}
           </p>

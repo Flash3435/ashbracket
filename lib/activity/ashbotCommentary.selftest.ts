@@ -1,6 +1,7 @@
 import {
   buildAshBotComment,
   buildAshBotCommentsForFeed,
+  recapAshBotTemplateVars,
   shouldShowAshBotComment,
   stableTemplateIndex,
 } from "./ashbotCommentary";
@@ -83,6 +84,48 @@ const recapItem = row({
 const recapComment = buildAshBotComment(recapItem);
 t(recapComment?.includes("9") === true && recapComment?.includes("13") === true, "recap counts");
 t(buildAshBotComment(recapItem) === recapComment, "recap deterministic");
+
+function recapCommentsForCounts(completed: number, total: number): string[] {
+  const item = row({
+    id: "recap-grammar",
+    type: "ash_daily_recap",
+    metadata_json: { participant_count: total, submitted_count: completed },
+  });
+  const out: string[] = [];
+  for (let offset = 0; offset < 12; offset++) {
+    const line = buildAshBotComment(item, undefined, offset);
+    if (line) out.push(line);
+  }
+  return out;
+}
+
+function assertNoBadCountGrammar(lines: string[], label: string) {
+  for (const line of lines) {
+    t(!/\b1 are\b/.test(line), `${label}: no "1 are" in "${line}"`);
+    t(!/\b1 entries\b/.test(line), `${label}: no "1 entries" in "${line}"`);
+    t(!/\b0 participant have\b/.test(line), `${label}: no bad participant verb in "${line}"`);
+    t(!/\b1 brackets are done\b/.test(line), `${label}: no "1 brackets are done" in "${line}"`);
+    t(!/\bThe remaining 1 are\b/.test(line), `${label}: no "The remaining 1 are" in "${line}"`);
+  }
+}
+
+const recapOneLeft = recapCommentsForCounts(0, 1);
+t(recapOneLeft.length > 0, "ashbot recap templates for 0/1");
+assertNoBadCountGrammar(recapOneLeft, "recap 0/1");
+
+const recapTwoLeft = recapCommentsForCounts(1, 3);
+t(recapTwoLeft.length > 0, "ashbot recap templates for 1/3");
+assertNoBadCountGrammar(recapTwoLeft, "recap 1/3");
+
+const recapVarsOne = recapAshBotTemplateVars(0, 1, 1);
+t(recapVarsOne.remainingPhrase === "Still waiting on 1 bracket.", "recap vars singular remaining");
+t(recapVarsOne.completedEntriesVerb === "are", "zero entries use are");
+const recapVarsTwo = recapAshBotTemplateVars(1, 3, 2);
+t(recapVarsTwo.remainingBrackets === "2 brackets", "recap vars plural remaining");
+t(
+  recapAshBotTemplateVars(1, 3, 2).completedBrackets === "1 bracket",
+  "recap vars singular completed bracket label",
+);
 
 const recapLiveItem = row({
   id: "55555555-5555-4555-8555-555555555555",

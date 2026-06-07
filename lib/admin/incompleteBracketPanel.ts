@@ -1,3 +1,4 @@
+import { formatStillNeedToFinishVerb } from "../copy/pluralize";
 import { formatPoolLockDeadline } from "../datetime/poolLockDeadline";
 import { formatRelativeTimeUntilEn } from "../picks/poolPickDeadlineDisplay";
 
@@ -97,6 +98,11 @@ export function formatLastReminderSentLabel(
   return days === 1
     ? "Last reminder sent 1 day ago"
     : `Last reminder sent ${days} days ago`;
+}
+
+/** Progress line verb after incomplete count (e.g. "still needs to finish"). */
+export function formatIncompleteStillFinishingVerb(incompleteCount: number): string {
+  return formatStillNeedToFinishVerb(incompleteCount);
 }
 
 export function reminderRecentlySent(

@@ -2,6 +2,7 @@ import assert from "node:assert";
 import {
   buildIncompleteBracketPanelData,
   completionDefinitionLabel,
+  formatIncompleteStillFinishingVerb,
   formatLastReminderSentLabel,
   reminderRecentlySent,
   REMINDER_SPAM_GUARD_MS,
@@ -72,6 +73,36 @@ assert.strictEqual(someIncomplete.state, "some_incomplete");
 assert.strictEqual(someIncomplete.totalParticipants, 4);
 assert.strictEqual(someIncomplete.completedCount, 1);
 assert.strictEqual(someIncomplete.incompleteCount, 3);
+
+const oneIncomplete = buildIncompleteBracketPanelData(
+  baseInput({
+    participants: [
+      {
+        id: "p1",
+        displayName: "Done",
+        email: "done@example.com",
+        picksComplete: true,
+      },
+      {
+        id: "p2",
+        displayName: "Nish",
+        email: "nish@example.com",
+        picksComplete: false,
+      },
+    ],
+  }),
+);
+assert.strictEqual(oneIncomplete.incompleteCount, 1);
+assert.strictEqual(
+  formatIncompleteStillFinishingVerb(oneIncomplete.incompleteCount),
+  "still needs to finish",
+  "singular incomplete uses needs",
+);
+assert.strictEqual(
+  formatIncompleteStillFinishingVerb(someIncomplete.incompleteCount),
+  "still need to finish",
+  "plural incomplete uses need",
+);
 assert.strictEqual(someIncomplete.incompleteParticipants.length, 3);
 assert.strictEqual(someIncomplete.mailableIncompleteCount, 2);
 assert.strictEqual(someIncomplete.skippedNoEmailCount, 1);

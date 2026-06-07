@@ -1,3 +1,11 @@
+import {
+  formatActivityItemCount,
+  formatBracketCount,
+  formatNewParticipantsJoined,
+  formatPeopleUpdatedPicks,
+  verbHasHave,
+  verbIsAre,
+} from "../copy/pluralize";
 import { shouldShowChampionInsight, type RecapFacts } from "./buildDeterministicRecapBody";
 import { recapCalendarDateYmdEdmonton } from "./recapCalendarDate";
 import { preLockRollingSourceKey } from "./rollingPoolInsightKeys";
@@ -84,12 +92,11 @@ export function buildPreLockPoolInsightCandidates(
   if (submittedCount >= 2) {
     for (const bucket of COMPLETION_PERCENT_BUCKETS) {
       if (pct >= bucket) {
-        const bracketWord = submittedCount === 1 ? "bracket is" : "brackets are";
         out.push({
           sourceKey: `prelock_completion_percent_${bucket}`,
           label: "POOL INSIGHT",
           icon: "📊",
-          body: `📊 ${submittedCount} ${bracketWord} in. The pool is ${pct}% ready.`,
+          body: `📊 ${formatBracketCount(submittedCount)} ${verbIsAre(submittedCount)} in. The pool is ${pct}% ready.`,
           metadata: {
             completed_count: submittedCount,
             participant_count: participantCount,
@@ -101,12 +108,11 @@ export function buildPreLockPoolInsightCandidates(
   }
 
   if (remaining > 0 && remaining <= 3 && submittedCount > 0) {
-    const bracketWord = remaining === 1 ? "bracket" : "brackets";
     out.push({
       sourceKey: preLockRollingSourceKey("remaining", dayYmd),
       label: "POOL INSIGHT",
       icon: "⏳",
-      body: `⏳ Only ${remaining} ${bracketWord} left to complete.`,
+      body: `⏳ Only ${formatBracketCount(remaining)} left to complete.`,
       metadata: {
         remaining_count: remaining,
         participant_count: participantCount,
@@ -116,34 +122,31 @@ export function buildPreLockPoolInsightCandidates(
   }
 
   if (facts.updatesToday >= 2) {
-    const noun = facts.updatesToday === 1 ? "person" : "people";
     out.push({
       sourceKey: preLockRollingSourceKey("pick_updates", dayYmd),
       label: "POOL INSIGHT",
       icon: "✏️",
-      body: `✏️ ${facts.updatesToday} ${noun} updated their picks today.`,
+      body: `✏️ ${formatPeopleUpdatedPicks(facts.updatesToday)} today.`,
       metadata: { updates_today: facts.updatesToday, insight_day: dayYmd },
     });
   }
 
   if (facts.joinsLast24h >= 2) {
-    const noun = facts.joinsLast24h === 1 ? "participant" : "participants";
     out.push({
       sourceKey: preLockRollingSourceKey("joins", dayYmd),
       label: "POOL INSIGHT",
       icon: "👋",
-      body: `👋 ${facts.joinsLast24h} new ${noun} joined in the last 24 hours.`,
+      body: `👋 ${formatNewParticipantsJoined(facts.joinsLast24h)} in the last 24 hours.`,
       metadata: { joins_last_24h: facts.joinsLast24h, insight_day: dayYmd },
     });
   }
 
   if (facts.activityToday >= 6) {
-    const itemWord = facts.activityToday === 1 ? "item" : "items";
     out.push({
       sourceKey: preLockRollingSourceKey("activity_heat", dayYmd),
       label: "POOL INSIGHT",
       icon: "🔥",
-      body: `🔥 The pool is heating up: ${facts.activityToday} activity ${itemWord} today.`,
+      body: `🔥 The pool is heating up: ${formatActivityItemCount(facts.activityToday)} today.`,
       metadata: {
         activity_today: facts.activityToday,
         evaluated_at_ms: nowMs,
@@ -237,12 +240,11 @@ export function buildPostLockPoolInsightCandidates(
 
   const presence = facts.topPresenceTeam;
   if (presence && presence.bracketCount >= 3) {
-    const bracketWord = presence.bracketCount === 1 ? "bracket" : "brackets";
     out.push({
       sourceKey: `postlock_top_bracket_presence_${presence.teamId}`,
       label: "POOL INSIGHT",
       icon: "🏆",
-      body: `🏆 ${presence.teamName} appears in ${presence.bracketCount} ${bracketWord}.`,
+      body: `🏆 ${presence.teamName} appears in ${formatBracketCount(presence.bracketCount)}.`,
       metadata: {
         team_id: presence.teamId,
         team_name: presence.teamName,
@@ -253,12 +255,11 @@ export function buildPostLockPoolInsightCandidates(
 
   const underdogCount = facts.underdogFinalistBracketCount ?? 0;
   if (underdogCount >= 2) {
-    const bracketWord = underdogCount === 1 ? "bracket has" : "brackets have";
     out.push({
       sourceKey: `postlock_underdog_finalist_${underdogCount}`,
       label: "POOL INSIGHT",
       icon: "🌪️",
-      body: `🌪️ ${underdogCount} ${bracketWord} at least one major underdog finalist.`,
+      body: `🌪️ ${formatBracketCount(underdogCount)} ${verbHasHave(underdogCount)} at least one major underdog finalist.`,
       metadata: { underdog_finalist_bracket_count: underdogCount },
     });
   }

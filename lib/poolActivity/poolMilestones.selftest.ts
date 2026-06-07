@@ -160,6 +160,30 @@ t(
   "keep participant-specific milestone",
 );
 
+const facts1incomplete = {
+  participantCount: 2,
+  submittedCount: 1,
+  topChampionTeamName: null,
+  topChampionTeamId: null,
+  topChampionPickCount: 0,
+  championUniqueLeader: false,
+};
+const lockSoon = new Date("2026-06-10T18:00:00Z").toISOString();
+const deadlineOneLeft = buildDeadlineMilestoneCandidates(
+  lockSoon,
+  facts1incomplete,
+  new Date("2026-06-10T06:00:00Z").getTime(),
+);
+const lockTodayBody = deadlineOneLeft.find((c) => c.sourceKey === "lock_today")?.bodyText;
+t(
+  lockTodayBody?.includes("1 participant still needs to finish.") === true,
+  "deadline suffix singular participant needs",
+);
+t(
+  !/\b1 participant still need to finish\b/.test(lockTodayBody ?? ""),
+  "deadline suffix avoids plural verb with singular noun",
+);
+
 if (failed) {
   process.exit(1);
 }

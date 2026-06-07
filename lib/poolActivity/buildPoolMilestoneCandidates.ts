@@ -1,3 +1,4 @@
+import { formatBracketCount, formatParticipantsStillNeedToFinish } from "../copy/pluralize";
 import type { RecapFacts } from "./buildDeterministicRecapBody";
 import type { PoolMilestoneLabel } from "./poolActivityTypes";
 
@@ -9,9 +10,8 @@ export type PoolMilestoneCandidate = {
 };
 
 function incompleteSuffix(remaining: number): string {
-  if (remaining <= 0) return "";
-  const noun = remaining === 1 ? "participant" : "participants";
-  return ` ${remaining} ${noun} still need to finish.`;
+  const phrase = formatParticipantsStillNeedToFinish(remaining);
+  return phrase ? ` ${phrase}` : "";
 }
 
 /**
@@ -76,10 +76,9 @@ export function buildCompletionMilestoneCandidates(
   }
 
   if (remaining > 0 && remaining <= 3 && submittedCount > 0) {
-    const bracketWord = remaining === 1 ? "bracket" : "brackets";
     out.push({
       sourceKey: "completion_remaining_le3",
-      bodyText: `⏳ Only ${remaining} ${bracketWord} left to complete.`,
+      bodyText: `⏳ Only ${formatBracketCount(remaining)} left to complete.`,
       milestoneLabel: "MILESTONE",
       metadata: {
         remaining_count: remaining,

@@ -32,6 +32,7 @@
     "test:pool-name": "tsx lib/pools/validatePoolNameInput.selftest.ts",
     "test:admin-pool-split": "tsx lib/pools/splitManagedPoolsForAdminHome.selftest.ts",
     "test:participant-count-label": "tsx lib/pools/formatParticipantCountLabel.selftest.ts",
+    "test:count-copy": "tsx lib/copy/pluralize.selftest.ts && tsx lib/poolActivity/buildDeterministicRecapBody.selftest.ts",
     "test:remove-participant": "tsx lib/participants/removeParticipantFromPoolPolicy.selftest.ts",
     "test:pool-activity-engagement": "tsx lib/poolActivity/poolActivityFeedEngagement.selftest.ts",
     "test:global-activity": "tsx lib/poolActivity/globalActivity.selftest.ts",

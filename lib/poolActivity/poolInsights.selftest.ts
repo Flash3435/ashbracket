@@ -292,6 +292,29 @@ t(
   "hide pool insights with participant filter",
 );
 
+const singularRemaining = buildPreLockPoolInsightCandidates(
+  {
+    participantCount: 2,
+    submittedCount: 1,
+    locked: false,
+    joinsLast24h: 0,
+    updatesToday: 0,
+    activityToday: 0,
+  },
+  nowMs,
+);
+const remainingInsight = singularRemaining.find((c) =>
+  c.sourceKey.includes("remaining"),
+);
+t(
+  remainingInsight?.body.includes("1 bracket") === true,
+  "singular remaining bracket insight",
+);
+t(
+  !remainingInsight?.body.includes("1 brackets"),
+  "no singular/plural mismatch in remaining insight",
+);
+
 if (failed) {
   process.exit(1);
 }

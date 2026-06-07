@@ -1,4 +1,11 @@
 import {
+  formatBracketCount,
+  formatEntryCount,
+  formatRemainingBracketPhrase,
+  formatRemainingBracketsUndecided,
+  verbIsAre,
+} from "../copy/pluralize";
+import {
   recapFactsFromActivityMetadata,
   type RecapFacts,
 } from "../poolActivity/buildDeterministicRecapBody";
@@ -180,6 +187,26 @@ function fill(template: string, vars: Record<string, string>): string {
   return template.replace(/\{(\w+)\}/g, (_, key: string) => vars[key] ?? "");
 }
 
+/** Template vars for ash_daily_recap AshBot lines (exported for tests). */
+export function recapAshBotTemplateVars(
+  completed: number,
+  total: number,
+  remaining: number,
+): Record<string, string> {
+  return {
+    completed: String(completed),
+    total: String(total),
+    remaining: String(remaining),
+    remainingBrackets: formatBracketCount(remaining),
+    remainingPhrase: formatRemainingBracketPhrase(remaining),
+    remainingUndecided: formatRemainingBracketsUndecided(remaining),
+    completedEntries: formatEntryCount(completed),
+    completedEntriesVerb: verbIsAre(completed),
+    completedBrackets: formatBracketCount(completed),
+    completedBracketsVerb: verbIsAre(completed),
+  };
+}
+
 function templatesForItem(item: PoolActivityFeedRow): readonly string[] | null {
   switch (item.type) {
     case "participant_joined":
@@ -236,12 +263,12 @@ const PICKS_UPDATED_TEMPLATES = [
 
 const RECAP_INCOMPLETE_TEMPLATES = [
   "{completed} of {total} brackets are in. The pressure is now professionally applied.",
-  "{completed} completed, {remaining} to go. Someone send a reminder pigeon.",
-  "{completed} of {total} brackets are complete. The remaining {remaining} are still \"researching.\"",
-  "{completed} brackets are done. {remaining} brave souls remain undecided.",
+  "{completed} locked in, {remainingBrackets} to go.",
+  "{completed} of {total} brackets are complete. {remainingPhrase}",
+  "{completedBrackets} {completedBracketsVerb} done. {remainingUndecided}",
   "{completed}/{total} complete. The pool is slowly becoming sentient.",
-  "{remaining} brackets left. The deadline clock is not getting friendlier.",
-  "{completed} entries are locked in. {remaining} are still negotiating with fate.",
+  "Still waiting on {remainingBrackets}.",
+  "{completedEntries} {completedEntriesVerb} locked in. {remainingPhrase}",
   "{completed} of {total} have made their move. The rest are preserving suspense.",
 ] as const;
 
@@ -389,11 +416,10 @@ export function buildAshBotComment(
       const { completed, total, remaining } = counts;
       const templates =
         remaining > 0 ? RECAP_INCOMPLETE_TEMPLATES : RECAP_COMPLETE_TEMPLATES;
-      return fill(pickTemplate(seed, templates, templateOffset), {
-        completed: String(completed),
-        total: String(total),
-        remaining: String(remaining),
-      });
+      return fill(
+        pickTemplate(seed, templates, templateOffset),
+        recapAshBotTemplateVars(completed, total, remaining),
+      );
     }
     case "announcement":
       return pickTemplate(seed, ANNOUNCEMENT_TEMPLATES, templateOffset);
