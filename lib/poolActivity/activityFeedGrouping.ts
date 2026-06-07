@@ -7,6 +7,7 @@ import type {
 import type { GlobalPoolActivityFeedRow } from "./globalActivityTypes";
 import type { PoolActivityFeedRow } from "./poolActivityTypes";
 import { activityDisplayPriority } from "./activityFeedDisplayPriority";
+import { dedupeRollingPoolInsights } from "./rollingPoolInsightDedup";
 
 export type ActivityFeedGroupingMode = "strict" | "light" | "none";
 
@@ -229,11 +230,13 @@ function applyGroupingPass<T extends PoolActivityFeedRow>(
   getPoolId: (item: T) => string,
   getPoolName?: (item: T) => string | undefined,
 ): Array<({ kind: "activity" } & T) | GroupedSystemActivityDisplayItem> {
+  const deduped = dedupeRollingPoolInsights(items, getPoolId);
+
   if (mode === "none") {
-    return items.map((row) => ({ kind: "activity" as const, ...row }));
+    return deduped.map((row) => ({ kind: "activity" as const, ...row }));
   }
 
-  const candidates = collectCompletionMilestones(items, getPoolId, getPoolName);
+  const candidates = collectCompletionMilestones(deduped, getPoolId, getPoolName);
   const groupedBuckets = selectBucketsToGroup(candidates, mode);
   const groupedItemIds = new Set<string>();
   const groupedItemsByInsertIndex = new Map<
@@ -254,13 +257,13 @@ function applyGroupingPass<T extends PoolActivityFeedRow>(
 
   const hiddenIds =
     mode === "strict"
-      ? strictHiddenCompletionIds(items, groupedBuckets, groupedItemIds, getPoolId)
+      ? strictHiddenCompletionIds(deduped, groupedBuckets, groupedItemIds, getPoolId)
       : groupedItemIds;
 
   const out: Array<({ kind: "activity" } & T) | GroupedSystemActivityDisplayItem> =
     [];
 
-  items.forEach((row, index) => {
+  deduped.forEach((row, index) => {
     const groupedAtIndex = groupedItemsByInsertIndex.get(index);
     if (groupedAtIndex) {
       out.push(groupedAtIndex);

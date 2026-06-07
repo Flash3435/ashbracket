@@ -114,7 +114,9 @@ export function shouldShowAshBotComment(
       if (!sk) return false;
       if (
         sk.startsWith("prelock_completion_percent_") ||
+        sk.startsWith("prelock_remaining:") ||
         sk.startsWith("prelock_remaining_") ||
+        sk.startsWith("prelock_activity_heat:") ||
         sk.startsWith("prelock_activity_today_") ||
         sk === "postlock_top_champion" ||
         sk.startsWith("postlock_unique_champion_pick_") ||
@@ -325,10 +327,16 @@ function insightTemplatesForSourceKey(
   if (sourceKey.startsWith("prelock_completion_percent_")) {
     return INSIGHT_PRELOCK_READY_TEMPLATES;
   }
-  if (sourceKey.startsWith("prelock_remaining_")) {
+  if (
+    sourceKey.startsWith("prelock_remaining:") ||
+    sourceKey.startsWith("prelock_remaining_")
+  ) {
     return INSIGHT_PRELOCK_REMAINING_TEMPLATES;
   }
-  if (sourceKey.startsWith("prelock_activity_today_")) {
+  if (
+    sourceKey.startsWith("prelock_activity_heat:") ||
+    sourceKey.startsWith("prelock_activity_today_")
+  ) {
     return INSIGHT_PRELOCK_HEATING_TEMPLATES;
   }
   if (sourceKey === "postlock_top_champion") {

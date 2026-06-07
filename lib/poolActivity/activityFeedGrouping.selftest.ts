@@ -1,4 +1,5 @@
 import { activityDisplayPriority } from "./activityFeedDisplayPriority";
+import { preLockRollingSourceKey } from "./rollingPoolInsightKeys";
 import {
   applyGlobalActivityFeedGrouping,
   applyPoolActivityFeedGrouping,
@@ -228,6 +229,64 @@ t(
 
 t(activityDisplayPriority(lock) === "high", "lock milestone high priority");
 t(activityDisplayPriority(m5) === "low", "count milestone low priority");
+
+const heatLegacy = (id: string, count: number, createdAt: string): PoolActivityFeedRow => ({
+  id,
+  type: "pool_insight",
+  body_text: `🔥 The pool is heating up: ${count} activity items today.`,
+  metadata_json: {
+    source_key: `prelock_activity_today_${count}`,
+    insight_label: "POOL INSIGHT",
+    activity_today: count,
+  },
+  related_path: null,
+  is_ai_generated: false,
+  created_at: createdAt,
+  participant_display_name: null,
+});
+
+const heatBurst = applyPoolActivityFeedGrouping(
+  [
+    heatLegacy("h11", 11, "2026-06-06T20:00:00.000Z"),
+    heatLegacy("h10", 10, "2026-06-06T19:00:00.000Z"),
+    heatLegacy("h9", 9, "2026-06-06T18:00:00.000Z"),
+    heatLegacy("h8", 8, "2026-06-06T17:00:00.000Z"),
+  ],
+  "strict",
+  poolId,
+);
+t(
+  heatBurst.filter((item) => !isGroupedSystemActivityDisplayItem(item)).length === 1,
+  "pool feed dedupes legacy rolling heat insights",
+);
+t(
+  heatBurst.some(
+    (item) => !isGroupedSystemActivityDisplayItem(item) && item.id === "h11",
+  ),
+  "pool feed keeps highest-count heat insight",
+);
+
+const stableHeat = applyPoolActivityFeedGrouping(
+  [
+    {
+      ...heatLegacy("stable", 11, day),
+      metadata_json: {
+        source_key: preLockRollingSourceKey("activity_heat", "2026-06-06"),
+        insight_label: "POOL INSIGHT",
+        activity_today: 11,
+        insight_day: "2026-06-06",
+      },
+    },
+  ],
+  "strict",
+  poolId,
+);
+t(
+  stableHeat.some(
+    (item) => !isGroupedSystemActivityDisplayItem(item) && item.id === "stable",
+  ),
+  "stable-key heat insight still displays",
+);
 
 if (failed) {
   process.exit(1);

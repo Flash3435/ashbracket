@@ -5,7 +5,7 @@ import {
 } from "./buildPoolInsightCandidates";
 import { loadPoolInsightFacts } from "./loadPoolInsightFacts";
 
-async function insertInsightCandidate(
+async function upsertInsightCandidate(
   poolId: string,
   candidate: PoolInsightCandidate,
 ): Promise<void> {
@@ -16,6 +16,29 @@ async function insertInsightCandidate(
     icon: candidate.icon,
     ...candidate.metadata,
   };
+
+  const { data: existing, error: findErr } = await supabase
+    .from("pool_activity")
+    .select("id")
+    .eq("pool_id", poolId)
+    .eq("type", "pool_insight")
+    .eq("metadata_json->>source_key", candidate.sourceKey)
+    .maybeSingle();
+
+  if (findErr) throw new Error(findErr.message);
+
+  if (existing?.id) {
+    const { error: updateErr } = await supabase
+      .from("pool_activity")
+      .update({
+        body_text: candidate.body,
+        metadata_json: metadataJson,
+      })
+      .eq("id", existing.id);
+
+    if (updateErr) throw new Error(updateErr.message);
+    return;
+  }
 
   const { error } = await supabase.from("pool_activity").insert({
     pool_id: poolId,
@@ -36,8 +59,8 @@ async function insertInsightCandidate(
 }
 
 /**
- * Idempotent: inserts pool insight rows when thresholds are met.
- * Duplicate source_key values are ignored via partial unique index.
+ * Idempotent: inserts or updates pool insight rows when thresholds are met.
+ * Rolling daily insights reuse a stable source_key; body and counts refresh in place.
  */
 export async function ensurePoolInsightsForPool(
   poolId: string,
@@ -47,6 +70,6 @@ export async function ensurePoolInsightsForPool(
   const candidates = buildAllPoolInsightCandidates(facts, nowMs);
 
   for (const candidate of candidates) {
-    await insertInsightCandidate(poolId, candidate);
+    await upsertInsightCandidate(poolId, candidate);
   }
 }

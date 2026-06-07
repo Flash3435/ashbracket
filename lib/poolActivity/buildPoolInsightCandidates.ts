@@ -1,4 +1,6 @@
 import { shouldShowChampionInsight, type RecapFacts } from "./buildDeterministicRecapBody";
+import { recapCalendarDateYmdEdmonton } from "./recapCalendarDate";
+import { preLockRollingSourceKey } from "./rollingPoolInsightKeys";
 import type { PoolInsightLabel } from "./poolActivityTypes";
 
 export type ChampionTeamStat = {
@@ -74,6 +76,7 @@ export function buildPreLockPoolInsightCandidates(
   if (participantCount <= 0) return [];
 
   const out: PoolInsightCandidate[] = [];
+  const dayYmd = recapCalendarDateYmdEdmonton(new Date(nowMs));
   const remaining = participantCount - submittedCount;
   const pct =
     participantCount > 0 ? Math.round((submittedCount / participantCount) * 100) : 0;
@@ -100,13 +103,14 @@ export function buildPreLockPoolInsightCandidates(
   if (remaining > 0 && remaining <= 3 && submittedCount > 0) {
     const bracketWord = remaining === 1 ? "bracket" : "brackets";
     out.push({
-      sourceKey: `prelock_remaining_${remaining}`,
+      sourceKey: preLockRollingSourceKey("remaining", dayYmd),
       label: "POOL INSIGHT",
       icon: "⏳",
       body: `⏳ Only ${remaining} ${bracketWord} left to complete.`,
       metadata: {
         remaining_count: remaining,
         participant_count: participantCount,
+        insight_day: dayYmd,
       },
     });
   }
@@ -114,33 +118,37 @@ export function buildPreLockPoolInsightCandidates(
   if (facts.updatesToday >= 2) {
     const noun = facts.updatesToday === 1 ? "person" : "people";
     out.push({
-      sourceKey: `prelock_updates_today_${facts.updatesToday}`,
+      sourceKey: preLockRollingSourceKey("pick_updates", dayYmd),
       label: "POOL INSIGHT",
       icon: "✏️",
       body: `✏️ ${facts.updatesToday} ${noun} updated their picks today.`,
-      metadata: { updates_today: facts.updatesToday },
+      metadata: { updates_today: facts.updatesToday, insight_day: dayYmd },
     });
   }
 
   if (facts.joinsLast24h >= 2) {
     const noun = facts.joinsLast24h === 1 ? "participant" : "participants";
     out.push({
-      sourceKey: `prelock_joins_today_${facts.joinsLast24h}`,
+      sourceKey: preLockRollingSourceKey("joins", dayYmd),
       label: "POOL INSIGHT",
       icon: "👋",
       body: `👋 ${facts.joinsLast24h} new ${noun} joined in the last 24 hours.`,
-      metadata: { joins_last_24h: facts.joinsLast24h },
+      metadata: { joins_last_24h: facts.joinsLast24h, insight_day: dayYmd },
     });
   }
 
   if (facts.activityToday >= 6) {
     const itemWord = facts.activityToday === 1 ? "item" : "items";
     out.push({
-      sourceKey: `prelock_activity_today_${facts.activityToday}`,
+      sourceKey: preLockRollingSourceKey("activity_heat", dayYmd),
       label: "POOL INSIGHT",
       icon: "🔥",
       body: `🔥 The pool is heating up: ${facts.activityToday} activity ${itemWord} today.`,
-      metadata: { activity_today: facts.activityToday, evaluated_at_ms: nowMs },
+      metadata: {
+        activity_today: facts.activityToday,
+        evaluated_at_ms: nowMs,
+        insight_day: dayYmd,
+      },
     });
   }
 

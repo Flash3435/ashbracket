@@ -1,4 +1,5 @@
 import type { PoolActivityFeedRow } from "./poolActivityTypes";
+import { parseRollingInsightKind } from "./rollingPoolInsightKeys";
 
 export type ActivityDisplayPriority = "high" | "medium" | "low";
 
@@ -9,9 +10,12 @@ const HIGH_INSIGHT_PREFIXES = [
 ] as const;
 
 const LOW_INSIGHT_PREFIXES = [
-  "pre_lock_activity_today",
-  "pre_lock_updates_today",
-  "pre_lock_joins_24h",
+  "prelock_activity_heat:",
+  "prelock_pick_updates:",
+  "prelock_joins:",
+  "prelock_activity_today_",
+  "prelock_updates_today_",
+  "prelock_joins_today_",
 ] as const;
 
 function sourceKey(item: PoolActivityFeedRow): string | null {
@@ -90,6 +94,10 @@ function poolInsightDisplayPriority(
   }
 
   if (LOW_INSIGHT_PREFIXES.some((prefix) => sk.startsWith(prefix))) {
+    return "low";
+  }
+
+  if (parseRollingInsightKind(sk) === "activity_heat") {
     return "low";
   }
 
