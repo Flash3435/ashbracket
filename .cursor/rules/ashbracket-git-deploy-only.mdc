@@ -1,0 +1,12 @@
+---
+description: Ship via git push; no Vercel CLI deploy unless user asks
+alwaysApply: true
+---
+
+# App deployment (Vercel + Git)
+
+This repo is deployed by **Vercel’s Git integration** (push to the connected branch, e.g. `main`).
+
+- **Do not** run `vercel deploy`, `vercel deploy --prod`, `npx vercel …`, or `npm run deploy:vercel-cli` after changes **unless** the user explicitly asks to deploy using the Vercel CLI in the current chat.
+- When the user wants to **deploy** the app, use **git**: stage, commit, and **push** to the remote. Do not assume the Vercel CLI is installed or logged in.
+- **Database** migrations (`supabase db push`, etc.) are separate; run them only when the user asks for a database deployment.

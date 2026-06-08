@@ -1,0 +1,263 @@
+import type { KnockoutPickSlotDraft } from "../../types/adminKnockoutPicks";
+import {
+  buildAllParticipantPickDrafts,
+} from "../predictions/buildParticipantPickDrafts";
+import { labelParticipantBonusPick } from "../predictions/participantBonusLabels";
+import type { Prediction, TournamentStage } from "../../src/types/domain";
+
+export type PickCompletionSectionId =
+  | "group"
+  | "third_place"
+  | "bonus"
+  | "knockout";
+
+export type PickCompletionSectionStatus = {
+  id: PickCompletionSectionId;
+  label: string;
+  /** False when knockout picks are not required yet (Round of 32 unpublished). */
+  required: boolean;
+  filled: number;
+  total: number;
+  complete: boolean;
+  /** Human labels for empty required slots in this section. */
+  missingLabels: string[];
+};
+
+export type PoolMembershipCompletionStatus = {
+  isComplete: boolean;
+  requiredSections: PickCompletionSectionId[];
+  completedSections: PickCompletionSectionId[];
+  missingSections: PickCompletionSectionId[];
+  missingPickKeys: string[];
+  displaySummary: string;
+  sections: PickCompletionSectionStatus[];
+  knockoutBracketPicksUnlocked: boolean;
+};
+
+function isGroupKind(kind: string): boolean {
+  return kind === "group_winner" || kind === "group_runner_up";
+}
+
+function sectionForSlot(slot: KnockoutPickSlotDraft): PickCompletionSectionId {
+  if (isGroupKind(slot.predictionKind)) return "group";
+  if (slot.predictionKind === "third_place_qualifier") return "third_place";
+  if (slot.predictionKind === "bonus_pick") return "bonus";
+  return "knockout";
+}
+
+function sectionLabel(id: PickCompletionSectionId): string {
+  switch (id) {
+    case "group":
+      return "Group picks";
+    case "third_place":
+      return "Third-place picks";
+    case "bonus":
+      return "Bonus picks";
+    case "knockout":
+      return "Knockout picks";
+  }
+}
+
+function missingLabelForSlot(slot: KnockoutPickSlotDraft): string {
+  if (slot.predictionKind === "bonus_pick" && slot.bonusKey) {
+    return labelParticipantBonusPick(slot.bonusKey);
+  }
+  if (isGroupKind(slot.predictionKind)) {
+    return `${slot.sectionLabel} ${slot.slotLabel}`;
+  }
+  return slot.slotLabel;
+}
+
+function filledOfTotal(rows: KnockoutPickSlotDraft[]): {
+  filled: number;
+  total: number;
+} {
+  const total = rows.length;
+  const filled = rows.filter((s) => s.teamId.trim() !== "").length;
+  return { filled, total };
+}
+
+/**
+ * Canonical pre-lock / full-bracket completion for one participant membership.
+ * Knockout progression rows are ignored until the official Round of 32 is published.
+ */
+export function buildPoolMembershipCompletionStatus(
+  slots: KnockoutPickSlotDraft[],
+  options?: { knockoutBracketPicksUnlocked?: boolean },
+): PoolMembershipCompletionStatus {
+  const knockoutBracketPicksUnlocked =
+    options?.knockoutBracketPicksUnlocked !== false;
+
+  const bySection = new Map<PickCompletionSectionId, KnockoutPickSlotDraft[]>([
+    ["group", []],
+    ["third_place", []],
+    ["bonus", []],
+    ["knockout", []],
+  ]);
+
+  for (const slot of slots) {
+    bySection.get(sectionForSlot(slot))!.push(slot);
+  }
+
+  const sections: PickCompletionSectionStatus[] = (
+    ["group", "third_place", "bonus", "knockout"] as const
+  ).map((id) => {
+    const rows = bySection.get(id) ?? [];
+    const { filled, total } = filledOfTotal(rows);
+    const empty = rows.filter((s) => !s.teamId.trim());
+    const required =
+      id === "knockout" ? knockoutBracketPicksUnlocked && total > 0 : total > 0;
+    const complete = !required || (total > 0 && filled === total);
+    return {
+      id,
+      label: sectionLabel(id),
+      required,
+      filled,
+      total,
+      complete,
+      missingLabels: required
+        ? empty.map((s) => missingLabelForSlot(s))
+        : [],
+    };
+  });
+
+  const requiredSections = sections
+    .filter((s) => s.required)
+    .map((s) => s.id);
+  const completedSections = sections
+    .filter((s) => s.required && s.complete)
+    .map((s) => s.id);
+  const missingSections = sections
+    .filter((s) => s.required && !s.complete)
+    .map((s) => s.id);
+
+  const missingPickKeys = slots
+    .filter((s) => {
+      const sec = sectionForSlot(s);
+      if (sec === "knockout" && !knockoutBracketPicksUnlocked) return false;
+      return !s.teamId.trim();
+    })
+    .map((s) => s.rowKey);
+
+  const isComplete = missingSections.length === 0 && slots.length > 0;
+
+  const displaySummary = buildCompletionDisplaySummary(
+    sections,
+    knockoutBracketPicksUnlocked,
+    isComplete,
+  );
+
+  return {
+    isComplete,
+    requiredSections,
+    completedSections,
+    missingSections,
+    missingPickKeys,
+    displaySummary,
+    sections,
+    knockoutBracketPicksUnlocked,
+  };
+}
+
+export function buildCompletionDisplaySummary(
+  sections: PickCompletionSectionStatus[],
+  knockoutBracketPicksUnlocked: boolean,
+  isComplete: boolean,
+): string {
+  if (isComplete) {
+    return knockoutBracketPicksUnlocked
+      ? "All required picks complete (group, third-place, bonus, and knockout)."
+      : "Pre-lock picks complete (group, third-place, and bonus). Knockout picks are not required until Round of 32 is published.";
+  }
+
+  const missingParts: string[] = [];
+  for (const s of sections) {
+    if (!s.required || s.complete) continue;
+    if (s.missingLabels.length > 0) {
+      const preview =
+        s.missingLabels.length <= 3
+          ? s.missingLabels.join(", ")
+          : `${s.missingLabels.slice(0, 2).join(", ")} (+${s.missingLabels.length - 2} more)`;
+      missingParts.push(`${s.label.toLowerCase()} (${preview})`);
+    } else {
+      missingParts.push(
+        `${s.label.toLowerCase()} (${s.filled}/${s.total})`,
+      );
+    }
+  }
+
+  const prefix = missingParts.length
+    ? `Missing: ${missingParts.join("; ")}.`
+    : "Some required picks are still empty.";
+
+  if (!knockoutBracketPicksUnlocked) {
+    return `${prefix} Knockout picks are not required until Round of 32 is published.`;
+  }
+  return prefix;
+}
+
+/** Participant-facing copy after save when required picks remain empty. */
+export function formatIncompleteSavedBanner(
+  status: PoolMembershipCompletionStatus,
+): string {
+  const labels = status.missingSections.map((id) => {
+    switch (id) {
+      case "group":
+        return "group picks";
+      case "third_place":
+        return "third-place picks";
+      case "bonus":
+        return "bonus picks";
+      case "knockout":
+        return "knockout picks";
+    }
+  });
+  if (labels.length === 0) {
+    return "Picks saved. Some required picks are still empty.";
+  }
+  if (labels.length === 1) {
+    return `Picks saved. Still missing: ${labels[0]}.`;
+  }
+  const last = labels[labels.length - 1];
+  const rest = labels.slice(0, -1).join(", ");
+  return `Picks saved. Still missing: ${rest} and ${last}.`;
+}
+
+/** Compact one-line progress for participant summary headers. */
+export function formatCompletionProgressLine(
+  status: PoolMembershipCompletionStatus,
+): string {
+  return status.sections
+    .map((s) => {
+      if (s.id === "knockout" && !status.knockoutBracketPicksUnlocked) {
+        return "Knockout picks: not required yet";
+      }
+      return `${s.label}: ${s.filled}/${s.total}`;
+    })
+    .join(" · ");
+}
+
+export type BuildCompletionFromPredictionsInput = {
+  stageByCode: Partial<Record<TournamentStage["code"], TournamentStage>>;
+  predictions: Prediction[];
+  participantId: string;
+  bonusKeys: readonly string[];
+  knockoutBracketPicksUnlocked?: boolean;
+};
+
+export function buildPoolMembershipCompletionStatusFromPredictions(
+  input: BuildCompletionFromPredictionsInput,
+): PoolMembershipCompletionStatus {
+  const slots = buildAllParticipantPickDrafts({
+    stageByCode: input.stageByCode,
+    predictions: input.predictions,
+    participantId: input.participantId,
+    bonusKeys: input.bonusKeys,
+  });
+  return buildPoolMembershipCompletionStatus(slots, {
+    knockoutBracketPicksUnlocked: input.knockoutBracketPicksUnlocked,
+  });
+}
+
+/** @deprecated Alias kept for callers migrating to the canonical name. */
+export const getPreLockPickCompletionStatus = buildPoolMembershipCompletionStatus;
