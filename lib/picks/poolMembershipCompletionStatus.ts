@@ -271,6 +271,39 @@ export function buildCompletionDisplaySummary(
   return prefix;
 }
 
+/** Admin Overview: per-section counts for one incomplete participant. */
+export type AdminIncompleteParticipantBreakdown = {
+  missingSummary: string;
+  groupPicks: string;
+  thirdPlacePicks: string;
+  bonusPicks: string;
+  knockoutStatus: string;
+};
+
+export function buildAdminIncompleteParticipantBreakdown(
+  status: PoolMembershipCompletionStatus,
+): AdminIncompleteParticipantBreakdown {
+  const find = (id: PickCompletionSectionId) =>
+    status.sections.find((s) => s.id === id);
+
+  const group = find("group");
+  const third = find("third_place");
+  const bonus = find("bonus");
+  const knockout = find("knockout");
+
+  return {
+    missingSummary: status.displaySummary,
+    groupPicks: group ? `${group.filled}/${group.total}` : "—",
+    thirdPlacePicks: third ? `${third.filled}/${third.total}` : "—",
+    bonusPicks: bonus ? `${bonus.filled}/${bonus.total}` : "—",
+    knockoutStatus: !status.knockoutBracketPicksUnlocked
+      ? "Not required yet (Round of 32 not published)"
+      : knockout
+        ? `${knockout.filled}/${knockout.total}`
+        : "—",
+  };
+}
+
 /** Participant-facing copy after save when required picks remain empty. */
 export function formatIncompleteSavedBanner(
   status: PoolMembershipCompletionStatus,

@@ -1,5 +1,6 @@
 import { formatStillNeedToFinishVerb } from "../copy/pluralize";
 import { formatPoolLockDeadline } from "../datetime/poolLockDeadline";
+import type { AdminIncompleteParticipantBreakdown } from "../picks/poolMembershipCompletionStatus";
 import { formatRelativeTimeUntilEn } from "../picks/poolPickDeadlineDisplay";
 
 export const INCOMPLETE_BRACKET_REMINDER_TYPE = "incomplete_bracket_reminder";
@@ -10,6 +11,8 @@ export type IncompleteBracketParticipant = {
   id: string;
   displayName: string;
   hasEmail: boolean;
+  userId: string | null;
+  breakdown: AdminIncompleteParticipantBreakdown;
 };
 
 export type IncompleteBracketPanelState =
@@ -55,6 +58,8 @@ export type BuildIncompleteBracketPanelInput = {
     displayName: string;
     email: string;
     picksComplete: boolean;
+    userId?: string | null;
+    breakdown?: AdminIncompleteParticipantBreakdown | null;
   }>;
   lastReminderSentAt?: string | null;
   lastReminderRecipientCount?: number | null;
@@ -212,6 +217,16 @@ export function buildIncompleteBracketPanelData(
       id: p.id,
       displayName: p.displayName.trim() || "Participant",
       hasEmail: Boolean(p.email.trim()),
+      userId: p.userId ?? null,
+      breakdown: p.breakdown ?? {
+        missingSummary: "Pick completion details unavailable.",
+        groupPicks: "—",
+        thirdPlacePicks: "—",
+        bonusPicks: "—",
+        knockoutStatus: input.knockoutBracketPicksUnlocked
+          ? "—"
+          : "Not required yet (Round of 32 not published)",
+      },
     }));
   const moreIncompleteCount = Math.max(
     0,

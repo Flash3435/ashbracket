@@ -1,8 +1,9 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import {
-  buildCompletionDiagnosticRows,
+  buildCompletionStatusForParticipant,
   loadPicksCompletenessInputsForPool,
 } from "../communications/picksCompleteness";
+import { buildAdminIncompleteParticipantBreakdown } from "../picks/poolMembershipCompletionStatus";
 import { getResendMailerConfig } from "../email/sendResendEmail";
 import {
   buildIncompleteBracketPanelData,
@@ -42,7 +43,7 @@ export async function loadIncompleteBracketPanelForPool(
 ): Promise<IncompleteBracketPanelData> {
   const { data: rows, error } = await supabase
     .from("participants")
-    .select("id, display_name, email")
+    .select("id, display_name, email, user_id")
     .eq("pool_id", args.poolId)
     .order("display_name", { ascending: true });
 
@@ -62,11 +63,13 @@ export async function loadIncompleteBracketPanelForPool(
     id: string;
     display_name: string;
     email: string | null;
+    user_id: string | null;
   }[];
   const participantIds = participantRows.map((r) => r.id);
 
   let knockoutBracketPicksUnlocked = true;
   let picksCompleteById = new Map<string, boolean>();
+  let breakdownById = new Map<string, ReturnType<typeof buildAdminIncompleteParticipantBreakdown>>();
   let statusAvailable = true;
 
   if (participantIds.length > 0) {
@@ -79,17 +82,13 @@ export async function loadIncompleteBracketPanelForPool(
       statusAvailable = false;
     } else {
       knockoutBracketPicksUnlocked = inputs.knockoutBracketPicksUnlocked;
-      const diagnostics = buildCompletionDiagnosticRows(
-        inputs,
-        args.poolId,
-        participantRows.map((r) => ({
-          id: r.id,
-          display_name: r.display_name,
-        })),
-      );
-      picksCompleteById = new Map(
-        diagnostics.map((d) => [d.participant_id, d.picks_complete]),
-      );
+      for (const pid of participantIds) {
+        const status = buildCompletionStatusForParticipant(inputs, pid);
+        picksCompleteById.set(pid, status.isComplete);
+        if (!status.isComplete) {
+          breakdownById.set(pid, buildAdminIncompleteParticipantBreakdown(status));
+        }
+      }
     }
   }
 
@@ -108,6 +107,8 @@ export async function loadIncompleteBracketPanelForPool(
       displayName: r.display_name,
       email: r.email ?? "",
       picksComplete: picksCompleteById.get(r.id) ?? false,
+      userId: r.user_id,
+      breakdown: breakdownById.get(r.id) ?? null,
     })),
     lastReminderSentAt: lastReminder?.sentAt ?? null,
     lastReminderRecipientCount: lastReminder?.recipientCount ?? null,

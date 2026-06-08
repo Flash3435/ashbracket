@@ -5,6 +5,7 @@ import {
   participantBonusKeysForPool,
 } from "../predictions/buildParticipantPickDrafts";
 import {
+  buildAdminIncompleteParticipantBreakdown,
   buildPoolMembershipCompletionStatus,
   buildPoolMembershipCompletionStatusFromPredictions,
   formatCompletionProgressLine,
@@ -175,6 +176,17 @@ assert.ok(missingBonusStatus.missingSections.includes("bonus"));
 assert.ok(
   missingBonusStatus.displaySummary.includes("Golden Boot"),
   "regression: group complete but bonus missing",
+);
+
+const adminBreakdown = buildAdminIncompleteParticipantBreakdown(missingBonusStatus);
+assert.ok(adminBreakdown.missingSummary.includes("Golden Boot"));
+assert.strictEqual(adminBreakdown.groupPicks, "24/24");
+assert.strictEqual(adminBreakdown.thirdPlacePicks, "8/8");
+assert.ok(adminBreakdown.bonusPicks.includes("/"));
+assert.notStrictEqual(adminBreakdown.bonusPicks, "1/1");
+assert.strictEqual(
+  adminBreakdown.knockoutStatus,
+  "Not required yet (Round of 32 not published)",
 );
 
 const unlockedIncompleteKnockout = buildPoolMembershipCompletionStatus(
