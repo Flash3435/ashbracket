@@ -6,7 +6,6 @@ import { PageContainer } from "@/components/ui/PageContainer";
 import { PageTitle } from "@/components/ui/PageTitle";
 import { createClient } from "@/lib/supabase/server";
 import { poolLocked } from "@/lib/account/loadAccountKnockoutSelection";
-import { buildPoolMembershipCompletionStatus } from "@/lib/picks/poolMembershipCompletionStatus";
 import { loadParticipantBracketSnapshot } from "@/lib/participant/loadParticipantBracketSnapshot";
 import {
   countryCodesFromKnockoutSlots,
@@ -60,25 +59,6 @@ export default async function ParticipantBracketSnapshotPage({
   } = await supabase.auth.getUser();
 
   const locked = poolLocked(result.header.lockAt);
-  const lockHintSelf =
-    locked && result.header.lockAt
-      ? `Group stage, third-place advancers, and bonus picks locked ${new Intl.DateTimeFormat(undefined, {
-          dateStyle: "medium",
-          timeStyle: "short",
-        }).format(new Date(result.header.lockAt))}. Knockout bracket may still be editable after the official Round of 32 is published.`
-      : locked
-        ? "Pre‑knockout picks are locked; knockout bracket may still be open."
-        : null;
-
-  const lockHintPeer =
-    locked && result.header.lockAt
-      ? `This pool had its pre‑knockout picks deadline at ${new Intl.DateTimeFormat(undefined, {
-          dateStyle: "medium",
-          timeStyle: "short",
-        }).format(new Date(result.header.lockAt))} (host timezone as stored). Knockout may still update after the official Round of 32 is published.`
-      : locked
-        ? "Pre‑knockout picks are locked for this pool; knockout bracket may still be open."
-        : null;
 
   const teamById = new Map(result.teams.map((t) => [t.id, t]));
   const codes = countryCodesFromKnockoutSlots(result.initialSlots, teamById);
@@ -111,10 +91,6 @@ export default async function ParticipantBracketSnapshotPage({
   }`;
   const snapshotBracketHref = `/participant/${result.participantId}/snapshot?${snapshotBracketQs}`;
   const snapshotEditPicksHref = `/account/picks?participant=${result.participantId}`;
-  const snapshotCompletionStatus = buildPoolMembershipCompletionStatus(
-    result.initialSlots,
-    { knockoutBracketPicksUnlocked: result.knockoutBracketPicksUnlocked },
-  );
 
   return (
     <PageContainer>
@@ -166,6 +142,7 @@ export default async function ParticipantBracketSnapshotPage({
               current={view}
               listHref={snapshotListHref}
               bracketHref={snapshotBracketHref}
+              knockoutBracketPicksUnlocked={result.knockoutBracketPicksUnlocked}
             />
           </div>
 
@@ -176,11 +153,10 @@ export default async function ParticipantBracketSnapshotPage({
               participantId={result.participantId}
               poolName={result.header.poolName}
               locked={locked}
-              lockHint={isSelf ? lockHintSelf : lockHintPeer}
+              lockAtIso={result.header.lockAt}
               showSavedBanner={false}
               knockoutBracketPicksUnlocked={result.knockoutBracketPicksUnlocked}
               showCompactStageProgress
-              completionStatus={snapshotCompletionStatus}
               readOnly={!isSelf}
             />
           ) : (
@@ -191,11 +167,10 @@ export default async function ParticipantBracketSnapshotPage({
                 participantId={result.participantId}
                 poolName={result.header.poolName}
                 locked={locked}
-                lockHint={isSelf ? lockHintSelf : lockHintPeer}
+                lockAtIso={result.header.lockAt}
                 showSavedBanner={false}
                 knockoutBracketPicksUnlocked={result.knockoutBracketPicksUnlocked}
                 showCompactStageProgress
-                completionStatus={snapshotCompletionStatus}
                 readOnly={!isSelf}
                 sections="toolbar_only"
               />
@@ -205,6 +180,7 @@ export default async function ParticipantBracketSnapshotPage({
                   teams={result.teams}
                   knockoutBracketPicksUnlocked={result.knockoutBracketPicksUnlocked}
                   editPicksHref={isSelf ? snapshotEditPicksHref : null}
+                  listViewHref={isSelf ? snapshotListHref : null}
                   readOnly={!isSelf}
                 />
               </div>
@@ -217,15 +193,13 @@ export default async function ParticipantBracketSnapshotPage({
               description={
                 isSelf ? (
                   <>
-                    From the official group schedule in the app (FIFA country codes). Date and
-                    time use America/Edmonton (Calgary). Live and upcoming fixtures for teams in
-                    this bracket are listed first.
+                    From the official tournament schedule. Kickoff times use Mountain Time. Live
+                    and upcoming fixtures for teams in this bracket are listed first.
                   </>
                 ) : (
                   <>
-                    From the official group schedule (FIFA country codes). Times use
-                    America/Edmonton (Calgary). Listed for teams in this participant&apos;s saved
-                    bracket.
+                    From the official tournament schedule. Kickoff times use Mountain Time. Listed
+                    for teams in this participant&apos;s saved bracket.
                   </>
                 )
               }

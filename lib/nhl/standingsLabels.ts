@@ -17,12 +17,14 @@ export function labelNhlStandingsStatus(status: NhlStandingsStatus): string {
 export function formatNhlStandingsLoadError(message: string): string {
   const m = message.toLowerCase();
   if (
-    m.includes("fetch_nhl_edition_standings") &&
+    (m.includes("fetch_nhl_edition_standings") ||
+      m.includes("fetch_nhl_public_entry_picks") ||
+      m.includes("fetch_nhl_public_entry_context")) &&
     (m.includes("schema cache") || m.includes("does not exist") || m.includes("not find"))
   ) {
     return (
-      "The database is missing the NHL standings function. Apply migration " +
-      "`20260422180000_nhl_standings_rpc.sql` (for example `supabase db push` from the ashbracket " +
+      "The database is missing an NHL standings or public entry function. Apply the NHL migrations " +
+      "(for example `20260520170000_nhl_public_entry_detail_fix_return_types.sql` via `supabase db push` from the ashbracket " +
       "repo), then refresh this page."
     );
   }

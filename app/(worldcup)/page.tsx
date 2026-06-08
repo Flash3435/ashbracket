@@ -1,9 +1,11 @@
+import { AuthRecoveryRedirect } from "@/components/auth/AuthRecoveryRedirect";
 import { resolvePostLoginDestination } from "@/lib/auth/postLoginDestination";
 import { createClient } from "@/lib/supabase/server";
 import { HomeHero } from "@/components/ui/HomeHero";
 import { HomeMarketingSections } from "@/components/ui/HomeMarketingSections";
 import { PageContainer } from "@/components/ui/PageContainer";
 import { redirect } from "next/navigation";
+import { Suspense } from "react";
 
 export const dynamic = "force-dynamic";
 
@@ -26,6 +28,9 @@ export default async function HomePage() {
 
   return (
     <>
+      <Suspense fallback={null}>
+        <AuthRecoveryRedirect />
+      </Suspense>
       <HomeHero />
       <PageContainer compactBottom>
         <HomeMarketingSections />

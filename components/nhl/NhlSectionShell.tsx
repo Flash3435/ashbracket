@@ -113,6 +113,15 @@ export function NhlSectionShell({
       <footer className="mt-auto w-full border-t border-blue-500/15 bg-slate-950/40 py-5">
         <p className="text-center text-sm text-slate-500">
           © 2026 AshBracket · NHL section
+          <span className="mx-2 text-slate-700" aria-hidden>
+            ·
+          </span>
+          <Link
+            href="/contact"
+            className="text-slate-400 no-underline transition-colors hover:text-slate-200"
+          >
+            Contact
+          </Link>
         </p>
       </footer>
     </div>

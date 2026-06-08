@@ -62,7 +62,7 @@ export default async function JoinByCodePage({
         }
         description={
           peek.ok
-            ? "You’re invited to join this World Cup pool. Sign in or create a free account, then choose how you appear on the leaderboard."
+            ? "You’re invited to join this World Cup pool. Sign in or create a free account, then pick the name you want on the leaderboard."
             : "This link uses a pool join code. If the code is wrong or the pool is not open for self-join, your organizer can send an updated link or add you by email."
         }
       />

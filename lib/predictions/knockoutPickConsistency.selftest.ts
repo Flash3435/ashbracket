@@ -1,20 +1,26 @@
+import type { Prediction, Team, TournamentStage } from "../../src/types/domain";
 import type { KnockoutPickSlotDraft } from "../../types/adminKnockoutPicks";
-import type { Team } from "../../src/types/domain";
+import { buildThirdPlacePickDrafts } from "./buildParticipantPickDrafts";
 import {
   assignParticipantPickDeduped,
+  buildTeamIdToGroupLetter,
+  buildThirdPlacePickChooserOptionsForGroup,
+  normalizeParticipantThirdPlaceSaveSlots,
+  pruneParticipantPicks,
+  THIRD_PLACE_DISABLED_MAX_SELECTED,
+  THIRD_PLACE_ROW_MAX_SELECTED_EXPLANATION,
   THIRD_PLACE_DISABLED_OTHER_SLOT,
   THIRD_PLACE_DISABLED_RUNNER,
   THIRD_PLACE_DISABLED_WINNER,
-  buildThirdPlacePickChooserOptionGroups,
-  buildThirdPlacePickChooserOptions,
-  pruneParticipantPicks,
   thirdPlacePickDisabledReason,
+  thirdPlaceRowUnavailableReason,
   thirdPlaceSlotInvalidReason,
   validateParticipantSlotsThirdPlaceRules,
 } from "./knockoutPickConsistency";
 
 function row(
-  partial: Partial<KnockoutPickSlotDraft> & Pick<KnockoutPickSlotDraft, "rowKey" | "predictionKind" | "teamId">,
+  partial: Partial<KnockoutPickSlotDraft> &
+    Pick<KnockoutPickSlotDraft, "rowKey" | "predictionKind" | "teamId">,
 ): KnockoutPickSlotDraft {
   return {
     sectionLabel: "",
@@ -27,234 +33,376 @@ function row(
   };
 }
 
-const t1 = {
-  id: "10000000-0000-4000-8000-000000000001",
-  name: "Alpha",
-  countryCode: "AAA",
-  fifaCode: null,
-  fifaRank: 1,
-  fifaRankAsOf: null,
-  createdAt: "",
-  updatedAt: "",
-} as Team;
-const t2 = {
-  id: "20000000-0000-4000-8000-000000000002",
-  name: "Beta",
-  countryCode: "BBB",
-  fifaCode: null,
-  fifaRank: 2,
-  fifaRankAsOf: null,
-  createdAt: "",
-  updatedAt: "",
-} as Team;
-const t3 = {
-  id: "30000000-0000-4000-8000-000000000003",
-  name: "Gamma",
-  countryCode: "CCC",
-  fifaCode: null,
-  fifaRank: 3,
-  fifaRankAsOf: null,
-  createdAt: "",
-  updatedAt: "",
-} as Team;
-
-// --- thirdPlacePickDisabledReason: group winner / runner-up / other slot ---
-const thirdRow = row({
-  rowKey: "tp1",
-  predictionKind: "third_place_qualifier",
-  teamId: "",
-  slotKey: "1",
-});
-
-const slotsWithWinner: KnockoutPickSlotDraft[] = [
-  row({
-    rowKey: "gw",
-    predictionKind: "group_winner",
-    teamId: t1.id,
-    groupCode: "A",
-  }),
-  thirdRow,
-];
-
-const r1 = thirdPlacePickDisabledReason(t1.id, thirdRow, slotsWithWinner);
-if (r1 !== THIRD_PLACE_DISABLED_WINNER) {
-  throw new Error(`expected winner block, got ${r1}`);
+function prediction(
+  partial: Partial<Prediction> &
+    Pick<Prediction, "id" | "predictionKind" | "teamId">,
+): Prediction {
+  return {
+    poolId: "pool",
+    participantId: "participant",
+    tournamentStageId: "00000000-0000-4000-8000-000000000001",
+    groupCode: null,
+    slotKey: null,
+    bonusKey: null,
+    valueText: null,
+    createdAt: "",
+    updatedAt: "",
+    ...partial,
+  };
 }
 
-const slotsWithRunner: KnockoutPickSlotDraft[] = [
-  row({
-    rowKey: "gr",
-    predictionKind: "group_runner_up",
-    teamId: t2.id,
-    groupCode: "A",
-  }),
-  thirdRow,
-];
-const r2 = thirdPlacePickDisabledReason(t2.id, thirdRow, slotsWithRunner);
-if (r2 !== THIRD_PLACE_DISABLED_RUNNER) {
-  throw new Error(`expected runner block, got ${r2}`);
+function team(
+  id: string,
+  name: string,
+  countryCode: string,
+  fifaRank: number,
+): Team {
+  return {
+    id,
+    name,
+    countryCode,
+    fifaCode: null,
+    fifaRank,
+    fifaRankAsOf: null,
+    createdAt: "",
+    updatedAt: "",
+  };
 }
 
-const tpA = row({
+const roundOf32Stage = {
+  id: "00000000-0000-4000-8000-000000000099",
+  code: "round_of_32",
+  label: "Round of 32",
+  sortOrder: 2,
+  startsAt: null,
+  endsAt: null,
+  createdAt: "",
+  updatedAt: "",
+} as TournamentStage;
+
+const a1 = team("10000000-0000-4000-8000-000000000001", "Alpha", "AAA", 1);
+const a2 = team("10000000-0000-4000-8000-000000000002", "Atlas", "AAB", 2);
+const a3 = team("10000000-0000-4000-8000-000000000003", "Aurora", "AAC", 3);
+const b1 = team("20000000-0000-4000-8000-000000000001", "Beta", "BBB", 4);
+const b2 = team("20000000-0000-4000-8000-000000000002", "Bravo", "BBC", 5);
+const b3 = team("20000000-0000-4000-8000-000000000003", "Blaze", "BBD", 6);
+const allTeams = [a1, a2, a3, b1, b2, b3];
+const groupMap: Record<string, string[]> = {
+  A: ["AAA", "AAB", "AAC"],
+  B: ["BBB", "BBC", "BBD"],
+};
+const teamIdToGroupLetter = buildTeamIdToGroupLetter(allTeams, groupMap);
+if (
+  THIRD_PLACE_ROW_MAX_SELECTED_EXPLANATION !==
+  "Clear one of your current eight to choose from this group."
+) {
+  throw new Error("unexpected Stage 2 max-selected explanation copy");
+}
+
+// --- only teams from the correct group are shown ---
+const thirdRowA = row({
   rowKey: "tpA",
   predictionKind: "third_place_qualifier",
-  teamId: t3.id,
-  slotKey: "1",
-});
-const tpB = row({
-  rowKey: "tpB",
-  predictionKind: "third_place_qualifier",
   teamId: "",
-  slotKey: "2",
+  groupCode: "A",
 });
-const r3 = thirdPlacePickDisabledReason(t3.id, tpB, [tpA, tpB]);
-if (r3 !== THIRD_PLACE_DISABLED_OTHER_SLOT) {
-  throw new Error(`expected other third slot, got ${r3}`);
-}
-
-// Current selection stays choosable (not disabled) so user can change groups first
-const tpCurrent = row({
-  rowKey: "tpC",
-  predictionKind: "third_place_qualifier",
-  teamId: t1.id,
-  slotKey: "3",
-});
-const r4 = thirdPlacePickDisabledReason(t1.id, tpCurrent, slotsWithWinner);
-if (r4 !== null) {
-  throw new Error(`expected current pick allowed in chooser, got ${r4}`);
-}
-
-// --- thirdPlaceSlotInvalidReason for saved conflict ---
-const inv = thirdPlaceSlotInvalidReason(tpCurrent, slotsWithWinner);
-if (inv !== THIRD_PLACE_DISABLED_WINNER) {
-  throw new Error(`expected inline invalid winner, got ${inv}`);
-}
-
-// --- buildThirdPlacePickChooserOptions: winner disabled in list ---
-const opts = buildThirdPlacePickChooserOptions(thirdRow, slotsWithWinner, [
-  t1,
-  t2,
-]);
-const o1 = opts.find((x) => x.team.id === t1.id);
-if (!o1?.disabled || o1.disabledReason !== THIRD_PLACE_DISABLED_WINNER) {
-  throw new Error("chooser should disable group winner team");
-}
-const o2 = opts.find((x) => x.team.id === t2.id);
-if (o2?.disabled) throw new Error("t2 should be eligible");
-
-// --- buildThirdPlacePickChooserOptionGroups: tournament group order A then B ---
-const groupMap: Record<string, string[]> = {
-  B: ["BBB"],
-  A: ["AAA", "CCC"],
-};
-const grouped = buildThirdPlacePickChooserOptionGroups(
-  thirdRow,
-  slotsWithWinner,
-  [t1, t2, t3],
-  groupMap,
-);
-if (grouped[0]?.heading !== "Group A") {
-  throw new Error(`expected Group A first, got ${grouped[0]?.heading}`);
-}
-if (grouped[1]?.heading !== "Group B") {
-  throw new Error(`expected Group B second, got ${grouped[1]?.heading}`);
-}
-const groupAEntryOrder = grouped[0]!.entries.map((e) => e.team.name);
-if (groupAEntryOrder.join(",") !== "Alpha,Gamma") {
-  throw new Error(
-    `expected name sort within group A, got ${groupAEntryOrder.join(",")}`,
-  );
-}
-
-// --- pruneParticipantPicks clears third when team is group advancer ---
-const beforePrune: KnockoutPickSlotDraft[] = [
+const stage2ContextA: KnockoutPickSlotDraft[] = [
   row({
-    rowKey: "gw",
+    rowKey: "gwA",
     predictionKind: "group_winner",
-    teamId: t1.id,
+    teamId: a1.id,
     groupCode: "A",
   }),
   row({
-    rowKey: "tp",
-    predictionKind: "third_place_qualifier",
-    teamId: t1.id,
-    slotKey: "1",
+    rowKey: "grA",
+    predictionKind: "group_runner_up",
+    teamId: a2.id,
+    groupCode: "A",
   }),
+  thirdRowA,
 ];
-const pruned = pruneParticipantPicks(beforePrune);
-const tpAfter = pruned.find((s) => s.rowKey === "tp");
-if (tpAfter?.teamId !== "") {
-  throw new Error("prune should clear third-place pick that matches group winner");
-}
-
-// --- prune removes duplicate third-place (later row cleared) ---
-const dupSlots: KnockoutPickSlotDraft[] = [
-  row({
-    rowKey: "tp1",
-    predictionKind: "third_place_qualifier",
-    teamId: t2.id,
-    slotKey: "1",
-  }),
-  row({
-    rowKey: "tp2",
-    predictionKind: "third_place_qualifier",
-    teamId: t2.id,
-    slotKey: "2",
-  }),
-];
-const prunedDup = pruneParticipantPicks(dupSlots);
-const first = prunedDup.find((s) => s.rowKey === "tp1")?.teamId;
-const second = prunedDup.find((s) => s.rowKey === "tp2")?.teamId;
-if (first !== t2.id || second !== "") {
+const chooserA = buildThirdPlacePickChooserOptionsForGroup(
+  thirdRowA,
+  stage2ContextA,
+  allTeams,
+  groupMap,
+);
+if (chooserA.map((x) => x.team.id).join(",") !== a3.id) {
   throw new Error(
-    `duplicate third prune: expected first kept, second cleared; got ${first} / ${second}`,
+    `expected only Group A's remaining team, got ${chooserA.map((x) => x.team.name).join(",")}`,
   );
 }
 
-// --- validateParticipantSlotsThirdPlaceRules (save payload) ---
-const payload = [
+// --- teams already selected 1st/2nd are excluded or blocked ---
+const winnerReason = thirdPlacePickDisabledReason(
+  a1.id,
+  thirdRowA,
+  stage2ContextA,
+);
+if (winnerReason !== THIRD_PLACE_DISABLED_WINNER) {
+  throw new Error(`expected winner block, got ${winnerReason}`);
+}
+const runnerReason = thirdPlacePickDisabledReason(
+  a2.id,
+  thirdRowA,
+  stage2ContextA,
+);
+if (runnerReason !== THIRD_PLACE_DISABLED_RUNNER) {
+  throw new Error(`expected runner block, got ${runnerReason}`);
+}
+
+// --- duplicates across Stage 2 are rejected ---
+const duplicateReason = thirdPlacePickDisabledReason(
+  b1.id,
+  row({
+    rowKey: "tpB2",
+    predictionKind: "third_place_qualifier",
+    teamId: "",
+    groupCode: "B",
+  }),
+  [
+    row({
+      rowKey: "tpB1",
+      predictionKind: "third_place_qualifier",
+      teamId: b1.id,
+      groupCode: "B",
+    }),
+    row({
+      rowKey: "tpB2",
+      predictionKind: "third_place_qualifier",
+      teamId: "",
+      groupCode: "B",
+    }),
+  ],
+);
+if (duplicateReason !== THIRD_PLACE_DISABLED_OTHER_SLOT) {
+  throw new Error(`expected duplicate block, got ${duplicateReason}`);
+}
+const duplicateTeamSave = normalizeParticipantThirdPlaceSaveSlots({
+  slots: [
+    {
+      predictionKind: "third_place_qualifier",
+      tournamentStageId: roundOf32Stage.id,
+      slotKey: null,
+      groupCode: "A",
+      bonusKey: null,
+      teamId: a3.id,
+    },
+    {
+      predictionKind: "third_place_qualifier",
+      tournamentStageId: roundOf32Stage.id,
+      slotKey: null,
+      groupCode: "B",
+      bonusKey: null,
+      teamId: a3.id,
+    },
+  ],
+  teams: allTeams,
+  groupTeamCountryCodesByLetter: groupMap,
+});
+if (duplicateTeamSave.ok) {
+  throw new Error("server normalization should reject duplicate third-place teams");
+}
+
+// --- current selection stays choosable until the user changes it ---
+const currentSelectionReason = thirdPlacePickDisabledReason(
+  a1.id,
+  row({
+    rowKey: "tp-current",
+    predictionKind: "third_place_qualifier",
+    teamId: a1.id,
+    groupCode: "A",
+  }),
+  stage2ContextA,
+);
+if (currentSelectionReason !== null) {
+  throw new Error(
+    `expected current third-place pick to stay choosable, got ${currentSelectionReason}`,
+  );
+}
+
+// --- once eight groups are selected, additional Stage 2 rows are blocked ---
+const maxEightReason = thirdPlacePickDisabledReason(
+  a3.id,
+  thirdRowA,
+  [
+    thirdRowA,
+    ...Array.from({ length: 8 }, (_, i) =>
+      row({
+        rowKey: `filled-${i}`,
+        predictionKind: "third_place_qualifier",
+        teamId: `third-${i}`,
+        groupCode: `G${i}`,
+      }),
+    ),
+  ],
+);
+if (maxEightReason !== THIRD_PLACE_DISABLED_MAX_SELECTED) {
+  throw new Error(`expected max-eight block, got ${maxEightReason}`);
+}
+const maxEightRowReason = thirdPlaceRowUnavailableReason(
+  thirdRowA,
+  [
+    thirdRowA,
+    ...Array.from({ length: 8 }, (_, i) =>
+      row({
+        rowKey: `filled-row-${i}`,
+        predictionKind: "third_place_qualifier",
+        teamId: `third-row-${i}`,
+        groupCode: `G${i}`,
+      }),
+    ),
+  ],
+);
+if (maxEightRowReason !== THIRD_PLACE_ROW_MAX_SELECTED_EXPLANATION) {
+  throw new Error(`expected row-level max-eight explanation, got ${maxEightRowReason}`);
+}
+const selectedRowStillAvailable = thirdPlaceRowUnavailableReason(
+  row({
+    rowKey: "selected-at-cap",
+    predictionKind: "third_place_qualifier",
+    teamId: a3.id,
+    groupCode: "A",
+  }),
+  [
+    ...Array.from({ length: 8 }, (_, i) =>
+      row({
+        rowKey: `picked-${i}`,
+        predictionKind: "third_place_qualifier",
+        teamId: `picked-${i}`,
+        groupCode: `P${i}`,
+      }),
+    ),
+  ],
+);
+if (selectedRowStillAvailable !== null) {
+  throw new Error("selected Stage 2 rows should stay actionable at the eight-pick cap");
+}
+
+// --- invalid persisted Stage 2 values are cleaned or flagged ---
+const wrongGroupReason = thirdPlaceSlotInvalidReason(
+  row({
+    rowKey: "bad-group",
+    predictionKind: "third_place_qualifier",
+    teamId: b1.id,
+    groupCode: "A",
+  }),
+  [],
+  { teamIdToGroupLetter },
+);
+if (wrongGroupReason !== "Does not belong to Group A") {
+  throw new Error(`expected wrong-group reason, got ${wrongGroupReason}`);
+}
+const hydratedThirdDrafts = buildThirdPlacePickDrafts(
+  roundOf32Stage,
+  [
+    prediction({
+      id: "pred-good-legacy",
+      predictionKind: "third_place_qualifier",
+      teamId: b3.id,
+      tournamentStageId: roundOf32Stage.id,
+      slotKey: "1",
+      groupCode: null,
+    }),
+    prediction({
+      id: "pred-bad-group",
+      predictionKind: "third_place_qualifier",
+      teamId: b2.id,
+      tournamentStageId: roundOf32Stage.id,
+      slotKey: null,
+      groupCode: "A",
+    }),
+  ],
+  "participant",
+  allTeams,
+  groupMap,
+);
+if (hydratedThirdDrafts.find((s) => s.groupCode === "B")?.teamId !== b3.id) {
+  throw new Error("legacy Stage 2 row should hydrate into its inferred group");
+}
+if (hydratedThirdDrafts.find((s) => s.groupCode === "A")?.teamId !== "") {
+  throw new Error("invalid persisted Stage 2 row should be cleared on hydration");
+}
+const wrongGroupSave = normalizeParticipantThirdPlaceSaveSlots({
+  slots: [
+    {
+      predictionKind: "third_place_qualifier",
+      tournamentStageId: roundOf32Stage.id,
+      slotKey: null,
+      groupCode: "A",
+      bonusKey: null,
+      teamId: b3.id,
+    },
+  ],
+  teams: allTeams,
+  groupTeamCountryCodesByLetter: groupMap,
+});
+if (wrongGroupSave.ok) {
+  throw new Error("server normalization should reject a team saved under the wrong group");
+}
+
+// --- payload validation rejects duplicate group rows ---
+const duplicateGroupErr = validateParticipantSlotsThirdPlaceRules([
   {
-    predictionKind: "group_winner",
-    tournamentStageId: "00000000-0000-4000-8000-000000000001",
+    predictionKind: "third_place_qualifier",
+    tournamentStageId: roundOf32Stage.id,
     slotKey: null,
     groupCode: "A",
     bonusKey: null,
-    teamId: t1.id,
+    teamId: a2.id,
   },
   {
     predictionKind: "third_place_qualifier",
-    tournamentStageId: "00000000-0000-4000-8000-000000000002",
-    slotKey: "1",
-    groupCode: null,
+    tournamentStageId: roundOf32Stage.id,
+    slotKey: null,
+    groupCode: "A",
     bonusKey: null,
-    teamId: t1.id,
+    teamId: a3.id,
   },
-];
-const verr = validateParticipantSlotsThirdPlaceRules(payload);
-if (verr == null) {
-  throw new Error("validator should reject third-place same as group winner");
+]);
+if (duplicateGroupErr == null) {
+  throw new Error("validator should reject two Stage 2 payload rows for one group");
 }
 
-// --- assignParticipantPickDeduped + prune clears third when group pick overlaps ---
-const overlapSlots: KnockoutPickSlotDraft[] = [
-  row({
-    rowKey: "tp",
-    predictionKind: "third_place_qualifier",
-    teamId: t1.id,
-    slotKey: "1",
-  }),
+// --- changing Stage 1 invalidates conflicting Stage 2 picks immediately ---
+const pruned = pruneParticipantPicks([
   row({
     rowKey: "gw",
     predictionKind: "group_winner",
-    teamId: "",
+    teamId: a3.id,
     groupCode: "A",
   }),
-];
-const afterGroupPick = assignParticipantPickDeduped(overlapSlots, "gw", t1.id);
-const tpCleared = afterGroupPick.find((s) => s.rowKey === "tp")?.teamId;
-if (tpCleared !== "") {
+  row({
+    rowKey: "tp",
+    predictionKind: "third_place_qualifier",
+    teamId: a3.id,
+    groupCode: "A",
+  }),
+]);
+if (pruned.find((s) => s.rowKey === "tp")?.teamId !== "") {
+  throw new Error("prune should clear Stage 2 picks that became top-two picks");
+}
+const afterGroupPick = assignParticipantPickDeduped(
+  [
+    row({
+      rowKey: "tpA",
+      predictionKind: "third_place_qualifier",
+      teamId: a3.id,
+      groupCode: "A",
+    }),
+    row({
+      rowKey: "grA",
+      predictionKind: "group_runner_up",
+      teamId: "",
+      groupCode: "A",
+    }),
+  ],
+  "grA",
+  a3.id,
+);
+if (afterGroupPick.find((s) => s.rowKey === "tpA")?.teamId !== "") {
   throw new Error(
-    "picking group winner same as third-place team should prune third slot",
+    "picking a Stage 1 top-two team should immediately clear the conflicting Stage 2 row",
   );
 }
 

@@ -3,6 +3,7 @@
 import { isGlobalAdmin } from "@/lib/auth/permissions";
 import { fetchActiveNhlEdition } from "@/lib/nhl/queries";
 import { revalidateNhlPublicSurfaces } from "@/lib/nhl/revalidateNhlPublicSurfaces";
+import { syncNhlR2SlotsFromR1 } from "@/lib/nhl/syncNhlEditionBracketSlots";
 import { createClient } from "@/lib/supabase/server";
 
 const UUID_RE =
@@ -38,7 +39,7 @@ export async function recordNhlSeriesWinnerAction(formData: FormData): Promise<v
 
   const { data: series, error: sErr } = await supabase
     .from("nhl_series")
-    .select("id, edition_id, higher_seed_team_id, lower_seed_team_id")
+    .select("id, edition_id, round_code, higher_seed_team_id, lower_seed_team_id")
     .eq("id", seriesId)
     .maybeSingle();
 
@@ -60,6 +61,9 @@ export async function recordNhlSeriesWinnerAction(formData: FormData): Promise<v
       .eq("edition_id", edition.id);
 
     if (!error) {
+      if (series.round_code === "R1") {
+        await syncNhlR2SlotsFromR1(supabase, edition.id);
+      }
       revalidateNhlPublicSurfaces();
     }
     return;
@@ -83,6 +87,9 @@ export async function recordNhlSeriesWinnerAction(formData: FormData): Promise<v
     .eq("edition_id", edition.id);
 
   if (!error) {
+    if (series.round_code === "R1") {
+      await syncNhlR2SlotsFromR1(supabase, edition.id);
+    }
     revalidateNhlPublicSurfaces();
   }
 }

@@ -8,9 +8,11 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 export async function fetchOfficialRoundOf32Complete(
   supabase: SupabaseClient,
   roundOf32StageId: string,
+  editionId: string,
 ): Promise<boolean> {
   const { data, error } = await supabase.rpc("official_round_of_32_complete", {
     p_tournament_stage_id: roundOf32StageId,
+    p_edition_id: editionId,
   });
   if (error) return false;
   return Boolean(data);

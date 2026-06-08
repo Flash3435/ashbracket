@@ -1,39 +1,59 @@
 "use client";
 
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState, useTransition } from "react";
 import {
   createParticipantAction,
-  deleteParticipantAction,
   inviteParticipantAction,
+  removeParticipantFromPoolAction,
   sendParticipantInviteAction,
   updateParticipantAction,
 } from "../../app/(worldcup)/admin/participants/actions";
-import type { Participant } from "../../types/participant";
+import {
+  buildRemoveParticipantWarnings,
+  removeParticipantModalSubject,
+} from "@/lib/participants/removeParticipantFromPoolPolicy";
+import type { SimulationPoolEmailUiStatus } from "@/lib/admin/simulationPoolEmailPolicy";
+import {
+  SIMULATION_POOL_EMAIL_TYPED_PHRASE,
+} from "@/lib/admin/simulationPoolEmailPolicy";
+import type {
+  ParticipantPicksStatus,
+  ParticipantWithPicksStatus,
+} from "@/lib/admin/participantPickStatus";
 import { PoolShareInvitePanel } from "./PoolShareInvitePanel";
+import { SimulationPoolEmailStatusBanner } from "./SimulationPoolEmailStatusBanner";
 
 type ParticipantsManagerProps = {
   poolId: string;
-  initialParticipants: Participant[];
+  initialParticipants: ParticipantWithPicksStatus[];
   /** Pool open-join code and URL; from server via `poolShareJoinUrl` */
   joinCode: string | null;
   shareUrl: string | null;
   disabled?: boolean;
+  incompletePicksMessageHref: string;
+  lockSummary: string;
+  picksLocked: boolean;
+  picksStatusAvailable: boolean;
+  simulationEmailStatus?: SimulationPoolEmailUiStatus;
+  poolIsPaid?: boolean;
 };
 
 type Panel = "none" | "invite" | "manual";
+type PicksFilter = "all" | "incomplete" | "complete" | "not_started" | "not_joined";
 
 function emptyForm() {
   return { displayName: "", email: "", paid: false as boolean };
 }
 
-function statusLabel(p: Participant): string {
+function statusLabel(p: ParticipantWithPicksStatus): string {
   if (p.inviteStatus === "joined") return "Joined";
-  if (p.inviteStatus === "invited") return "Invited";
-  return "Manual";
+  if (p.inviteStatus === "invited") return "Invite pending";
+  return "Manual only";
 }
 
-function statusClass(p: Participant): string {
+function statusClass(p: ParticipantWithPicksStatus): string {
   if (p.inviteStatus === "joined") {
     return "inline-flex rounded-full bg-emerald-950/50 px-2 py-0.5 text-xs font-medium text-emerald-300 ring-1 ring-emerald-800/60";
   }
@@ -41,6 +61,56 @@ function statusClass(p: Participant): string {
     return "inline-flex rounded-full bg-amber-950/40 px-2 py-0.5 text-xs font-medium text-amber-200 ring-1 ring-amber-800/50";
   }
   return "inline-flex rounded-full bg-ash-body px-2 py-0.5 text-xs font-medium text-ash-muted ring-1 ring-ash-border";
+}
+
+function picksStatusClass(status: ParticipantPicksStatus | null): string {
+  if (!status) {
+    return "inline-flex rounded-full bg-ash-body px-2 py-0.5 text-xs font-medium text-ash-muted ring-1 ring-ash-border";
+  }
+  if (status.kind === "complete") {
+    return "inline-flex rounded-full bg-emerald-950/50 px-2 py-0.5 text-xs font-medium text-emerald-300 ring-1 ring-emerald-800/60";
+  }
+  if (status.kind === "in_progress") {
+    return "inline-flex rounded-full bg-sky-950/40 px-2 py-0.5 text-xs font-medium text-sky-200 ring-1 ring-sky-800/50";
+  }
+  if (status.kind === "not_started") {
+    return "inline-flex rounded-full bg-orange-950/40 px-2 py-0.5 text-xs font-medium text-orange-200 ring-1 ring-orange-800/50";
+  }
+  if (status.kind === "invite_pending") {
+    return "inline-flex rounded-full bg-amber-950/40 px-2 py-0.5 text-xs font-medium text-amber-200 ring-1 ring-amber-800/50";
+  }
+  return "inline-flex rounded-full bg-ash-body px-2 py-0.5 text-xs font-medium text-ash-muted ring-1 ring-ash-border";
+}
+
+function picksStatusLabel(status: ParticipantPicksStatus | null): string {
+  return status?.label ?? "Unavailable";
+}
+
+function picksFilterMatches(
+  participant: ParticipantWithPicksStatus,
+  filter: PicksFilter,
+): boolean {
+  if (filter === "all") return true;
+  if (!participant.picksStatus) return false;
+  if (filter === "incomplete") return participant.picksStatus.isIncomplete;
+  if (filter === "complete") return participant.picksStatus.kind === "complete";
+  if (filter === "not_started") {
+    return participant.picksStatus.kind === "not_started";
+  }
+  return (
+    participant.picksStatus.kind === "invite_pending" ||
+    participant.picksStatus.kind === "not_joined"
+  );
+}
+
+function formatDateTime(value: string | null): string | null {
+  if (!value) return null;
+  const date = new Date(value);
+  if (!Number.isFinite(date.getTime())) return null;
+  return date.toLocaleString(undefined, {
+    dateStyle: "short",
+    timeStyle: "short",
+  });
 }
 
 type InviteFeedback = {
@@ -56,12 +126,22 @@ export function ParticipantsManager({
   joinCode,
   shareUrl,
   disabled = false,
+  incompletePicksMessageHref,
+  lockSummary,
+  picksLocked,
+  picksStatusAvailable,
+  simulationEmailStatus,
+  poolIsPaid = false,
 }: ParticipantsManagerProps) {
+  const emailStatus = simulationEmailStatus;
+  const sendsBlocked = emailStatus?.sendsBlocked ?? false;
+  const requiresTypedPhrase = emailStatus?.requiresTypedPhrase ?? false;
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
-  const [participants, setParticipants] = useState<Participant[]>(
+  const [participants, setParticipants] = useState<ParticipantWithPicksStatus[]>(
     initialParticipants,
   );
+  const [statusFilter, setStatusFilter] = useState<PicksFilter>("all");
   const [panel, setPanel] = useState<Panel>("none");
   const [inviteForm, setInviteForm] = useState(emptyForm);
   const [manualForm, setManualForm] = useState(emptyForm);
@@ -72,10 +152,31 @@ export function ParticipantsManager({
     null,
   );
   const [copyDone, setCopyDone] = useState(false);
+  const [typedPhrase, setTypedPhrase] = useState("");
+  const [productionAck, setProductionAck] = useState(false);
+  const [simulationEmailAck, setSimulationEmailAck] = useState(false);
+  const [removingParticipant, setRemovingParticipant] =
+    useState<ParticipantWithPicksStatus | null>(null);
+  const [removeSuccessMessage, setRemoveSuccessMessage] = useState<string | null>(
+    null,
+  );
+
+  const typedPhraseOk =
+    !requiresTypedPhrase ||
+    typedPhrase.trim().toUpperCase().replace(/\s+/g, " ") ===
+      SIMULATION_POOL_EMAIL_TYPED_PHRASE;
+  const emailConfirmOk =
+    !requiresTypedPhrase || (typedPhraseOk && productionAck && simulationEmailAck);
 
   useEffect(() => {
     setParticipants(initialParticipants);
   }, [initialParticipants]);
+
+  useEffect(() => {
+    if (!picksStatusAvailable && statusFilter !== "all") {
+      setStatusFilter("all");
+    }
+  }, [picksStatusAvailable, statusFilter]);
 
   const sorted = useMemo(
     () =>
@@ -87,7 +188,38 @@ export function ParticipantsManager({
     [participants],
   );
 
-  function openEdit(p: Participant) {
+  const filterCounts = useMemo(() => {
+    let incomplete = 0;
+    let complete = 0;
+    let notStarted = 0;
+    let notJoined = 0;
+
+    for (const participant of sorted) {
+      const status = participant.picksStatus;
+      if (!status) continue;
+      if (status.isIncomplete) incomplete += 1;
+      if (status.kind === "complete") complete += 1;
+      if (status.kind === "not_started") notStarted += 1;
+      if (status.kind === "invite_pending" || status.kind === "not_joined") {
+        notJoined += 1;
+      }
+    }
+
+    return {
+      all: sorted.length,
+      incomplete,
+      complete,
+      notStarted,
+      notJoined,
+    };
+  }, [sorted]);
+
+  const visibleParticipants = useMemo(
+    () => sorted.filter((participant) => picksFilterMatches(participant, statusFilter)),
+    [sorted, statusFilter],
+  );
+
+  function openEdit(p: ParticipantWithPicksStatus) {
     setEditingId(p.id);
     setEditForm({
       displayName: p.displayName,
@@ -103,7 +235,7 @@ export function ParticipantsManager({
 
   function handleInvite(e: React.FormEvent) {
     e.preventDefault();
-    if (disabled) return;
+    if (disabled || sendsBlocked || !emailConfirmOk) return;
     const name = inviteForm.displayName.trim();
     const email = inviteForm.email.trim();
     if (!name || !email) return;
@@ -116,6 +248,9 @@ export function ParticipantsManager({
         displayName: name,
         email,
         paid: inviteForm.paid,
+        productionAcknowledged: productionAck,
+        simulationEmailAcknowledged: simulationEmailAck,
+        typedConfirmationPhrase: requiresTypedPhrase ? typedPhrase : undefined,
       });
       if (!res.ok) {
         setActionError(res.error);
@@ -176,12 +311,18 @@ export function ParticipantsManager({
   }
 
   function handleSendOrResendInvite(id: string) {
-    if (disabled) return;
+    if (disabled || sendsBlocked || !emailConfirmOk) return;
     setActionError(null);
     setInviteFeedback(null);
     setCopyDone(false);
     startTransition(async () => {
-      const res = await sendParticipantInviteAction({ poolId, participantId: id });
+      const res = await sendParticipantInviteAction({
+        poolId,
+        participantId: id,
+        productionAcknowledged: productionAck,
+        simulationEmailAcknowledged: simulationEmailAck,
+        typedConfirmationPhrase: requiresTypedPhrase ? typedPhrase : undefined,
+      });
       if (!res.ok) {
         setActionError(res.error);
         return;
@@ -242,31 +383,94 @@ export function ParticipantsManager({
     });
   }
 
-  function handleDelete(id: string) {
+  function openRemoveConfirm(p: ParticipantWithPicksStatus) {
     if (disabled) return;
-    const p = participants.find((x) => x.id === id);
-    if (
-      !p ||
-      !window.confirm(
-        `Remove ${p.displayName} from this pool? This cannot be undone.`,
-      )
-    ) {
-      return;
-    }
+    setActionError(null);
+    setRemoveSuccessMessage(null);
+    setRemovingParticipant(p);
+  }
+
+  function closeRemoveConfirm() {
+    setRemovingParticipant(null);
+  }
+
+  function handleConfirmRemove() {
+    if (disabled || !removingParticipant) return;
+    const participant = removingParticipant;
+    const id = participant.id;
     setActionError(null);
     startTransition(async () => {
-      const res = await deleteParticipantAction({ poolId, id });
+      const res = await removeParticipantFromPoolAction({
+        poolId,
+        participantId: id,
+      });
       if (!res.ok) {
         setActionError(res.error);
         return;
       }
       if (editingId === id) closeEdit();
+      setParticipants((prev) => prev.filter((x) => x.id !== id));
+      setRemoveSuccessMessage(
+        res.message ??
+          `${participant.displayName.trim() || participant.email.trim() || "Participant"} was removed from this pool.`,
+      );
+      closeRemoveConfirm();
       router.refresh();
     });
   }
 
+  const removeWarnings = removingParticipant
+    ? buildRemoveParticipantWarnings({
+        paid: removingParticipant.paid,
+        picksStatus: removingParticipant.picksStatus,
+      })
+    : [];
+
   return (
     <div className="space-y-6">
+      {emailStatus ? (
+        <SimulationPoolEmailStatusBanner status={emailStatus} />
+      ) : null}
+      {requiresTypedPhrase ? (
+        <div className="rounded-md border border-amber-700/50 bg-amber-950/25 px-4 py-3 text-sm text-amber-100">
+          <label className="block font-medium">
+            Type{" "}
+            <span className="font-mono">{SIMULATION_POOL_EMAIL_TYPED_PHRASE}</span>{" "}
+            before sending invite email
+            <input
+              type="text"
+              value={typedPhrase}
+              onChange={(e) => setTypedPhrase(e.target.value)}
+              autoComplete="off"
+              className="mt-2 w-full rounded-md border border-amber-800/60 bg-ash-body px-3 py-2 font-mono text-sm text-ash-text"
+            />
+          </label>
+          <label className="mt-3 flex cursor-pointer items-start gap-2">
+            <input
+              type="checkbox"
+              checked={productionAck}
+              onChange={(e) => setProductionAck(e.target.checked)}
+              className="mt-1"
+            />
+            <span>I understand this sends real email on production.</span>
+          </label>
+          <label className="mt-2 flex cursor-pointer items-start gap-2">
+            <input
+              type="checkbox"
+              checked={simulationEmailAck}
+              onChange={(e) => setSimulationEmailAck(e.target.checked)}
+              className="mt-1"
+            />
+            <span>I intend to send invite email from this simulation test pool.</span>
+          </label>
+        </div>
+      ) : null}
+      {removeSuccessMessage ? (
+        <p className="rounded-md border border-emerald-800/70 bg-emerald-950/35 px-3 py-2 text-sm text-emerald-100">
+          {removeSuccessMessage}
+        </p>
+      ) : null}
+
       {actionError ? (
         <p className="rounded-md border border-red-800/80 bg-red-950/40 px-3 py-2 text-sm text-red-200">
           {actionError}
@@ -301,6 +505,109 @@ export function ParticipantsManager({
           ) : null}
         </div>
       ) : null}
+
+      <section className="ash-surface space-y-4 p-4">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <h2 className="text-base font-bold text-ash-text">Pick completion</h2>
+            <p className="mt-1 text-sm text-ash-muted">
+              Uses the same completeness rules as the incomplete-picks email
+              audience.
+            </p>
+            <p className="mt-1 text-xs text-ash-muted">
+              Picks lock: <span className="text-ash-text">{lockSummary}</span>
+              {picksLocked ? " Statuses now reflect what was saved before lock." : ""}
+            </p>
+          </div>
+          {picksStatusAvailable ? (
+            <div className="flex flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={() => setStatusFilter("incomplete")}
+                className={
+                  statusFilter === "incomplete"
+                    ? "btn-primary"
+                    : "rounded-md border border-ash-border bg-ash-body/60 px-3 py-2 text-sm font-medium text-ash-text hover:bg-ash-body"
+                }
+              >
+                View incomplete picks
+              </button>
+              <Link
+                href={incompletePicksMessageHref}
+                className="rounded-md border border-ash-border bg-ash-body/60 px-3 py-2 text-sm font-medium text-ash-text hover:bg-ash-body"
+              >
+                Message incomplete participants
+              </Link>
+            </div>
+          ) : null}
+        </div>
+
+        {picksStatusAvailable ? (
+          <>
+            <div className="flex flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={() => setStatusFilter("all")}
+                className={
+                  statusFilter === "all"
+                    ? "btn-primary"
+                    : "rounded-md border border-ash-border bg-ash-body/50 px-3 py-1.5 text-sm font-medium text-ash-text hover:bg-ash-body"
+                }
+              >
+                All participants ({filterCounts.all})
+              </button>
+              <button
+                type="button"
+                onClick={() => setStatusFilter("incomplete")}
+                className={
+                  statusFilter === "incomplete"
+                    ? "btn-primary"
+                    : "rounded-md border border-ash-border bg-ash-body/50 px-3 py-1.5 text-sm font-medium text-ash-text hover:bg-ash-body"
+                }
+              >
+                Incomplete picks ({filterCounts.incomplete})
+              </button>
+              <button
+                type="button"
+                onClick={() => setStatusFilter("complete")}
+                className={
+                  statusFilter === "complete"
+                    ? "btn-primary"
+                    : "rounded-md border border-ash-border bg-ash-body/50 px-3 py-1.5 text-sm font-medium text-ash-text hover:bg-ash-body"
+                }
+              >
+                Complete ({filterCounts.complete})
+              </button>
+              <button
+                type="button"
+                onClick={() => setStatusFilter("not_started")}
+                className={
+                  statusFilter === "not_started"
+                    ? "btn-primary"
+                    : "rounded-md border border-ash-border bg-ash-body/50 px-3 py-1.5 text-sm font-medium text-ash-text hover:bg-ash-body"
+                }
+              >
+                Not started ({filterCounts.notStarted})
+              </button>
+              <button
+                type="button"
+                onClick={() => setStatusFilter("not_joined")}
+                className={
+                  statusFilter === "not_joined"
+                    ? "btn-primary"
+                    : "rounded-md border border-ash-border bg-ash-body/50 px-3 py-1.5 text-sm font-medium text-ash-text hover:bg-ash-body"
+                }
+              >
+                Not joined ({filterCounts.notJoined})
+              </button>
+            </div>
+            <p className="text-xs text-ash-muted">
+              Showing {visibleParticipants.length} of {sorted.length} participant
+              {sorted.length === 1 ? "" : "s"}.
+            </p>
+          </>
+        ) : null}
+      </section>
 
       <div className="space-y-4 rounded-md border border-ash-accent/20 bg-ash-accent/5 p-4">
         <div className="flex flex-wrap items-baseline justify-between gap-2">
@@ -408,18 +715,20 @@ export function ParticipantsManager({
               />
             </label>
           </div>
-          <label className="mt-4 flex cursor-pointer items-center gap-2 text-sm text-ash-muted">
-            <input
-              type="checkbox"
-              disabled={disabled || isPending}
-              checked={inviteForm.paid}
-              onChange={(e) =>
-                setInviteForm((f) => ({ ...f, paid: e.target.checked }))
-              }
-              className="size-4 rounded border-ash-border text-ash-accent focus:ring-ash-accent disabled:opacity-50"
-            />
-            Paid
-          </label>
+          {poolIsPaid ? (
+            <label className="mt-4 flex cursor-pointer items-center gap-2 text-sm text-ash-muted">
+              <input
+                type="checkbox"
+                disabled={disabled || isPending}
+                checked={inviteForm.paid}
+                onChange={(e) =>
+                  setInviteForm((f) => ({ ...f, paid: e.target.checked }))
+                }
+                className="size-4 rounded border-ash-border text-ash-accent focus:ring-ash-accent disabled:opacity-50"
+              />
+              Mark as paid
+            </label>
+          ) : null}
           <div className="mt-4 flex justify-end gap-2">
             <button
               type="button"
@@ -434,10 +743,10 @@ export function ParticipantsManager({
             </button>
             <button
               type="submit"
-              disabled={disabled || isPending}
+              disabled={disabled || isPending || sendsBlocked || !emailConfirmOk}
               className="btn-primary disabled:cursor-not-allowed disabled:opacity-50"
             >
-              Send invite
+              {sendsBlocked ? "Invite email blocked" : "Send invite"}
             </button>
           </div>
         </form>
@@ -483,18 +792,20 @@ export function ParticipantsManager({
               />
             </label>
           </div>
-          <label className="mt-4 flex cursor-pointer items-center gap-2 text-sm text-ash-muted">
-            <input
-              type="checkbox"
-              disabled={disabled || isPending}
-              checked={manualForm.paid}
-              onChange={(e) =>
-                setManualForm((f) => ({ ...f, paid: e.target.checked }))
-              }
-              className="size-4 rounded border-ash-border text-ash-accent focus:ring-ash-accent disabled:opacity-50"
-            />
-            Paid
-          </label>
+          {poolIsPaid ? (
+            <label className="mt-4 flex cursor-pointer items-center gap-2 text-sm text-ash-muted">
+              <input
+                type="checkbox"
+                disabled={disabled || isPending}
+                checked={manualForm.paid}
+                onChange={(e) =>
+                  setManualForm((f) => ({ ...f, paid: e.target.checked }))
+                }
+                className="size-4 rounded border-ash-border text-ash-accent focus:ring-ash-accent disabled:opacity-50"
+              />
+              Mark as paid
+            </label>
+          ) : null}
           <div className="mt-4 flex justify-end gap-2">
             <button
               type="button"
@@ -525,23 +836,30 @@ export function ParticipantsManager({
             <tr>
               <th className="px-4 py-3">Name</th>
               <th className="px-4 py-3">Email</th>
-              <th className="px-4 py-3">Status</th>
-              <th className="px-4 py-3">Paid</th>
+              <th className="px-4 py-3">Join status</th>
+              <th className="px-4 py-3">Picks status</th>
+              {poolIsPaid ? (
+                <th className="px-4 py-3">Payment</th>
+              ) : (
+                <th className="px-4 py-3 text-ash-muted/70">Payment</th>
+              )}
               <th className="px-4 py-3 text-right">Actions</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-ash-border">
-            {sorted.length === 0 ? (
+            {visibleParticipants.length === 0 ? (
               <tr>
                 <td
-                  colSpan={5}
+                  colSpan={6}
                   className="px-4 py-8 text-center text-ash-muted"
                 >
-                  No participants yet. Invite someone or add them manually.
+                  {sorted.length === 0
+                    ? "No participants yet. Invite someone or add them manually."
+                    : "No participants match this filter."}
                 </td>
               </tr>
             ) : (
-              sorted.map((p) => (
+              visibleParticipants.map((p) => (
                 <tr key={p.id} className="text-ash-muted">
                   <td className="px-4 py-3 font-medium text-ash-text">
                     {p.displayName}
@@ -551,36 +869,58 @@ export function ParticipantsManager({
                     <span className={statusClass(p)}>{statusLabel(p)}</span>
                     {p.inviteStatus === "invited" && p.inviteLastSentAt ? (
                       <span className="mt-1 block text-xs text-ash-muted">
-                        Last sent{" "}
-                        {new Date(p.inviteLastSentAt).toLocaleString(undefined, {
-                          dateStyle: "short",
-                          timeStyle: "short",
-                        })}
+                        Last sent {formatDateTime(p.inviteLastSentAt)}
                       </span>
                     ) : null}
                   </td>
                   <td className="px-4 py-3">
-                    <span
-                      className={
-                        p.paid
-                          ? "inline-flex rounded-full bg-ash-accent/20 px-2 py-0.5 text-xs font-medium text-ash-accent"
-                          : "inline-flex rounded-full bg-ash-body px-2 py-0.5 text-xs font-medium text-ash-muted ring-1 ring-ash-border"
-                      }
-                    >
-                      {p.paid ? "Paid" : "Unpaid"}
+                    <span className={picksStatusClass(p.picksStatus)}>
+                      {picksStatusLabel(p.picksStatus)}
                     </span>
+                    {p.picksStatus?.lastSavedAt ? (
+                      <span className="mt-1 block text-xs text-ash-muted">
+                        Last saved {formatDateTime(p.picksStatus.lastSavedAt)}
+                      </span>
+                    ) : p.picksStatus?.kind === "not_started" ? (
+                      <span className="mt-1 block text-xs text-ash-muted">
+                        No picks saved yet
+                      </span>
+                    ) : null}
+                  </td>
+                  <td className="px-4 py-3">
+                    {poolIsPaid ? (
+                      <span
+                        className={
+                          p.paid
+                            ? "inline-flex rounded-full bg-ash-accent/20 px-2 py-0.5 text-xs font-semibold text-ash-accent"
+                            : "inline-flex rounded-full bg-amber-950/40 px-2 py-0.5 text-xs font-semibold text-amber-200 ring-1 ring-amber-800/50"
+                        }
+                      >
+                        {p.paid ? "Paid" : "Unpaid"}
+                      </span>
+                    ) : (
+                      <span className="text-xs text-ash-muted">—</span>
+                    )}
                   </td>
                   <td className="px-4 py-3 text-right">
                     {p.inviteStatus !== "joined" ? (
                       <button
                         type="button"
-                        disabled={disabled || isPending || !p.email?.trim()}
+                        disabled={
+                          disabled ||
+                          isPending ||
+                          !p.email?.trim() ||
+                          sendsBlocked ||
+                          !emailConfirmOk
+                        }
                         onClick={() => handleSendOrResendInvite(p.id)}
                         className="mr-2 text-sm font-medium text-ash-accent hover:underline disabled:cursor-not-allowed disabled:opacity-40"
                       >
-                        {p.inviteStatus === "invited"
-                          ? "Resend invite"
-                          : "Send invite"}
+                        {sendsBlocked
+                          ? "Email blocked"
+                          : p.inviteStatus === "invited"
+                            ? "Resend invite"
+                            : "Send invite"}
                       </button>
                     ) : null}
                     <button
@@ -594,10 +934,10 @@ export function ParticipantsManager({
                     <button
                       type="button"
                       disabled={disabled || isPending}
-                      onClick={() => handleDelete(p.id)}
+                      onClick={() => openRemoveConfirm(p)}
                       className="text-sm font-medium text-red-400 hover:underline disabled:cursor-not-allowed disabled:opacity-50"
                     >
-                      Delete
+                      Remove from pool
                     </button>
                   </td>
                 </tr>
@@ -609,52 +949,72 @@ export function ParticipantsManager({
 
       {/* Cards — mobile */}
       <ul className="space-y-3 md:hidden">
-        {sorted.length === 0 ? (
+        {visibleParticipants.length === 0 ? (
           <li className="ash-surface px-4 py-8 text-center text-sm text-ash-muted">
-            No participants yet.
+            {sorted.length === 0
+              ? "No participants yet."
+              : "No participants match this filter."}
           </li>
         ) : (
-          sorted.map((p) => (
+          visibleParticipants.map((p) => (
             <li key={p.id} className="ash-surface p-4">
               <div className="flex items-start justify-between gap-2">
                 <div>
                   <p className="font-medium text-ash-text">{p.displayName}</p>
                   <p className="mt-0.5 text-sm text-ash-muted">{p.email}</p>
-                  <p className="mt-2">
+                  <div className="mt-2 flex flex-wrap gap-2">
                     <span className={statusClass(p)}>{statusLabel(p)}</span>
-                  </p>
+                    <span className={picksStatusClass(p.picksStatus)}>
+                      {picksStatusLabel(p.picksStatus)}
+                    </span>
+                  </div>
                   {p.inviteStatus === "invited" && p.inviteLastSentAt ? (
                     <p className="mt-1 text-xs text-ash-muted">
-                      Last sent{" "}
-                      {new Date(p.inviteLastSentAt).toLocaleString(undefined, {
-                        dateStyle: "short",
-                        timeStyle: "short",
-                      })}
+                      Last sent {formatDateTime(p.inviteLastSentAt)}
                     </p>
                   ) : null}
-                  <p className="mt-2">
-                    <span
-                      className={
-                        p.paid
-                          ? "inline-flex rounded-full bg-ash-accent/20 px-2 py-0.5 text-xs font-medium text-ash-accent"
-                          : "inline-flex rounded-full bg-ash-body px-2 py-0.5 text-xs font-medium text-ash-muted ring-1 ring-ash-border"
-                      }
-                    >
-                      {p.paid ? "Paid" : "Unpaid"}
-                    </span>
-                  </p>
+                  {p.picksStatus?.lastSavedAt ? (
+                    <p className="mt-1 text-xs text-ash-muted">
+                      Last saved {formatDateTime(p.picksStatus.lastSavedAt)}
+                    </p>
+                  ) : p.picksStatus?.kind === "not_started" ? (
+                    <p className="mt-1 text-xs text-ash-muted">
+                      No picks saved yet
+                    </p>
+                  ) : null}
+                  {poolIsPaid ? (
+                    <p className="mt-2">
+                      <span
+                        className={
+                          p.paid
+                            ? "inline-flex rounded-full bg-ash-accent/20 px-2 py-0.5 text-xs font-semibold text-ash-accent"
+                            : "inline-flex rounded-full bg-amber-950/40 px-2 py-0.5 text-xs font-semibold text-amber-200 ring-1 ring-amber-800/50"
+                        }
+                      >
+                        {p.paid ? "Paid" : "Unpaid"}
+                      </span>
+                    </p>
+                  ) : null}
                 </div>
                 <div className="flex shrink-0 flex-col items-end gap-1">
                   {p.inviteStatus !== "joined" ? (
                     <button
                       type="button"
-                      disabled={disabled || isPending || !p.email?.trim()}
+                      disabled={
+                        disabled ||
+                        isPending ||
+                        !p.email?.trim() ||
+                        sendsBlocked ||
+                        !emailConfirmOk
+                      }
                       onClick={() => handleSendOrResendInvite(p.id)}
                       className="text-sm font-medium text-ash-accent hover:underline disabled:cursor-not-allowed disabled:opacity-40"
                     >
-                      {p.inviteStatus === "invited"
-                        ? "Resend invite"
-                        : "Send invite"}
+                      {sendsBlocked
+                        ? "Email blocked"
+                        : p.inviteStatus === "invited"
+                          ? "Resend invite"
+                          : "Send invite"}
                     </button>
                   ) : null}
                   <button
@@ -668,10 +1028,10 @@ export function ParticipantsManager({
                   <button
                     type="button"
                     disabled={disabled || isPending}
-                    onClick={() => handleDelete(p.id)}
+                    onClick={() => openRemoveConfirm(p)}
                     className="text-sm font-medium text-red-400 hover:underline disabled:cursor-not-allowed disabled:opacity-50"
                   >
-                    Delete
+                    Remove from pool
                   </button>
                 </div>
               </div>
@@ -679,6 +1039,70 @@ export function ParticipantsManager({
           ))
         )}
       </ul>
+
+      {removingParticipant ? (
+        <div
+          className="fixed inset-0 z-50 flex items-end justify-center p-4 sm:items-center"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="remove-participant-title"
+        >
+          <button
+            type="button"
+            className="absolute inset-0 bg-black/60"
+            aria-label="Close dialog"
+            onClick={closeRemoveConfirm}
+          />
+          <div className="relative z-10 w-full max-w-md rounded-xl border border-red-900/40 bg-ash-surface p-5 shadow-[0_4px_12px_rgba(0,0,0,0.5)]">
+            <h2
+              id="remove-participant-title"
+              className="text-base font-bold text-ash-text"
+            >
+              Remove from pool
+            </h2>
+            <div className="mt-3 space-y-2 text-sm text-ash-muted">
+              <p>
+                This will remove{" "}
+                <span className="font-medium text-ash-text">
+                  {removeParticipantModalSubject({
+                    displayName: removingParticipant.displayName,
+                    email: removingParticipant.email,
+                  })}
+                </span>{" "}
+                from this pool.
+              </p>
+              <p>Their AshBracket account will not be deleted.</p>
+              <p>Other pools are not affected.</p>
+              <p>Their picks and standings entry for this pool may be removed.</p>
+            </div>
+            {removeWarnings.length > 0 ? (
+              <ul className="mt-4 list-disc space-y-1 pl-5 text-sm text-amber-200">
+                {removeWarnings.map((warning) => (
+                  <li key={warning}>{warning}</li>
+                ))}
+              </ul>
+            ) : null}
+            <div className="mt-5 flex justify-end gap-2">
+              <button
+                type="button"
+                disabled={disabled || isPending}
+                onClick={closeRemoveConfirm}
+                className="btn-ghost disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={disabled || isPending}
+                onClick={handleConfirmRemove}
+                className="rounded-lg bg-red-700 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-red-600 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                Remove participant
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
 
       {editingId ? (
         <div
@@ -730,18 +1154,20 @@ export function ParticipantsManager({
                   className="w-full rounded-md border border-ash-border bg-ash-body px-3 py-2 text-sm text-ash-text shadow-sm outline-none ring-ash-accent/20 focus:border-ash-accent focus:ring-2 disabled:opacity-50"
                 />
               </label>
-              <label className="flex cursor-pointer items-center gap-2 text-sm text-ash-muted">
-                <input
-                  type="checkbox"
-                  disabled={disabled || isPending}
-                  checked={editForm.paid}
-                  onChange={(e) =>
-                    setEditForm((f) => ({ ...f, paid: e.target.checked }))
-                  }
-                  className="size-4 rounded border-ash-border text-ash-accent focus:ring-ash-accent disabled:opacity-50"
-                />
-                Paid
-              </label>
+              {poolIsPaid ? (
+                <label className="flex cursor-pointer items-center gap-2 text-sm text-ash-muted">
+                  <input
+                    type="checkbox"
+                    disabled={disabled || isPending}
+                    checked={editForm.paid}
+                    onChange={(e) =>
+                      setEditForm((f) => ({ ...f, paid: e.target.checked }))
+                    }
+                    className="size-4 rounded border-ash-border text-ash-accent focus:ring-ash-accent disabled:opacity-50"
+                  />
+                  Mark as paid
+                </label>
+              ) : null}
               <div className="flex justify-end gap-2 pt-2">
                 <button
                   type="button"

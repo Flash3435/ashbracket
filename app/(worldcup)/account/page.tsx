@@ -1,6 +1,14 @@
 import Link from "next/link";
-import { AccountNextMatchesSection } from "@/components/account/AccountNextMatchesSection";
+import { PoolRevealDashboardCard } from "@/components/account/PoolRevealDashboardCard";
+import { WhoToCheerForCard } from "@/components/account/WhoToCheerForCard";
+import { whoToCheerForFromSchedule } from "@/lib/account/loadWhoToCheerFor";
+import { formatPoolPickDeadlineLabel } from "@/lib/picks/poolPickDeadlineDisplay";
+import { participantPicksCompleteFromDrafts } from "@/lib/predictions/participantPicksCompletenessRules";
 import { AccountPicksProfileLinks } from "@/components/account/AccountPicksProfileLinks";
+import { ParticipantPoolPaymentPanel } from "@/components/pools/ParticipantPoolPaymentPanel";
+import type { PoolPotParticipantSummary } from "@/lib/pools/computePoolPotSummary";
+import { fetchPoolPotForMember } from "@/lib/pools/fetchPoolPotForMember";
+import { mapPoolPaymentFromPool, poolIsPaid } from "@/lib/pools/poolPayment";
 import { ParticipantBracketView } from "@/components/bracket/ParticipantBracketView";
 import { MyKnockoutPicksSummary } from "@/components/picks/MyKnockoutPicksSummary";
 import { PicksViewToggle } from "@/components/picks/PicksViewToggle";
@@ -13,12 +21,7 @@ import {
   poolLocked,
 } from "../../../lib/account/loadAccountKnockoutSelection";
 import { resolveAccountParticipantId } from "../../../lib/account/resolveAccountParticipantId";
-import {
-  countryCodesFromKnockoutSlots,
-  nextMatchesForTeamCountryCodes,
-} from "../../../lib/participant/nextMatchesForPickedTeams";
 import { fetchPublicTournamentProgress } from "../../../lib/tournament/fetchPublicTournamentProgress";
-import type { TournamentMatchPublicRow } from "../../../types/tournamentPublic";
 
 export const dynamic = "force-dynamic";
 
@@ -55,11 +58,68 @@ export default async function AccountPage({ searchParams }: PageProps) {
 
   const { data: rows, error } = await supabase
     .from("participants")
-    .select("id, display_name, pool_id")
+    .select(
+      `
+      id,
+      display_name,
+      pool_id,
+      is_paid,
+      pools (
+        name,
+        payment_type,
+        entry_fee_label,
+        entry_fee_amount,
+        payment_instructions,
+        entry_fee_cents,
+        currency_code,
+        show_pot_to_participants
+      )
+    `,
+    )
     .eq("user_id", user.id)
     .order("created_at", { ascending: true });
 
-  const list = rows ?? [];
+  type PoolEmbedRow = {
+    name: string;
+    payment_type: string;
+    entry_fee_label: string | null;
+    entry_fee_amount: number | string | null;
+    payment_instructions: string | null;
+    entry_fee_cents: number | null;
+    currency_code: string | null;
+    show_pot_to_participants: boolean | null;
+  };
+
+  const list = (rows ?? []).map((r) => {
+    const poolRaw = r.pools as PoolEmbedRow | PoolEmbedRow[] | null;
+    const pool = Array.isArray(poolRaw) ? poolRaw[0] : poolRaw;
+    return {
+      id: r.id as string,
+      display_name: r.display_name as string,
+      pool_id: r.pool_id as string,
+      is_paid: Boolean(r.is_paid),
+      pool_name: pool?.name ?? "Pool",
+      pool_payment: pool
+        ? mapPoolPaymentFromPool(pool)
+        : mapPoolPaymentFromPool({ payment_type: "free" }),
+    };
+  });
+
+  const potByPoolId = new Map<string, PoolPotParticipantSummary | null>();
+  await Promise.all(
+    list
+      .filter(
+        (p) =>
+          poolIsPaid(p.pool_payment) &&
+          p.pool_payment.showPotToParticipants,
+      )
+      .map(async (p) => {
+        potByPoolId.set(
+          p.pool_id,
+          await fetchPoolPotForMember(supabase, p.pool_id),
+        );
+      }),
+  );
 
   const preferredParticipantId = resolveAccountParticipantId(
     list,
@@ -71,36 +131,14 @@ export default async function AccountPage({ searchParams }: PageProps) {
       ? await loadAccountKnockoutSelection(user.id, preferredParticipantId)
       : null;
 
-  let accountNextMatches: TournamentMatchPublicRow[] = [];
-  let accountTournamentErr: string | null = null;
+  let whoToCheer: ReturnType<typeof whoToCheerForFromSchedule> | null = null;
 
   if (picksCtx && !picksCtx.loadError && picksCtx.initialSlots.length > 0) {
-    const teamById = new Map(picksCtx.teams.map((t) => [t.id, t]));
-    const codes = countryCodesFromKnockoutSlots(
-      picksCtx.initialSlots,
-      teamById,
-    );
     const { data: tp, error: te } = await fetchPublicTournamentProgress();
-    accountTournamentErr = te;
-    if (tp?.matches && !te) {
-      accountNextMatches = nextMatchesForTeamCountryCodes(
-        tp.matches,
-        codes,
-        8,
-      );
-    }
+    whoToCheer = whoToCheerForFromSchedule(picksCtx, tp?.matches, te);
   }
 
   const locked = picksCtx ? poolLocked(picksCtx.selectedLockAt) : false;
-  const lockHint =
-    picksCtx && locked && picksCtx.selectedLockAt
-      ? `Group stage, third-place advancers, and bonus picks locked ${new Intl.DateTimeFormat(undefined, {
-          dateStyle: "medium",
-          timeStyle: "short",
-        }).format(new Date(picksCtx.selectedLockAt))}. Knockout bracket may still be editable after the official Round of 32 is published.`
-      : picksCtx && locked
-        ? "Pre‑knockout picks are locked; knockout bracket may still be open."
-        : null;
 
   const picksHref =
     list.length === 1
@@ -116,6 +154,18 @@ export default async function AccountPage({ searchParams }: PageProps) {
   const editPicksFromDashboardHref = picksCtx?.selectedParticipant?.id
     ? `/account/picks?participant=${picksCtx.selectedParticipant.id}`
     : picksHref;
+  const revealHref = picksCtx?.selectedParticipant?.id
+    ? `/account/reveal?participant=${picksCtx.selectedParticipant.id}`
+    : "/account/reveal";
+  const revealDeadlineLabel = picksCtx?.selectedLockAt
+    ? formatPoolPickDeadlineLabel(picksCtx.selectedLockAt)
+    : null;
+  const viewerPicksComplete =
+    picksCtx && picksCtx.initialSlots.length > 0
+      ? participantPicksCompleteFromDrafts(picksCtx.initialSlots, {
+          knockoutBracketPicksUnlocked: picksCtx.knockoutBracketPicksUnlocked,
+        })
+      : false;
 
   return (
     <PageContainer>
@@ -167,6 +217,18 @@ export default async function AccountPage({ searchParams }: PageProps) {
             Create your own pool
           </Link>
         </div>
+        <div className="ash-surface p-4">
+          <h2 className="text-sm font-semibold text-ash-text">Security</h2>
+          <p className="mt-1 text-sm text-ash-muted">
+            Update your AshBracket sign-in password.
+          </p>
+          <Link
+            href="/account/change-password"
+            className="btn-ghost mt-3 inline-flex text-sm ring-1 ring-ash-border"
+          >
+            Change password
+          </Link>
+        </div>
       </div>
 
       {error ? (
@@ -212,6 +274,9 @@ export default async function AccountPage({ searchParams }: PageProps) {
             >
               Activity
             </Link>
+            <Link href={revealHref} className="btn-ghost inline-flex ring-1 ring-ash-border">
+              Reveal
+            </Link>
           </div>
 
           {picksCtx && picksCtx.profileLinkItems.length > 1 ? (
@@ -220,6 +285,7 @@ export default async function AccountPage({ searchParams }: PageProps) {
               selectedId={picksCtx.selectedId}
               summaryBasePath="/account/picks/summary"
               activityBasePath="/account/activity"
+              revealBasePath="/account/reveal"
               multiProfileHeading="Choose profile"
             />
           ) : null}
@@ -234,6 +300,22 @@ export default async function AccountPage({ searchParams }: PageProps) {
           ) : null}
 
           {picksCtx &&
+          picksCtx.selectedParticipant &&
+          poolIsPaid(picksCtx.selectedPoolPayment) ? (
+            <div className="mb-6">
+              <ParticipantPoolPaymentPanel
+                poolPayment={picksCtx.selectedPoolPayment}
+                isPaid={picksCtx.selectedParticipant.paid}
+                potSummary={
+                  picksCtx.selectedPoolId
+                    ? (potByPoolId.get(picksCtx.selectedPoolId) ?? null)
+                    : null
+                }
+              />
+            </div>
+          ) : null}
+
+          {picksCtx &&
           picksCtx.selectedId &&
           picksCtx.selectedParticipant &&
           !picksCtx.loadError &&
@@ -244,6 +326,9 @@ export default async function AccountPage({ searchParams }: PageProps) {
                   current={view}
                   listHref={dashboardListHref}
                   bracketHref={dashboardBracketHref}
+                  knockoutBracketPicksUnlocked={
+                    picksCtx.knockoutBracketPicksUnlocked
+                  }
                 />
               </div>
 
@@ -254,13 +339,11 @@ export default async function AccountPage({ searchParams }: PageProps) {
                   participantId={picksCtx.selectedParticipant.id}
                   poolName={picksCtx.selectedPoolName}
                   locked={locked}
-                  lockHint={lockHint}
+                  lockAtIso={picksCtx?.selectedLockAt ?? null}
                   showSavedBanner={false}
                   knockoutBracketPicksUnlocked={
                     picksCtx.knockoutBracketPicksUnlocked
                   }
-                  showCompactStageProgress
-                  completionStatus={picksCtx.pickCompletionStatus}
                 />
               ) : (
                 <>
@@ -270,13 +353,12 @@ export default async function AccountPage({ searchParams }: PageProps) {
                     participantId={picksCtx.selectedParticipant.id}
                     poolName={picksCtx.selectedPoolName}
                     locked={locked}
-                    lockHint={lockHint}
+                    lockAtIso={picksCtx?.selectedLockAt ?? null}
                     showSavedBanner={false}
                     knockoutBracketPicksUnlocked={
                       picksCtx.knockoutBracketPicksUnlocked
                     }
                     showCompactStageProgress
-                    completionStatus={picksCtx.pickCompletionStatus}
                     sections="toolbar_only"
                   />
                   <div className="mt-6">
@@ -287,31 +369,33 @@ export default async function AccountPage({ searchParams }: PageProps) {
                         picksCtx.knockoutBracketPicksUnlocked
                       }
                       editPicksHref={editPicksFromDashboardHref}
+                      listViewHref={dashboardListHref}
                       readOnly={false}
                     />
                   </div>
                 </>
               )}
 
-              <AccountNextMatchesSection
-                className="rounded-xl border border-ash-border bg-ash-surface p-4"
-                title="Upcoming matches for your bracket"
-                description={
-                  <>
-                    Highlights use your saved picks for{" "}
-                    <span className="font-medium text-ash-text">
-                      {picksCtx.selectedPoolName}
-                    </span>
-                    . Times are America/Edmonton (Calgary). If you are in several
-                    pools, choose the profile above so the schedule matches that
-                    bracket.
-                  </>
-                }
-                tournamentErr={accountTournamentErr}
-                matches={accountNextMatches}
-                initialSlots={picksCtx.initialSlots}
-                teams={picksCtx.teams}
+              <PoolRevealDashboardCard
+                locked={locked}
+                revealHref={revealHref}
+                picksHref={editPicksFromDashboardHref}
+                deadlineLabel={revealDeadlineLabel}
+                viewerPicksComplete={viewerPicksComplete}
               />
+
+              {whoToCheer ? (
+                <WhoToCheerForCard
+                  suggestions={whoToCheer.suggestions}
+                  totalRelevantMatches={whoToCheer.totalRelevantMatches}
+                  tournamentErr={whoToCheer.tournamentErr}
+                  showIncompleteCta={whoToCheer.showIncompleteCta}
+                  hasAnyPick={whoToCheer.hasAnyPick}
+                  picksHref={editPicksFromDashboardHref}
+                  initialSlots={picksCtx.initialSlots}
+                  teams={picksCtx.teams}
+                />
+              ) : null}
             </div>
           ) : null}
 
@@ -339,6 +423,16 @@ export default async function AccountPage({ searchParams }: PageProps) {
             {list.map((p) => (
               <li key={p.id} className="ash-surface p-4">
                 <p className="font-medium text-ash-text">{p.display_name}</p>
+                <p className="mt-0.5 text-xs text-ash-muted">{p.pool_name}</p>
+                {poolIsPaid(p.pool_payment) ? (
+                  <div className="mt-3">
+                    <ParticipantPoolPaymentPanel
+                      poolPayment={p.pool_payment}
+                      isPaid={p.is_paid}
+                      potSummary={potByPoolId.get(p.pool_id) ?? null}
+                    />
+                  </div>
+                ) : null}
                 <div className="mt-2 flex flex-wrap gap-3 text-sm">
                   <Link href={`/participant/${p.id}`} className="ash-link">
                     Public profile

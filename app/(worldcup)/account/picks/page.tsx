@@ -1,5 +1,11 @@
 import { AccountPicksProfileLinks } from "@/components/account/AccountPicksProfileLinks";
 import { ParticipantKnockoutPicksForm } from "@/components/admin/ParticipantKnockoutPicksForm";
+import {
+  ParticipantPoolPaymentPanel,
+  UnpaidPaymentReminderBanner,
+} from "@/components/pools/ParticipantPoolPaymentPanel";
+import { fetchPoolPotForMember } from "@/lib/pools/fetchPoolPotForMember";
+import { poolIsPaid } from "@/lib/pools/poolPayment";
 import { PageContainer } from "@/components/ui/PageContainer";
 import { PageTitle } from "@/components/ui/PageTitle";
 import { createClient } from "@/lib/supabase/server";
@@ -14,7 +20,7 @@ import { saveMyKnockoutPicksAction } from "./actions";
 export const dynamic = "force-dynamic";
 
 type PageProps = {
-  searchParams: Promise<{ participant?: string }>;
+  searchParams: Promise<{ participant?: string; joined?: string }>;
 };
 
 export default async function AccountPicksPage({ searchParams }: PageProps) {
@@ -29,22 +35,21 @@ export default async function AccountPicksPage({ searchParams }: PageProps) {
   }
 
   const participantParam = sp.participant?.trim() ?? "";
+  const showJoinPaymentNotice = sp.joined === "1";
   const ctx = await loadAccountKnockoutSelection(user.id, participantParam);
+
+  const potSummary =
+    ctx.selectedPoolId &&
+    poolIsPaid(ctx.selectedPoolPayment) &&
+    ctx.selectedPoolPayment.showPotToParticipants
+      ? await fetchPoolPotForMember(supabase, ctx.selectedPoolId)
+      : null;
 
   if (ctx.invalidOtherProfile && ctx.paramId) {
     redirect(`/participant/${ctx.paramId}/snapshot?from=account`);
   }
 
   const locked = poolLocked(ctx.selectedLockAt);
-  const lockHint =
-    locked && ctx.selectedLockAt
-      ? `Group stage, third-place advancers, and bonus picks locked ${new Intl.DateTimeFormat(undefined, {
-          dateStyle: "medium",
-          timeStyle: "short",
-        }).format(new Date(ctx.selectedLockAt))}. Knockout bracket picks still open after the official Round of 32 is published.`
-      : locked
-        ? "Group stage, third-place, and bonus picks are locked; knockout bracket may still be open."
-        : null;
 
   const summaryHref = ctx.selectedId
     ? `/account/picks/summary?participant=${ctx.selectedId}`
@@ -83,7 +88,7 @@ export default async function AccountPicksPage({ searchParams }: PageProps) {
 
       <PageTitle
         title="Your picks"
-        description="Three stages: pick 1st and 2nd in every group, then eight best third-place advancers (order does not matter), then the official Round of 32 through champion once published — plus bonus picks. Quick start fills early stages (and the full bracket when unlocked). Group/third/bonus lock at the pool deadline; knockout can stay open after that."
+        description="Your picks open in bracket view so you can see what’s done and what’s still missing. Stage 1: 1st and 2nd in every group. Stage 2: one third-place advancer per group row (eight total). Stage 3: Round of 32 through champion once the official bracket is published, plus bonus picks. Use list view anytime for step-by-step editing."
       />
 
       {ctx.loadError ? (
@@ -133,6 +138,7 @@ export default async function AccountPicksPage({ searchParams }: PageProps) {
             selectedId={ctx.selectedId}
             summaryBasePath="/account/picks/summary"
             activityBasePath="/account/activity"
+            revealBasePath="/account/reveal"
           />
 
           {!ctx.selectedId && ctx.myParticipants.length > 1 ? (
@@ -148,22 +154,36 @@ export default async function AccountPicksPage({ searchParams }: PageProps) {
                 <span className="font-medium text-ash-text">
                   {ctx.selectedPoolName}
                 </span>
-                {locked ? (
-                  <span className="ml-2 rounded-full bg-amber-950/50 px-2 py-0.5 text-xs font-medium text-amber-100">
-                    Pre‑knockout locked
-                  </span>
-                ) : (
-                  <span className="ml-2 rounded-full bg-ash-accent/20 px-2 py-0.5 text-xs font-medium text-ash-accent">
-                    Open for picks
-                  </span>
-                )}
               </p>
+
+              {poolIsPaid(ctx.selectedPoolPayment) ? (
+                <div className="mb-4">
+                  <ParticipantPoolPaymentPanel
+                    poolPayment={ctx.selectedPoolPayment}
+                    isPaid={ctx.selectedParticipant.paid}
+                    potSummary={potSummary}
+                    variant={
+                      showJoinPaymentNotice && !ctx.selectedParticipant.paid
+                        ? "join_notice"
+                        : "default"
+                    }
+                  />
+                </div>
+              ) : null}
+
+              {!showJoinPaymentNotice ? (
+                <UnpaidPaymentReminderBanner
+                  poolPayment={ctx.selectedPoolPayment}
+                  isPaid={ctx.selectedParticipant.paid}
+                />
+              ) : null}
 
               {ctx.predictions.length === 0 && !locked ? (
                 <p className="mb-6 rounded-md border border-ash-border bg-ash-surface px-3 py-2 text-sm text-ash-muted">
-                  No saved knockout picks yet — all slots start empty. Choose a
-                  team per slot, then save. After saving, we’ll take you to a
-                  clear summary you can revisit anytime.
+                  No saved picks yet — the bracket starts empty. Fill groups and
+                  third-place advancers first (switch to list view for guided
+                  steps), then save. Knockout rounds unlock after the official
+                  Round of 32 is published.
                 </p>
               ) : null}
 
@@ -177,12 +197,14 @@ export default async function AccountPicksPage({ searchParams }: PageProps) {
                 disabled={ctx.teams.length === 0}
                 readOnly={false}
                 preBracketSelectionsLocked={locked}
-                lockedMessage={lockHint}
+                poolLockAtIso={ctx.selectedLockAt}
                 savePicks={saveMyKnockoutPicksAction}
                 successMessage="Your picks were saved."
-                successDetail="Standings and the public leaderboard refresh when match results are updated or an organizer recomputes scores."
-                saveHelpText="Saving writes every slot (including empty ones you cleared). Your bracket is stored right away; the scoreboard catches up after the next standings update."
+                successDetail="Your pool’s scored leaderboard is recalculated from official results as soon as you save (same scoring rules as everyone else in the pool)."
+                saveHelpText="Saving writes every slot (including empty ones you cleared). Your bracket is stored immediately and the pool leaderboard is refreshed from the official results snapshot."
                 postSaveRedirectTo={postSaveRedirectTo}
+                defaultPicksMainView="bracket"
+                rememberPicksMainView
               />
 
               {ctx.teams.length === 0 ? (

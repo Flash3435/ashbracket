@@ -3,9 +3,14 @@ import {
   resultRowKey,
 } from "../admin/knockoutResultsConfig";
 import { WC2026_GROUP_CODES } from "../tournament/wc2026GroupCodes";
-import type { Prediction, TournamentStage } from "../../src/types/domain";
+import type { Prediction, Team, TournamentStage } from "../../src/types/domain";
 import type { KnockoutPickSlotDraft } from "../../types/adminKnockoutPicks";
 import { labelParticipantBonusPick } from "./participantBonusLabels";
+import {
+  buildTeamIdToGroupLetter,
+  pruneParticipantPicks,
+  type GroupTeamCountryCodesByLetter,
+} from "./knockoutPickConsistency";
 
 function bracketSlotLabel(kind: string, slotKey: string | null): string {
   if (kind === "champion") return "Champion";
@@ -51,6 +56,20 @@ function matchesGroupPick(
     p.participantId === participantId &&
     p.predictionKind === kind &&
     p.tournamentStageId === groupStageId &&
+    (p.groupCode ?? "").toUpperCase() === groupCode.toUpperCase()
+  );
+}
+
+function matchesThirdPlaceGroupPick(
+  p: Prediction,
+  participantId: string,
+  stageId: string,
+  groupCode: string,
+): boolean {
+  return (
+    p.participantId === participantId &&
+    p.predictionKind === "third_place_qualifier" &&
+    p.tournamentStageId === stageId &&
     (p.groupCode ?? "").toUpperCase() === groupCode.toUpperCase()
   );
 }
@@ -106,7 +125,69 @@ export function buildGroupPickDrafts(
 }
 
 /**
- * Third-place qualifiers, Round of 32, and knockout progression (group picks and
+ * One Stage 2 row per group letter. Saved participant picks now key by `group_code`,
+ * but we still infer valid legacy slot-based rows from team membership on load.
+ */
+export function buildThirdPlacePickDrafts(
+  roundOf32Stage: TournamentStage,
+  predictions: Prediction[],
+  participantId: string,
+  teams?: Team[],
+  groupTeamCountryCodesByLetter?: GroupTeamCountryCodesByLetter,
+): KnockoutPickSlotDraft[] {
+  const teamIdToGroupLetter = buildTeamIdToGroupLetter(
+    teams ?? [],
+    groupTeamCountryCodesByLetter,
+  );
+  const savedTeamIdByGroup = new Map<string, string>();
+
+  for (const letter of WC2026_GROUP_CODES) {
+    const pred = predictions.find((p) =>
+      matchesThirdPlaceGroupPick(p, participantId, roundOf32Stage.id, letter),
+    );
+    const tid = pred?.teamId?.trim() ?? "";
+    const inferredGroup = teamIdToGroupLetter.get(tid) ?? "";
+    if (tid && inferredGroup && inferredGroup !== letter) continue;
+    if (tid) savedTeamIdByGroup.set(letter, tid);
+  }
+
+  for (const pred of predictions) {
+    if (
+      pred.participantId !== participantId ||
+      pred.predictionKind !== "third_place_qualifier" ||
+      pred.tournamentStageId !== roundOf32Stage.id
+    ) {
+      continue;
+    }
+    const tid = pred.teamId?.trim() ?? "";
+    if (!tid) continue;
+
+    const savedGroup = (pred.groupCode ?? "").trim().toUpperCase();
+    const inferredGroup = teamIdToGroupLetter.get(tid) ?? "";
+    if (savedGroup && inferredGroup && savedGroup !== inferredGroup) {
+      continue;
+    }
+
+    const groupLetter = savedGroup || inferredGroup;
+    if (!groupLetter || savedTeamIdByGroup.has(groupLetter)) continue;
+    savedTeamIdByGroup.set(groupLetter, tid);
+  }
+
+  return WC2026_GROUP_CODES.map((letter) => ({
+    rowKey: `third_place_qualifier:${letter}`,
+    sectionLabel: `Group ${letter}`,
+    slotLabel: `Group ${letter} — 3rd-place team`,
+    predictionKind: "third_place_qualifier",
+    tournamentStageId: roundOf32Stage.id,
+    slotKey: null,
+    groupCode: letter,
+    bonusKey: null,
+    teamId: savedTeamIdByGroup.get(letter) ?? "",
+  }));
+}
+
+/**
+ * Round of 32 and knockout progression only (group picks, third-place picks, and
  * bonuses are built separately).
  */
 export function buildBracketPickSlotDrafts(
@@ -117,6 +198,7 @@ export function buildBracketPickSlotDrafts(
   const drafts: KnockoutPickSlotDraft[] = [];
 
   for (const section of PARTICIPANT_BRACKET_PICK_SECTIONS) {
+    if (section.kind === "third_place_qualifier") continue;
     const stage = stageByCode[section.stageCode as TournamentStage["code"]];
     if (!stage) continue;
 
@@ -223,12 +305,31 @@ export function buildAllParticipantPickDrafts(input: {
   predictions: Prediction[];
   participantId: string;
   bonusKeys: readonly string[];
+  teams?: Team[];
+  groupTeamCountryCodesByLetter?: GroupTeamCountryCodesByLetter;
 }): KnockoutPickSlotDraft[] {
-  const { stageByCode, predictions, participantId, bonusKeys } = input;
+  const {
+    stageByCode,
+    predictions,
+    participantId,
+    bonusKeys,
+    teams,
+    groupTeamCountryCodesByLetter,
+  } = input;
   const groupStage = stageByCode.group;
   if (!groupStage) return [];
+  const roundOf32Stage = stageByCode.round_of_32;
 
   const group = buildGroupPickDrafts(groupStage, predictions, participantId);
+  const third = roundOf32Stage
+    ? buildThirdPlacePickDrafts(
+        roundOf32Stage,
+        predictions,
+        participantId,
+        teams,
+        groupTeamCountryCodesByLetter,
+      )
+    : [];
   const bracket = buildBracketPickSlotDrafts(
     stageByCode,
     predictions,
@@ -241,7 +342,8 @@ export function buildAllParticipantPickDrafts(input: {
     participantId,
   );
 
-  return [...group, ...bracket, ...bonus];
+  const normalizedPreBracket = pruneParticipantPicks([...group, ...third]);
+  return [...normalizedPreBracket, ...bracket, ...bonus];
 }
 
 /** @deprecated Use buildBracketPickSlotDrafts — admin-only bracket rows. */

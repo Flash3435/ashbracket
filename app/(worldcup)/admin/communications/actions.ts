@@ -1,5 +1,12 @@
 "use server";
 
+import {
+  gateSimulationPoolOutboundEmail,
+  logSimulationPoolEmailSuccess,
+} from "@/lib/admin/enforceSimulationPoolEmailForAction";
+import { isProductionDeployment } from "@/lib/admin/deploymentEnvironment";
+import { checkProductionAdminAck } from "@/lib/admin/requireProductionAdminAck";
+import { isSimulationEmailOverrideEnabledInProduction } from "@/lib/admin/simulationPoolEmailPolicy";
 import { assertCanManagePool } from "@/lib/admin/assertCanManagePool";
 import { createClient } from "@/lib/supabase/server";
 import { getSiteUrl } from "@/lib/site-url";
@@ -33,15 +40,16 @@ export type SendPoolCommunicationsResult =
 async function loadPoolMeta(
   supabase: Awaited<ReturnType<typeof createClient>>,
   poolId: string,
-): Promise<{ name: string; lockAt: string | null }> {
+): Promise<{ name: string; lockAt: string | null; isSimulation: boolean }> {
   const { data } = await supabase
     .from("pools")
-    .select("name, lock_at")
+    .select("name, lock_at, is_simulation")
     .eq("id", poolId)
     .maybeSingle();
   return {
     name: (data?.name as string | undefined)?.trim() || "Your pool",
     lockAt: (data?.lock_at as string | null) ?? null,
+    isSimulation: Boolean(data?.is_simulation),
   };
 }
 
@@ -94,6 +102,9 @@ export async function sendPoolCommunicationsAction(input: {
   selectedParticipantIds: string[];
   subjectTemplate: string;
   bodyTemplate: string;
+  productionAcknowledged?: boolean;
+  simulationEmailAcknowledged?: boolean;
+  typedConfirmationPhrase?: string;
 }): Promise<SendPoolCommunicationsResult> {
   try {
     const supabase = await createClient();
@@ -108,6 +119,12 @@ export async function sendPoolCommunicationsAction(input: {
     if (!gate.ok) return { ok: false, error: gate.error };
 
     const poolId = input.poolId.trim();
+    const poolMetaEarly = await loadPoolMeta(supabase, poolId);
+
+    if (isProductionDeployment() && !poolMetaEarly.isSimulation) {
+      const prodAck = checkProductionAdminAck(input.productionAcknowledged);
+      if (!prodAck.ok) return prodAck;
+    }
 
     const err = validateTemplates(input.subjectTemplate, input.bodyTemplate);
     if (err) return { ok: false, error: err };
@@ -138,6 +155,22 @@ export async function sendPoolCommunicationsAction(input: {
       };
     }
 
+    const emailGate = await gateSimulationPoolOutboundEmail({
+      supabase,
+      poolId,
+      poolName: poolMetaEarly.name,
+      action: "pool_communications_send",
+      userId: user.id,
+      userEmail: user.email,
+      recipientCount: targets.length,
+      productionAcknowledged: input.productionAcknowledged,
+      simulationEmailAcknowledged: input.simulationEmailAcknowledged,
+      typedConfirmationPhrase: input.typedConfirmationPhrase,
+    });
+    if (!emailGate.ok) {
+      return { ok: false, error: emailGate.error };
+    }
+
     const pool = await loadPoolMeta(supabase, poolId);
     const configured = getResendMailerConfig() !== null;
     const failures: { email: string; error: string }[] = [];
@@ -163,6 +196,7 @@ export async function sendPoolCommunicationsAction(input: {
         poolName: pool.name,
         lockAtIso: pool.lockAt,
         siteUrl,
+        participantId: t.id,
       });
       const res = await sendResendEmail({
         to: t.email,
@@ -179,6 +213,18 @@ export async function sendPoolCommunicationsAction(input: {
         });
       }
     }
+
+    logSimulationPoolEmailSuccess({
+      action: "pool_communications_send",
+      userId: user.id,
+      userEmail: user.email,
+      poolId,
+      poolName: pool.name,
+      isSimulationPool: poolMetaEarly.isSimulation,
+      overrideEnabled: isSimulationEmailOverrideEnabledInProduction(),
+      recipientCount: targets.length,
+      detail: `emailsAccepted=${emailsAccepted}`,
+    });
 
     return {
       ok: true,
@@ -199,6 +245,9 @@ export async function sendPoolCommunicationsTestAction(input: {
   poolId: string;
   subjectTemplate: string;
   bodyTemplate: string;
+  productionAcknowledged?: boolean;
+  simulationEmailAcknowledged?: boolean;
+  typedConfirmationPhrase?: string;
 }): Promise<SendPoolCommunicationsResult> {
   try {
     const supabase = await createClient();
@@ -213,9 +262,26 @@ export async function sendPoolCommunicationsTestAction(input: {
     if (!gate.ok) return { ok: false, error: gate.error };
 
     const poolId = input.poolId.trim();
+    const poolMetaEarly = await loadPoolMeta(supabase, poolId);
 
     const err = validateTemplates(input.subjectTemplate, input.bodyTemplate);
     if (err) return { ok: false, error: err };
+
+    const emailGate = await gateSimulationPoolOutboundEmail({
+      supabase,
+      poolId,
+      poolName: poolMetaEarly.name,
+      action: "pool_communications_test",
+      userId: user.id,
+      userEmail: user.email,
+      recipientCount: 1,
+      productionAcknowledged: input.productionAcknowledged,
+      simulationEmailAcknowledged: input.simulationEmailAcknowledged,
+      typedConfirmationPhrase: input.typedConfirmationPhrase,
+    });
+    if (!emailGate.ok) {
+      return { ok: false, error: emailGate.error };
+    }
 
     const to = user.email?.trim();
     if (!to) {
@@ -274,6 +340,17 @@ export async function sendPoolCommunicationsTestAction(input: {
         ],
       };
     }
+
+    logSimulationPoolEmailSuccess({
+      action: "pool_communications_test",
+      userId: user.id,
+      userEmail: user.email,
+      poolId,
+      poolName: poolMetaEarly.name,
+      isSimulationPool: poolMetaEarly.isSimulation,
+      overrideEnabled: isSimulationEmailOverrideEnabledInProduction(),
+      recipientCount: 1,
+    });
 
     return {
       ok: true,

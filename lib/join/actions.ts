@@ -3,6 +3,9 @@
 import { createClient } from "@/lib/supabase/server";
 import { insertPoolActivityRow } from "../poolActivity/insertPoolActivity";
 import { revalidatePath } from "next/cache";
+import { validateJoinDisplayName } from "./joinDisplayName";
+import { mapJoinRpcError } from "./mapJoinRpcError";
+import { planPoolJoin, type PoolJoinIntent, type UnclaimedMatch } from "./planPoolJoin";
 
 async function tryRecordParticipantJoined(input: {
   poolId: string;
@@ -58,6 +61,133 @@ export type PoolJoinMutationResult =
   | { ok: true; participantId: string }
   | { ok: false; message: string };
 
+export type JoinPoolResult =
+  | { status: "success"; participantId: string }
+  | {
+      status: "needs_confirmation";
+      participantId: string;
+      matchedDisplayName: string;
+      message: string;
+    }
+  | { status: "ambiguous"; message: string }
+  | { status: "error"; message: string };
+
+async function fetchUnclaimedMatches(
+  poolId: string,
+  joinCode: string,
+  displayName: string,
+): Promise<UnclaimedMatch[]> {
+  const supabase = await createClient();
+  const { data, error } = await supabase.rpc("peek_unclaimed_participants_for_join", {
+    p_pool_id: poolId,
+    p_join_code: joinCode.trim(),
+    p_display_name: displayName,
+  });
+
+  if (error) {
+    throw new Error(mapJoinRpcError(error.message ?? "Could not check this name."));
+  }
+
+  const rows = Array.isArray(data) ? data : data ? [data] : [];
+  return rows
+    .map((row) => {
+      const participantId = row?.participant_id as string | undefined;
+      const name = row?.display_name as string | undefined;
+      if (!participantId || !name) return null;
+      return { participantId, displayName: name };
+    })
+    .filter((row): row is UnclaimedMatch => row !== null);
+}
+
+async function isJoinedDisplayNameTaken(
+  poolId: string,
+  displayName: string,
+): Promise<boolean> {
+  const supabase = await createClient();
+  const { data, error } = await supabase.rpc("is_joined_display_name_taken", {
+    p_pool_id: poolId,
+    p_display_name: displayName,
+  });
+
+  if (error) {
+    throw new Error(mapJoinRpcError(error.message ?? "Could not check this name."));
+  }
+
+  return Boolean(data);
+}
+
+/**
+ * Unified pool join: matches unclaimed organizer rows by display name or creates a new profile.
+ */
+export async function joinPool(
+  poolId: string,
+  joinCode: string,
+  displayName: string,
+  intent: PoolJoinIntent = "initial",
+): Promise<JoinPoolResult> {
+  const validated = validateJoinDisplayName(displayName);
+  if (!validated.ok) {
+    return { status: "error", message: validated.message };
+  }
+
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) {
+    return { status: "error", message: "Sign in or create an account first." };
+  }
+
+  const name = validated.name;
+  const code = joinCode.trim();
+
+  let unclaimedMatches: UnclaimedMatch[];
+  let nameTakenByJoinedParticipant: boolean;
+  try {
+    [unclaimedMatches, nameTakenByJoinedParticipant] = await Promise.all([
+      fetchUnclaimedMatches(poolId, code, name),
+      isJoinedDisplayNameTaken(poolId, name),
+    ]);
+  } catch (e) {
+    const message = e instanceof Error ? e.message : "Could not join this pool.";
+    return { status: "error", message };
+  }
+
+  const plan = planPoolJoin({
+    intent,
+    unclaimedMatches,
+    nameTakenByJoinedParticipant,
+  });
+
+  if (plan.action === "needs_confirmation") {
+    return {
+      status: "needs_confirmation",
+      participantId: plan.participantId,
+      matchedDisplayName: plan.matchedDisplayName,
+      message: plan.message,
+    };
+  }
+
+  if (plan.action === "ambiguous") {
+    return { status: "ambiguous", message: plan.message };
+  }
+
+  if (plan.action === "error") {
+    return { status: "error", message: plan.message };
+  }
+
+  const mutation =
+    plan.action === "claim"
+      ? await claimPoolParticipant(poolId, code, name)
+      : await registerInPool(poolId, code, name);
+
+  if (!mutation.ok) {
+    return { status: "error", message: mutation.message };
+  }
+
+  return { status: "success", participantId: mutation.participantId };
+}
+
 export async function registerInPool(
   poolId: string,
   joinCode: string,
@@ -95,7 +225,7 @@ export async function registerInPool(
         return { ok: true, participantId: existingId };
       }
     }
-    return { ok: false, message: msg };
+    return { ok: false, message: mapJoinRpcError(msg) };
   }
 
   const participantId = data as string | null;
@@ -154,12 +284,12 @@ export async function claimPoolParticipant(
         return { ok: true, participantId: existingId };
       }
     }
-    return { ok: false, message: msg };
+    return { ok: false, message: mapJoinRpcError(msg) };
   }
 
   const participantId = data as string | null;
   if (!participantId) {
-    return { ok: false, message: "Could not claim that profile." };
+    return { ok: false, message: "Could not join with that profile." };
   }
 
   await tryRecordParticipantJoined({

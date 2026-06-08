@@ -20,7 +20,7 @@ export type KnockoutPickSlotDraft = {
   predictionKind: PredictionKind;
   tournamentStageId: string;
   slotKey: string | null;
-  /** Group letter for `group_winner` / `group_runner_up`; otherwise null. */
+  /** Group letter for group-stage rows and participant Stage 2 third-place rows; otherwise null. */
   groupCode: string | null;
   /** Bonus category for `bonus_pick`; otherwise null. */
   bonusKey: string | null;

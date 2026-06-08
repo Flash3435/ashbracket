@@ -89,7 +89,7 @@ export function recapActivityDisplayBody(
     return flavorBlocks ? `${baseline}\n\n${flavorBlocks}` : baseline;
   }
 
-  return baseline;
+  return flavorBlocks ? `${baseline}\n\n${flavorBlocks}` : baseline;
 }
 
 /**
@@ -126,7 +126,7 @@ export function buildDeterministicRecapBody(facts: RecapFacts): string {
   if (participantCount <= 0) {
     return "Ash's daily recap: this pool is warming up - no participants yet, so the bracket gossip can wait.";
   }
-  let line = `Ash's daily recap: ${submittedCount} of ${participantCount} participant${participantCount === 1 ? "" : "s"} ha${submittedCount === 1 ? "s" : "ve"} completed their bracket`;
+  let line = `Ash's daily recap: ${submittedCount} of ${participantCount} brackets are complete`;
   if (shouldShowChampionInsight(facts)) {
     line += `. Among them, ${topChampionTeamName} is the most popular champion pick (${topChampionPickCount} pick${topChampionPickCount === 1 ? "" : "s"})`;
   }

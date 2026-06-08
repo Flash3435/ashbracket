@@ -85,9 +85,9 @@ function filledPreLockPredictions(): Prediction[] {
   }
 
   const r32 = stageByCode.round_of_32!.id;
-  for (let i = 1; i <= 8; i++) {
+  for (const letter of "ABCDEFGH") {
     preds.push(
-      next("third_place_qualifier", r32, { slotKey: String(i) }),
+      next("third_place_qualifier", r32, { groupCode: letter }),
     );
   }
 
@@ -105,7 +105,7 @@ const emptySlots = buildAllParticipantPickDrafts({
   bonusKeys,
 });
 
-assert.strictEqual(emptySlots.length, 99, "24 group + 71 bracket + 4 bonus");
+assert.strictEqual(emptySlots.length, 103, "24 group + 12 third + 63 knockout + 4 bonus");
 
 const emptyStatus = buildPoolMembershipCompletionStatus(emptySlots, {
   knockoutBracketPicksUnlocked: false,
@@ -146,7 +146,8 @@ assert.ok(missingGroupStatus.missingSections.includes("group"));
 const missingThird = buildAllParticipantPickDrafts({
   stageByCode,
   predictions: preLockPreds.filter(
-    (p) => p.predictionKind !== "third_place_qualifier" || p.slotKey !== "1",
+    (p) =>
+      p.predictionKind !== "third_place_qualifier" || p.groupCode !== "A",
   ),
   participantId: pid,
   bonusKeys,
@@ -206,6 +207,12 @@ assert.strictEqual(fromPredictions.isComplete, true);
 
 const progress = formatCompletionProgressLine(preLockStatus);
 assert.ok(progress.includes("Group picks: 24/24"));
-assert.ok(progress.includes("Knockout picks: not required yet"));
+assert.ok(progress.includes("Third-place picks: 8/8"));
+
+assert.strictEqual(
+  preLockStatus.sections.find((s) => s.id === "third_place")?.filled,
+  8,
+  "third-place progress shows 8 required advancers",
+);
 
 console.log("poolMembershipCompletionStatus.selftest.ts: ok");

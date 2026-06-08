@@ -1,6 +1,7 @@
 "use client";
 
 import { createClient } from "@/lib/supabase/client";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 
@@ -8,11 +9,14 @@ type SignInWithEmailFormProps = {
   /** Validated server-side (see `safeRedirectPath`). */
   redirectAfterLogin: string;
   submitLabel?: string;
+  /** When set, shows “Forgot password?” below the password field. */
+  forgotPasswordHref?: string;
 };
 
 export function SignInWithEmailForm({
   redirectAfterLogin,
   submitLabel = "Sign in",
+  forgotPasswordHref,
 }: SignInWithEmailFormProps) {
   const router = useRouter();
   const [email, setEmail] = useState("");
@@ -65,6 +69,13 @@ export function SignInWithEmailForm({
           onChange={(e) => setPassword(e.target.value)}
           className="w-full rounded-md border border-ash-border bg-ash-body px-3 py-2 text-sm text-ash-text shadow-sm outline-none ring-ash-accent/20 focus:border-ash-accent focus:ring-2"
         />
+        {forgotPasswordHref ? (
+          <p className="text-right">
+            <Link href={forgotPasswordHref} className="ash-link text-xs">
+              Forgot password?
+            </Link>
+          </p>
+        ) : null}
       </label>
       {error ? (
         <p className="text-sm text-red-300" role="alert">

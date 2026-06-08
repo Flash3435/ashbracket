@@ -125,6 +125,7 @@ export async function seedOfficialWc2026(
         name: edition.name,
         starts_on: "2026-06-11",
         ends_on: "2026-07-19",
+        is_simulation: false,
       },
       { onConflict: "code" },
     )

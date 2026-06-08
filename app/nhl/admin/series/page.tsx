@@ -1,4 +1,5 @@
 import { NhlAdminSeriesLedgerForm } from "@/components/nhl/NhlAdminSeriesLedgerForm";
+import { NhlAdminSyncOfficialRound1Form } from "@/components/nhl/NhlAdminSyncOfficialRound1Form";
 import { NhlAdminSeriesWinnerForm } from "@/components/nhl/NhlAdminSeriesWinnerForm";
 import { NhlTeamLogo } from "@/components/nhl/NhlTeamLogo";
 import { PageContainer } from "@/components/ui/PageContainer";
@@ -14,6 +15,19 @@ import {
 import Link from "next/link";
 
 export const dynamic = "force-dynamic";
+
+type SeriesPageProps = {
+  searchParams: Promise<{
+    ok?: string;
+    err?: string;
+    up?: string;
+    sk?: string;
+    cf?: string;
+    r2up?: string;
+    r2sk?: string;
+    r2cf?: string;
+  }>;
+};
 
 function sideLabel(side: string | null): string {
   if (side === "cup") return "Cup";
@@ -52,7 +66,8 @@ function SeriesTeamCell({
   );
 }
 
-export default async function NhlAdminSeriesPage() {
+export default async function NhlAdminSeriesPage({ searchParams }: SeriesPageProps) {
+  const sp = await searchParams;
   const supabase = await createClient();
   const { edition, error: edErr } = await fetchActiveNhlEdition(supabase);
 
@@ -77,20 +92,51 @@ export default async function NhlAdminSeriesPage() {
     <PageContainer compactBottom>
       <PageTitle
         title="Series"
-        description="All bracket slots from Round 1 through the Stanley Cup Final. Round 1 scores can also sync from the league bracket API via /api/nhl/sync-playoff-series when NHL_PLAYOFF_SYNC_ENABLED=true (see ops env below)."
+        description="Bracket slots Round 1 through Stanley Cup Final. Save winners here, or sync official Round 1 finals from the league using the form below."
       />
 
       <p className="text-xs leading-relaxed text-slate-500">
-        Public pages overlay live Round 1 scores from NHLE by default. To disable that read-through,
-        set{" "}
-        <code className="rounded bg-slate-950/70 px-1 py-px text-slate-300">NHL_DISABLE_LIVE_BRACKET_OVERLAY=true</code>{" "}
-        (the old <code className="text-slate-400">NHL_PUBLIC_BRACKET_OVERLAY</code> flag is ignored). Optional DB sync:{" "}
-        <code className="rounded bg-slate-950/70 px-1 py-px text-slate-300">NHL_PLAYOFF_SYNC_ENABLED=true</code> with{" "}
-        <code className="rounded bg-slate-950/70 px-1 py-px text-slate-300">CRON_SECRET</code> and{" "}
-        <code className="rounded bg-slate-950/70 px-1 py-px text-slate-300">SUPABASE_SERVICE_ROLE_KEY</code>; optional{" "}
-        <code className="rounded bg-slate-950/70 px-1 py-px text-slate-300">NHL_PLAYOFF_BRACKET_YEAR=2026</code> (
-        <code className="text-slate-400">vercel.json</code> cron).
+        Public picks overlay live scores from the league for display.{" "}
+        <span className="font-medium text-slate-400">Standings</span> only use winners stored on each
+        row below. Scheduled sync uses{" "}
+        <code className="rounded bg-slate-950/70 px-1 py-px text-slate-300">/api/nhl/sync-playoff-series</code>{" "}
+        with <code className="rounded bg-slate-950/70 px-1 py-px text-slate-300">NHL_PLAYOFF_SYNC_ENABLED</code>{" "}
+        and <code className="rounded bg-slate-950/70 px-1 py-px text-slate-300">CRON_SECRET</code>. Disable
+        live overlay only if needed:{" "}
+        <code className="rounded bg-slate-950/70 px-1 py-px text-slate-300">NHL_DISABLE_LIVE_BRACKET_OVERLAY=true</code>
+        .
       </p>
+
+      <div className="mt-4 max-w-xl">
+        <NhlAdminSyncOfficialRound1Form />
+      </div>
+
+      {sp.ok === "sync_bracket" || sp.ok === "sync_round1" ? (
+        <p className="mt-4 rounded-md border border-emerald-800/60 bg-emerald-950/30 px-3 py-2 text-sm text-emerald-100">
+          Official bracket sync finished — Round 1:{" "}
+          <span className="font-medium">{Number(sp.up ?? 0)}</span> updated,{" "}
+          <span className="font-medium">{Number(sp.sk ?? 0)}</span> skipped
+          {Number(sp.cf ?? 0) > 0 ? (
+            <>
+              , <span className="font-medium">{Number(sp.cf)}</span> R1 conflict(s)
+            </>
+          ) : null}
+          . Round 2: <span className="font-medium">{Number(sp.r2up ?? 0)}</span> updated,{" "}
+          <span className="font-medium">{Number(sp.r2sk ?? 0)}</span> skipped
+          {Number(sp.r2cf ?? 0) > 0 ? (
+            <>
+              , <span className="font-medium">{Number(sp.r2cf)}</span> R2 conflict(s)
+            </>
+          ) : null}
+          .
+        </p>
+      ) : null}
+
+      {sp.err ? (
+        <p className="mt-4 rounded-md border border-red-800/80 bg-red-950/40 px-3 py-2 text-sm text-red-200">
+          {decodeURIComponent(sp.err)}
+        </p>
+      ) : null}
 
       <p className="text-sm text-ash-muted">
         <Link href="/nhl/admin" className="ash-link">
@@ -136,6 +182,19 @@ export default async function NhlAdminSeriesPage() {
             Active edition:{" "}
             <span className="font-medium text-ash-text">{edition.season_label}</span>
           </p>
+          {(() => {
+            const r1 = seriesRes.rows.filter((r) => r.round_code === "R1");
+            const missing = r1.filter((r) => !r.winner_team_id).length;
+            if (r1.length === 0) return null;
+            return (
+              <p className="mt-2 text-xs text-slate-500">
+                Round 1: <span className="font-medium text-slate-400">{missing}</span> of{" "}
+                <span className="font-medium text-slate-400">{r1.length}</span> series slots still have
+                no stored winner in the edition (leaderboard stays at zero until results are saved
+                or synced).
+              </p>
+            );
+          })()}
           {fieldStatus ? (
             <p
               className={`mt-2 rounded-md border px-3 py-2 text-sm ${

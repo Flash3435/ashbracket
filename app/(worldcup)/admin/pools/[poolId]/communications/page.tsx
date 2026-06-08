@@ -1,25 +1,60 @@
+import { IncompleteBracketsPanel } from "@/components/admin/IncompleteBracketsPanel";
 import { PoolCommunicationsForm } from "@/components/admin/PoolCommunicationsForm";
 import { PageContainer } from "@/components/ui/PageContainer";
 import { PageTitle } from "@/components/ui/PageTitle";
+import { getSimulationPoolEmailUiStatus } from "@/lib/admin/simulationPoolEmailPolicy";
 import { requireManagedPool } from "@/lib/admin/requireManagedPool";
+import { mapPoolPaymentFromPool, poolIsPaid } from "@/lib/pools/poolPayment";
+import { loadIncompleteBracketPanelForPool } from "@/lib/admin/loadIncompleteBracketPanelForPool";
 import { loadParticipantIdsWithIncompletePicks } from "@/lib/communications/picksCompleteness";
 import { formatPoolLockSummary } from "@/lib/communications/messageTemplates";
-import type { PoolCommunicationParticipant } from "@/lib/communications/recipientResolve";
+import type {
+  PoolCommunicationParticipant,
+  RecipientPreset,
+} from "@/lib/communications/recipientResolve";
 
 export const dynamic = "force-dynamic";
 
+function parseRecipientPreset(
+  value: string | string[] | undefined,
+): RecipientPreset {
+  const first = Array.isArray(value) ? value[0] : value;
+  if (
+    first === "all" ||
+    first === "unpaid" ||
+    first === "incomplete_picks" ||
+    first === "selected"
+  ) {
+    return first;
+  }
+  return "all";
+}
+
 export default async function AdminPoolCommunicationsPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ poolId: string }>;
+  searchParams?: Promise<Record<string, string | string[] | undefined>>;
 }) {
   const { poolId } = await params;
-  const { supabase } = await requireManagedPool(poolId);
+  const sp = searchParams ? await searchParams : undefined;
+  const { pool, supabase } = await requireManagedPool(poolId);
+  const simulationEmailStatus = getSimulationPoolEmailUiStatus(
+    Boolean(pool.is_simulation),
+  );
+  const poolPayment = mapPoolPaymentFromPool(pool);
+  const poolIsPaidPool = poolIsPaid(poolPayment);
+  let initialPreset = parseRecipientPreset(sp?.preset);
+  if (!poolIsPaidPool && initialPreset === "unpaid") {
+    initialPreset = "all";
+  }
 
   let participants: PoolCommunicationParticipant[] = [];
   let poolName = "Your pool";
   let lockAtIso: string | null = null;
   let loadError: string | null = null;
+  let incompleteBracketPanel = null;
 
   try {
     const [{ data: poolRow }, { data: rows, error: parErr }] = await Promise.all([
@@ -62,6 +97,15 @@ export default async function AdminPoolCommunicationsPage({
         isPaid: r.is_paid,
         picksComplete: !incomplete.has(r.id),
       }));
+
+      incompleteBracketPanel = await loadIncompleteBracketPanelForPool(
+        supabase,
+        {
+          poolId,
+          poolName,
+          lockAtIso,
+        },
+      );
     }
   } catch (e) {
     loadError =
@@ -72,9 +116,14 @@ export default async function AdminPoolCommunicationsPage({
     <PageContainer>
       <PageTitle
         title="Email participants"
-        description="Send payment reminders, deadline reminders, or a custom note to groups of people in this pool. Each person only sees their own message."
+        description={
+          pool.is_simulation
+            ? "Simulation test pool — production blocks real email here by default. Complete the pilot checklist before enabling email."
+            : poolIsPaidPool
+              ? "Send payment reminders, deadline reminders, or a custom note to groups of people in this pool."
+              : "Send deadline reminders or a custom note to groups of people in this pool. Payment reminders are only available for paid pools."
+        }
       />
-
       {loadError ? (
         <p className="mb-4 rounded-md border border-red-800/80 bg-red-950/40 px-3 py-2 text-sm text-red-200">
           {loadError}
@@ -105,12 +154,24 @@ export default async function AdminPoolCommunicationsPage({
         </p>
       </div>
 
+      {incompleteBracketPanel ? (
+        <IncompleteBracketsPanel
+          data={incompleteBracketPanel}
+          simulationEmailStatus={simulationEmailStatus}
+          showPoolName={false}
+          className="mb-6"
+        />
+      ) : null}
+
       {loadError ? null : (
         <PoolCommunicationsForm
+          initialPreset={initialPreset}
           poolId={poolId}
           poolName={poolName}
           lockAtIso={lockAtIso}
           participants={participants}
+          simulationEmailStatus={simulationEmailStatus}
+          poolIsPaid={poolIsPaidPool}
         />
       )}
     </PageContainer>

@@ -1,8 +1,13 @@
 "use server";
 
-import { effectiveSeriesWinnerId, mergeRound2DisplayFromRound1 } from "@/lib/nhl/nhlPicksProgression";
+import {
+  effectiveSeriesWinnerId,
+  mergeFinalRoundsDisplayFromPriorWinners,
+  mergeRound2DisplayFromRound1,
+} from "@/lib/nhl/nhlPicksProgression";
 import {
   fetchActiveNhlEdition,
+  fetchNhlMembershipForUserEdition,
   fetchNhlSeriesRowsWithPublicLiveOverlay,
   fetchNhlTeamsForEdition,
 } from "@/lib/nhl/queries";
@@ -27,10 +32,33 @@ function friendlyPickError(raw: string): string {
   if (m.includes("picked team is not in this edition")) return "That team is not part of this edition.";
   if (m.includes("only round 1")) return "Only Round 1 picks can be saved here.";
   if (m.includes("only round 2")) return "Only Round 2 picks can be saved here.";
+  if (m.includes("conference finals")) return "Only Conference Finals picks can be saved here.";
+  if (m.includes("stanley cup final")) return "Only Stanley Cup Final picks can be saved here.";
   if (m.includes("edition does not match series")) return "Series does not belong to that edition.";
   if (m.includes("series not found")) return "Series was not found.";
   if (m.includes("jwt") || m.includes("not authenticated")) return "You must be signed in to save picks.";
+  if (m.includes("join the nhl competition")) {
+    return "Join the NHL competition on your account page before saving picks.";
+  }
   return raw.length > 160 ? "Could not save your pick. Try again." : raw;
+}
+
+async function requireNhlCompetitionEntry(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  userId: string,
+  editionId: string,
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  const mem = await fetchNhlMembershipForUserEdition(supabase, userId, editionId);
+  if (mem.error) {
+    return { ok: false, error: "Could not verify NHL competition entry. Try again." };
+  }
+  if (!mem.membershipId) {
+    return {
+      ok: false,
+      error: "Join the NHL competition on your account page before saving picks.",
+    };
+  }
+  return { ok: true };
 }
 
 export type SaveNhlRound1SeriesPickResult =
@@ -72,6 +100,11 @@ export async function saveNhlRound1SeriesPickAction(input: {
   }
   if (isNhlEditionLocked(edition.lock_at)) {
     return { ok: false, error: "Picks are closed for this edition." };
+  }
+
+  const entry = await requireNhlCompetitionEntry(supabase, user.id, editionId);
+  if (!entry.ok) {
+    return { ok: false, error: entry.error };
   }
 
   const seriesRes = await fetchNhlSeriesRowsWithPublicLiveOverlay(supabase, editionId);
@@ -155,6 +188,11 @@ export async function saveNhlRound2SeriesPickAction(input: {
     return { ok: false, error: "Picks are closed for this edition." };
   }
 
+  const entry = await requireNhlCompetitionEntry(supabase, user.id, editionId);
+  if (!entry.ok) {
+    return { ok: false, error: entry.error };
+  }
+
   await supabase.rpc("sync_nhl_r2_slots_from_r1", { p_edition_id: editionId });
 
   const [seriesRes, teamsRes] = await Promise.all([
@@ -177,7 +215,7 @@ export async function saveNhlRound2SeriesPickAction(input: {
     return {
       ok: false,
       error:
-        "This Round 2 matchup is not open yet—both feeding Round 1 winners must be recorded in the pool (or try again after the league sync updates).",
+        "This Round 2 matchup is not open yet—both feeding Round 1 winners must be recorded in the edition (or try again after the league sync updates).",
     };
   }
   if (pickedTeamId !== hi && pickedTeamId !== lo) {
@@ -185,6 +223,201 @@ export async function saveNhlRound2SeriesPickAction(input: {
   }
 
   const { error } = await supabase.from("nhl_r2_series_picks").upsert(
+    {
+      user_id: user.id,
+      edition_id: editionId,
+      series_id: seriesId,
+      picked_team_id: pickedTeamId,
+    },
+    { onConflict: "user_id,edition_id,series_id" },
+  );
+
+  if (error) {
+    return { ok: false, error: friendlyPickError(error.message) };
+  }
+
+  revalidatePath("/nhl/picks");
+  revalidatePath("/nhl/standings");
+  return { ok: true };
+}
+
+export type SaveNhlConferenceFinalSeriesPickResult =
+  | { ok: true }
+  | { ok: false; error: string };
+
+/**
+ * Upserts the current user's Conference Finals series winner for one conference.
+ */
+export async function saveNhlConferenceFinalSeriesPickAction(input: {
+  editionId: string;
+  seriesId: string;
+  pickedTeamId: string;
+}): Promise<SaveNhlConferenceFinalSeriesPickResult> {
+  const editionId = input.editionId?.trim() ?? "";
+  const seriesId = input.seriesId?.trim() ?? "";
+  const pickedTeamId = input.pickedTeamId?.trim() ?? "";
+
+  if (!isUuid(editionId) || !isUuid(seriesId) || !isUuid(pickedTeamId)) {
+    return { ok: false, error: "Invalid pick payload." };
+  }
+
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (!user) {
+    return { ok: false, error: "You must be signed in to save picks." };
+  }
+
+  const { edition, error: editionErr } = await fetchActiveNhlEdition(supabase);
+  if (editionErr || !edition) {
+    return { ok: false, error: "No active NHL edition is available right now." };
+  }
+  if (edition.id !== editionId) {
+    return { ok: false, error: "That edition is not the active NHL edition." };
+  }
+  if (isNhlEditionLocked(edition.lock_at)) {
+    return { ok: false, error: "Picks are closed for this edition." };
+  }
+
+  const entry = await requireNhlCompetitionEntry(supabase, user.id, editionId);
+  if (!entry.ok) {
+    return { ok: false, error: entry.error };
+  }
+
+  await supabase.rpc("sync_nhl_r2_slots_from_r1", { p_edition_id: editionId });
+  await supabase.rpc("sync_nhl_cf_slots_from_r2", { p_edition_id: editionId });
+
+  const [seriesRes, teamsRes] = await Promise.all([
+    fetchNhlSeriesRowsWithPublicLiveOverlay(supabase, editionId),
+    fetchNhlTeamsForEdition(supabase, editionId),
+  ]);
+
+  if (seriesRes.error || teamsRes.error) {
+    return { ok: false, error: "Could not load series for validation." };
+  }
+
+  const merged = mergeFinalRoundsDisplayFromPriorWinners(
+    mergeRound2DisplayFromRound1(seriesRes.rows, teamsRes.teams),
+    teamsRes.teams,
+  );
+  const series = merged.find((r) => r.id === seriesId);
+  if (!series || series.round_code !== "CF") {
+    return { ok: false, error: "That Conference Finals series was not found." };
+  }
+  const hi = series.higher_seed_team_id;
+  const lo = series.lower_seed_team_id;
+  if (!hi || !lo) {
+    return {
+      ok: false,
+      error:
+        "This Conference Finals matchup is not open yet—both Round 2 winners must be recorded in the edition.",
+    };
+  }
+  if (pickedTeamId !== hi && pickedTeamId !== lo) {
+    return { ok: false, error: "Pick must be one of the two teams in this series." };
+  }
+
+  const { error } = await supabase.from("nhl_cf_series_picks").upsert(
+    {
+      user_id: user.id,
+      edition_id: editionId,
+      series_id: seriesId,
+      picked_team_id: pickedTeamId,
+    },
+    { onConflict: "user_id,edition_id,series_id" },
+  );
+
+  if (error) {
+    return { ok: false, error: friendlyPickError(error.message) };
+  }
+
+  revalidatePath("/nhl/picks");
+  revalidatePath("/nhl/standings");
+  return { ok: true };
+}
+
+export type SaveNhlStanleyCupFinalSeriesPickResult =
+  | { ok: true }
+  | { ok: false; error: string };
+
+/**
+ * Upserts the current user's Stanley Cup Final series winner.
+ */
+export async function saveNhlStanleyCupFinalSeriesPickAction(input: {
+  editionId: string;
+  seriesId: string;
+  pickedTeamId: string;
+}): Promise<SaveNhlStanleyCupFinalSeriesPickResult> {
+  const editionId = input.editionId?.trim() ?? "";
+  const seriesId = input.seriesId?.trim() ?? "";
+  const pickedTeamId = input.pickedTeamId?.trim() ?? "";
+
+  if (!isUuid(editionId) || !isUuid(seriesId) || !isUuid(pickedTeamId)) {
+    return { ok: false, error: "Invalid pick payload." };
+  }
+
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (!user) {
+    return { ok: false, error: "You must be signed in to save picks." };
+  }
+
+  const { edition, error: editionErr } = await fetchActiveNhlEdition(supabase);
+  if (editionErr || !edition) {
+    return { ok: false, error: "No active NHL edition is available right now." };
+  }
+  if (edition.id !== editionId) {
+    return { ok: false, error: "That edition is not the active NHL edition." };
+  }
+  if (isNhlEditionLocked(edition.lock_at)) {
+    return { ok: false, error: "Picks are closed for this edition." };
+  }
+
+  const entry = await requireNhlCompetitionEntry(supabase, user.id, editionId);
+  if (!entry.ok) {
+    return { ok: false, error: entry.error };
+  }
+
+  await supabase.rpc("sync_nhl_r2_slots_from_r1", { p_edition_id: editionId });
+  await supabase.rpc("sync_nhl_cf_slots_from_r2", { p_edition_id: editionId });
+  await supabase.rpc("sync_nhl_scf_slots_from_cf", { p_edition_id: editionId });
+
+  const [seriesRes, teamsRes] = await Promise.all([
+    fetchNhlSeriesRowsWithPublicLiveOverlay(supabase, editionId),
+    fetchNhlTeamsForEdition(supabase, editionId),
+  ]);
+
+  if (seriesRes.error || teamsRes.error) {
+    return { ok: false, error: "Could not load series for validation." };
+  }
+
+  const merged = mergeFinalRoundsDisplayFromPriorWinners(
+    mergeRound2DisplayFromRound1(seriesRes.rows, teamsRes.teams),
+    teamsRes.teams,
+  );
+  const series = merged.find((r) => r.id === seriesId);
+  if (!series || series.round_code !== "SCF") {
+    return { ok: false, error: "That Stanley Cup Final series was not found." };
+  }
+  const hi = series.higher_seed_team_id;
+  const lo = series.lower_seed_team_id;
+  if (!hi || !lo) {
+    return {
+      ok: false,
+      error:
+        "The Stanley Cup Final matchup is not open yet—both conference champions must be known.",
+    };
+  }
+  if (pickedTeamId !== hi && pickedTeamId !== lo) {
+    return { ok: false, error: "Pick must be one of the two teams in this series." };
+  }
+
+  const { error } = await supabase.from("nhl_scf_series_picks").upsert(
     {
       user_id: user.id,
       edition_id: editionId,

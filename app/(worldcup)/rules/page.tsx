@@ -8,26 +8,19 @@ import { fetchSamplePoolScoringRules } from "../../../lib/rules/fetchSamplePoolS
 import { knockoutRulesTableRowsFromPublicRules } from "../../../lib/rules/knockoutRulesTableRows";
 import { partitionPublicRulesForDisplay } from "../../../lib/rules/partitionPublicRulesForDisplay";
 import {
-  DEFAULT_PUBLIC_RULES_STAGE2_CORRECT,
   PUBLIC_RULES_DEFAULT_TIE_BREAK,
   PUBLIC_RULES_PAGE_COPY,
   describePrizeTier,
+  shouldApplyPublicRulesDisplayDefaults,
 } from "../../../lib/rules/publicRulesDisplayDefaults";
+import { resolveStage2PointsForRulesPage } from "../../../lib/scoring/poolScoringConfig";
 import { comparePublicScoringRuleRows } from "../../../lib/rules/comparePublicScoringRules";
+import { formatPoolLockDeadline } from "@/lib/datetime/poolLockDeadline";
+import { LiveScoresUpdateNotice } from "@/components/tournament/LiveScoresUpdateNotice";
+import { fetchPublicLiveScoresLastUpdated } from "@/lib/tournament/liveDailyUpdateStatus";
 import type { PublicScoringRuleRow } from "../../../types/publicScoringRules";
 
 export const dynamic = "force-dynamic";
-
-function formatLockAt(iso: string | null): string | null {
-  if (iso == null) return null;
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return null;
-  return d.toLocaleString("en-US", {
-    dateStyle: "long",
-    timeStyle: "short",
-    timeZone: "UTC",
-  });
-}
 
 function formatEntryFee(cents: number | null): string | null {
   if (cents == null || cents < 0) return null;
@@ -103,6 +96,7 @@ export default async function RulesPage() {
     data: { user },
   } = await supabase.auth.getUser();
   const result = await fetchSamplePoolScoringRules();
+  const liveScoresLastUpdatedAt = await fetchPublicLiveScoresLastUpdated(supabase);
 
   if (!result.ok && result.kind === "error") {
     return (
@@ -150,9 +144,11 @@ export default async function RulesPage() {
   }
 
   const { data } = result;
-  const lockLabel = formatLockAt(data.lockAt);
+  const lockLabel = data.lockAt
+    ? formatPoolLockDeadline(data.lockAt, { style: "long" })
+    : null;
   const feeLabel = formatEntryFee(data.entryFeeCents);
-  const { groupKindRules, knockoutRules, thirdPlaceRules, bonusRules } =
+  const { groupKindRules, knockoutRules, bonusRules } =
     partitionPublicRulesForDisplay(data.rules);
   const tieCopy = data.tieBreakNote?.trim() || PUBLIC_RULES_DEFAULT_TIE_BREAK;
 
@@ -161,13 +157,17 @@ export default async function RulesPage() {
   const bonusTableRows = bonusRulesTableRowsFromPublicRules(bonusRules);
 
   const stage2PointsPerCorrect =
-    thirdPlaceRules.length > 0
-      ? Math.max(...thirdPlaceRules.map((r) => r.points))
-      : DEFAULT_PUBLIC_RULES_STAGE2_CORRECT;
+    data.scoringConfig.thirdPlaceQualifierPoints ??
+    resolveStage2PointsForRulesPage({
+      rules: data.rules,
+      applyWorldCupDisplayDefaults: shouldApplyPublicRulesDisplayDefaults(
+        data.poolId,
+      ),
+    });
 
   const pageTitle = data.poolName.trim() || "Pool rules";
   const pageDescription = lockLabel
-    ? `Pre–knockout picks lock ${lockLabel} (UTC) unless the host changes the deadline. Stage 3 opens after the official Round of 32 bracket is published.`
+    ? `Pre–knockout picks lock ${lockLabel}, unless the host changes the deadline. Stage 3 opens after the official Round of 32 bracket is published.`
     : "Three stages — group finishes, best third-place advancers, then the published knockout bracket — plus bonus picks.";
 
   const c = PUBLIC_RULES_PAGE_COPY;
@@ -175,6 +175,11 @@ export default async function RulesPage() {
   return (
     <PageContainer>
       <PageTitle title={pageTitle} description={pageDescription} />
+
+      <LiveScoresUpdateNotice
+        lastUpdatedAt={liveScoresLastUpdatedAt}
+        className="mb-6"
+      />
 
       <div className="space-y-6">
         <section className="ash-surface px-4 py-4">
@@ -331,11 +336,21 @@ export default async function RulesPage() {
             </p>
             <ul className="mt-3 list-inside list-disc space-y-1.5 text-sm text-ash-muted">
               <li>
-                <span className="font-medium text-ash-text">
-                  {formatPoolPoints(stage2PointsPerCorrect)} points
-                </span>{" "}
-                for each correctly picked team that advances as a best third-place
-                qualifier
+                {stage2PointsPerCorrect != null ? (
+                  <>
+                    <span className="font-medium text-ash-text">
+                      {formatPoolPoints(stage2PointsPerCorrect)} points
+                    </span>{" "}
+                    for each correctly picked team that advances as a best
+                    third-place qualifier
+                  </>
+                ) : (
+                  <span className="font-medium text-ash-text">
+                    Points for each correct best third-place advancer are set in
+                    this pool&apos;s scoring rules. Ask the organizer if they are
+                    not listed on this page yet.
+                  </span>
+                )}
               </li>
               <li>
                 <span className="font-medium text-ash-text">0 points</span> for

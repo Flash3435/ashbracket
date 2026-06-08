@@ -2,8 +2,13 @@ import type { KnockoutPickSlotDraft } from "../../types/adminKnockoutPicks";
 import {
   buildAllParticipantPickDrafts,
 } from "../predictions/buildParticipantPickDrafts";
+import { thirdPlaceSlotInvalidReason } from "../predictions/knockoutPickConsistency";
 import { labelParticipantBonusPick } from "../predictions/participantBonusLabels";
+import { isKnockoutProgressionKind } from "../predictions/knockoutProgressionKinds";
 import type { Prediction, TournamentStage } from "../../src/types/domain";
+
+/** Eight distinct third-place advancers — not all twelve group rows must be filled. */
+export const THIRD_PLACE_ADVANCERS_REQUIRED = 8;
 
 export type PickCompletionSectionId =
   | "group"
@@ -77,6 +82,37 @@ function filledOfTotal(rows: KnockoutPickSlotDraft[]): {
   return { filled, total };
 }
 
+function isThirdPlaceSectionComplete(
+  thirdRows: KnockoutPickSlotDraft[],
+  allSlots: KnockoutPickSlotDraft[],
+): boolean {
+  const filled = thirdRows.filter((s) => s.teamId.trim()).length;
+  if (filled !== THIRD_PLACE_ADVANCERS_REQUIRED) return false;
+  return thirdRows.every((row) => {
+    if (!row.teamId.trim()) return true;
+    return thirdPlaceSlotInvalidReason(row, allSlots) == null;
+  });
+}
+
+function sectionComplete(
+  id: PickCompletionSectionId,
+  rows: KnockoutPickSlotDraft[],
+  allSlots: KnockoutPickSlotDraft[],
+  knockoutBracketPicksUnlocked: boolean,
+): boolean {
+  const { filled, total } = filledOfTotal(rows);
+  if (id === "knockout") {
+    if (!knockoutBracketPicksUnlocked || total === 0) return true;
+    return filled === total;
+  }
+  if (id === "third_place") {
+    if (total === 0) return false;
+    return isThirdPlaceSectionComplete(rows, allSlots);
+  }
+  if (total === 0) return false;
+  return filled === total;
+}
+
 /**
  * Canonical pre-lock / full-bracket completion for one participant membership.
  * Knockout progression rows are ignored until the official Round of 32 is published.
@@ -107,17 +143,45 @@ export function buildPoolMembershipCompletionStatus(
     const empty = rows.filter((s) => !s.teamId.trim());
     const required =
       id === "knockout" ? knockoutBracketPicksUnlocked && total > 0 : total > 0;
-    const complete = !required || (total > 0 && filled === total);
+    const complete = sectionComplete(
+      id,
+      rows,
+      slots,
+      knockoutBracketPicksUnlocked,
+    );
+    const displayTotal =
+      id === "third_place" ? THIRD_PLACE_ADVANCERS_REQUIRED : total;
+    const displayFilled =
+      id === "third_place"
+        ? Math.min(filled, THIRD_PLACE_ADVANCERS_REQUIRED)
+        : filled;
+    let missingLabels: string[] = [];
+    if (required && !complete) {
+      if (id === "third_place") {
+        const need = Math.max(0, THIRD_PLACE_ADVANCERS_REQUIRED - filled);
+        if (need > 0) {
+          missingLabels = [`${need} more third-place advancer${need === 1 ? "" : "s"}`];
+        } else {
+          missingLabels = rows
+            .filter(
+              (row) =>
+                row.teamId.trim() &&
+                thirdPlaceSlotInvalidReason(row, slots) != null,
+            )
+            .map((s) => missingLabelForSlot(s));
+        }
+      } else {
+        missingLabels = empty.map((s) => missingLabelForSlot(s));
+      }
+    }
     return {
       id,
       label: sectionLabel(id),
       required,
-      filled,
-      total,
+      filled: displayFilled,
+      total: displayTotal,
       complete,
-      missingLabels: required
-        ? empty.map((s) => missingLabelForSlot(s))
-        : [],
+      missingLabels,
     };
   });
 
@@ -135,6 +199,17 @@ export function buildPoolMembershipCompletionStatus(
     .filter((s) => {
       const sec = sectionForSlot(s);
       if (sec === "knockout" && !knockoutBracketPicksUnlocked) return false;
+      if (sec === "third_place") {
+        const thirdRows = bySection.get("third_place") ?? [];
+        const filled = thirdRows.filter((r) => r.teamId.trim()).length;
+        if (filled >= THIRD_PLACE_ADVANCERS_REQUIRED) {
+          return (
+            s.teamId.trim() !== "" &&
+            thirdPlaceSlotInvalidReason(s, slots) != null
+          );
+        }
+        return !s.teamId.trim();
+      }
       return !s.teamId.trim();
     })
     .map((s) => s.rowKey);
@@ -243,6 +318,8 @@ export type BuildCompletionFromPredictionsInput = {
   participantId: string;
   bonusKeys: readonly string[];
   knockoutBracketPicksUnlocked?: boolean;
+  teams?: import("../../src/types/domain").Team[];
+  groupTeamCountryCodesByLetter?: Record<string, string[]>;
 };
 
 export function buildPoolMembershipCompletionStatusFromPredictions(
@@ -253,6 +330,8 @@ export function buildPoolMembershipCompletionStatusFromPredictions(
     predictions: input.predictions,
     participantId: input.participantId,
     bonusKeys: input.bonusKeys,
+    teams: input.teams,
+    groupTeamCountryCodesByLetter: input.groupTeamCountryCodesByLetter,
   });
   return buildPoolMembershipCompletionStatus(slots, {
     knockoutBracketPicksUnlocked: input.knockoutBracketPicksUnlocked,

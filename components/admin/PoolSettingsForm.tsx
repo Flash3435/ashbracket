@@ -3,7 +3,13 @@
 import { useRouter } from "next/navigation";
 import { useEffect, useState, useTransition } from "react";
 import { updatePoolSettingsAction } from "../../app/(worldcup)/admin/settings/actions";
+import {
+  PoolPaymentSection,
+  poolPaymentFormStateFromSettings,
+  type PoolPaymentFormState,
+} from "@/components/pools/PoolPaymentSection";
 import type { PoolSettingsEditable } from "../../lib/pools/poolSettingsDb";
+import { formatPoolLockDeadline } from "../../lib/datetime/poolLockDeadline";
 
 type PoolSettingsFormProps = {
   poolId: string;
@@ -39,9 +45,14 @@ export function PoolSettingsForm({
   const [showPublicRules, setShowPublicRules] = useState(
     initial.showPublicRules,
   );
+  const [ashbotEnabled, setAshbotEnabled] = useState(initial.ashbotEnabled);
   const [lockLocal, setLockLocal] = useState(() =>
     toDatetimeLocalFromIso(initial.lockAt),
   );
+  const [paymentForm, setPaymentForm] = useState<PoolPaymentFormState>(() =>
+    poolPaymentFormStateFromSettings(initial.payment),
+  );
+  const [paymentWarnings, setPaymentWarnings] = useState<string[]>([]);
   const [actionError, setActionError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
 
@@ -49,7 +60,10 @@ export function PoolSettingsForm({
     setName(initial.name);
     setIsPublic(initial.isPublic);
     setShowPublicRules(initial.showPublicRules);
+    setAshbotEnabled(initial.ashbotEnabled);
     setLockLocal(toDatetimeLocalFromIso(initial.lockAt));
+    setPaymentForm(poolPaymentFormStateFromSettings(initial.payment));
+    setPaymentWarnings([]);
   }, [initial]);
 
   useEffect(() => {
@@ -72,19 +86,29 @@ export function PoolSettingsForm({
         isPublic,
         showPublicRules,
         lockAt,
+        ashbotEnabled,
+        payment: paymentForm,
       });
       if (!res.ok) {
         setActionError(res.error);
+        setPaymentWarnings([]);
         return;
       }
       setName(res.pool.name);
       setIsPublic(res.pool.isPublic);
       setShowPublicRules(res.pool.showPublicRules);
+      setAshbotEnabled(res.pool.ashbotEnabled);
       setLockLocal(toDatetimeLocalFromIso(res.pool.lockAt));
+      setPaymentForm(poolPaymentFormStateFromSettings(res.pool.payment));
+      setPaymentWarnings(res.paymentWarnings ?? []);
       setSuccess(true);
       router.refresh();
     });
   }
+
+  const lockDeadlineEastern = initial.lockAt
+    ? formatPoolLockDeadline(initial.lockAt, { style: "compact" })
+    : null;
 
   return (
     <form onSubmit={onSubmit} className="space-y-6">
@@ -101,8 +125,8 @@ export function PoolSettingsForm({
           className="rounded-md border border-ash-accent/40 bg-ash-accent/10 px-3 py-2 text-sm text-ash-muted"
           role="status"
         >
-          Saved. Updated name, leaderboard visibility, public rules, and lock
-          time apply after refresh.
+          Saved. Updated name, leaderboard visibility, public rules, AshBot
+          commentary, and lock time apply after refresh.
         </p>
       ) : null}
 
@@ -176,6 +200,39 @@ export function PoolSettingsForm({
         </div>
       </div>
 
+      <PoolPaymentSection
+        value={paymentForm}
+        onChange={setPaymentForm}
+        disabled={disabled || isPending}
+        validationWarnings={paymentWarnings}
+      />
+
+      <div className="space-y-2">
+        <p className="text-xs font-medium uppercase tracking-wide text-ash-muted">
+          Activity feed
+        </p>
+        <div className="flex items-start gap-2">
+          <input
+            id="pool-ashbot"
+            type="checkbox"
+            checked={ashbotEnabled}
+            onChange={(e) => setAshbotEnabled(e.target.checked)}
+            disabled={disabled || isPending}
+            className="mt-0.5 h-4 w-4 shrink-0 rounded border-ash-border text-ash-accent focus:ring-ash-accent"
+          />
+          <div>
+            <label htmlFor="pool-ashbot" className="text-sm text-ash-text">
+              AshBot commentary on activity
+            </label>
+            <p className="mt-1 text-xs text-ash-muted">
+              When on, short playful AshBot lines appear under joins, pick
+              milestones, daily recaps, and announcements. Reactions stay on the
+              activity item itself.
+            </p>
+          </div>
+        </div>
+      </div>
+
       <div className="space-y-2">
         <label
           htmlFor="pool-lock"
@@ -193,7 +250,17 @@ export function PoolSettingsForm({
         />
         <p className="text-xs text-ash-muted">
           Uses your browser&apos;s local timezone. Clear the field if you do not
-          want a lock deadline.
+          want a lock deadline. Public deadline displays use Eastern Time
+          {lockDeadlineEastern ? (
+            <>
+              {" "}
+              (currently{" "}
+              <span className="font-medium text-ash-text">{lockDeadlineEastern}</span>
+              ).
+            </>
+          ) : (
+            "."
+          )}
         </p>
       </div>
 

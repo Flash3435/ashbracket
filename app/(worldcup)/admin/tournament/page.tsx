@@ -1,10 +1,15 @@
+import { LiveDailyUpdatePanel } from "@/components/admin/LiveDailyUpdatePanel";
+import { AdminTournamentAdvancedTools } from "@/components/admin/AdminTournamentAdvancedTools";
+import { SimulationModeBanner } from "@/components/admin/SimulationModeBanner";
 import { PageContainer } from "@/components/ui/PageContainer";
 import { requireGlobalAdminPage } from "@/lib/admin/requireGlobalAdmin";
+import { isProductionDeployment } from "@/lib/admin/deploymentEnvironment";
+import { fetchLiveTournamentSyncImpactSummary } from "@/lib/admin/fetchAdminImpactSummary";
+import { fetchLiveDailyUpdateStatusForEdition } from "@/lib/tournament/liveDailyUpdateStatus";
 import { createClient } from "@/lib/supabase/server";
 import { PageTitle } from "@/components/ui/PageTitle";
 import Link from "next/link";
 import { OFFICIAL_EDITION_CODE } from "../../../../lib/config/officialTournament";
-import { runTournamentSyncAction } from "./actions";
 
 export const dynamic = "force-dynamic";
 
@@ -37,6 +42,20 @@ export default async function AdminTournamentPage() {
     finishedGroupMatches = fg ?? 0;
   }
 
+  const syncImpact =
+    edition?.id != null
+      ? await fetchLiveTournamentSyncImpactSummary(supabase)
+      : null;
+  const lastUpdate =
+    edition?.id != null
+      ? await fetchLiveDailyUpdateStatusForEdition(
+          supabase,
+          edition.id,
+          edition.code as string,
+        )
+      : null;
+  const isProduction = isProductionDeployment();
+
   return (
     <PageContainer>
       <p className="mb-4 text-sm text-ash-muted">
@@ -51,8 +70,16 @@ export default async function AdminTournamentPage() {
       </p>
 
       <PageTitle
-        title="Tournament data"
-        description="Bring in official match scores and turn them into results your pool can score against. After a successful sync, everyone’s points and the public leaderboard are updated."
+        title="Live scores & standings"
+        description="Once per day, after match scores are recorded, run the update below to refresh official results and every live pool leaderboard."
+      />
+
+      <SimulationModeBanner
+        variant="live"
+        editionLabel={
+          edition ? `${edition.name} (${edition.code})` : undefined
+        }
+        className="mb-6"
       />
 
       <div className="ash-surface mb-6 space-y-2 p-4 text-sm text-ash-muted">
@@ -74,19 +101,19 @@ export default async function AdminTournamentPage() {
         </p>
       </div>
 
-      <div className="ash-surface flex flex-col gap-4 p-4">
-        <p className="text-sm text-ash-muted">
-          Match scores are usually updated where your tournament data is
-          maintained. You can <span className="font-medium text-ash-text">freeze</span>{" "}
-          a match so automated sync skips it and leaves your manual score in
-          place.
-        </p>
-        <form action={runTournamentSyncAction}>
-          <button type="submit" className="btn-primary">
-            Sync tournament and update standings
-          </button>
-        </form>
-      </div>
+      {syncImpact ? (
+        <>
+          <LiveDailyUpdatePanel
+            isProduction={isProduction}
+            impact={syncImpact}
+            lastUpdate={lastUpdate}
+          />
+          <AdminTournamentAdvancedTools
+            isProduction={isProduction}
+            impact={syncImpact}
+          />
+        </>
+      ) : null}
 
       <p className="mt-8 text-sm text-ash-muted">
         <Link href="/admin" className="ash-link">

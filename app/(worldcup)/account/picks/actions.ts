@@ -2,6 +2,8 @@
 
 import { createClient } from "@/lib/supabase/server";
 import { isParticipantPicksCompleteForParticipant } from "../../../../lib/communications/picksCompleteness";
+import { ensurePoolInsightsForPool } from "../../../../lib/poolActivity/ensurePoolInsights";
+import { ensurePoolMilestonesForPool } from "../../../../lib/poolActivity/ensurePoolMilestones";
 import { insertPoolActivityRow } from "../../../../lib/poolActivity/insertPoolActivity";
 import { fingerprintPredictionsForParticipant } from "../../../../lib/poolActivity/predictionsFingerprint";
 import { applyParticipantPickSlots } from "../../../../lib/predictions/applyParticipantPickSlots";
@@ -10,6 +12,7 @@ import { mergeKnockoutProgressionSlotsFromPredictions } from "../../../../lib/pr
 import { validateKnockoutPickSaveInput } from "../../../../lib/predictions/validateKnockoutPickPayload";
 import { fetchOfficialRoundOf32Complete } from "../../../../lib/tournament/fetchOfficialRoundOf32Complete";
 import { mapPredictionRow } from "../../../../src/lib/scoring/mapSupabaseRows";
+import { recomputePoolLedgerForPoolAsTrustedServer } from "../../../../src/lib/scoring/recomputePoolLedger";
 import { revalidatePath } from "next/cache";
 import type {
   ParticipantPickSlotPayload,
@@ -29,8 +32,8 @@ function poolIsLocked(lockAt: string | null): boolean {
 
 /**
  * Saves knockout picks for the signed-in user's participant row only (RLS on `predictions`).
- * Verifies ownership and pool lock server-side. Does not call `replace_points_ledger_for_pool`
- * (admin-only); standings refresh when an organizer recomputes or results sync runs.
+ * Verifies ownership and pool lock server-side, then recomputes that pool's `points_ledger`
+ * via the trusted service-role path so the public leaderboard matches persisted scoring.
  */
 export async function saveMyKnockoutPicksAction(input: {
   participantId: string;
@@ -66,7 +69,7 @@ export async function saveMyKnockoutPicksAction(input: {
 
     const { data: poolRow, error: poolErr } = await supabase
       .from("pools")
-      .select("lock_at")
+      .select("lock_at, tournament_edition_id")
       .eq("id", row.pool_id)
       .maybeSingle();
 
@@ -106,10 +109,11 @@ export async function saveMyKnockoutPicksAction(input: {
     if (r32StageErr) {
       return { ok: false, error: r32StageErr.message };
     }
-    if (r32StageRow?.id) {
+    if (r32StageRow?.id && poolRow?.tournament_edition_id) {
       const unlocked = await fetchOfficialRoundOf32Complete(
         supabase,
         r32StageRow.id as string,
+        poolRow.tournament_edition_id as string,
       );
       if (!unlocked) {
         const { data: predData, error: predFetchErr } = await supabase
@@ -128,6 +132,8 @@ export async function saveMyKnockoutPicksAction(input: {
         );
         slots = mergeKnockoutProgressionSlotsFromPredictions(slots, existing);
       }
+    } else if (r32StageRow?.id) {
+      return { ok: false, error: "Pool tournament edition is missing." };
     }
 
     const { data: predBeforeRows, error: predBeforeErr } = await supabase
@@ -224,7 +230,43 @@ export async function saveMyKnockoutPicksAction(input: {
       } catch (e) {
         console.error("pool_activity picks milestone failed", e);
       }
+      try {
+        await ensurePoolMilestonesForPool(row.pool_id as string);
+      } catch (e) {
+        console.error("pool_activity pool milestones failed", e);
+      }
+      try {
+        await ensurePoolInsightsForPool(row.pool_id as string);
+      } catch (e) {
+        console.error("pool_activity pool insights failed", e);
+      }
     }
+
+    const poolIdStr = row.pool_id as string;
+    const ledger = await recomputePoolLedgerForPoolAsTrustedServer(poolIdStr, {
+      ledgerTrigger: "participant_save",
+    });
+    if (ledger.error) {
+      console.error("[ashbracket:participant-picks] ledger recompute failed", {
+        poolId: poolIdStr,
+        participantId: input.participantId,
+        error: ledger.error,
+      });
+      revalidatePath("/account/picks");
+      revalidatePath("/account/picks/summary");
+      revalidatePath(`/participant/${input.participantId}/snapshot`);
+      revalidatePath("/account");
+      revalidatePath("/account/activity");
+      revalidatePath(`/participant/${input.participantId}`);
+      return {
+        ok: false,
+        error: `Your picks were saved, but the pool leaderboard could not be updated yet: ${ledger.error}`,
+      };
+    }
+    console.info("[ashbracket:participant-picks] ledger recomputed after save", {
+      poolId: poolIdStr,
+      participantId: input.participantId,
+    });
 
     revalidatePath("/account/picks");
     revalidatePath("/account/picks/summary");

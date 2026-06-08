@@ -4,7 +4,9 @@ import type { ParticipantBracketModel } from "../../lib/bracket/types";
 import type { KnockoutPickSlotDraft } from "../../types/adminKnockoutPicks";
 import type { Team } from "../../src/types/domain";
 import { BracketMatchCard } from "./BracketMatchCard";
+import { LockedLaterRoundsPanel } from "./LockedLaterRoundsPanel";
 import { CountryFlagIcon } from "../tournament/Flag";
+import { PreRoundOf32BracketBanner } from "../picks/PreRoundOf32BracketBanner";
 
 type Props = {
   slots: KnockoutPickSlotDraft[];
@@ -12,6 +14,8 @@ type Props = {
   knockoutBracketPicksUnlocked: boolean;
   /** Optional: link to `/account/picks?participant=…` for the owner. */
   editPicksHref?: string | null;
+  /** Optional: list view on summary / snapshot pages. */
+  listViewHref?: string | null;
   /** Hide edit links on read-only snapshots. */
   readOnly?: boolean;
 };
@@ -103,6 +107,7 @@ export function ParticipantBracketView({
   teams,
   knockoutBracketPicksUnlocked,
   editPicksHref = null,
+  listViewHref = null,
   readOnly = false,
 }: Props) {
   const bracket = deriveParticipantBracket({
@@ -126,30 +131,44 @@ export function ParticipantBracketView({
     );
   }
 
+  if (!knockoutBracketPicksUnlocked) {
+    return (
+      <div className="space-y-4">
+        <PreRoundOf32BracketBanner
+          listViewHref={listViewHref}
+          showListViewCta={!readOnly}
+        />
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-wide text-ash-muted">
+            Knockout bracket — opens later
+          </p>
+          <p className="mt-1 text-[11px] leading-relaxed text-ash-muted">
+            Round of 32 sides from your group picks appear below. Third-route slots show
+            FIFA-style labels (e.g. 3 ABCDF) until the official bracket is published.
+          </p>
+        </div>
+        <div
+          className="overflow-x-auto rounded-xl border border-ash-border bg-ash-body/20 p-2 sm:p-4"
+          role="region"
+          aria-label="Participant bracket preview before official Round of 32"
+        >
+          <div className="flex min-w-[520px] flex-nowrap gap-2 pb-1">
+            <RoundColumn
+              title="Round of 32"
+              shortTitle="R32"
+              matches={bracket.roundOf32}
+              teamById={teamById}
+              matchEditHref={matchEditHref}
+            />
+            <LockedLaterRoundsPanel />
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-4">
-      {bracket.meta.notes.length > 0 ? (
-        <ul className="space-y-1 text-xs text-ash-muted">
-          {bracket.meta.notes.map((n, i) => (
-            <li key={i} className="flex gap-2">
-              <span className="text-ash-accent" aria-hidden>
-                •
-              </span>
-              <span>{n}</span>
-            </li>
-          ))}
-        </ul>
-      ) : null}
-
-      {!knockoutBracketPicksUnlocked ? (
-        <p className="text-xs leading-relaxed text-ash-muted">
-          Sides that depend on FIFA&apos;s third-place routing show labels like{" "}
-          <span className="text-ash-text/90">3 ABCDF</span> (Annex C), not teams from your
-          Stage 2 list. After organizers publish the official Round of 32, Stage 3 opens and
-          you pick from those real pairings.
-        </p>
-      ) : null}
-
       <div
         className="overflow-x-auto rounded-xl border border-ash-border bg-ash-body/20 p-2 sm:p-4"
         role="region"

@@ -15,12 +15,16 @@ type LoginFormProps = {
   showForbiddenMessage: boolean;
   /** Invalid or expired Supabase email confirmation link. */
   showEmailConfirmFailed?: boolean;
+  /** Password was updated via the reset-password flow. */
+  showPasswordResetSuccess?: boolean;
   /** After sign-out from the blocked-admin state (defaults to `/login`). */
   signOutRedirectTo?: string;
   /** “My account” link in blocked-admin state (defaults to `/account`). */
   blockedStateAccountHref?: string;
   /** When true, copy and links assume the NHL section instead of the main site. */
   isNhlSurface?: boolean;
+  /** When true, copy and links assume the NHL Draft 2026 Pick'em section. */
+  isNhlDraft26Surface?: boolean;
 };
 
 export function LoginForm({
@@ -29,10 +33,13 @@ export function LoginForm({
   blockedEmail,
   showForbiddenMessage,
   showEmailConfirmFailed,
+  showPasswordResetSuccess,
   signOutRedirectTo = "/login",
   blockedStateAccountHref = "/account",
   isNhlSurface = false,
+  isNhlDraft26Surface = false,
 }: LoginFormProps) {
+  const isolatedSurface = isNhlDraft26Surface || isNhlSurface;
   const router = useRouter();
 
   async function onSignOut() {
@@ -47,14 +54,22 @@ export function LoginForm({
       <div className="space-y-4">
         {showForbiddenMessage ? (
           <p className="rounded-md border border-amber-700/50 bg-amber-950/30 px-3 py-2 text-sm text-amber-100">
-            {isNhlSurface
-              ? "That NHL admin page is only available to AshBracket global admins."
-              : "This area is for pool organizers."}
+            {isNhlDraft26Surface
+              ? "That NHL Draft admin page is only available to AshBracket global admins."
+              : isNhlSurface
+                ? "That NHL admin page is only available to AshBracket global admins."
+                : "This area is for pool organizers."}
           </p>
         ) : null}
         <p className="rounded-md border border-amber-700/50 bg-amber-950/30 px-3 py-2 text-sm text-amber-100">
           Signed in as <span className="font-medium text-amber-50">{blockedEmail}</span>.
-          {isNhlSurface ? (
+          {isNhlDraft26Surface ? (
+            <>
+              {" "}
+              This account is not authorized for NHL Draft admin tools. Sign out and sign in with a
+              global admin account, or return to your picks.
+            </>
+          ) : isNhlSurface ? (
             <>
               {" "}
               This account is not authorized for NHL admin tools. Sign out and sign in with a
@@ -78,7 +93,7 @@ export function LoginForm({
           )}
         </p>
         <div className="flex flex-wrap gap-2">
-          {!isNhlSurface ? (
+          {!isolatedSurface ? (
             <Link
               href="/account/pools/new"
               className="btn-primary inline-flex items-center text-sm"
@@ -90,7 +105,11 @@ export function LoginForm({
             href={blockedStateAccountHref}
             className="btn-ghost inline-flex items-center text-sm ring-1 ring-ash-border"
           >
-            {isNhlSurface ? "NHL account" : "My account"}
+            {isNhlDraft26Surface
+              ? "My picks"
+              : isNhlSurface
+                ? "NHL account"
+                : "My account"}
           </Link>
           <button
             type="button"
@@ -106,6 +125,14 @@ export function LoginForm({
 
   return (
     <div className="space-y-4">
+      {showPasswordResetSuccess ? (
+        <p
+          className="rounded-md border border-emerald-800/60 bg-emerald-950/40 px-3 py-2 text-sm text-emerald-100"
+          role="status"
+        >
+          Your password was updated. Sign in with your new password.
+        </p>
+      ) : null}
       {showEmailConfirmFailed ? (
         <p className="rounded-md border border-red-800/60 bg-red-950/40 px-3 py-2 text-sm text-red-100">
           That confirmation link is invalid or has expired. Sign in below if you
@@ -113,7 +140,10 @@ export function LoginForm({
           from AshBracket.
         </p>
       ) : null}
-      <SignInWithEmailForm redirectAfterLogin={postLoginHref} />
+      <SignInWithEmailForm
+        redirectAfterLogin={postLoginHref}
+        forgotPasswordHref={isolatedSurface ? undefined : "/forgot-password"}
+      />
       <p className="text-center text-sm text-ash-muted">
         No account yet?{" "}
         <Link href={signupHref} className="ash-link">

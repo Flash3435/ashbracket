@@ -9,6 +9,47 @@ Small-team workflow: migrate the database first, ship data updates if needed, co
 | [Supabase CLI](https://supabase.com/docs/guides/cli) | `supabase db push` to production |
 | [Vercel CLI](optional) | `npm run deploy:vercel-cli` — only if you do not use Git → Vercel |
 
+### Required environment variables (Vercel production)
+
+| Variable | Example | Purpose |
+|----------|---------|---------|
+| `NEXT_PUBLIC_SITE_URL` | `https://ashbracket.com` | Canonical site URL for password-reset emails, invites, and absolute links |
+| `NEXT_PUBLIC_SUPABASE_URL` | `https://<project>.supabase.co` | Supabase project URL |
+| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | (from Supabase dashboard) | Browser/server anon key |
+
+Optional: `SITE_URL` (server-only) overrides `NEXT_PUBLIC_SITE_URL` for server-side email/link generation.
+
+**Local dev:** set `NEXT_PUBLIC_SITE_URL=http://localhost:3000` in `.env.local` (or rely on the dev fallback in `getSiteUrl()`).
+
+### Supabase Authentication → URL Configuration
+
+Required for signup, email change, and **password reset** links to land on production (not `localhost`).
+
+| Setting | Production value |
+|---------|------------------|
+| **Site URL** | `https://ashbracket.com` (keep this — do not set back to localhost) |
+| **Redirect URLs** (add each; all are required for password reset) | `https://ashbracket.com/reset-password` |
+| | `https://ashbracket.com/**` |
+| | `https://ashbracket.com/auth/confirm` |
+
+**Local dev** may also include:
+
+- `http://localhost:3000/**`
+- `http://localhost:3000/reset-password`
+
+Password-reset emails should include a `redirect_to` query param like  
+`https://ashbracket.com/auth/confirm?next=%2Freset-password` (the app sends this via `POST /api/auth/forgot-password` → `resetPasswordForEmail(..., { redirectTo })`).
+
+If the emailed link shows only `redirect_to=https://ashbracket.com` (no path), Supabase rejected the redirect URL and fell back to Site URL. Ensure these are in **Redirect URLs**:
+
+- `https://ashbracket.com/auth/confirm`
+- `https://ashbracket.com/reset-password`
+- `https://ashbracket.com/**`
+
+Request a **new** reset email after any dashboard change. Check Vercel logs for `[forgot-password] resetPasswordForEmail redirectTo:` to confirm what the app sent.
+
+**Recovery email template (optional):** Under Authentication → Email Templates → Reset password, Supabase’s PKCE-friendly link format is documented in [Email Templates](https://supabase.com/docs/guides/auth/auth-email-templates). If you customize the template, use `{{ .RedirectTo }}` (not only `{{ .SiteURL }}`) when building the action link.
+
 Link the repo to your Supabase project (from `ashbracket/`):
 
 ```bash
@@ -26,6 +67,7 @@ Use this every time schema, data, or app code changes together.
 - [ ] **4. Git** — commit and `git push origin main`
 - [ ] **5. App** — normally **skip**: `git push` triggers Vercel. Only if Git integration is off: `npm run deploy:vercel-cli`
 - [ ] **6. Production smoke** — [Manual checklist](#production-smoke-after-deploy) or `npm run verify:prod` with `ASHBRACKET_URL` set
+- [ ] **7. Auth URLs** (when auth/email behavior changed) — `NEXT_PUBLIC_SITE_URL` on Vercel; Supabase [URL Configuration](#supabase-authentication--url-configuration) matches production domain
 
 ### npm shortcuts
 

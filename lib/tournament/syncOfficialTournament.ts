@@ -1,10 +1,17 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { recomputePoolLedgerForPool } from "@/lib/scoring/recomputePoolLedger";
+import { recomputePoolLedgerWithClient } from "@/lib/scoring/recomputePoolLedger";
 import {
   computeGroupStandings,
   type FinishedGroupMatch,
 } from "./groupStandings";
 import { winnerFromMatchScores } from "./matchOutcome";
+
+export type SyncOfficialTournamentSummary = {
+  finishedMatchCount: number;
+  derivedResultsInserted: number;
+  poolsRecalculated: number;
+  syncLockedMatchCount: number;
+};
 
 export type OfficialMatchScorePatch = {
   matchCode: string;
@@ -155,7 +162,9 @@ export async function syncOfficialTournament(
     poolIds: string[];
     patches?: OfficialMatchScorePatch[];
   },
-): Promise<{ ok: true } | { ok: false; error: string }> {
+): Promise<
+  { ok: true; summary: SyncOfficialTournamentSummary } | { ok: false; error: string }
+> {
   const { editionCode, poolIds, patches = [] } = options;
 
   const { data: edition, error: edErr } = await supabase
@@ -198,6 +207,7 @@ export async function syncOfficialTournament(
   const { data: lockedRows, error: lrErr } = await supabase
     .from("results")
     .select("tournament_stage_id, kind, group_code, slot_key")
+    .eq("edition_id", editionId)
     .eq("locked", true);
   if (lrErr) return { ok: false, error: lrErr.message };
 
@@ -212,7 +222,11 @@ export async function syncOfficialTournament(
     ),
   );
 
-  const { error: delErr } = await supabase.from("results").delete().eq("source", "sync");
+  const { error: delErr } = await supabase
+    .from("results")
+    .delete()
+    .eq("edition_id", editionId)
+    .eq("source", "sync");
   if (delErr) return { ok: false, error: delErr.message };
 
   const resolvedAt = new Date().toISOString();
@@ -266,6 +280,7 @@ export async function syncOfficialTournament(
     const rKey = resultSlotKey(groupStageId, "group_runner_up", g, null);
     if (!lockedKeys.has(wKey)) {
       inserts.push({
+        edition_id: editionId,
         tournament_stage_id: groupStageId,
         kind: "group_winner",
         team_id: first.teamId,
@@ -278,6 +293,7 @@ export async function syncOfficialTournament(
     }
     if (!lockedKeys.has(rKey)) {
       inserts.push({
+        edition_id: editionId,
         tournament_stage_id: groupStageId,
         kind: "group_runner_up",
         team_id: second.teamId,
@@ -303,6 +319,7 @@ export async function syncOfficialTournament(
     );
     if (lockedKeys.has(k)) continue;
     inserts.push({
+      edition_id: editionId,
       tournament_stage_id: stageId,
       kind: m.scoring_result_kind,
       team_id: m.winner_team_id,
@@ -319,12 +336,41 @@ export async function syncOfficialTournament(
     if (insErr) return { ok: false, error: insErr.message };
   }
 
+  console.info(
+    "[ashbracket:sync] results rebuilt from tournament_matches; recomputing ledgers",
+    { insertCount: inserts.length, poolCount: poolIds.length },
+  );
+
   for (const poolId of poolIds) {
-    const ledger = await recomputePoolLedgerForPool(poolId);
+    const ledger = await recomputePoolLedgerWithClient(supabase, poolId, {
+      ledgerTrigger: "tournament_sync",
+    });
     if (ledger.error) {
+      console.error("[ashbracket:sync] ledger recompute failed", {
+        poolId,
+        error: ledger.error,
+      });
       return { ok: false, error: ledger.error };
     }
   }
 
-  return { ok: true };
+  console.info("[ashbracket:sync] ledger recompute finished for all pools");
+
+  const finishedMatchCount = matches.filter(
+    (m) =>
+      m.status === "finished" &&
+      m.home_goals != null &&
+      m.away_goals != null,
+  ).length;
+  const syncLockedMatchCount = matches.filter((m) => m.sync_locked).length;
+
+  return {
+    ok: true,
+    summary: {
+      finishedMatchCount,
+      derivedResultsInserted: inserts.length,
+      poolsRecalculated: poolIds.length,
+      syncLockedMatchCount,
+    },
+  };
 }

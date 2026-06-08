@@ -1,9 +1,14 @@
 import { AccountPicksProfileLinks } from "@/components/account/AccountPicksProfileLinks";
-import { PoolActivityFeed } from "@/components/poolActivity/PoolActivityFeed";
+import { PoolActivityFeedPanel } from "@/components/poolActivity/PoolActivityFeedPanel";
 import { PageContainer } from "@/components/ui/PageContainer";
 import { PageTitle } from "@/components/ui/PageTitle";
+import { canManagePool, isGlobalAdmin } from "@/lib/auth/permissions";
 import { createClient } from "@/lib/supabase/server";
-import { loadAccountKnockoutSelection } from "../../../../lib/account/loadAccountKnockoutSelection";
+import {
+  loadAccountKnockoutSelection,
+  poolLocked,
+} from "../../../../lib/account/loadAccountKnockoutSelection";
+import { filterActivityFeedForParticipantView } from "../../../../lib/poolActivity/activityFeedParticipantFilter";
 import { loadPoolActivityForViewer } from "../../../../lib/poolActivity/loadPoolActivityForViewer";
 import Link from "next/link";
 import { redirect } from "next/navigation";
@@ -31,15 +36,24 @@ export default async function AccountActivityPage({ searchParams }: PageProps) {
   let feedError: string | null = null;
   let activity: Awaited<ReturnType<typeof loadPoolActivityForViewer>> | null =
     null;
+  let isPoolAdmin = false;
+  const globalAdmin = await isGlobalAdmin(supabase);
   const selectedPoolId = ctx.selectedId
     ? ctx.myParticipants.find((p) => p.id === ctx.selectedId)?.pool_id
     : null;
+  const locked = poolLocked(ctx.selectedLockAt);
+  const revealHref =
+    locked && ctx.selectedId
+      ? `/account/reveal?participant=${ctx.selectedId}`
+      : null;
 
   if (ctx.selectedId && selectedPoolId && !ctx.loadError) {
     try {
+      isPoolAdmin = await canManagePool(supabase, selectedPoolId);
       activity = await loadPoolActivityForViewer(supabase, selectedPoolId, {
         ensureDailyRecap: true,
         limit: 20,
+        viewerParticipantId: ctx.selectedId,
       });
     } catch (e) {
       feedError =
@@ -64,14 +78,32 @@ export default async function AccountActivityPage({ searchParams }: PageProps) {
             >
               Edit picks
             </Link>
+            <span className="text-ash-border" aria-hidden>
+              |
+            </span>
+            <Link
+              href={`/account/reveal?participant=${ctx.selectedId}`}
+              className="ash-link text-sm"
+            >
+              Reveal
+            </Link>
           </>
         ) : null}
       </div>
 
       <PageTitle
         title="Activity"
-        description="A read-only timeline for your pool: joins, pick milestones, and Ash recaps when the pool picture changes."
+        description="Your pool timeline: joins, pick milestones, Ash recaps, admin updates, and reactions from members."
       />
+
+      {globalAdmin ? (
+        <p className="mb-4 text-sm">
+          <Link href="/admin/activity" className="ash-link font-medium">
+            View activity across all pools
+          </Link>
+          <span className="text-ash-muted"> — global admin dashboard</span>
+        </p>
+      ) : null}
 
       {ctx.loadError ? (
         <p
@@ -119,6 +151,7 @@ export default async function AccountActivityPage({ searchParams }: PageProps) {
             selectedId={ctx.selectedId}
             summaryBasePath="/account/picks/summary"
             activityBasePath="/account/activity"
+            revealBasePath="/account/reveal"
           />
 
           {!ctx.selectedId && ctx.myParticipants.length > 1 ? (
@@ -142,11 +175,20 @@ export default async function AccountActivityPage({ searchParams }: PageProps) {
                 >
                   {feedError}
                 </p>
-              ) : activity ? (
-                <PoolActivityFeed
-                  items={activity.items}
+              ) : activity && ctx.selectedId ? (
+                <PoolActivityFeedPanel
+                  items={filterActivityFeedForParticipantView(activity.items, {
+                    hidePoolWideMilestones: Boolean(participantParam),
+                    participantId: ctx.selectedId,
+                  })}
+                  poolId={selectedPoolId}
+                  viewerParticipantId={ctx.selectedId}
+                  reactions={activity.reactions}
+                  isPoolAdmin={isPoolAdmin}
                   liveRecapFacts={activity.liveRecapFacts}
                   liveRecapDateYmd={activity.liveRecapDateYmd}
+                  ashbotEnabled={activity.ashbotEnabled}
+                  revealHref={revealHref}
                 />
               ) : null}
             </>

@@ -1,5 +1,6 @@
-import { AccountNextMatchesSection } from "@/components/account/AccountNextMatchesSection";
+import { WhoToCheerForCard } from "@/components/account/WhoToCheerForCard";
 import { AccountPicksProfileLinks } from "@/components/account/AccountPicksProfileLinks";
+import { whoToCheerForFromSchedule } from "@/lib/account/loadWhoToCheerFor";
 import { ParticipantBracketView } from "@/components/bracket/ParticipantBracketView";
 import { MyKnockoutPicksSummary } from "@/components/picks/MyKnockoutPicksSummary";
 import { PicksViewToggle } from "@/components/picks/PicksViewToggle";
@@ -11,10 +12,6 @@ import {
   poolLocked,
 } from "../../../../../lib/account/loadAccountKnockoutSelection";
 import { fetchPublicTournamentProgress } from "../../../../../lib/tournament/fetchPublicTournamentProgress";
-import {
-  countryCodesFromKnockoutSlots,
-  nextMatchesForTeamCountryCodes,
-} from "../../../../../lib/participant/nextMatchesForPickedTeams";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 
@@ -50,24 +47,17 @@ export default async function AccountPicksSummaryPage({ searchParams }: PageProp
   }
 
   const locked = poolLocked(ctx.selectedLockAt);
-  const lockHint =
-    locked && ctx.selectedLockAt
-      ? `Group stage, third-place advancers, and bonus picks locked ${new Intl.DateTimeFormat(undefined, {
-          dateStyle: "medium",
-          timeStyle: "short",
-        }).format(new Date(ctx.selectedLockAt))}. Knockout bracket may still be editable after the official Round of 32 is published.`
-      : locked
-        ? "Pre‑knockout picks are locked; knockout bracket may still be open."
-        : null;
 
-  const teamById = new Map(ctx.teams.map((t) => [t.id, t]));
-  const codes = countryCodesFromKnockoutSlots(ctx.initialSlots, teamById);
   const { data: tournamentPayload, error: tournamentErr } =
     await fetchPublicTournamentProgress();
-  const nextMatches =
-    tournamentPayload?.matches && !tournamentErr
-      ? nextMatchesForTeamCountryCodes(tournamentPayload.matches, codes, 8)
-      : [];
+  const whoToCheer =
+    ctx.initialSlots.length > 0
+      ? whoToCheerForFromSchedule(
+          ctx,
+          tournamentPayload?.matches,
+          tournamentErr,
+        )
+      : null;
 
   const pid = ctx.selectedParticipant?.id;
   const listQs = new URLSearchParams();
@@ -151,6 +141,8 @@ export default async function AccountPicksSummaryPage({ searchParams }: PageProp
             profiles={ctx.profileLinkItems}
             selectedId={ctx.selectedId}
             summaryBasePath="/account/picks/summary"
+            activityBasePath="/account/activity"
+            revealBasePath="/account/reveal"
             multiProfileHeading="Choose profile"
           />
 
@@ -166,7 +158,12 @@ export default async function AccountPicksSummaryPage({ searchParams }: PageProp
           ctx.initialSlots.length > 0 ? (
             <>
               <div className="mb-6">
-                <PicksViewToggle current={view} listHref={listHref} bracketHref={bracketHref} />
+                <PicksViewToggle
+                  current={view}
+                  listHref={listHref}
+                  bracketHref={bracketHref}
+                  knockoutBracketPicksUnlocked={ctx.knockoutBracketPicksUnlocked}
+                />
               </div>
 
               {view === "list" ? (
@@ -176,11 +173,9 @@ export default async function AccountPicksSummaryPage({ searchParams }: PageProp
                   participantId={ctx.selectedParticipant.id}
                   poolName={ctx.selectedPoolName}
                   locked={locked}
-                  lockHint={lockHint}
+                  lockAtIso={ctx.selectedLockAt}
                   showSavedBanner={showSavedBanner}
                   knockoutBracketPicksUnlocked={ctx.knockoutBracketPicksUnlocked}
-                  showCompactStageProgress
-                  completionStatus={ctx.pickCompletionStatus}
                 />
               ) : (
                 <>
@@ -190,11 +185,10 @@ export default async function AccountPicksSummaryPage({ searchParams }: PageProp
                     participantId={ctx.selectedParticipant.id}
                     poolName={ctx.selectedPoolName}
                     locked={locked}
-                    lockHint={lockHint}
+                    lockAtIso={ctx.selectedLockAt}
                     showSavedBanner={showSavedBanner}
                     knockoutBracketPicksUnlocked={ctx.knockoutBracketPicksUnlocked}
                     showCompactStageProgress
-                    completionStatus={ctx.pickCompletionStatus}
                     sections="toolbar_only"
                   />
                   <div className="mt-6">
@@ -203,28 +197,27 @@ export default async function AccountPicksSummaryPage({ searchParams }: PageProp
                       teams={ctx.teams}
                       knockoutBracketPicksUnlocked={ctx.knockoutBracketPicksUnlocked}
                       editPicksHref={editPicksHref}
+                      listViewHref={listHref}
                       readOnly={false}
                     />
                   </div>
                 </>
               )}
 
-              <AccountNextMatchesSection
-                title="Next matches for your teams"
-                description={
-                  <>
-                    From the official group schedule in the app (FIFA country
-                    codes). Date and time use America/Edmonton (Calgary). Live
-                    and upcoming fixtures for teams in your bracket are listed
-                    first.
-                  </>
-                }
-                tournamentErr={tournamentErr}
-                tournamentErrorSuffix="Your picks above are still saved."
-                matches={nextMatches}
-                initialSlots={ctx.initialSlots}
-                teams={ctx.teams}
-              />
+              {whoToCheer ? (
+                <div className="mt-6">
+                  <WhoToCheerForCard
+                    suggestions={whoToCheer.suggestions}
+                    totalRelevantMatches={whoToCheer.totalRelevantMatches}
+                    tournamentErr={whoToCheer.tournamentErr}
+                    showIncompleteCta={whoToCheer.showIncompleteCta}
+                    hasAnyPick={whoToCheer.hasAnyPick}
+                    picksHref={editPicksHref}
+                    initialSlots={ctx.initialSlots}
+                    teams={ctx.teams}
+                  />
+                </div>
+              ) : null}
 
               <p className="text-center text-sm text-ash-muted">
                 <Link

@@ -338,24 +338,36 @@ export function applyQuickPickToSlots(
     );
   }
 
-  let thirdPoolTeams: Team[];
+  const thirdChosenByGroup = new Map<string, string>();
+  let thirdIds: string[] = [];
   if (scheduleLoaded && groupMap) {
-    thirdPoolTeams = teams.filter((t) => {
-      const gl = groupLetterForCountryCode(t.countryCode, groupMap);
-      if (!gl) return false;
-      const w = groupWinnerByLetter.get(gl) ?? "";
-      const r = groupRunnerByLetter.get(gl) ?? "";
-      return t.id !== w && t.id !== r;
+    const candidateByGroup = WC2026_GROUP_CODES.flatMap((letter) => {
+      const groupTeams = teamsInScheduleGroup(letter, teams, groupMap);
+      const winnerId = groupWinnerByLetter.get(letter) ?? "";
+      const runnerId = groupRunnerByLetter.get(letter) ?? "";
+      const candidates = groupTeams.filter(
+        (t) => t.id !== winnerId && t.id !== runnerId,
+      );
+      const ordered = orderedTeamsForMode(candidates, mode);
+      const picked = ordered[0];
+      return picked ? [{ letter, team: picked }] : [];
     });
+    const thirdCandidateTeams = candidateByGroup.map((x) => x.team);
+    thirdIds = pickNTeamIdsFromPool(thirdCandidateTeams, 8);
+    const chosenSet = new Set(thirdIds);
+    for (const { letter, team } of candidateByGroup) {
+      if (chosenSet.has(team.id) && !thirdChosenByGroup.has(letter)) {
+        thirdChosenByGroup.set(letter, team.id);
+      }
+    }
   } else {
-    thirdPoolTeams = pool.filter((t) => !used.has(t.id));
+    const thirdPoolTeams = pool.filter((t) => !used.has(t.id));
+    const thirdOrdered = orderedTeamsForMode(thirdPoolTeams, mode);
+    thirdIds = pickNTeamIdsFromPool(
+      thirdOrdered.length > 0 ? thirdOrdered : pool.filter((t) => !used.has(t.id)),
+      8,
+    );
   }
-
-  const thirdOrdered = orderedTeamsForMode(thirdPoolTeams, mode);
-  const thirdIds = pickNTeamIdsFromPool(
-    thirdOrdered.length > 0 ? thirdOrdered : pool.filter((t) => !used.has(t.id)),
-    8,
-  );
   for (const id of thirdIds) used.add(id);
 
   /** FIFA slot keys `"1"`…`"32"` → team id; only when Annex C resolution succeeds. */
@@ -461,9 +473,8 @@ export function applyQuickPickToSlots(
       return { ...row, teamId: id };
     }
     if (row.predictionKind === "third_place_qualifier") {
-      const sk = parseInt(row.slotKey ?? "0", 10);
-      const idx = Number.isFinite(sk) ? sk - 1 : 0;
-      const id = thirdIds[idx] ?? "";
+      const gc = row.groupCode ? row.groupCode.toUpperCase() : "";
+      const id = gc ? thirdChosenByGroup.get(gc) ?? "" : "";
       return { ...row, teamId: id };
     }
     if (!fillKnockoutProgression && isKnockoutProgressionKind(row.predictionKind)) {

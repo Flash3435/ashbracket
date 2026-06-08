@@ -1,8 +1,9 @@
+import { NhlStandingsLeaderboard } from "@/components/nhl/NhlStandingsLeaderboard";
 import { NhlTeamLogo } from "@/components/nhl/NhlTeamLogo";
 import { PageContainer } from "@/components/ui/PageContainer";
 import { getOfficial2026EditionTeamStatus } from "@/lib/nhl/official2026Edition";
 import { NHL_SERIES_WINNER_POINTS_BY_ROUND } from "@/lib/nhl/scoring";
-import { formatNhlStandingsLoadError, labelNhlStandingsStatus } from "@/lib/nhl/standingsLabels";
+import { formatNhlStandingsLoadError } from "@/lib/nhl/standingsLabels";
 import {
   countNhlSeriesForEdition,
   countNhlSeriesWithWinnerForEdition,
@@ -12,20 +13,25 @@ import {
   fetchNhlTeamsForEdition,
   fetchNhlTeamSlugsForEdition,
 } from "@/lib/nhl/queries";
+import { prepareNhlEditionBracketForScoring } from "@/lib/nhl/prepareNhlEditionBracket";
 import type { NhlTeam } from "@/lib/nhl/types";
 import { createClient } from "@/lib/supabase/server";
+import { unstable_noStore as noStore } from "next/cache";
 import type { Metadata } from "next";
+import { connection } from "next/server";
 import Link from "next/link";
 
 export const metadata: Metadata = {
   title: "Standings",
   description:
-    "NHL playoff leaderboard for the active AshBracket NHL edition—points from saved Round 1 picks vs recorded series winners.",
+    "NHL playoff leaderboard for the active AshBracket NHL edition—overall points and a Round 2+ view that excludes Round 1 for fair late entry.",
 };
 
 export const dynamic = "force-dynamic";
 
 export default async function NhlStandingsPage() {
+  noStore();
+  await connection();
   const supabase = await createClient();
   const { edition, error: editionError } = await fetchActiveNhlEdition(supabase);
 
@@ -42,6 +48,8 @@ export default async function NhlStandingsPage() {
   let standingsError: string | null = null;
 
   if (edition && !editionError) {
+    await prepareNhlEditionBracketForScoring(edition.id, supabase);
+
     const [teamCountRes, seriesCountRes, slugRes, teamsRes, winnersRes] = await Promise.all([
       countNhlTeamsForEdition(supabase, edition.id),
       countNhlSeriesForEdition(supabase, edition.id),
@@ -104,8 +112,9 @@ export default async function NhlStandingsPage() {
           Standings
         </h1>
         <p className="mt-3 max-w-2xl text-base leading-relaxed text-slate-300">
-          Live leaderboard for the active NHL edition. Points come from saved picks matched to
-          recorded series winners (NHL-only tables; separate from World Cup pools).
+          Live leaderboard for the active NHL edition: overall points across every round, plus a
+          Round 2+ view that ranks on later rounds only so new joiners are not stuck behind Round 1
+          they never played. NHL-only data; separate from World Cup pools.
         </p>
       </section>
 
@@ -135,7 +144,7 @@ export default async function NhlStandingsPage() {
           <div className="space-y-4">
             <div className="rounded-xl border border-blue-500/20 bg-slate-950/50 px-4 py-4">
               <p className="text-xs font-semibold uppercase tracking-wider text-blue-300/80">
-                Active playoff pool
+                Active competition
               </p>
               <p className="mt-1 text-lg font-semibold text-ash-text">{edition.name}</p>
               <p className="mt-1 text-sm text-slate-400">
@@ -212,8 +221,9 @@ export default async function NhlStandingsPage() {
           reflects the live model.
         </p>
         <p className="text-sm leading-relaxed text-slate-500">
-          Participant picks currently include Round 1 only; later-round pick rows can plug into the
-          same scoring pattern when those flows ship.
+          Round 1 and Round 2 picks are scored from saved rows once each series has a recorded
+          winner. Conference Finals and Stanley Cup Final use the same weights when those pick
+          flows and results are present.
         </p>
       </section>
 
@@ -222,8 +232,9 @@ export default async function NhlStandingsPage() {
           <div>
             <h2 className="text-lg font-semibold text-ash-text">Leaderboard</h2>
             <p className="mt-1 text-sm text-slate-500">
-              Rank, points, and correct picks update on each request from NHL picks and series
-              results.
+              Use Overall for full-playoff credit, or Round 2+ to compare everyone on the same
+              post–Round 1 scoring window. Values refresh on each request from saved picks and
+              recorded series winners.
             </p>
           </div>
         </div>
@@ -237,8 +248,8 @@ export default async function NhlStandingsPage() {
 
         {!standingsError && edition && !editionError && !hasEntries ? (
           <p className="mt-4 text-sm leading-relaxed text-slate-400">
-            <span className="font-medium text-slate-300">No NHL entries yet.</span> Join with an
-            invite or save at least one Round 1 pick so your account appears in this pool.
+            <span className="font-medium text-slate-300">No competitors yet.</span> Join the
+            competition from your account page or save picks to appear on the leaderboard.
           </p>
         ) : null}
 
@@ -261,90 +272,87 @@ export default async function NhlStandingsPage() {
         noRecordedWinnersYet ? (
           <p className="mt-4 text-sm leading-relaxed text-slate-400">
             <span className="font-medium text-slate-300">
-              Picks are in, but no completed series results are available yet.
+              Picks are in, but no completed series results are saved for this edition yet.
             </span>{" "}
-            Points stay at zero until at least one series has a recorded winner (NHL admin →
-            Series).
+            Points stay at zero until official Round 1 winners are stored (this page tries to pull them
+            when you load it; organizers can also use{" "}
+            <Link href="/nhl/admin/series" className="text-blue-300 underline-offset-2 hover:underline">
+              NHL admin → Series
+            </Link>
+            ).
           </p>
         ) : null}
 
-        <div className="mt-5 overflow-hidden rounded-xl border border-blue-500/25 bg-slate-950/60 shadow-inner shadow-blue-950/30">
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[520px] border-collapse text-left text-sm">
-              <thead>
-                <tr className="border-b border-blue-500/20 bg-slate-900/80">
-                  <th className="px-4 py-3 font-semibold tracking-wide text-blue-100/90">Rank</th>
-                  <th className="px-4 py-3 font-semibold tracking-wide text-blue-100/90">Entry</th>
-                  <th className="px-4 py-3 text-right font-semibold tracking-wide text-blue-100/90">
-                    Points
-                  </th>
-                  <th className="px-4 py-3 text-right font-semibold tracking-wide text-blue-100/90">
-                    Correct picks
-                  </th>
-                  <th className="px-4 py-3 font-semibold tracking-wide text-blue-100/90">Status</th>
-                </tr>
-              </thead>
-              <tbody>
-                {!edition && !editionError ? (
-                  <tr>
-                    <td
-                      colSpan={5}
-                      className="px-4 py-12 text-center text-sm leading-relaxed text-slate-400"
-                    >
-                      No active NHL edition — leaderboard is unavailable.
-                    </td>
+        {hasEntries && !standingsError ? (
+          <div className="mt-5">
+            <NhlStandingsLeaderboard rows={standingsRows} />
+          </div>
+        ) : (
+          <div className="mt-5 overflow-hidden rounded-xl border border-blue-500/25 bg-slate-950/60 shadow-inner shadow-blue-950/30">
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[520px] border-collapse text-left text-sm">
+                <thead>
+                  <tr className="border-b border-blue-500/20 bg-slate-900/80">
+                    <th className="px-4 py-3 font-semibold tracking-wide text-blue-100/90">Rank</th>
+                    <th className="px-4 py-3 font-semibold tracking-wide text-blue-100/90">Entry</th>
+                    <th className="px-4 py-3 text-right font-semibold tracking-wide text-blue-100/90">
+                      Overall
+                    </th>
+                    <th className="px-4 py-3 text-right font-semibold tracking-wide text-blue-100/90">
+                      R1
+                    </th>
+                    <th className="px-4 py-3 text-right font-semibold tracking-wide text-blue-100/90">
+                      R2+
+                    </th>
+                    <th className="px-4 py-3 text-right font-semibold tracking-wide text-blue-100/90">
+                      Correct
+                    </th>
+                    <th className="px-4 py-3 font-semibold tracking-wide text-blue-100/90">Status</th>
                   </tr>
-                ) : editionError ? (
-                  <tr>
-                    <td
-                      colSpan={5}
-                      className="px-4 py-12 text-center text-sm leading-relaxed text-slate-400"
-                    >
-                      Could not load the active edition ({editionError}).
-                    </td>
-                  </tr>
-                ) : standingsError ? (
-                  <tr>
-                    <td
-                      colSpan={5}
-                      className="px-4 py-12 text-center text-sm leading-relaxed text-slate-400"
-                    >
-                      Fix the database error above to load standings.
-                    </td>
-                  </tr>
-                ) : !hasEntries ? (
-                  <tr>
-                    <td
-                      colSpan={5}
-                      className="px-4 py-12 text-center text-sm leading-relaxed text-slate-400"
-                    >
-                      No rows to show yet — see the message above.
-                    </td>
-                  </tr>
-                ) : (
-                  standingsRows.map((row) => (
-                    <tr
-                      key={row.user_id}
-                      className="border-b border-blue-500/10 bg-slate-950/30 last:border-b-0"
-                    >
-                      <td className="px-4 py-3 tabular-nums text-slate-200">{row.rank}</td>
-                      <td className="px-4 py-3 font-medium text-ash-text">{row.entry_name}</td>
-                      <td className="px-4 py-3 text-right tabular-nums text-slate-200">
-                        {row.total_points}
-                      </td>
-                      <td className="px-4 py-3 text-right tabular-nums text-slate-200">
-                        {row.correct_picks}
-                      </td>
-                      <td className="px-4 py-3 text-slate-300">
-                        {labelNhlStandingsStatus(row.status)}
+                </thead>
+                <tbody>
+                  {!edition && !editionError ? (
+                    <tr>
+                      <td
+                        colSpan={7}
+                        className="px-4 py-12 text-center text-sm leading-relaxed text-slate-400"
+                      >
+                        No active NHL edition — leaderboard is unavailable.
                       </td>
                     </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
+                  ) : editionError ? (
+                    <tr>
+                      <td
+                        colSpan={7}
+                        className="px-4 py-12 text-center text-sm leading-relaxed text-slate-400"
+                      >
+                        Could not load the active edition ({editionError}).
+                      </td>
+                    </tr>
+                  ) : standingsError ? (
+                    <tr>
+                      <td
+                        colSpan={7}
+                        className="px-4 py-12 text-center text-sm leading-relaxed text-slate-400"
+                      >
+                        Fix the database error above to load standings.
+                      </td>
+                    </tr>
+                  ) : (
+                    <tr>
+                      <td
+                        colSpan={7}
+                        className="px-4 py-12 text-center text-sm leading-relaxed text-slate-400"
+                      >
+                        No rows to show yet — see the message above.
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
           </div>
-        </div>
+        )}
       </section>
 
       <section>

@@ -71,7 +71,9 @@ export async function saveParticipantKnockoutPicksAction(input: {
     });
     if (!applied.ok) return applied;
 
-    const ledger = await recomputePoolLedgerForPool(poolId);
+    const ledger = await recomputePoolLedgerForPool(poolId, {
+      ledgerTrigger: "admin_pick_edit",
+    });
     if (ledger.error) {
       return {
         ok: false,

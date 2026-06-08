@@ -64,7 +64,7 @@ export default async function NhlJoinByInviteTokenPage({
         title={peek.ok ? `Join ${peek.editionName}` : "NHL invite"}
         description={
           peek.ok
-            ? "Accept your NHL playoff pool invite. This uses your main AshBracket sign-in—there is not a separate NHL-only account."
+            ? "This invite enters you in the global NHL playoff competition for this edition. Use your main AshBracket sign-in."
             : "We could not read this NHL invite. It may be invalid, expired, or already used."
         }
       />

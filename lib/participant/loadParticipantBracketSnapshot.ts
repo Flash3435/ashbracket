@@ -97,6 +97,20 @@ export async function loadParticipantBracketSnapshot(
       isPublic: Boolean(h.is_public),
     };
 
+    const { data: poolRow, error: poolErr } = await supabase
+      .from("pools")
+      .select("tournament_edition_id")
+      .eq("id", header.poolId)
+      .maybeSingle();
+    if (poolErr || !poolRow?.tournament_edition_id) {
+      return {
+        ok: false,
+        kind: "load_error",
+        message: poolErr?.message ?? "Pool tournament edition is missing.",
+      };
+    }
+    const editionId = poolRow.tournament_edition_id as string;
+
     const [teamsRes, stagesRes, groupTeamCountryCodesByLetter] = await Promise.all([
       supabase
         .from("teams")
@@ -146,6 +160,7 @@ export async function loadParticipantBracketSnapshot(
       knockoutBracketPicksUnlocked = await fetchOfficialRoundOf32Complete(
         supabase,
         r32Stage.id,
+        editionId,
       );
     }
 
@@ -245,6 +260,8 @@ export async function loadParticipantBracketSnapshot(
       predictions,
       participantId: trimmed,
       bonusKeys: bonusKeysOrdered,
+      teams,
+      groupTeamCountryCodesByLetter,
     });
 
     return {

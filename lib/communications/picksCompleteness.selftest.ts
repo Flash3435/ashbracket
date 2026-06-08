@@ -77,11 +77,11 @@ function filledPredictions(): Prediction[] {
   }
 
   const r32 = stageByCode.round_of_32!.id;
-  for (let i = 1; i <= 8; i++) {
+  for (const letter of letters.slice(0, 8)) {
     preds.push(
       mk("third_place_qualifier", r32, {
-        slotKey: String(i),
-        groupCode: null,
+        slotKey: null,
+        groupCode: letter,
       }),
     );
   }
@@ -130,8 +130,8 @@ const slotsEmpty = buildAllParticipantPickDrafts({
 
 assert.strictEqual(
   slotsEmpty.length,
-  98,
-  "expected 24 group + 71 knockout bracket + 3 default bonus slots",
+  102,
+  "expected 24 group + 12 Stage 2 group rows + 63 knockout rows + 3 default bonus slots",
 );
 
 const slotsFilled = buildAllParticipantPickDrafts({
@@ -141,7 +141,7 @@ const slotsFilled = buildAllParticipantPickDrafts({
   bonusKeys: participantBonusKeysForPool([]),
 });
 
-assert.strictEqual(slotsFilled.length, 98);
+assert.strictEqual(slotsFilled.length, 102);
 assert.strictEqual(
   participantPicksCompleteFromDrafts(slotsFilled, {
     knockoutBracketPicksUnlocked: true,
@@ -151,9 +151,19 @@ assert.strictEqual(
 );
 
 const relLocked = relevantSlotsForCompleteness(slotsFilled, false);
-assert.ok(
-  relLocked.every((s) => s.teamId.trim() !== ""),
-  "when knockout is locked, non-progression slots should still be filled in this fixture",
+assert.strictEqual(
+  participantPicksCompleteFromDrafts(slotsFilled, {
+    knockoutBracketPicksUnlocked: false,
+  }),
+  true,
+  "when knockout is locked, eight selected Stage 2 group rows should still count as complete",
+);
+assert.strictEqual(
+  relLocked.filter(
+    (s) => s.predictionKind === "third_place_qualifier" && s.teamId.trim() === "",
+  ).length,
+  4,
+  "locked completeness keeps four unselected Stage 2 group rows empty",
 );
 
 const parity = buildPoolMembershipCompletionStatus(slotsFilled, {

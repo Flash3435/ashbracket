@@ -2,5 +2,8 @@ These files are the NHL-provided primary SVG marks (light variant) from
 https://assets.nhle.com/logos/nhl/svg/{TEAM_ABBREV}_light.svg
 renamed to match app team_slug keys (e.g. golden-knights.svg from VGK_light.svg).
 
+2026 draft pick-order clubs (maple-leafs, sharks, …) use the same CDN source and
+nhlTeamLogoRegistry.ts entries — not duplicated under nhldraft26.
+
 Trademark notice: NHL and team marks are property of the NHL and member clubs.
 Refresh copies with scripts or manual download if the league updates artwork.

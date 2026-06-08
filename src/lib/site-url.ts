@@ -1,5 +1,5 @@
 /**
- * Canonical public base URL for absolute links in emails and server-side use.
+ * Canonical public base URL for absolute links in emails, password-reset redirects, and server-side use.
  *
  * Order:
  * 1. `SITE_URL` (server-only; preferred in Vercel so secrets stay off the client bundle)

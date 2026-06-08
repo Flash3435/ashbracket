@@ -4,10 +4,6 @@ import {
   participantBonusKeysForPool,
 } from "../predictions/buildParticipantPickDrafts";
 import {
-  buildPoolMembershipCompletionStatus,
-  type PoolMembershipCompletionStatus,
-} from "../picks/poolMembershipCompletionStatus";
-import {
   mapParticipantRow,
   type ParticipantRow,
 } from "../participants/participantsDb";
@@ -19,6 +15,14 @@ import type { Prediction, Team, TournamentStage } from "../../src/types/domain";
 import type { Participant } from "../../types/participant";
 import type { KnockoutPickSlotDraft } from "../../types/adminKnockoutPicks";
 import { fetchOfficialRoundOf32Complete } from "../tournament/fetchOfficialRoundOf32Complete";
+import { poolLocked } from "../pools/poolLocked";
+import {
+  mapPoolPaymentFromPool,
+  mapPoolPaymentRow,
+  type PoolPaymentSettings,
+} from "../pools/poolPayment";
+
+export { poolLocked };
 
 /** Stages needed to build the full participant picks wizard. */
 export const ACCOUNT_TOURNAMENT_STAGE_CODES = [
@@ -33,25 +37,29 @@ export const ACCOUNT_TOURNAMENT_STAGE_CODES = [
 const UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
-export type PoolEmbed = { name: string; lock_at: string | null } | null;
+export type PoolEmbed = {
+  name: string;
+  lock_at: string | null;
+  tournament_edition_id: string | null;
+  payment_type: string;
+  entry_fee_label: string | null;
+  entry_fee_amount: number | string | null;
+  payment_instructions: string | null;
+  entry_fee_cents: number | null;
+  currency_code: string;
+  show_pot_to_participants: boolean;
+} | null;
 
 export function embeddedPool(
   raw:
-    | { name: string; lock_at: string | null }
-    | { name: string; lock_at: string | null }[]
+    | PoolEmbed
+    | NonNullable<PoolEmbed>[]
     | null
     | undefined,
 ): PoolEmbed {
   if (raw == null) return null;
   if (Array.isArray(raw)) return raw[0] ?? null;
   return raw;
-}
-
-export function poolLocked(lockAt: string | null | undefined): boolean {
-  if (lockAt == null || lockAt === "") return false;
-  const t = new Date(lockAt).getTime();
-  if (Number.isNaN(t)) return false;
-  return t <= Date.now();
 }
 
 export type MyParticipantRow = {
@@ -73,7 +81,9 @@ export type AccountKnockoutSelection = {
   selectedId: string | null;
   selectedParticipant: Participant | null;
   selectedPoolName: string;
+  selectedPoolId: string | null;
   selectedLockAt: string | null;
+  selectedPoolPayment: PoolPaymentSettings;
   teams: Team[];
   stages: TournamentStage[];
   predictions: Prediction[];
@@ -87,8 +97,6 @@ export type AccountKnockoutSelection = {
    * organizers publish all 32 official Round of 32 `results` rows.
    */
   knockoutBracketPicksUnlocked: boolean;
-  /** Canonical completion for the selected profile (same rules as admin overview). */
-  pickCompletionStatus: PoolMembershipCompletionStatus | null;
 };
 
 /**
@@ -114,7 +122,11 @@ export async function loadAccountKnockoutSelection(
   let selectedId: string | null = null;
   let selectedParticipant: Participant | null = null;
   let selectedPoolName = "";
+  let selectedPoolId: string | null = null;
   let selectedLockAt: string | null = null;
+  let selectedPoolPayment: PoolPaymentSettings = mapPoolPaymentFromPool({
+    payment_type: "free",
+  });
 
   try {
     const supabase = await createClient();
@@ -131,7 +143,15 @@ export async function loadAccountKnockoutSelection(
         pool_id,
         pools (
           name,
-          lock_at
+          lock_at,
+          tournament_edition_id,
+          payment_type,
+          entry_fee_label,
+          entry_fee_amount,
+          payment_instructions,
+          entry_fee_cents,
+          currency_code,
+          show_pot_to_participants
         )
       `,
       )
@@ -149,8 +169,8 @@ export async function loadAccountKnockoutSelection(
         pool_id: r.pool_id as string,
         pools: embeddedPool(
           r.pools as
-            | { name: string; lock_at: string | null }
-            | { name: string; lock_at: string | null }[]
+            | NonNullable<PoolEmbed>
+            | NonNullable<PoolEmbed>[]
             | null
             | undefined,
         ),
@@ -179,16 +199,6 @@ export async function loadAccountKnockoutSelection(
         teams = (teamsRes.data ?? []).map(mapTeamRow);
         stages = (stagesRes.data ?? []).map(mapTournamentStageRow);
         groupTeamCountryCodesByLetter = groupCodes;
-      }
-    }
-
-    if (!loadError) {
-      const r32Stage = stages.find((s) => s.code === "round_of_32");
-      if (r32Stage) {
-        knockoutBracketPicksUnlocked = await fetchOfficialRoundOf32Complete(
-          supabase,
-          r32Stage.id,
-        );
       }
     }
 
@@ -224,7 +234,28 @@ export async function loadAccountKnockoutSelection(
           invite_last_sent_at: null,
         } as ParticipantRow);
         selectedPoolName = row.pools?.name ?? "Pool";
+        selectedPoolId = row.pool_id;
         selectedLockAt = row.pools?.lock_at ?? null;
+        if (row.pools) {
+          selectedPoolPayment = mapPoolPaymentRow({
+            payment_type: row.pools.payment_type ?? "free",
+            entry_fee_label: row.pools.entry_fee_label,
+            entry_fee_amount: row.pools.entry_fee_amount,
+            payment_instructions: row.pools.payment_instructions,
+            entry_fee_cents: row.pools.entry_fee_cents,
+            currency_code: row.pools.currency_code,
+            show_pot_to_participants: row.pools.show_pot_to_participants,
+          });
+        }
+        const selectedEditionId = row.pools?.tournament_edition_id ?? null;
+        const r32Stage = stages.find((s) => s.code === "round_of_32");
+        if (!loadError && r32Stage && selectedEditionId) {
+          knockoutBracketPicksUnlocked = await fetchOfficialRoundOf32Complete(
+            supabase,
+            r32Stage.id,
+            selectedEditionId,
+          );
+        }
 
         const [{ data: predData, error: predErr }, { data: ruleRows, error: ruleErr }] =
           await Promise.all([
@@ -281,6 +312,8 @@ export async function loadAccountKnockoutSelection(
           predictions,
           participantId: selectedParticipant.id,
           bonusKeys: bonusKeysOrdered,
+          teams,
+          groupTeamCountryCodesByLetter,
         })
       : [];
 
@@ -289,13 +322,6 @@ export async function loadAccountKnockoutSelection(
     displayName: p.display_name,
     poolName: p.pools?.name ?? "Pool",
   }));
-
-  const pickCompletionStatus =
-    initialSlots.length > 0
-      ? buildPoolMembershipCompletionStatus(initialSlots, {
-          knockoutBracketPicksUnlocked,
-        })
-      : null;
 
   return {
     loadError,
@@ -306,7 +332,9 @@ export async function loadAccountKnockoutSelection(
     selectedId,
     selectedParticipant,
     selectedPoolName,
+    selectedPoolId,
     selectedLockAt,
+    selectedPoolPayment,
     teams,
     stages,
     predictions,
@@ -315,7 +343,6 @@ export async function loadAccountKnockoutSelection(
     profileLinkItems,
     groupTeamCountryCodesByLetter,
     knockoutBracketPicksUnlocked,
-    pickCompletionStatus,
   };
 }
 

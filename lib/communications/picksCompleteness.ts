@@ -10,10 +10,15 @@ import {
   participantBonusKeysForPool,
 } from "../predictions/buildParticipantPickDrafts";
 import { mapPredictionRow } from "../../src/lib/scoring/mapSupabaseRows";
-import type { Prediction, TournamentStage } from "../../src/types/domain";
-import { mapTournamentStageRow } from "../results/mapRows";
-import { isKnockoutProgressionKind } from "../predictions/knockoutProgressionKinds";
+import type { Prediction, Team, TournamentStage } from "../../src/types/domain";
+import { mapTeamRow, mapTournamentStageRow } from "../results/mapRows";
+import {
+  participantPicksCompleteFromDrafts,
+  relevantSlotsForCompleteness,
+} from "../predictions/participantPicksCompletenessRules";
 import { fetchOfficialRoundOf32Complete } from "../tournament/fetchOfficialRoundOf32Complete";
+import { fetchGroupTeamCountryCodesByLetter } from "../tournament/fetchGroupTeamCountryCodesByLetter";
+import { TEAM_TABLE_SELECT } from "../teams/teamDbSelect";
 
 type PredRow = Parameters<typeof mapPredictionRow>[0];
 
@@ -21,7 +26,7 @@ type PredRow = Parameters<typeof mapPredictionRow>[0];
 export const BRACKET_COMPLETION_RULES_SOURCE =
   "lib/picks/poolMembershipCompletionStatus.ts::buildPoolMembershipCompletionStatus + " +
   "lib/predictions/buildParticipantPickDrafts.ts::buildAllParticipantPickDrafts " +
-  "(group rows + PARTICIPANT_BRACKET_PICK_SECTIONS from knockoutResultsConfig + bonus keys)";
+  "(group rows + per-group Stage 2 third-place rows + knockout sections + bonus keys)";
 
 export type { PoolMembershipCompletionStatus };
 
@@ -29,6 +34,8 @@ export type PicksCompletenessInputs = {
   stageByCode: Partial<Record<TournamentStage["code"], TournamentStage>>;
   predictions: Prediction[];
   bonusKeys: string[];
+  teams: Team[];
+  groupTeamCountryCodesByLetter: Record<string, string[]>;
   knockoutBracketPicksUnlocked: boolean;
 };
 
@@ -46,27 +53,10 @@ export type BracketCompletionDiagnosticRow = {
   rules_source: string;
 };
 
-/**
- * Whether every required pick slot has a team chosen. When the official Round of 32 is
- * not published yet, knockout progression rows are ignored so participants are not
- * flagged incomplete for rounds they cannot fill.
- */
-export function participantPicksCompleteFromDrafts(
-  slots: ReturnType<typeof buildAllParticipantPickDrafts>,
-  options?: { knockoutBracketPicksUnlocked?: boolean },
-): boolean {
-  return buildPoolMembershipCompletionStatus(slots, options).isComplete;
-}
-
-export function relevantSlotsForCompleteness(
-  slots: ReturnType<typeof buildAllParticipantPickDrafts>,
-  knockoutBracketPicksUnlocked: boolean,
-): ReturnType<typeof buildAllParticipantPickDrafts> {
-  const unlocked = knockoutBracketPicksUnlocked !== false;
-  return unlocked
-    ? slots
-    : slots.filter((s) => !isKnockoutProgressionKind(s.predictionKind));
-}
+export {
+  participantPicksCompleteFromDrafts,
+  relevantSlotsForCompleteness,
+} from "../predictions/participantPicksCompletenessRules";
 
 function countSavedPredictionsByKindForParticipant(
   predictions: Prediction[],
@@ -95,13 +85,27 @@ export async function loadPicksCompletenessInputsForPool(
       stageByCode: {},
       predictions: [],
       bonusKeys: participantBonusKeysForPool([]),
+      teams: [],
+      groupTeamCountryCodesByLetter: {},
       knockoutBracketPicksUnlocked: true,
     };
   }
 
   const stageCodes = [...ACCOUNT_TOURNAMENT_STAGE_CODES];
-  const [{ data: stageRows, error: stageErr }, { data: predRows, error: predErr }, { data: ruleRows, error: ruleErr }] =
+  const [
+    { data: poolRow, error: poolErr },
+    { data: stageRows, error: stageErr },
+    { data: predRows, error: predErr },
+    { data: ruleRows, error: ruleErr },
+    { data: teamRows, error: teamsErr },
+    groupTeamCountryCodesByLetter,
+  ] =
     await Promise.all([
+      supabase
+        .from("pools")
+        .select("tournament_edition_id")
+        .eq("id", poolId)
+        .maybeSingle(),
       supabase
         .from("tournament_stages")
         .select(
@@ -122,9 +126,17 @@ export async function loadPicksCompletenessInputsForPool(
         .eq("pool_id", poolId)
         .eq("prediction_kind", "bonus_pick")
         .order("bonus_key", { ascending: true }),
+      supabase.from("teams").select(TEAM_TABLE_SELECT).order("name", {
+        ascending: true,
+      }),
+      fetchGroupTeamCountryCodesByLetter(supabase),
     ]);
 
-  if (stageErr || predErr || ruleErr) {
+  if (poolErr || stageErr || predErr || ruleErr || teamsErr) {
+    return null;
+  }
+  const editionId = (poolRow?.tournament_edition_id as string | null) ?? null;
+  if (!editionId) {
     return null;
   }
 
@@ -149,6 +161,7 @@ export async function loadPicksCompletenessInputsForPool(
   const predictions: Prediction[] = (predRows ?? []).map((row) =>
     mapPredictionRow(row as PredRow),
   );
+  const teams: Team[] = (teamRows ?? []).map(mapTeamRow);
 
   const fromDb = (ruleRows ?? [])
     .map((r) => r.bonus_key as string | null)
@@ -157,13 +170,15 @@ export async function loadPicksCompletenessInputsForPool(
 
   const r32Stage = stages.find((s) => s.code === "round_of_32");
   const knockoutBracketPicksUnlocked = r32Stage
-    ? await fetchOfficialRoundOf32Complete(supabase, r32Stage.id)
+    ? await fetchOfficialRoundOf32Complete(supabase, r32Stage.id, editionId)
     : true;
 
   return {
     stageByCode,
     predictions,
     bonusKeys,
+    teams,
+    groupTeamCountryCodesByLetter,
     knockoutBracketPicksUnlocked,
   };
 }
@@ -178,6 +193,8 @@ export function buildCompletionStatusForParticipant(
     participantId,
     bonusKeys: inputs.bonusKeys,
     knockoutBracketPicksUnlocked: inputs.knockoutBracketPicksUnlocked,
+    teams: inputs.teams,
+    groupTeamCountryCodesByLetter: inputs.groupTeamCountryCodesByLetter,
   });
 }
 
@@ -192,6 +209,8 @@ export function buildCompletionDiagnosticRows(
       predictions: inputs.predictions,
       participantId: row.id,
       bonusKeys: inputs.bonusKeys,
+      teams: inputs.teams,
+      groupTeamCountryCodesByLetter: inputs.groupTeamCountryCodesByLetter,
     });
     const status = buildPoolMembershipCompletionStatus(slots, {
       knockoutBracketPicksUnlocked: inputs.knockoutBracketPicksUnlocked,
@@ -255,6 +274,8 @@ export async function loadParticipantIdsWithIncompletePicks(
       predictions: inputs.predictions,
       participantId: pid,
       bonusKeys: inputs.bonusKeys,
+      teams: inputs.teams,
+      groupTeamCountryCodesByLetter: inputs.groupTeamCountryCodesByLetter,
     });
     if (
       !participantPicksCompleteFromDrafts(slots, {

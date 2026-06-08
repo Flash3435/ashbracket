@@ -1,18 +1,14 @@
-import { NHL_2026_PLAYOFF_TEAMS } from "./nhl2026PlayoffField";
+import {
+  NHL_ABBREV_TO_LOGO_SLUG,
+  NHL_LOGO_ASSET_SLUGS,
+} from "./nhlTeamLogoRegistry";
 
-/** Slugs that have a committed asset under `public/nhl/logos/{slug}.svg` (league SVG artwork, see SOURCE.txt). */
-export const NHL_LOGO_ASSET_SLUGS: ReadonlySet<string> = new Set(
-  NHL_2026_PLAYOFF_TEAMS.map((t) => t.team_slug),
-);
-
-const ABBREV_TO_SLUG: ReadonlyMap<string, string> = new Map(
-  NHL_2026_PLAYOFF_TEAMS.map((t) => [t.abbreviation.toUpperCase(), t.team_slug]),
-);
+export { NHL_LOGO_ASSET_SLUGS } from "./nhlTeamLogoRegistry";
 
 /**
  * Resolves a public URL for a team logo image.
  * Prefer `team_slug` + static mapping; `logo_path` from the DB is honored only for same-origin paths.
- * Add new rows to `public/nhl/logos/` and `NHL_2026_PLAYOFF_TEAMS` (or extend this map) for new clubs.
+ * Assets live under `public/nhl/logos/{team_slug}.svg` (see public/nhl/logos/SOURCE.txt).
  */
 export function resolveNhlTeamLogoPath(input: {
   team_slug?: string | null;
@@ -35,5 +31,5 @@ export function resolveNhlTeamLogoPath(input: {
 
 export function abbrevToSlug(abbreviation: string | null | undefined): string | null {
   if (!abbreviation?.trim()) return null;
-  return ABBREV_TO_SLUG.get(abbreviation.trim().toUpperCase()) ?? null;
+  return NHL_ABBREV_TO_LOGO_SLUG.get(abbreviation.trim().toUpperCase()) ?? null;
 }

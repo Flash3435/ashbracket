@@ -94,7 +94,7 @@ export async function claimNhlParticipationInviteWithClient(
 
   const membershipId = data as string | null;
   if (!membershipId) {
-    return { ok: false, message: "Could not complete NHL pool access." };
+    return { ok: false, message: "Could not complete NHL competition entry." };
   }
 
   return { ok: true, participantId: membershipId };

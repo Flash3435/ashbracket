@@ -13,6 +13,8 @@ type AccountPicksProfileLinksProps = {
   summaryBasePath?: string;
   /** When set, each profile row also links to pool activity with `?participant=`. */
   activityBasePath?: string;
+  /** When set, each profile row also links to pool reveal with `?participant=`. */
+  revealBasePath?: string;
   /** Heading when multiple profiles (defaults to edit-oriented copy). */
   multiProfileHeading?: string;
 };
@@ -22,6 +24,7 @@ export function AccountPicksProfileLinks({
   selectedId,
   summaryBasePath,
   activityBasePath,
+  revealBasePath,
   multiProfileHeading = "Choose profile to edit",
 }: AccountPicksProfileLinksProps) {
   if (profiles.length <= 1) return null;
@@ -72,6 +75,14 @@ export function AccountPicksProfileLinks({
                       className="rounded-md bg-ash-body px-2.5 py-1 text-xs font-medium text-ash-text ring-1 ring-ash-border hover:bg-ash-surface"
                     >
                       Activity
+                    </Link>
+                  ) : null}
+                  {revealBasePath ? (
+                    <Link
+                      href={`${revealBasePath}?participant=${p.id}`}
+                      className="rounded-md bg-ash-body px-2.5 py-1 text-xs font-medium text-ash-text ring-1 ring-ash-border hover:bg-ash-surface"
+                    >
+                      Reveal
                     </Link>
                   ) : null}
                 </div>
