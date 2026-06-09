@@ -18,6 +18,7 @@ import {
 } from "../predictions/participantPicksCompletenessRules";
 import { fetchOfficialRoundOf32Complete } from "../tournament/fetchOfficialRoundOf32Complete";
 import { fetchGroupTeamCountryCodesByLetter } from "../tournament/fetchGroupTeamCountryCodesByLetter";
+import { fetchGroupTeamCountryCodesForEdition } from "../tournament/fetchGroupTeamCountryCodesForEdition";
 import { TEAM_TABLE_SELECT } from "../teams/teamDbSelect";
 
 type PredRow = Parameters<typeof mapPredictionRow>[0];
@@ -98,39 +99,36 @@ export async function loadPicksCompletenessInputsForPool(
     { data: predRows, error: predErr },
     { data: ruleRows, error: ruleErr },
     { data: teamRows, error: teamsErr },
-    groupTeamCountryCodesByLetter,
-  ] =
-    await Promise.all([
-      supabase
-        .from("pools")
-        .select("tournament_edition_id")
-        .eq("id", poolId)
-        .maybeSingle(),
-      supabase
-        .from("tournament_stages")
-        .select(
-          "id, code, label, sort_order, starts_at, ends_at, created_at, updated_at",
-        )
-        .in("code", stageCodes)
-        .order("sort_order", { ascending: true }),
-      supabase
-        .from("predictions")
-        .select(
-          "id, pool_id, participant_id, prediction_kind, team_id, tournament_stage_id, group_code, slot_key, bonus_key, value_text, created_at, updated_at",
-        )
-        .eq("pool_id", poolId)
-        .in("participant_id", participantIds),
-      supabase
-        .from("scoring_rules")
-        .select("bonus_key")
-        .eq("pool_id", poolId)
-        .eq("prediction_kind", "bonus_pick")
-        .order("bonus_key", { ascending: true }),
-      supabase.from("teams").select(TEAM_TABLE_SELECT).order("name", {
-        ascending: true,
-      }),
-      fetchGroupTeamCountryCodesByLetter(supabase),
-    ]);
+  ] = await Promise.all([
+    supabase
+      .from("pools")
+      .select("tournament_edition_id")
+      .eq("id", poolId)
+      .maybeSingle(),
+    supabase
+      .from("tournament_stages")
+      .select(
+        "id, code, label, sort_order, starts_at, ends_at, created_at, updated_at",
+      )
+      .in("code", stageCodes)
+      .order("sort_order", { ascending: true }),
+    supabase
+      .from("predictions")
+      .select(
+        "id, pool_id, participant_id, prediction_kind, team_id, tournament_stage_id, group_code, slot_key, bonus_key, value_text, created_at, updated_at",
+      )
+      .eq("pool_id", poolId)
+      .in("participant_id", participantIds),
+    supabase
+      .from("scoring_rules")
+      .select("bonus_key")
+      .eq("pool_id", poolId)
+      .eq("prediction_kind", "bonus_pick")
+      .order("bonus_key", { ascending: true }),
+    supabase.from("teams").select(TEAM_TABLE_SELECT).order("name", {
+      ascending: true,
+    }),
+  ]);
 
   if (poolErr || stageErr || predErr || ruleErr || teamsErr) {
     return null;
@@ -138,6 +136,19 @@ export async function loadPicksCompletenessInputsForPool(
   const editionId = (poolRow?.tournament_edition_id as string | null) ?? null;
   if (!editionId) {
     return null;
+  }
+
+  let groupTeamCountryCodesByLetter: Record<string, string[]> = {};
+  const editionGroupMap = await fetchGroupTeamCountryCodesForEdition(
+    supabase,
+    editionId,
+  );
+  if (Object.keys(editionGroupMap).length > 0) {
+    groupTeamCountryCodesByLetter = editionGroupMap;
+  } else {
+    groupTeamCountryCodesByLetter = await fetchGroupTeamCountryCodesByLetter(
+      supabase,
+    );
   }
 
   const stages = (stageRows ?? []).map((r) =>

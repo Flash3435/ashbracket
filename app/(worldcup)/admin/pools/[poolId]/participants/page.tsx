@@ -9,7 +9,8 @@ import {
 import { getSimulationPoolEmailUiStatus } from "@/lib/admin/simulationPoolEmailPolicy";
 import { loadIncompleteBracketPanelForPool } from "@/lib/admin/loadIncompleteBracketPanelForPool";
 import { requireManagedPool } from "@/lib/admin/requireManagedPool";
-import { buildCompletionDiagnosticRows, loadPicksCompletenessInputsForPool } from "@/lib/communications/picksCompleteness";
+import { buildCompletionDiagnosticRows } from "@/lib/communications/picksCompleteness";
+import { loadAdminPicksCompletenessInputsForPool } from "@/lib/admin/trustedPoolPicksCompleteness";
 import { formatPoolLockSummary } from "@/lib/communications/messageTemplates";
 import { poolShareJoinUrl } from "@/lib/site-url";
 import {
@@ -20,6 +21,7 @@ import { PoolPotAdminSummary } from "@/components/pools/PoolPotAdminSummary";
 import { mapPoolPaymentFromPool, poolIsPaid } from "@/lib/pools/poolPayment";
 
 export const dynamic = "force-dynamic";
+export const revalidate = 0;
 
 export default async function AdminPoolParticipantsPage({
   params,
@@ -74,10 +76,10 @@ export default async function AdminPoolParticipantsPage({
       >();
 
       if (participantIds.length > 0) {
-        const completenessInputs = await loadPicksCompletenessInputsForPool(
-          supabase,
+        const completenessInputs = await loadAdminPicksCompletenessInputsForPool(
           poolId,
           participantIds,
+          { fallbackSupabase: supabase },
         );
 
         if (!completenessInputs) {

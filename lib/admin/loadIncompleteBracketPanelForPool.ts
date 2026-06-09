@@ -1,8 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import {
-  buildCompletionStatusForParticipant,
-  loadPicksCompletenessInputsForPool,
-} from "../communications/picksCompleteness";
+import { unstable_noStore as noStore } from "next/cache";
+import { buildCompletionStatusForParticipant } from "../communications/picksCompleteness";
 import { buildAdminIncompleteParticipantBreakdown } from "../picks/poolMembershipCompletionStatus";
 import { buildAllParticipantPickDrafts } from "../predictions/buildParticipantPickDrafts";
 import { detectPickKeyMismatches } from "../predictions/participantPickDiagnostics";
@@ -10,8 +8,10 @@ import { getResendMailerConfig } from "../email/sendResendEmail";
 import {
   buildIncompleteBracketPanelData,
   INCOMPLETE_BRACKET_REMINDER_TYPE,
+  type IncompleteBracketCompletionDebugRow,
   type IncompleteBracketPanelData,
 } from "./incompleteBracketPanel";
+import { loadAdminPicksCompletenessInputsForPool } from "./trustedPoolPicksCompleteness";
 
 export async function loadLastIncompleteBracketReminder(
   supabase: SupabaseClient,
@@ -43,6 +43,8 @@ export async function loadIncompleteBracketPanelForPool(
     lockAtIso: string | null;
   },
 ): Promise<IncompleteBracketPanelData> {
+  noStore();
+
   const { data: rows, error } = await supabase
     .from("participants")
     .select("id, display_name, email, user_id")
@@ -74,20 +76,48 @@ export async function loadIncompleteBracketPanelForPool(
   let breakdownById = new Map<string, ReturnType<typeof buildAdminIncompleteParticipantBreakdown>>();
   let keyMismatchById = new Map<string, boolean>();
   let statusAvailable = true;
+  const completionDebug: IncompleteBracketCompletionDebugRow[] = [];
+  const showCompletionDebug =
+    process.env.INCOMPLETE_PANEL_COMPLETION_DEBUG === "1";
 
   if (participantIds.length > 0) {
-    const inputs = await loadPicksCompletenessInputsForPool(
-      supabase,
+    const inputs = await loadAdminPicksCompletenessInputsForPool(
       args.poolId,
       participantIds,
+      { fallbackSupabase: supabase },
     );
     if (!inputs) {
       statusAvailable = false;
     } else {
       knockoutBracketPicksUnlocked = inputs.knockoutBracketPicksUnlocked;
-      for (const pid of participantIds) {
+      for (const row of participantRows) {
+        const pid = row.id;
         const status = buildCompletionStatusForParticipant(inputs, pid);
         picksCompleteById.set(pid, status.isComplete);
+
+        if (showCompletionDebug) {
+          const group = status.sections.find((s) => s.id === "group");
+          const third = status.sections.find((s) => s.id === "third_place");
+          const bonus = status.sections.find((s) => s.id === "bonus");
+          const knockout = status.sections.find((s) => s.id === "knockout");
+          completionDebug.push({
+            participantId: pid,
+            displayName: row.display_name,
+            isComplete: status.isComplete,
+            missingPickKeysCount: status.missingPickKeys.length,
+            sections: {
+              group: group ? `${group.filled}/${group.total}` : "—",
+              third: third ? `${third.filled}/${third.total}` : "—",
+              bonus: bonus ? `${bonus.filled}/${bonus.total}` : "—",
+              knockout: !inputs.knockoutBracketPicksUnlocked
+                ? "not required"
+                : knockout
+                  ? `${knockout.filled}/${knockout.total}`
+                  : "—",
+            },
+          });
+        }
+
         if (!status.isComplete) {
           breakdownById.set(pid, buildAdminIncompleteParticipantBreakdown(status));
           const slots = buildAllParticipantPickDrafts({
@@ -126,7 +156,9 @@ export async function loadIncompleteBracketPanelForPool(
       id: r.id,
       displayName: r.display_name,
       email: r.email ?? "",
-      picksComplete: picksCompleteById.get(r.id) ?? false,
+      picksComplete: statusAvailable
+        ? (picksCompleteById.get(r.id) ?? false)
+        : false,
       userId: r.user_id,
       breakdown: breakdownById.get(r.id) ?? null,
       possibleKeyMismatch: keyMismatchById.get(r.id) ?? false,
@@ -135,6 +167,7 @@ export async function loadIncompleteBracketPanelForPool(
     lastReminderRecipientCount: lastReminder?.recipientCount ?? null,
     emailConfigured: getResendMailerConfig() !== null,
     statusAvailable,
+    completionDebug: showCompletionDebug ? completionDebug : undefined,
   });
 }
 

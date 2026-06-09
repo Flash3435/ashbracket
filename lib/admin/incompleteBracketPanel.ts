@@ -22,6 +22,19 @@ export type IncompleteBracketPanelState =
   | "past_lock"
   | "unavailable";
 
+export type IncompleteBracketCompletionDebugRow = {
+  participantId: string;
+  displayName: string;
+  isComplete: boolean;
+  missingPickKeysCount: number;
+  sections: {
+    group: string;
+    third: string;
+    bonus: string;
+    knockout: string;
+  };
+};
+
 export type IncompleteBracketPanelData = {
   poolId: string;
   poolName: string;
@@ -51,6 +64,8 @@ export type IncompleteBracketPanelData = {
   lastReminderRecipientCount: number | null;
   reminderRecentlySent: boolean;
   communicationsHref: string;
+  /** Populated when INCOMPLETE_PANEL_COMPLETION_DEBUG=1 on the server. */
+  completionDebug?: IncompleteBracketCompletionDebugRow[];
 };
 
 export type BuildIncompleteBracketPanelInput = {
@@ -72,6 +87,7 @@ export type BuildIncompleteBracketPanelInput = {
   emailConfigured: boolean;
   nowMs?: number;
   statusAvailable?: boolean;
+  completionDebug?: IncompleteBracketCompletionDebugRow[];
 };
 
 const MAX_VISIBLE_INCOMPLETE = 5;
@@ -180,6 +196,7 @@ export function buildIncompleteBracketPanelData(
         nowMs,
       ),
       communicationsHref,
+      completionDebug: input.completionDebug,
     };
   }
 
@@ -213,6 +230,7 @@ export function buildIncompleteBracketPanelData(
         nowMs,
       ),
       communicationsHref,
+      completionDebug: input.completionDebug,
     };
   }
 
@@ -282,5 +300,6 @@ export function buildIncompleteBracketPanelData(
     lastReminderRecipientCount: input.lastReminderRecipientCount ?? null,
     reminderRecentlySent: reminderRecentlySent(input.lastReminderSentAt, nowMs),
     communicationsHref,
+    completionDebug: input.completionDebug,
   };
 }

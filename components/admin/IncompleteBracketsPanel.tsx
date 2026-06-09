@@ -305,6 +305,24 @@ export function IncompleteBracketsPanel({
         </>
       ) : null}
 
+      {data.completionDebug && data.completionDebug.length > 0 ? (
+        <details className="mt-3 rounded-md border border-ash-border/60 bg-ash-body/20 px-3 py-2 text-xs">
+          <summary className="cursor-pointer font-semibold text-ash-muted">
+            Completion debug ({data.completionDebug.length} participants)
+          </summary>
+          <ul className="mt-2 space-y-1 font-mono text-[11px] text-ash-text">
+            {data.completionDebug.map((row) => (
+              <li key={row.participantId}>
+                {row.displayName}: complete={String(row.isComplete)} missingKeys=
+                {row.missingPickKeysCount} group={row.sections.group} third=
+                {row.sections.third} bonus={row.sections.bonus} knockout=
+                {row.sections.knockout}
+              </li>
+            ))}
+          </ul>
+        </details>
+      ) : null}
+
       {data.state === "all_complete" ? (
         <p className="mt-3 text-sm text-emerald-200">
           Everyone has completed their picks.

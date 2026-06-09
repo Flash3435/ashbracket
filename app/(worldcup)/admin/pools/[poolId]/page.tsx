@@ -9,6 +9,7 @@ import { mapPoolPaymentFromPool, poolIsPaid } from "@/lib/pools/poolPayment";
 import Link from "next/link";
 
 export const dynamic = "force-dynamic";
+export const revalidate = 0;
 
 export default async function AdminPoolDashboardPage({
   params,
