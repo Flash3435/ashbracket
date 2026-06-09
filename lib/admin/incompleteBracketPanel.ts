@@ -38,6 +38,11 @@ export type IncompleteBracketPanelData = {
   timeRemainingLabel: string | null;
   completionDefinitionLabel: string;
   knockoutBracketPicksUnlocked: boolean;
+  /**
+   * When true, at least one incomplete participant has saved picks that did not hydrate
+   * into required slots (possible key mismatch). Reminder sends should be deferred.
+   */
+  possibleKeyMismatch: boolean;
   /** Incomplete participants who can receive email. */
   mailableIncompleteCount: number;
   skippedNoEmailCount: number;
@@ -60,6 +65,7 @@ export type BuildIncompleteBracketPanelInput = {
     picksComplete: boolean;
     userId?: string | null;
     breakdown?: AdminIncompleteParticipantBreakdown | null;
+    possibleKeyMismatch?: boolean;
   }>;
   lastReminderSentAt?: string | null;
   lastReminderRecipientCount?: number | null;
@@ -163,6 +169,7 @@ export function buildIncompleteBracketPanelData(
         input.knockoutBracketPicksUnlocked,
       ),
       knockoutBracketPicksUnlocked: input.knockoutBracketPicksUnlocked,
+      possibleKeyMismatch: false,
       mailableIncompleteCount: 0,
       skippedNoEmailCount: 0,
       emailConfigured: input.emailConfigured,
@@ -195,6 +202,7 @@ export function buildIncompleteBracketPanelData(
         input.knockoutBracketPicksUnlocked,
       ),
       knockoutBracketPicksUnlocked: input.knockoutBracketPicksUnlocked,
+      possibleKeyMismatch: false,
       mailableIncompleteCount: 0,
       skippedNoEmailCount: 0,
       emailConfigured: input.emailConfigured,
@@ -209,6 +217,9 @@ export function buildIncompleteBracketPanelData(
   }
 
   const incompleteRows = input.participants.filter((p) => !p.picksComplete);
+  const possibleKeyMismatch = incompleteRows.some(
+    (p) => p.possibleKeyMismatch === true,
+  );
   const completedCount = totalParticipants - incompleteRows.length;
   const incompleteCount = incompleteRows.length;
   const incompleteParticipants = incompleteRows
@@ -263,6 +274,7 @@ export function buildIncompleteBracketPanelData(
       input.knockoutBracketPicksUnlocked,
     ),
     knockoutBracketPicksUnlocked: input.knockoutBracketPicksUnlocked,
+    possibleKeyMismatch,
     mailableIncompleteCount,
     skippedNoEmailCount,
     emailConfigured: input.emailConfigured,

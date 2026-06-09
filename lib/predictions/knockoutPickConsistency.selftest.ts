@@ -293,7 +293,7 @@ const wrongGroupReason = thirdPlaceSlotInvalidReason(
 if (wrongGroupReason !== "Does not belong to Group A") {
   throw new Error(`expected wrong-group reason, got ${wrongGroupReason}`);
 }
-const hydratedThirdDrafts = buildThirdPlacePickDrafts(
+const legacyHydrated = buildThirdPlacePickDrafts(
   roundOf32Stage,
   [
     prediction({
@@ -304,6 +304,18 @@ const hydratedThirdDrafts = buildThirdPlacePickDrafts(
       slotKey: "1",
       groupCode: null,
     }),
+  ],
+  "participant",
+  allTeams,
+  groupMap,
+);
+if (legacyHydrated.find((s) => s.groupCode === "B")?.teamId !== b3.id) {
+  throw new Error("legacy Stage 2 row should hydrate into its inferred group");
+}
+
+const wrongGroupHydrated = buildThirdPlacePickDrafts(
+  roundOf32Stage,
+  [
     prediction({
       id: "pred-bad-group",
       predictionKind: "third_place_qualifier",
@@ -317,11 +329,13 @@ const hydratedThirdDrafts = buildThirdPlacePickDrafts(
   allTeams,
   groupMap,
 );
-if (hydratedThirdDrafts.find((s) => s.groupCode === "B")?.teamId !== b3.id) {
-  throw new Error("legacy Stage 2 row should hydrate into its inferred group");
+if (wrongGroupHydrated.find((s) => s.groupCode === "B")?.teamId !== b2.id) {
+  throw new Error(
+    "wrong group_code should remap to inferred group on hydration, not drop the pick",
+  );
 }
-if (hydratedThirdDrafts.find((s) => s.groupCode === "A")?.teamId !== "") {
-  throw new Error("invalid persisted Stage 2 row should be cleared on hydration");
+if (wrongGroupHydrated.find((s) => s.groupCode === "A")?.teamId !== "") {
+  throw new Error("wrong group_code should not remain on the incorrect group row");
 }
 const wrongGroupSave = normalizeParticipantThirdPlaceSaveSlots({
   slots: [

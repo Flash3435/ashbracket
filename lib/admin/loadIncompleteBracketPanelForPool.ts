@@ -4,6 +4,8 @@ import {
   loadPicksCompletenessInputsForPool,
 } from "../communications/picksCompleteness";
 import { buildAdminIncompleteParticipantBreakdown } from "../picks/poolMembershipCompletionStatus";
+import { buildAllParticipantPickDrafts } from "../predictions/buildParticipantPickDrafts";
+import { detectPickKeyMismatches } from "../predictions/participantPickDiagnostics";
 import { getResendMailerConfig } from "../email/sendResendEmail";
 import {
   buildIncompleteBracketPanelData,
@@ -70,6 +72,7 @@ export async function loadIncompleteBracketPanelForPool(
   let knockoutBracketPicksUnlocked = true;
   let picksCompleteById = new Map<string, boolean>();
   let breakdownById = new Map<string, ReturnType<typeof buildAdminIncompleteParticipantBreakdown>>();
+  let keyMismatchById = new Map<string, boolean>();
   let statusAvailable = true;
 
   if (participantIds.length > 0) {
@@ -87,6 +90,23 @@ export async function loadIncompleteBracketPanelForPool(
         picksCompleteById.set(pid, status.isComplete);
         if (!status.isComplete) {
           breakdownById.set(pid, buildAdminIncompleteParticipantBreakdown(status));
+          const slots = buildAllParticipantPickDrafts({
+            stageByCode: inputs.stageByCode,
+            predictions: inputs.predictions,
+            participantId: pid,
+            bonusKeys: inputs.bonusKeys,
+            teams: inputs.teams,
+            groupTeamCountryCodesByLetter: inputs.groupTeamCountryCodesByLetter,
+          });
+          const mismatch = detectPickKeyMismatches({
+            predictions: inputs.predictions,
+            participantId: pid,
+            slots,
+            missingPickKeys: status.missingPickKeys,
+            teams: inputs.teams,
+            groupTeamCountryCodesByLetter: inputs.groupTeamCountryCodesByLetter,
+          });
+          keyMismatchById.set(pid, mismatch.possibleKeyMismatch);
         }
       }
     }
@@ -109,6 +129,7 @@ export async function loadIncompleteBracketPanelForPool(
       picksComplete: picksCompleteById.get(r.id) ?? false,
       userId: r.user_id,
       breakdown: breakdownById.get(r.id) ?? null,
+      possibleKeyMismatch: keyMismatchById.get(r.id) ?? false,
     })),
     lastReminderSentAt: lastReminder?.sentAt ?? null,
     lastReminderRecipientCount: lastReminder?.recipientCount ?? null,

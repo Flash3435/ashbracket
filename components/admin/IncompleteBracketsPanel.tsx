@@ -166,7 +166,8 @@ export function IncompleteBracketsPanel({
     data.state === "some_incomplete" &&
     data.mailableIncompleteCount > 0 &&
     !sendsBlocked &&
-    data.emailConfigured;
+    data.emailConfigured &&
+    !data.possibleKeyMismatch;
 
   const showSendAnywayWarning = data.reminderRecentlySent && canSendReminder;
 
@@ -347,6 +348,18 @@ export function IncompleteBracketsPanel({
         <p className="mt-3 text-xs text-ash-muted">No reminders sent yet.</p>
       ) : null}
 
+      {data.possibleKeyMismatch ? (
+        <p className="mt-2 rounded-md border border-amber-800/50 bg-amber-950/25 px-3 py-2 text-xs text-amber-100">
+          Some incomplete participants have saved picks that did not match required
+          slot keys. Run{" "}
+          <code className="rounded bg-ash-body/80 px-1 py-0.5 font-mono text-[11px]">
+            npx tsx scripts/diagnose-pool-completion.ts {data.poolId}
+          </code>{" "}
+          before sending reminders — their brackets may already be complete in the
+          database.
+        </p>
+      ) : null}
+
       {showSendAnywayWarning ? (
         <p className="mt-2 rounded-md border border-amber-800/50 bg-amber-950/25 px-3 py-2 text-xs text-amber-100">
           A reminder was sent within the last hour. You can still send again if
@@ -409,11 +422,13 @@ export function IncompleteBracketsPanel({
           >
             {pending
               ? "Sending…"
-              : sendsBlocked
-                ? "Email blocked"
-                : data.mailableIncompleteCount === 0
-                  ? "No mailable recipients"
-                  : "Send reminder to incomplete participants"}
+              : data.possibleKeyMismatch
+                ? "Resolve key mismatch first"
+                : sendsBlocked
+                  ? "Email blocked"
+                  : data.mailableIncompleteCount === 0
+                    ? "No mailable recipients"
+                    : "Send reminder to incomplete participants"}
           </button>
           <Link
             href={data.communicationsHref}
