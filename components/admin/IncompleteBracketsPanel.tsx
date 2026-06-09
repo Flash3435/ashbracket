@@ -234,8 +234,9 @@ export function IncompleteBracketsPanel({
       </div>
 
       {data.state === "unavailable" ? (
-        <p className="mt-3 text-sm text-amber-100">
-          Pick completion status is unavailable right now. Try again in a moment.
+        <p className="mt-3 rounded-md border border-amber-800/60 bg-amber-950/30 px-3 py-2 text-sm text-amber-100">
+          {data.statusUnavailableReason ??
+            "Pick completion status is unavailable right now. Try again in a moment."}
         </p>
       ) : null}
 
@@ -304,6 +305,23 @@ export function IncompleteBracketsPanel({
           </p>
         </>
       ) : null}
+
+      <p
+        className="mt-3 rounded border border-ash-border/40 bg-ash-body/20 px-2 py-1.5 font-mono text-[10px] leading-relaxed text-ash-muted"
+        aria-label="Admin completion source diagnostics"
+      >
+        build: {data.sourceDiagnostics.buildCommitSha} · source:{" "}
+        {data.sourceDiagnostics.dataSource} · service role:{" "}
+        {data.sourceDiagnostics.serviceRoleAvailable ? "yes" : "no"}
+        {data.sourceDiagnostics.serviceRoleRequired ? " (required)" : ""} ·
+        participants: {data.sourceDiagnostics.participantCount} · predictions:{" "}
+        {data.sourceDiagnostics.predictionRowCount} · group map:{" "}
+        {data.sourceDiagnostics.groupMapSize} · trusted incomplete:{" "}
+        {data.sourceDiagnostics.trustedIncompleteCount}
+        {data.sourceDiagnostics.warningMessage
+          ? ` · warn: ${data.sourceDiagnostics.warningMessage}`
+          : ""}
+      </p>
 
       {data.completionDebug && data.completionDebug.length > 0 ? (
         <details className="mt-3 rounded-md border border-ash-border/60 bg-ash-body/20 px-3 py-2 text-xs">

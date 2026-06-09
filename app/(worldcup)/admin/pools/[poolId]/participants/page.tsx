@@ -76,16 +76,18 @@ export default async function AdminPoolParticipantsPage({
       >();
 
       if (participantIds.length > 0) {
-        const completenessInputs = await loadAdminPicksCompletenessInputsForPool(
+        const completenessLoaded = await loadAdminPicksCompletenessInputsForPool(
           poolId,
           participantIds,
           { fallbackSupabase: supabase },
         );
 
-        if (!completenessInputs) {
+        if (!completenessLoaded.ok) {
           picksStatusWarning =
+            completenessLoaded.diagnostics.warningMessage ??
             "Picks status is unavailable right now. Participant records still load, but completion filters and reminder shortcuts are hidden until the status check succeeds.";
         } else {
+          const completenessInputs = completenessLoaded.inputs;
           const diagnostics = buildCompletionDiagnosticRows(
             completenessInputs,
             poolId,

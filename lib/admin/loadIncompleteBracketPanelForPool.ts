@@ -11,7 +11,10 @@ import {
   type IncompleteBracketCompletionDebugRow,
   type IncompleteBracketPanelData,
 } from "./incompleteBracketPanel";
-import { loadAdminPicksCompletenessInputsForPool } from "./trustedPoolPicksCompleteness";
+import {
+  loadAdminPicksCompletenessInputsForPool,
+  type AdminCompletionSourceDiagnostics,
+} from "./trustedPoolPicksCompleteness";
 
 export async function loadLastIncompleteBracketReminder(
   supabase: SupabaseClient,
@@ -76,19 +79,34 @@ export async function loadIncompleteBracketPanelForPool(
   let breakdownById = new Map<string, ReturnType<typeof buildAdminIncompleteParticipantBreakdown>>();
   let keyMismatchById = new Map<string, boolean>();
   let statusAvailable = true;
+  let statusUnavailableReason: string | null = null;
+  let sourceDiagnostics: AdminCompletionSourceDiagnostics = {
+    buildCommitSha: "unknown",
+    dataSource: "load-failed",
+    serviceRoleAvailable: false,
+    serviceRoleRequired: false,
+    participantCount: participantIds.length,
+    predictionRowCount: 0,
+    groupMapSize: 0,
+    trustedIncompleteCount: 0,
+    warningMessage: null,
+  };
   const completionDebug: IncompleteBracketCompletionDebugRow[] = [];
   const showCompletionDebug =
     process.env.INCOMPLETE_PANEL_COMPLETION_DEBUG === "1";
 
   if (participantIds.length > 0) {
-    const inputs = await loadAdminPicksCompletenessInputsForPool(
+    const loaded = await loadAdminPicksCompletenessInputsForPool(
       args.poolId,
       participantIds,
       { fallbackSupabase: supabase },
     );
-    if (!inputs) {
+    sourceDiagnostics = loaded.diagnostics;
+    if (!loaded.ok) {
       statusAvailable = false;
+      statusUnavailableReason = loaded.diagnostics.warningMessage;
     } else {
+      const inputs = loaded.inputs;
       knockoutBracketPicksUnlocked = inputs.knockoutBracketPicksUnlocked;
       for (const row of participantRows) {
         const pid = row.id;
@@ -168,6 +186,8 @@ export async function loadIncompleteBracketPanelForPool(
     emailConfigured: getResendMailerConfig() !== null,
     statusAvailable,
     completionDebug: showCompletionDebug ? completionDebug : undefined,
+    sourceDiagnostics,
+    statusUnavailableReason,
   });
 }
 

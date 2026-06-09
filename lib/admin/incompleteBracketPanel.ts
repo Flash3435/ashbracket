@@ -2,6 +2,7 @@ import { formatStillNeedToFinishVerb } from "../copy/pluralize";
 import { formatPoolLockDeadline } from "../datetime/poolLockDeadline";
 import type { AdminIncompleteParticipantBreakdown } from "../picks/poolMembershipCompletionStatus";
 import { formatRelativeTimeUntilEn } from "../picks/poolPickDeadlineDisplay";
+import type { AdminCompletionSourceDiagnostics } from "./trustedPoolPicksCompleteness";
 
 export const INCOMPLETE_BRACKET_REMINDER_TYPE = "incomplete_bracket_reminder";
 
@@ -66,6 +67,10 @@ export type IncompleteBracketPanelData = {
   communicationsHref: string;
   /** Populated when INCOMPLETE_PANEL_COMPLETION_DEBUG=1 on the server. */
   completionDebug?: IncompleteBracketCompletionDebugRow[];
+  /** Always populated for admin visibility while verifying trusted completion reads. */
+  sourceDiagnostics: AdminCompletionSourceDiagnostics;
+  /** Shown when state is unavailable (e.g. missing service role in production). */
+  statusUnavailableReason: string | null;
 };
 
 export type BuildIncompleteBracketPanelInput = {
@@ -88,6 +93,8 @@ export type BuildIncompleteBracketPanelInput = {
   nowMs?: number;
   statusAvailable?: boolean;
   completionDebug?: IncompleteBracketCompletionDebugRow[];
+  sourceDiagnostics?: AdminCompletionSourceDiagnostics;
+  statusUnavailableReason?: string | null;
 };
 
 const MAX_VISIBLE_INCOMPLETE = 5;
@@ -166,6 +173,17 @@ export function buildIncompleteBracketPanelData(
         : null;
 
   const communicationsHref = `/admin/pools/${input.poolId}/communications?preset=incomplete_picks`;
+  const sourceDiagnostics = input.sourceDiagnostics ?? {
+    buildCommitSha: "unknown",
+    dataSource: "load-failed",
+    serviceRoleAvailable: false,
+    serviceRoleRequired: false,
+    participantCount: input.participants.length,
+    predictionRowCount: 0,
+    groupMapSize: 0,
+    trustedIncompleteCount: 0,
+    warningMessage: input.statusUnavailableReason ?? null,
+  };
 
   if (input.statusAvailable === false) {
     return {
@@ -197,6 +215,8 @@ export function buildIncompleteBracketPanelData(
       ),
       communicationsHref,
       completionDebug: input.completionDebug,
+      sourceDiagnostics,
+      statusUnavailableReason: input.statusUnavailableReason ?? null,
     };
   }
 
@@ -231,6 +251,8 @@ export function buildIncompleteBracketPanelData(
       ),
       communicationsHref,
       completionDebug: input.completionDebug,
+      sourceDiagnostics,
+      statusUnavailableReason: null,
     };
   }
 
@@ -301,5 +323,7 @@ export function buildIncompleteBracketPanelData(
     reminderRecentlySent: reminderRecentlySent(input.lastReminderSentAt, nowMs),
     communicationsHref,
     completionDebug: input.completionDebug,
+    sourceDiagnostics,
+    statusUnavailableReason: null,
   };
 }

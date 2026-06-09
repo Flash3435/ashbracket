@@ -177,6 +177,29 @@ const noParticipants = buildIncompleteBracketPanelData(
 );
 assert.strictEqual(noParticipants.state, "no_participants");
 
+const unavailable = buildIncompleteBracketPanelData(
+  baseInput({
+    statusAvailable: false,
+    statusUnavailableReason:
+      "Admin completion check requires SUPABASE_SERVICE_ROLE_KEY in production.",
+    sourceDiagnostics: {
+      buildCommitSha: "abc1234",
+      dataSource: "missing-service-role",
+      serviceRoleAvailable: false,
+      serviceRoleRequired: true,
+      participantCount: 4,
+      predictionRowCount: 0,
+      groupMapSize: 0,
+      trustedIncompleteCount: 0,
+      warningMessage:
+        "Admin completion check requires SUPABASE_SERVICE_ROLE_KEY in production.",
+    },
+  }),
+);
+assert.strictEqual(unavailable.state, "unavailable");
+assert.ok(unavailable.statusUnavailableReason?.includes("SUPABASE_SERVICE_ROLE_KEY"));
+assert.strictEqual(unavailable.sourceDiagnostics.dataSource, "missing-service-role");
+
 const manyIncomplete = buildIncompleteBracketPanelData(
   baseInput({
     participants: Array.from({ length: 8 }, (_, i) => ({
