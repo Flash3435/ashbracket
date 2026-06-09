@@ -9,8 +9,9 @@ import {
   buildAllParticipantPickDrafts,
   participantBonusKeysForPool,
 } from "../predictions/buildParticipantPickDrafts";
-import { mapPredictionRow } from "../../src/lib/scoring/mapSupabaseRows";
 import type { Prediction, Team, TournamentStage } from "../../src/types/domain";
+import { fetchPoolPredictions } from "../predictions/fetchPoolPredictions";
+import { warnIfPoolPredictionsLookTruncated } from "../supabase/fetchAllRows";
 import { mapTeamRow, mapTournamentStageRow } from "../results/mapRows";
 import {
   participantPicksCompleteFromDrafts,
@@ -20,8 +21,6 @@ import { fetchOfficialRoundOf32Complete } from "../tournament/fetchOfficialRound
 import { fetchGroupTeamCountryCodesByLetter } from "../tournament/fetchGroupTeamCountryCodesByLetter";
 import { fetchGroupTeamCountryCodesForEdition } from "../tournament/fetchGroupTeamCountryCodesForEdition";
 import { TEAM_TABLE_SELECT } from "../teams/teamDbSelect";
-
-type PredRow = Parameters<typeof mapPredictionRow>[0];
 
 /** Canonical description of how “bracket complete” is evaluated in app code. */
 export const BRACKET_COMPLETION_RULES_SOURCE =
@@ -96,9 +95,9 @@ export async function loadPicksCompletenessInputsForPool(
   const [
     { data: poolRow, error: poolErr },
     { data: stageRows, error: stageErr },
-    { data: predRows, error: predErr },
     { data: ruleRows, error: ruleErr },
     { data: teamRows, error: teamsErr },
+    poolPredictions,
   ] = await Promise.all([
     supabase
       .from("pools")
@@ -113,13 +112,6 @@ export async function loadPicksCompletenessInputsForPool(
       .in("code", stageCodes)
       .order("sort_order", { ascending: true }),
     supabase
-      .from("predictions")
-      .select(
-        "id, pool_id, participant_id, prediction_kind, team_id, tournament_stage_id, group_code, slot_key, bonus_key, value_text, created_at, updated_at",
-      )
-      .eq("pool_id", poolId)
-      .in("participant_id", participantIds),
-    supabase
       .from("scoring_rules")
       .select("bonus_key")
       .eq("pool_id", poolId)
@@ -128,11 +120,20 @@ export async function loadPicksCompletenessInputsForPool(
     supabase.from("teams").select(TEAM_TABLE_SELECT).order("name", {
       ascending: true,
     }),
+    fetchPoolPredictions(supabase, { poolId, participantIds }),
   ]);
 
-  if (poolErr || stageErr || predErr || ruleErr || teamsErr) {
+  if (poolErr || stageErr || poolPredictions.error || ruleErr || teamsErr) {
     return null;
   }
+
+  warnIfPoolPredictionsLookTruncated({
+    participantCount: participantIds.length,
+    predictionRowCount: poolPredictions.predictions.length,
+    paginationPageCount: poolPredictions.pageCount,
+    context: "loadPicksCompletenessInputsForPool",
+    poolId,
+  });
   const editionId = (poolRow?.tournament_edition_id as string | null) ?? null;
   if (!editionId) {
     return null;
@@ -169,9 +170,7 @@ export async function loadPicksCompletenessInputsForPool(
     stages.map((s) => [s.code, s]),
   ) as Partial<Record<TournamentStage["code"], TournamentStage>>;
 
-  const predictions: Prediction[] = (predRows ?? []).map((row) =>
-    mapPredictionRow(row as PredRow),
-  );
+  const predictions: Prediction[] = poolPredictions.predictions;
   const teams: Team[] = (teamRows ?? []).map(mapTeamRow);
 
   const fromDb = (ruleRows ?? [])

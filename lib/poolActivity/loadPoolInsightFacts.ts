@@ -1,5 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { loadParticipantIdsWithIncompletePicks } from "../communications/picksCompleteness";
+import { fetchAllRows } from "../supabase/fetchAllRows";
 import { isOftenPickedTeam, isWildCardTeam } from "../teams/teamStrengthLabel";
 import {
   type ChampionTeamStat,
@@ -71,15 +72,32 @@ async function loadPostLockPickAggregates(
     };
   }
 
-  const { data: predRows, error: pErr } = await supabase
-    .from("predictions")
-    .select("participant_id, team_id, prediction_kind, teams ( id, name, country_code )")
-    .eq("pool_id", poolId)
-    .in("participant_id", completeParticipantIds)
-    .not("team_id", "is", null)
-    .in("prediction_kind", [...KNOCKOUT_PRESENCE_KINDS]);
+  type InsightPredRow = {
+    participant_id: string;
+    team_id: string;
+    prediction_kind: string;
+    teams:
+      | { id: string; name: string; country_code: string | null }
+      | Array<{ id: string; name: string; country_code: string | null }>
+      | null;
+  };
 
-  if (pErr) throw new Error(pErr.message);
+  const { data: predRows, error: pErr } = await fetchAllRows<InsightPredRow>(
+    async ({ from, to }) =>
+      supabase
+        .from("predictions")
+        .select(
+          "participant_id, team_id, prediction_kind, teams ( id, name, country_code )",
+        )
+        .eq("pool_id", poolId)
+        .in("participant_id", completeParticipantIds)
+        .not("team_id", "is", null)
+        .in("prediction_kind", [...KNOCKOUT_PRESENCE_KINDS])
+        .order("id", { ascending: true })
+        .range(from, to),
+  );
+
+  if (pErr) throw new Error(pErr);
 
   type TeamEmbed = { id: string; name: string; country_code: string | null };
   const championByTeam = new Map<string, ChampionTeamStat>();
