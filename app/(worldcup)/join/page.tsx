@@ -1,6 +1,8 @@
 import { JoinPoolForm } from "@/components/join/JoinPoolForm";
+import { PicksDeadlineBannerFromPool } from "@/components/pool/PicksDeadlineBannerFromPool";
 import { PageContainer } from "@/components/ui/PageContainer";
 import { PageTitle } from "@/components/ui/PageTitle";
+import { resolvePublicRulesPoolId } from "@/lib/pool/resolvePublicRulesPoolId";
 import { createClient } from "@/lib/supabase/server";
 import { SAMPLE_POOL_JOIN_CODE } from "../../../lib/config/sample-pool";
 
@@ -37,9 +39,11 @@ export default async function JoinPage({
     : `/signup?next=${encodeURIComponent(joinPath)}`;
 
   const inviteMode = Boolean(invite.trim());
+  const { poolId: publicPoolId } = await resolvePublicRulesPoolId(supabase);
 
   return (
     <PageContainer>
+      <PicksDeadlineBannerFromPool poolId={publicPoolId} className="mb-6" />
       <PageTitle
         title="Join a pool"
         description={

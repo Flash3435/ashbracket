@@ -1,5 +1,6 @@
 import { AccountPicksProfileLinks } from "@/components/account/AccountPicksProfileLinks";
 import { ParticipantKnockoutPicksForm } from "@/components/admin/ParticipantKnockoutPicksForm";
+import { PicksDeadlineBannerFromPool } from "@/components/pool/PicksDeadlineBannerFromPool";
 import {
   ParticipantPoolPaymentPanel,
   UnpaidPaymentReminderBanner,
@@ -61,6 +62,12 @@ export default async function AccountPicksPage({ searchParams }: PageProps) {
 
   return (
     <PageContainer>
+      {ctx.selectedPoolId ? (
+        <PicksDeadlineBannerFromPool
+          poolId={ctx.selectedPoolId}
+          className="mb-6"
+        />
+      ) : null}
       <div className="mb-6 flex flex-wrap items-center gap-3">
         <Link href="/account" className="ash-link text-sm">
           ← Back to account

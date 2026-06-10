@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { PoolRevealDashboardCard } from "@/components/account/PoolRevealDashboardCard";
+import { PicksDeadlineBannerFromPool } from "@/components/pool/PicksDeadlineBannerFromPool";
 import { WhoToCheerForCard } from "@/components/account/WhoToCheerForCard";
 import { whoToCheerForFromSchedule } from "@/lib/account/loadWhoToCheerFor";
 import { formatPoolPickDeadlineLabel } from "@/lib/picks/poolPickDeadlineDisplay";
@@ -169,6 +170,12 @@ export default async function AccountPage({ searchParams }: PageProps) {
 
   return (
     <PageContainer>
+      {picksCtx?.selectedPoolId ? (
+        <PicksDeadlineBannerFromPool
+          poolId={picksCtx.selectedPoolId}
+          className="mb-6"
+        />
+      ) : null}
       <div className="mb-8">
         <PageTitle
           title="My bracket"

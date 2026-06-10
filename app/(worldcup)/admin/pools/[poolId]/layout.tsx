@@ -1,4 +1,5 @@
 import { AdminPoolHeader } from "@/components/admin/AdminPoolHeader";
+import { PicksDeadlineBannerFromPool } from "@/components/pool/PicksDeadlineBannerFromPool";
 import { requireManagedPool } from "@/lib/admin/requireManagedPool";
 import { canManagePoolAdmins } from "@/lib/auth/permissions";
 
@@ -22,6 +23,7 @@ export default async function AdminPoolLayout({
           pool={pool}
           showAuditLogLink={showAuditLogLink}
         />
+        <PicksDeadlineBannerFromPool poolId={poolId} className="mt-4" />
       </div>
       {children}
     </>

@@ -1,5 +1,6 @@
 import { WhoToCheerForCard } from "@/components/account/WhoToCheerForCard";
 import { AccountPicksProfileLinks } from "@/components/account/AccountPicksProfileLinks";
+import { PicksDeadlineBannerFromPool } from "@/components/pool/PicksDeadlineBannerFromPool";
 import { whoToCheerForFromSchedule } from "@/lib/account/loadWhoToCheerFor";
 import { ParticipantBracketView } from "@/components/bracket/ParticipantBracketView";
 import { MyKnockoutPicksSummary } from "@/components/picks/MyKnockoutPicksSummary";
@@ -71,6 +72,12 @@ export default async function AccountPicksSummaryPage({ searchParams }: PageProp
 
   return (
     <PageContainer>
+      {ctx.selectedPoolId ? (
+        <PicksDeadlineBannerFromPool
+          poolId={ctx.selectedPoolId}
+          className="mb-6"
+        />
+      ) : null}
       <div className="mb-6 flex flex-wrap items-center gap-3">
         <Link href="/account" className="ash-link text-sm">
           ← Back to account

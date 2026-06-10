@@ -211,7 +211,8 @@ export function IncompleteBracketsPanel({
 
   return (
     <section
-      className={`rounded-lg border border-ash-border bg-ash-body/40 p-4 ${className}`}
+      id="incomplete-brackets"
+      className={`scroll-mt-20 rounded-lg border border-ash-border bg-ash-body/40 p-4 ${className}`}
       aria-label="Incomplete brackets"
     >
       <div className="flex flex-wrap items-start justify-between gap-3">

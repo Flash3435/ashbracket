@@ -1,4 +1,5 @@
 import { JoinPoolForm } from "@/components/join/JoinPoolForm";
+import { PicksDeadlineBannerFromPool } from "@/components/pool/PicksDeadlineBannerFromPool";
 import { PageContainer } from "@/components/ui/PageContainer";
 import { PageTitle } from "@/components/ui/PageTitle";
 import { peekJoinablePool } from "@/lib/join/actions";
@@ -54,6 +55,9 @@ export default async function JoinByCodePage({
 
   return (
     <PageContainer>
+      {peek.ok ? (
+        <PicksDeadlineBannerFromPool poolId={peek.poolId} className="mb-6" />
+      ) : null}
       <PageTitle
         title={
           peek.ok

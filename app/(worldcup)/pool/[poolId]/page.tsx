@@ -1,4 +1,5 @@
 import { PublicPoolLeaderboardView } from "@/components/leaderboard/PublicPoolLeaderboardView";
+import { PicksDeadlineBannerFromPool } from "@/components/pool/PicksDeadlineBannerFromPool";
 import { SimulationModeBanner } from "@/components/admin/SimulationModeBanner";
 import { PageContainer } from "@/components/ui/PageContainer";
 import { getMyParticipantIdInPool } from "@/lib/join/actions";
@@ -56,6 +57,7 @@ export default async function PublicPoolLeaderboardPage({ params }: PageProps) {
 
   return (
     <PageContainer>
+      <PicksDeadlineBannerFromPool poolId={poolIdTrimmed} className="mb-6" />
       {pool.is_simulation ? (
         <SimulationModeBanner
           variant="simulation"
