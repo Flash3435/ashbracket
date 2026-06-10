@@ -18,7 +18,12 @@ import {
   type ParticipantRow,
 } from "@/lib/participants/participantsDb";
 import { PoolPotAdminSummary } from "@/components/pools/PoolPotAdminSummary";
+import { fetchManagedPoolsForCurrentUser } from "@/lib/pools/fetchManagedPoolsForViewer";
 import { mapPoolPaymentFromPool, poolIsPaid } from "@/lib/pools/poolPayment";
+import {
+  filterEligibleMoveDestinationPools,
+  worldCupPoolMoveScopeFromManagedPool,
+} from "@/lib/participants/worldCupParticipantMove";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -51,6 +56,16 @@ export default async function AdminPoolParticipantsPage({
     new Date(lockAtIso).getTime() <= Date.now();
   const poolPayment = mapPoolPaymentFromPool(pool);
   const poolIsPaidPool = poolIsPaid(poolPayment);
+  const managedPoolsResult = await fetchManagedPoolsForCurrentUser(supabase);
+  const moveDestinationPools = filterEligibleMoveDestinationPools(
+    worldCupPoolMoveScopeFromManagedPool({
+      id: poolId,
+      tournament_edition_id: pool.tournament_edition_id,
+      is_simulation: Boolean(pool.is_simulation),
+    }),
+    managedPoolsResult.data ?? [],
+  );
+  const currentPoolName = pool.name?.trim() || "This pool";
 
   let initialParticipants: ParticipantWithPicksStatus[] = [];
   let loadError: string | null = null;
@@ -170,6 +185,8 @@ export default async function AdminPoolParticipantsPage({
       ) : null}
       <ParticipantsManager
         poolId={poolId}
+        currentPoolName={currentPoolName}
+        moveDestinationPools={moveDestinationPools}
         initialParticipants={initialParticipants}
         joinCode={jc}
         shareUrl={shareUrl}

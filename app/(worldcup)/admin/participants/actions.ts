@@ -12,10 +12,23 @@ import { joinInviteUrl } from "@/lib/site-url";
 import { generateInviteToken } from "../../../../lib/invites/generateInviteToken";
 import { resolveInviterLabelForPoolInvite } from "../../../../lib/invites/resolveInviterLabelForPoolInvite";
 import { sendParticipantInviteEmail } from "../../../../lib/invites/sendParticipantInviteEmail";
+import { logAdminRiskAction } from "@/lib/admin/adminRiskAuditLog";
 import {
   formatRemoveParticipantSuccessMessage,
   REMOVE_PARTICIPANT_ALREADY_GONE_MESSAGE,
 } from "@/lib/participants/removeParticipantFromPoolPolicy";
+import {
+  areWorldCupPoolsCompatibleForMove,
+  formatMoveParticipantSuccessMessage,
+  mapMoveWorldCupParticipantRpcError,
+  MOVE_PARTICIPANT_DUPLICATE_BLOCKED_MESSAGE,
+  participantWouldDuplicateInDestinationPool,
+  poolsToRecomputeAfterParticipantMove,
+  worldCupPoolMoveScopeFromManagedPool,
+} from "@/lib/participants/worldCupParticipantMove";
+import { fetchManagedPoolsForCurrentUser } from "@/lib/pools/fetchManagedPoolsForViewer";
+import { fetchPoolEditionScope } from "@/lib/tournament/editionScope";
+import { recomputePoolLedgerForPool } from "@/lib/scoring/recomputePoolLedger";
 import {
   mapParticipantRow,
   paidAtForInsert,
@@ -499,4 +512,156 @@ export async function deleteParticipantAction(input: {
     poolId: input.poolId,
     participantId: input.id,
   });
+}
+
+export async function moveWorldCupParticipantToPoolAction(input: {
+  sourcePoolId: string;
+  destinationPoolId: string;
+  participantId: string;
+}): Promise<ParticipantActionResult> {
+  try {
+    const supabase = await createClient();
+    const sourcePoolId = input.sourcePoolId.trim();
+    const destinationPoolId = input.destinationPoolId.trim();
+    const participantId = input.participantId.trim();
+
+    if (!sourcePoolId || !destinationPoolId || !participantId) {
+      return { ok: false, error: "Source pool, destination pool, and participant are required." };
+    }
+
+    if (sourcePoolId === destinationPoolId) {
+      return { ok: false, error: "Choose a different destination pool." };
+    }
+
+    const sourceGate = await assertCanManagePool(supabase, sourcePoolId);
+    if (!sourceGate.ok) return { ok: false, error: sourceGate.error };
+
+    const destinationGate = await assertCanManagePool(supabase, destinationPoolId);
+    if (!destinationGate.ok) return { ok: false, error: destinationGate.error };
+
+    const {
+      data: { user: actor },
+    } = await supabase.auth.getUser();
+
+    const { data: participantRow, error: participantErr } = await supabase
+      .from("participants")
+      .select("id, pool_id, display_name, email, user_id")
+      .eq("id", participantId)
+      .eq("pool_id", sourcePoolId)
+      .maybeSingle();
+
+    if (participantErr) return { ok: false, error: participantErr.message };
+    if (!participantRow) {
+      return { ok: false, error: "Participant not found in this pool." };
+    }
+
+    const managedPoolsResult = await fetchManagedPoolsForCurrentUser(supabase);
+    if (managedPoolsResult.error) {
+      return { ok: false, error: managedPoolsResult.error };
+    }
+
+    const managedPools = managedPoolsResult.data ?? [];
+    const sourceManaged = managedPools.find((pool) => pool.id === sourcePoolId);
+    const destinationManaged = managedPools.find((pool) => pool.id === destinationPoolId);
+
+    if (!sourceManaged || !destinationManaged) {
+      return { ok: false, error: "You do not have access to one of these pools." };
+    }
+
+    const sourceScope = worldCupPoolMoveScopeFromManagedPool(sourceManaged);
+    const destinationScope = worldCupPoolMoveScopeFromManagedPool(destinationManaged);
+    if (!areWorldCupPoolsCompatibleForMove(sourceScope, destinationScope)) {
+      return { ok: false, error: "These pools cannot be used together for a move." };
+    }
+
+    const { data: destinationParticipants, error: destinationParticipantsErr } =
+      await supabase
+        .from("participants")
+        .select("user_id, email, display_name")
+        .eq("pool_id", destinationPoolId);
+
+    if (destinationParticipantsErr) {
+      return { ok: false, error: destinationParticipantsErr.message };
+    }
+
+    if (
+      participantWouldDuplicateInDestinationPool(
+        {
+          userId: (participantRow.user_id as string | null) ?? null,
+          email: String(participantRow.email ?? ""),
+          displayName: String(participantRow.display_name ?? ""),
+        },
+        (destinationParticipants ?? []).map((row) => ({
+          userId: (row.user_id as string | null) ?? null,
+          email: String(row.email ?? ""),
+          displayName: String(row.display_name ?? ""),
+        })),
+      )
+    ) {
+      return { ok: false, error: MOVE_PARTICIPANT_DUPLICATE_BLOCKED_MESSAGE };
+    }
+
+    const { data: rpcData, error: rpcErr } = await supabase.rpc(
+      "move_world_cup_participant_to_pool",
+      {
+        p_participant_id: participantId,
+        p_source_pool_id: sourcePoolId,
+        p_destination_pool_id: destinationPoolId,
+      },
+    );
+
+    if (rpcErr) {
+      return { ok: false, error: mapMoveWorldCupParticipantRpcError(rpcErr.message) };
+    }
+
+    const payload = (rpcData ?? {}) as {
+      display_name?: string;
+      destination_pool_name?: string;
+    };
+    const displayName = String(payload.display_name ?? participantRow.display_name ?? "").trim();
+    const destinationPoolName = String(
+      payload.destination_pool_name ?? destinationManaged.name ?? "",
+    ).trim();
+
+    const editionScope = await fetchPoolEditionScope(supabase, sourcePoolId);
+    for (const poolId of poolsToRecomputeAfterParticipantMove(
+      sourcePoolId,
+      destinationPoolId,
+    )) {
+      const ledgerResult = await recomputePoolLedgerForPool(poolId, {
+        ledgerTrigger: "admin_manual_recompute",
+      });
+      if (ledgerResult.error) {
+        console.error("[moveWorldCupParticipantToPool] ledger recompute failed", {
+          poolId,
+          error: ledgerResult.error,
+        });
+      }
+    }
+
+    revalidateParticipants(sourcePoolId);
+    revalidateParticipants(destinationPoolId);
+
+    logAdminRiskAction({
+      action: "participant_pool_move",
+      userId: actor?.id ?? null,
+      userEmail: actor?.email,
+      poolId: sourcePoolId,
+      poolName: sourceManaged.name,
+      editionId: editionScope.ok ? editionScope.edition.id : null,
+      editionCode: editionScope.ok ? editionScope.edition.code : null,
+      isSimulation: sourceManaged.is_simulation,
+      affectedParticipantCount: 1,
+      detail: `moved participant ${participantId} to pool ${destinationPoolId}`,
+    });
+
+    return {
+      ok: true,
+      message: formatMoveParticipantSuccessMessage(displayName, destinationPoolName),
+      removedDisplayName: displayName,
+    };
+  } catch (e) {
+    console.error("[moveWorldCupParticipantToPool] unexpected", e);
+    return { ok: false, error: messageFromUnknown(e) };
+  }
 }

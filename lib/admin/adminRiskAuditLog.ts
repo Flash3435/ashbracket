@@ -12,6 +12,7 @@ export type AdminRiskAction =
   | "pool_communications_send"
   | "pool_communications_test"
   | "participant_invite_email"
+  | "participant_pool_move"
   | "pool_admin_invite_email";
 
 export type AdminRiskAuditPayload = {
