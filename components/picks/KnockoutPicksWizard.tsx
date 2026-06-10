@@ -27,6 +27,11 @@ import {
   teamStrengthLabel,
 } from "../../lib/teams/teamStrengthLabel";
 import {
+  mergeSavedWarningWithRefreshFailure,
+  resolvePicksSaveClientNextStep,
+  tryRefreshPicksPage,
+} from "../../lib/predictions/participantPicksSaveFlow";
+import {
   picksDraftSignature,
   picksSaveButtonDisabled,
   picksSaveButtonLabel,
@@ -777,29 +782,59 @@ export function KnockoutPicksWizard({
       lastSavedAt: prev.lastSavedAt,
     }));
     startSaveTransition(async () => {
-      const res = await savePicks({
-        participantId,
-        slots: submittedSlots,
-      });
-      if (!res.ok) {
+      try {
+        const res = await savePicks({
+          participantId,
+          slots: submittedSlots,
+        });
+        const next = resolvePicksSaveClientNextStep(res, { postSaveRedirectTo });
+        if (next.step === "show_error") {
+          setSaveUiState((prev) => ({
+            kind: "error",
+            failedSignature: submittedSignature,
+            message: next.message,
+            lastSavedAt: prev.lastSavedAt,
+          }));
+          return;
+        }
+        if (next.step === "redirect") {
+          router.push(next.to);
+          return;
+        }
+
+        setSavedSignature(submittedSignature);
+        setSaveUiState({
+          kind: "saved",
+          lastSavedAt: Date.now(),
+          warning: next.warning,
+        });
+
+        const refreshResult = await tryRefreshPicksPage(() => router.refresh());
+        if (refreshResult.refreshFailed) {
+          setSaveUiState((prev) =>
+            prev.kind === "saved"
+              ? {
+                  ...prev,
+                  warning: mergeSavedWarningWithRefreshFailure(
+                    prev.warning,
+                    true,
+                  ),
+                }
+              : prev,
+          );
+        }
+      } catch (error) {
+        const message =
+          error instanceof Error && error.message.trim()
+            ? error.message.trim()
+            : "Could not reach the server. Your picks may or may not have saved — reload to check.";
         setSaveUiState((prev) => ({
           kind: "error",
           failedSignature: submittedSignature,
-          message: res.error,
+          message,
           lastSavedAt: prev.lastSavedAt,
         }));
-        return;
       }
-      if (postSaveRedirectTo) {
-        router.push(postSaveRedirectTo);
-        return;
-      }
-      setSavedSignature(submittedSignature);
-      setSaveUiState({
-        kind: "saved",
-        lastSavedAt: Date.now(),
-      });
-      router.refresh();
     });
   }
 
@@ -922,6 +957,14 @@ export function KnockoutPicksWizard({
             </p>
           ) : null}
         </div>
+      ) : null}
+      {saveUiState.kind === "saved" && saveUiState.warning ? (
+        <p
+          className="rounded-md border border-amber-700/50 bg-amber-950/30 px-3 py-2 text-sm text-amber-100"
+          role="status"
+        >
+          {saveUiState.warning}
+        </p>
       ) : null}
       {quickHint ? (
         <p

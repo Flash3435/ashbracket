@@ -1,6 +1,12 @@
+export type SavePicksOutcomeKind =
+  | "success"
+  | "validation_error"
+  | "unexpected_error";
+
 export type SaveKnockoutPicksResult =
-  | { ok: true }
-  | { ok: false; error: string };
+  | { ok: true; kind: "success"; warning?: string }
+  | { ok: false; kind: "validation_error"; error: string }
+  | { ok: false; kind: "unexpected_error"; error: string };
 
 /** Payload for saving any tournament pick row (group, bracket, bonus). */
 export type ParticipantPickSlotPayload = {
