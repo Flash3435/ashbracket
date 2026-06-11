@@ -187,6 +187,33 @@ const baseInput = {
   assert.strictEqual(data.championPicks[0]!.percentage, 100);
 }
 
+// Pre-R32 locked pool: pre-bracket reveal instead of empty champion state
+{
+  const data = buildPoolReveal({
+    ...baseInput,
+    championPicks: [],
+    knockoutBracketPicksUnlocked: false,
+    preBracketSections: [
+      {
+        id: "group",
+        title: "Group winners",
+        teamPicks: [
+          {
+            teamId: "t-bra",
+            teamName: "Brazil",
+            teamCode: "BRA",
+            count: 2,
+            percentage: 100,
+          },
+        ],
+      },
+    ],
+  });
+  assert.strictEqual(data.totalChampionBrackets, 0);
+  assert.strictEqual(data.showPreBracketReveal, true);
+  assert.ok(data.preBracketIntro?.includes("Round of 32"));
+}
+
 // Pre-lock loader-shaped input exposes no team strings
 {
   const data = buildPoolReveal({

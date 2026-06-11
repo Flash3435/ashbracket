@@ -1,4 +1,9 @@
 import { poolLocked } from "../pools/poolLocked";
+import type { PreBracketRevealSection } from "./resolvePoolPreBracketReveal";
+import {
+  PRE_BRACKET_REVEAL_INTRO,
+  shouldShowPreBracketReveal,
+} from "./resolvePoolPreBracketReveal";
 
 export type ChampionPickSummary = {
   teamId: string;
@@ -28,6 +33,10 @@ export type PoolRevealData = {
   soloChampionPicks: ChampionPickSummary[];
   ashbotLine: string | null;
   canShowParticipantNames: boolean;
+  knockoutBracketPicksUnlocked: boolean;
+  preBracketSections: PreBracketRevealSection[];
+  showPreBracketReveal: boolean;
+  preBracketIntro: string | null;
 };
 
 export type ChampionPickInput = {
@@ -48,6 +57,8 @@ export type BuildPoolRevealInput = {
   viewerPicksComplete: boolean;
   /** Same-pool members may view peer picks (participant bracket snapshot). */
   canShowParticipantNames: boolean;
+  knockoutBracketPicksUnlocked?: boolean;
+  preBracketSections?: PreBracketRevealSection[];
   nowMs?: number;
 };
 
@@ -79,6 +90,9 @@ export function buildPoolReveal(input: BuildPoolRevealInput): PoolRevealData {
   const totalCompleted = input.completeParticipantIds.length;
   const totalParticipants = input.totalParticipants;
 
+  const knockoutBracketPicksUnlocked = input.knockoutBracketPicksUnlocked !== false;
+  const preBracketSections = input.preBracketSections ?? [];
+
   const emptyLocked: PoolRevealData = {
     locked: false,
     lockAt: input.lockAt,
@@ -96,6 +110,10 @@ export function buildPoolReveal(input: BuildPoolRevealInput): PoolRevealData {
     soloChampionPicks: [],
     ashbotLine: null,
     canShowParticipantNames: false,
+    knockoutBracketPicksUnlocked,
+    preBracketSections,
+    showPreBracketReveal: false,
+    preBracketIntro: null,
   };
 
   if (!locked) return emptyLocked;
@@ -170,6 +188,13 @@ export function buildPoolReveal(input: BuildPoolRevealInput): PoolRevealData {
   const mostPopularChampion = leaders[0] ?? null;
   const mostPopularChampionTied = leaders.length > 1;
 
+  const showPreBracketReveal = shouldShowPreBracketReveal({
+    locked: true,
+    knockoutBracketPicksUnlocked,
+    totalChampionBrackets,
+    preBracketSections,
+  });
+
   return {
     locked: true,
     lockAt: input.lockAt,
@@ -187,6 +212,10 @@ export function buildPoolReveal(input: BuildPoolRevealInput): PoolRevealData {
     soloChampionPicks,
     ashbotLine: pickAshbotLine(mostPopularChampion, mostPopularChampionTied),
     canShowParticipantNames: showNames,
+    knockoutBracketPicksUnlocked,
+    preBracketSections,
+    showPreBracketReveal,
+    preBracketIntro: showPreBracketReveal ? PRE_BRACKET_REVEAL_INTRO : null,
   };
 }
 

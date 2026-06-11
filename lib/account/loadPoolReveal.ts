@@ -1,6 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import {
-  loadParticipantIdsWithIncompletePicks,
+  buildCompletionStatusForParticipant,
   loadPicksCompletenessInputsForPool,
 } from "../communications/picksCompleteness";
 import {
@@ -12,6 +12,7 @@ import { participantPicksCompleteFromDrafts } from "../predictions/participantPi
 import type { AccountKnockoutSelection } from "./loadAccountKnockoutSelection";
 import { buildPoolReveal, type PoolRevealData } from "./buildPoolReveal";
 import { resolvePoolChampionPickInputs } from "./resolvePoolChampionPicks";
+import { resolvePoolPreBracketRevealSections } from "./resolvePoolPreBracketReveal";
 
 /**
  * Loads pool reveal data for a signed-in pool member.
@@ -49,11 +50,26 @@ export async function loadPoolReveal(
   const poolLockAt = (poolRow.data?.lock_at as string | null) ?? lockAt;
   const locked = poolLocked(poolLockAt);
 
-  const incomplete = await loadParticipantIdsWithIncompletePicks(
+  const inputs = await loadPicksCompletenessInputsForPool(
     supabase,
     poolId,
     participantIds,
   );
+
+  const knockoutBracketPicksUnlocked =
+    inputs?.knockoutBracketPicksUnlocked ??
+    picksCtx.knockoutBracketPicksUnlocked;
+
+  const incomplete = new Set<string>();
+  if (!inputs) {
+    participantIds.forEach((id) => incomplete.add(id));
+  } else {
+    for (const pid of participantIds) {
+      const status = buildCompletionStatusForParticipant(inputs, pid);
+      if (!status.isComplete) incomplete.add(pid);
+    }
+  }
+
   const completeParticipantIds = participantIds.filter((id) => !incomplete.has(id));
 
   if (!locked) {
@@ -66,18 +82,30 @@ export async function loadPoolReveal(
       championPicks: [],
       viewerPicksComplete,
       canShowParticipantNames: false,
+      knockoutBracketPicksUnlocked,
+      preBracketSections: [],
       nowMs,
     });
   }
 
-  const inputs = await loadPicksCompletenessInputsForPool(
-    supabase,
-    poolId,
-    completeParticipantIds,
-  );
+  if (!inputs) {
+    return buildPoolReveal({
+      lockAt: poolLockAt,
+      deadlineLabel,
+      relativeCountdown,
+      totalParticipants: participantRows.length,
+      completeParticipantIds: [],
+      championPicks: [],
+      viewerPicksComplete,
+      canShowParticipantNames: true,
+      knockoutBracketPicksUnlocked,
+      preBracketSections: [],
+      nowMs,
+    });
+  }
 
   const championPicks =
-    inputs && completeParticipantIds.length > 0
+    completeParticipantIds.length > 0
       ? resolvePoolChampionPickInputs({
           completeParticipantIds,
           predictions: inputs.predictions,
@@ -86,6 +114,18 @@ export async function loadPoolReveal(
           stageByCode: inputs.stageByCode,
           bonusKeys: inputs.bonusKeys,
           groupTeamCountryCodesByLetter: inputs.groupTeamCountryCodesByLetter,
+        })
+      : [];
+
+  const preBracketSections =
+    completeParticipantIds.length > 0
+      ? resolvePoolPreBracketRevealSections({
+          completeParticipantIds,
+          predictions: inputs.predictions,
+          participantRows,
+          teams: inputs.teams,
+          bonusKeys: inputs.bonusKeys,
+          canShowParticipantNames: true,
         })
       : [];
 
@@ -98,6 +138,8 @@ export async function loadPoolReveal(
     championPicks,
     viewerPicksComplete,
     canShowParticipantNames: true,
+    knockoutBracketPicksUnlocked,
+    preBracketSections,
     nowMs,
   });
 }

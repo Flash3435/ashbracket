@@ -171,13 +171,83 @@ export function PoolRevealPage({
     );
   }
 
+  if (data.showPreBracketReveal) {
+    const sectionMax = (picks: PoolRevealData["championPicks"]) =>
+      picks.length > 0 ? Math.max(...picks.map((c) => c.count)) : 0;
+
+    return (
+      <div className="space-y-6">
+        <p className="text-sm text-ash-muted">
+          Pool: <span className="font-medium text-ash-text">{poolName}</span>
+        </p>
+
+        <div className="rounded-xl border border-sky-500/30 bg-gradient-to-br from-sky-500/10 to-ash-body/40 p-5 ring-1 ring-sky-500/15">
+          <p className="text-sm leading-relaxed text-ash-text">
+            {data.preBracketIntro}
+          </p>
+        </div>
+
+        <div className="grid gap-3 sm:grid-cols-2">
+          <StatCard
+            label="Completed brackets"
+            value={String(data.totalCompleted)}
+            detail={
+              data.totalParticipants > data.totalCompleted
+                ? `${data.totalParticipants - data.totalCompleted} still incomplete`
+                : undefined
+            }
+          />
+          <StatCard
+            label="Pre-bracket pick sections"
+            value={String(data.preBracketSections.length)}
+            detail="Group, third-place, and bonus trends"
+          />
+        </div>
+
+        {data.preBracketSections.map((section) => (
+          <section
+            key={`${section.id}-${section.title}`}
+            className="rounded-xl border border-ash-border bg-ash-surface p-4"
+          >
+            <h2 className="text-base font-bold text-ash-text">{section.title}</h2>
+            {section.subtitle ? (
+              <p className="mt-0.5 text-xs text-ash-muted">{section.subtitle}</p>
+            ) : null}
+            <ul className="mt-3 divide-y divide-ash-border">
+              {section.teamPicks.map((pick) => (
+                <ChampionRow
+                  key={`${section.id}-${pick.teamId}`}
+                  pick={pick}
+                  maxCount={sectionMax(section.teamPicks)}
+                  showNames={data.canShowParticipantNames}
+                />
+              ))}
+            </ul>
+          </section>
+        ))}
+
+        <div className="flex flex-wrap gap-3">
+          <Link href={picksHref} className="btn-ghost inline-flex text-sm ring-1 ring-ash-border">
+            View picks
+          </Link>
+          <Link href={activityHref} className="btn-ghost inline-flex text-sm ring-1 ring-ash-border">
+            View activity
+          </Link>
+          <Link href={dashboardHref} className="btn-ghost inline-flex text-sm ring-1 ring-ash-border">
+            Back to dashboard
+          </Link>
+        </div>
+      </div>
+    );
+  }
+
   if (data.totalChampionBrackets === 0) {
     return (
       <div className="rounded-xl border border-ash-border bg-ash-surface p-6 text-center">
         <p className="text-sm text-ash-muted">
           {data.totalCompleted === 0
             ? `No completed brackets to reveal yet for ${poolName}.`
-            : `No champion picks found for ${poolName} yet among completed brackets.`}
+            : `No locked picks to reveal yet for ${poolName}.`}
         </p>
         <Link
           href={dashboardHref}
