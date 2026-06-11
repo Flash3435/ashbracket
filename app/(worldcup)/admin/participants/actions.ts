@@ -1,5 +1,6 @@
 "use server";
 
+import { assertCanDirectlyManagePool } from "@/lib/admin/assertCanDirectlyManagePool";
 import { assertCanManagePool } from "@/lib/admin/assertCanManagePool";
 import {
   gateSimulationPoolOutboundEmail,
@@ -24,9 +25,10 @@ import {
   MOVE_PARTICIPANT_DUPLICATE_BLOCKED_MESSAGE,
   participantWouldDuplicateInDestinationPool,
   poolsToRecomputeAfterParticipantMove,
+  validateDirectPoolAdminMoveAccess,
   worldCupPoolMoveScopeFromManagedPool,
 } from "@/lib/participants/worldCupParticipantMove";
-import { fetchManagedPoolsForCurrentUser } from "@/lib/pools/fetchManagedPoolsForViewer";
+import { fetchDirectlyManagedPoolsForCurrentUser } from "@/lib/pools/fetchDirectlyManagedPoolsForCurrentUser";
 import { fetchPoolEditionScope } from "@/lib/tournament/editionScope";
 import { recomputePoolLedgerForPool } from "@/lib/scoring/recomputePoolLedger";
 import {
@@ -533,10 +535,10 @@ export async function moveWorldCupParticipantToPoolAction(input: {
       return { ok: false, error: "Choose a different destination pool." };
     }
 
-    const sourceGate = await assertCanManagePool(supabase, sourcePoolId);
+    const sourceGate = await assertCanDirectlyManagePool(supabase, sourcePoolId);
     if (!sourceGate.ok) return { ok: false, error: sourceGate.error };
 
-    const destinationGate = await assertCanManagePool(supabase, destinationPoolId);
+    const destinationGate = await assertCanDirectlyManagePool(supabase, destinationPoolId);
     if (!destinationGate.ok) return { ok: false, error: destinationGate.error };
 
     const {
@@ -555,12 +557,21 @@ export async function moveWorldCupParticipantToPoolAction(input: {
       return { ok: false, error: "Participant not found in this pool." };
     }
 
-    const managedPoolsResult = await fetchManagedPoolsForCurrentUser(supabase);
+    const managedPoolsResult = await fetchDirectlyManagedPoolsForCurrentUser(supabase);
     if (managedPoolsResult.error) {
       return { ok: false, error: managedPoolsResult.error };
     }
 
     const managedPools = managedPoolsResult.data ?? [];
+    const directAdminAccess = validateDirectPoolAdminMoveAccess(
+      sourcePoolId,
+      destinationPoolId,
+      managedPools.map((pool) => pool.id),
+    );
+    if (!directAdminAccess.ok) {
+      return { ok: false, error: directAdminAccess.error };
+    }
+
     const sourceManaged = managedPools.find((pool) => pool.id === sourcePoolId);
     const destinationManaged = managedPools.find((pool) => pool.id === destinationPoolId);
 

@@ -57,6 +57,26 @@ export function areWorldCupPoolsCompatibleForMove(
   );
 }
 
+export type DirectPoolAdminMoveAccessResult =
+  | { ok: true }
+  | { ok: false; error: string };
+
+const MOVE_POOL_ACCESS_DENIED_MESSAGE =
+  "You do not have access to one of these pools.";
+
+/** Requires explicit pool_admins membership on both source and destination pools. */
+export function validateDirectPoolAdminMoveAccess(
+  sourcePoolId: string,
+  destinationPoolId: string,
+  directAdminPoolIds: Iterable<string>,
+): DirectPoolAdminMoveAccessResult {
+  const adminIds = new Set(directAdminPoolIds);
+  if (!adminIds.has(sourcePoolId.trim()) || !adminIds.has(destinationPoolId.trim())) {
+    return { ok: false, error: MOVE_POOL_ACCESS_DENIED_MESSAGE };
+  }
+  return { ok: true };
+}
+
 /** Managed pools eligible as a move destination (excludes source and incompatible pools). */
 export function filterEligibleMoveDestinationPools(
   sourcePool: WorldCupPoolMoveScope,

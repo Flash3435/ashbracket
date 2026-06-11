@@ -18,7 +18,7 @@ import {
   type ParticipantRow,
 } from "@/lib/participants/participantsDb";
 import { PoolPotAdminSummary } from "@/components/pools/PoolPotAdminSummary";
-import { fetchManagedPoolsForCurrentUser } from "@/lib/pools/fetchManagedPoolsForViewer";
+import { fetchDirectlyManagedPoolsForCurrentUser } from "@/lib/pools/fetchDirectlyManagedPoolsForCurrentUser";
 import { mapPoolPaymentFromPool, poolIsPaid } from "@/lib/pools/poolPayment";
 import {
   filterEligibleMoveDestinationPools,
@@ -56,7 +56,7 @@ export default async function AdminPoolParticipantsPage({
     new Date(lockAtIso).getTime() <= Date.now();
   const poolPayment = mapPoolPaymentFromPool(pool);
   const poolIsPaidPool = poolIsPaid(poolPayment);
-  const managedPoolsResult = await fetchManagedPoolsForCurrentUser(supabase);
+  const managedPoolsResult = await fetchDirectlyManagedPoolsForCurrentUser(supabase);
   const moveDestinationPools = filterEligibleMoveDestinationPools(
     worldCupPoolMoveScopeFromManagedPool({
       id: poolId,

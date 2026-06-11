@@ -7,7 +7,9 @@ import {
   MOVE_PARTICIPANT_DUPLICATE_BLOCKED_MESSAGE,
   participantWouldDuplicateInDestinationPool,
   poolsToRecomputeAfterParticipantMove,
+  validateDirectPoolAdminMoveAccess,
 } from "./worldCupParticipantMove";
+import { filterPoolsToDirectAdminMembership } from "../pools/fetchDirectlyManagedPoolsForCurrentUser";
 
 let failed = 0;
 function t(cond: boolean, msg: string) {
@@ -95,6 +97,48 @@ const eligible = filterEligibleMoveDestinationPools(sourceScope, managedPools);
 t(eligible.length === 1, "destination dropdown excludes source and incompatible pools");
 t(eligible[0]?.id === "pool-dest-a", "only compatible managed pool remains");
 t(eligible[0]?.name === "Destination A", "destination label preserved");
+
+{
+  const globalAdminVisiblePools = [
+    ...managedPools,
+    {
+      id: "pool-global-only",
+      name: "Global Admin Only",
+      tournament_edition_id: editionA,
+      is_simulation: false,
+    },
+  ];
+  const directAdminPoolIds = new Set(["pool-source", "pool-dest-a"]);
+  const directOnly = filterPoolsToDirectAdminMembership(
+    globalAdminVisiblePools,
+    directAdminPoolIds,
+  );
+  const moveOptions = filterEligibleMoveDestinationPools(sourceScope, directOnly);
+  t(moveOptions.length === 1, "global admin without pool_admins sees only direct destinations");
+  t(moveOptions[0]?.id === "pool-dest-a", "eligible direct destination remains");
+  t(
+    !moveOptions.some((pool) => pool.id === "pool-global-only"),
+    "global-admin-only pool is not a move destination",
+  );
+}
+
+{
+  const access = validateDirectPoolAdminMoveAccess(
+    "pool-source",
+    "pool-dest-a",
+    ["pool-source", "pool-dest-a"],
+  );
+  t(access.ok, "explicit pool_admin on both pools can move");
+}
+
+{
+  const access = validateDirectPoolAdminMoveAccess(
+    "pool-source",
+    "pool-global-only",
+    ["pool-source", "pool-dest-a"],
+  );
+  t(!access.ok, "global admin without destination pool_admins is blocked server-side");
+}
 
 t(
   participantWouldDuplicateInDestinationPool(
