@@ -3,7 +3,13 @@ import { MERGED_POOL_NAME_PREFIX } from "@/lib/participants/worldCupPoolMerge";
 export const EMPTY_POOL_ARCHIVE_REASON =
   "Archived empty pool after pool cleanup.";
 
+export const SELECTED_POOL_ARCHIVE_REASON =
+  "Archived after pool merge/admin cleanup.";
+
 export const EMPTY_POOL_ARCHIVE_CONFIRM_TOKEN = "ARCHIVE_EMPTY_POOLS";
+
+export const SELECTED_POOLS_ARCHIVE_CONFIRM_TOKEN =
+  "ARCHIVE_SELECTED_POOLS_WITH_PARTICIPANTS";
 
 export type PoolArchiveFields = {
   archived_at: string | null;
@@ -18,33 +24,46 @@ export type PoolArchiveCandidate = PoolArchiveFields & {
   is_simulation: boolean;
 };
 
-export type EmptyPoolArchiveOptions = {
+export type PoolArchiveOptions = {
   includeSimulation?: boolean;
   includeMerged?: boolean;
+  allowNonEmpty?: boolean;
 };
 
-export type EmptyPoolArchiveBlockReason =
+/** @deprecated Use `PoolArchiveOptions` */
+export type EmptyPoolArchiveOptions = PoolArchiveOptions;
+
+export type PoolArchiveBlockReason =
   | "has_participants"
   | "already_archived"
   | "simulation_pool"
   | "merged_pool";
 
-export type EmptyPoolArchiveEvaluation =
+export type PoolArchiveEvaluation =
   | { eligible: true; action: "archive" }
-  | { eligible: false; blockReason: EmptyPoolArchiveBlockReason; detail: string };
+  | { eligible: false; blockReason: PoolArchiveBlockReason; detail: string };
 
-export type EmptyPoolArchiveDryRunRow = {
+/** @deprecated Use `PoolArchiveEvaluation` */
+export type EmptyPoolArchiveEvaluation = PoolArchiveEvaluation;
+
+export type PoolArchiveDryRunRow = {
   pool: PoolArchiveCandidate;
   participantCount: number;
-  evaluation: EmptyPoolArchiveEvaluation;
+  evaluation: PoolArchiveEvaluation;
 };
 
-export type EmptyPoolArchiveApplyPayload = {
+/** @deprecated Use `PoolArchiveDryRunRow` */
+export type EmptyPoolArchiveDryRunRow = PoolArchiveDryRunRow;
+
+export type PoolArchiveApplyPayload = {
   is_public: false;
   archived_at: string;
   archived_by_user_id: string | null;
   archive_reason: string;
 };
+
+/** @deprecated Use `PoolArchiveApplyPayload` */
+export type EmptyPoolArchiveApplyPayload = PoolArchiveApplyPayload;
 
 export function isPoolArchived(pool: PoolArchiveFields): boolean {
   return pool.archived_at != null;
@@ -77,11 +96,11 @@ export function splitActiveAndArchivedManagedPools<T extends PoolArchiveFields>(
   return { activePools, archivedPools };
 }
 
-export function evaluateEmptyPoolArchiveEligibility(
+export function evaluatePoolArchiveEligibility(
   pool: PoolArchiveCandidate,
   participantCount: number,
-  options: EmptyPoolArchiveOptions = {},
-): EmptyPoolArchiveEvaluation {
+  options: PoolArchiveOptions = {},
+): PoolArchiveEvaluation {
   if (isPoolArchived(pool)) {
     return {
       eligible: false,
@@ -89,11 +108,11 @@ export function evaluateEmptyPoolArchiveEligibility(
       detail: "Pool is already archived.",
     };
   }
-  if (participantCount > 0) {
+  if (participantCount > 0 && !options.allowNonEmpty) {
     return {
       eligible: false,
       blockReason: "has_participants",
-      detail: `Pool has ${participantCount} participant(s).`,
+      detail: `Pool has ${participantCount} participant(s). Use --allow-non-empty to archive named pools with participants.`,
     };
   }
   if (pool.is_simulation && !options.includeSimulation) {
@@ -113,31 +132,121 @@ export function evaluateEmptyPoolArchiveEligibility(
   return { eligible: true, action: "archive" };
 }
 
-export function buildEmptyPoolArchiveApplyPayload(
+/** @deprecated Use `evaluatePoolArchiveEligibility` */
+export const evaluateEmptyPoolArchiveEligibility = evaluatePoolArchiveEligibility;
+
+export function buildPoolArchiveApplyPayload(
   archivedAt: string,
+  archiveReason: string,
   archivedByUserId: string | null = null,
-): EmptyPoolArchiveApplyPayload {
+): PoolArchiveApplyPayload {
   return {
     is_public: false,
     archived_at: archivedAt,
     archived_by_user_id: archivedByUserId,
-    archive_reason: EMPTY_POOL_ARCHIVE_REASON,
+    archive_reason: archiveReason,
   };
 }
 
-function formatEvaluationAction(evaluation: EmptyPoolArchiveEvaluation): string {
+export function buildEmptyPoolArchiveApplyPayload(
+  archivedAt: string,
+  archivedByUserId: string | null = null,
+): PoolArchiveApplyPayload {
+  return buildPoolArchiveApplyPayload(
+    archivedAt,
+    EMPTY_POOL_ARCHIVE_REASON,
+    archivedByUserId,
+  );
+}
+
+export function resolveArchiveReasonForPool(
+  participantCount: number,
+  customReason: string | null | undefined,
+): string {
+  const trimmed = customReason?.trim();
+  if (trimmed) return trimmed;
+  return participantCount > 0
+    ? SELECTED_POOL_ARCHIVE_REASON
+    : EMPTY_POOL_ARCHIVE_REASON;
+}
+
+export function resolvePoolArchiveApplyConfirmation(
+  eligible: Array<{ participantCount: number }>,
+  confirmToken: string | null,
+  options: { allowNonEmpty: boolean },
+): { ok: true } | { ok: false; error: string } {
+  if (eligible.length === 0) {
+    return { ok: false, error: "No eligible pools to archive." };
+  }
+
+  const hasNonEmpty = eligible.some((row) => row.participantCount > 0);
+  if (hasNonEmpty) {
+    if (!options.allowNonEmpty) {
+      return {
+        ok: false,
+        error:
+          "Non-empty pools require --allow-non-empty and cannot use the empty-pool confirmation token.",
+      };
+    }
+    if (confirmToken === EMPTY_POOL_ARCHIVE_CONFIRM_TOKEN) {
+      return {
+        ok: false,
+        error: `Pools with participants cannot be archived with --confirm "${EMPTY_POOL_ARCHIVE_CONFIRM_TOKEN}". Use --confirm "${SELECTED_POOLS_ARCHIVE_CONFIRM_TOKEN}" instead.`,
+      };
+    }
+    if (confirmToken !== SELECTED_POOLS_ARCHIVE_CONFIRM_TOKEN) {
+      return {
+        ok: false,
+        error: `Apply blocked: pass --confirm "${SELECTED_POOLS_ARCHIVE_CONFIRM_TOKEN}" exactly for pools with participants.`,
+      };
+    }
+    return { ok: true };
+  }
+
+  if (confirmToken !== EMPTY_POOL_ARCHIVE_CONFIRM_TOKEN) {
+    return {
+      ok: false,
+      error: `Apply blocked: pass --confirm "${EMPTY_POOL_ARCHIVE_CONFIRM_TOKEN}" exactly for empty pools.`,
+    };
+  }
+  return { ok: true };
+}
+
+function formatEvaluationAction(evaluation: PoolArchiveEvaluation): string {
   if (evaluation.eligible) {
     return "archive (set is_public=false, archived_at=now())";
   }
   return `blocked: ${evaluation.detail}`;
 }
 
-export function formatEmptyPoolArchiveDryRunReport(
-  rows: EmptyPoolArchiveDryRunRow[],
-): string {
+function formatPoolArchiveWarnings(row: PoolArchiveDryRunRow): string[] {
+  if (!row.evaluation.eligible) return [];
+
+  const warnings: string[] = [];
+  if (row.participantCount > 0) {
+    warnings.push(
+      `  warning:         ${row.participantCount} participant(s) will be retained (not deleted)`,
+    );
+  }
+  if (row.pool.is_simulation) {
+    warnings.push("  warning:         simulation pool");
+  }
+  if (isMergedPoolName(row.pool.name)) {
+    warnings.push("  warning:         merged pool name prefix");
+  }
+  warnings.push(
+    "  warning:         pool will be hidden from normal admin lists after archive",
+  );
+  warnings.push(
+    "  warning:         participants, picks, activity, and ledgers are retained",
+  );
+  return warnings;
+}
+
+export function formatPoolArchiveDryRunReport(rows: PoolArchiveDryRunRow[]): string {
   const lines: string[] = [];
-  lines.push("Empty pool archive dry-run");
-  lines.push("==========================");
+  lines.push("Pool archive dry-run");
+  lines.push("==================");
   lines.push("");
 
   if (rows.length === 0) {
@@ -152,11 +261,14 @@ export function formatEmptyPoolArchiveDryRunReport(
     lines.push(`Pool: ${row.pool.name}`);
     lines.push(`  id:              ${row.pool.id}`);
     lines.push(`  participants:    ${row.participantCount}`);
+    lines.push(`  simulation:      ${row.pool.is_simulation}`);
+    lines.push(`  merged:          ${isMergedPoolName(row.pool.name)}`);
     lines.push(`  is_public:       ${row.pool.is_public}`);
-    lines.push(
-      `  archived_at:     ${row.pool.archived_at ?? "(null)"}`,
-    );
+    lines.push(`  archived_at:     ${row.pool.archived_at ?? "(null)"}`);
     lines.push(`  action:          ${formatEvaluationAction(row.evaluation)}`);
+    for (const warning of formatPoolArchiveWarnings(row)) {
+      lines.push(warning);
+    }
     lines.push("");
   }
 
@@ -185,3 +297,6 @@ export function formatEmptyPoolArchiveDryRunReport(
 
   return lines.join("\n");
 }
+
+/** @deprecated Use `formatPoolArchiveDryRunReport` */
+export const formatEmptyPoolArchiveDryRunReport = formatPoolArchiveDryRunReport;

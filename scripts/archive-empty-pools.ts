@@ -1,13 +1,20 @@
 #!/usr/bin/env tsx
 /**
- * Archive empty World Cup pools (soft archive: is_public=false + archived_at).
+ * Archive World Cup pools (soft archive: is_public=false + archived_at).
  *
- * Dry-run (default):
+ * Empty pools (default):
  *   npm run archive-empty-pools -- --dry-run
- *   npm run archive-empty-pools -- --name "AshBracket 2026" --include-merged
- *
- * Apply (requires explicit confirmation token):
  *   npm run archive-empty-pools -- --apply --confirm "ARCHIVE_EMPTY_POOLS"
+ *
+ * Named pools with participants (explicit opt-in):
+ *   npm run archive-empty-pools -- --dry-run \
+ *     --name "Simulation test pool" \
+ *     --include-simulation --include-merged --allow-non-empty
+ *
+ *   npm run archive-empty-pools -- --apply \
+ *     --confirm "ARCHIVE_SELECTED_POOLS_WITH_PARTICIPANTS" \
+ *     --name "Simulation test pool" \
+ *     --include-simulation --include-merged --allow-non-empty
  *
  * Pool identifiers may be UUIDs or exact case-insensitive pool names.
  * Requires SUPABASE_SERVICE_ROLE_KEY in the environment or `.env.local`.
@@ -15,12 +22,15 @@
 
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import {
-  buildEmptyPoolArchiveApplyPayload,
+  buildPoolArchiveApplyPayload,
   EMPTY_POOL_ARCHIVE_CONFIRM_TOKEN,
-  evaluateEmptyPoolArchiveEligibility,
-  formatEmptyPoolArchiveDryRunReport,
-  type EmptyPoolArchiveDryRunRow,
+  evaluatePoolArchiveEligibility,
+  formatPoolArchiveDryRunReport,
+  resolveArchiveReasonForPool,
+  resolvePoolArchiveApplyConfirmation,
+  SELECTED_POOLS_ARCHIVE_CONFIRM_TOKEN,
   type PoolArchiveCandidate,
+  type PoolArchiveDryRunRow,
 } from "../lib/pools/poolArchive";
 import { loadEnvLocal } from "./loadEnvLocal";
 
@@ -29,6 +39,12 @@ const UUID_RE =
 
 const POOL_SELECT =
   "id, name, is_public, is_simulation, archived_at, archived_by_user_id, archive_reason";
+
+function argValue(flag: string): string | null {
+  const idx = process.argv.indexOf(flag);
+  if (idx === -1) return null;
+  return process.argv[idx + 1]?.trim() || null;
+}
 
 function argValues(flag: string): string[] {
   const values: string[] = [];
@@ -137,6 +153,8 @@ async function main() {
   const dryRun = hasFlag("--dry-run") || !apply;
   const includeSimulation = hasFlag("--include-simulation");
   const includeMerged = hasFlag("--include-merged");
+  const allowNonEmpty = hasFlag("--allow-non-empty");
+  const customReason = argValue("--reason");
   const confirmArg = process.argv
     .slice(process.argv.indexOf("--confirm") + 1)
     .find((value) => value && !value.startsWith("--")) ?? null;
@@ -165,44 +183,66 @@ async function main() {
     uniquePools.map((pool) => pool.id),
   );
 
-  const rows: EmptyPoolArchiveDryRunRow[] = uniquePools.map((pool) => ({
+  const archiveOptions = {
+    includeSimulation,
+    includeMerged,
+    allowNonEmpty,
+  };
+
+  const rows: PoolArchiveDryRunRow[] = uniquePools.map((pool) => ({
     pool,
     participantCount: countsByPoolId.get(pool.id) ?? 0,
-    evaluation: evaluateEmptyPoolArchiveEligibility(
+    evaluation: evaluatePoolArchiveEligibility(
       pool,
       countsByPoolId.get(pool.id) ?? 0,
-      { includeSimulation, includeMerged },
+      archiveOptions,
     ),
   }));
 
-  console.log(formatEmptyPoolArchiveDryRunReport(rows));
+  console.log(formatPoolArchiveDryRunReport(rows));
   console.log("");
 
   if (dryRun) {
-    console.log("Dry-run only. Re-run with --apply --confirm \"ARCHIVE_EMPTY_POOLS\" to execute.");
+    const hasNonEmptyEligible = rows.some(
+      (row) => row.evaluation.eligible && row.participantCount > 0,
+    );
+    if (hasNonEmptyEligible) {
+      console.log(
+        `Dry-run only. Re-run with --apply --confirm "${SELECTED_POOLS_ARCHIVE_CONFIRM_TOKEN}" --allow-non-empty to execute.`,
+      );
+    } else {
+      console.log(
+        `Dry-run only. Re-run with --apply --confirm "${EMPTY_POOL_ARCHIVE_CONFIRM_TOKEN}" to execute.`,
+      );
+    }
     return;
   }
 
-  if (confirmArg !== EMPTY_POOL_ARCHIVE_CONFIRM_TOKEN) {
-    console.error(
-      `Apply blocked: pass --confirm "${EMPTY_POOL_ARCHIVE_CONFIRM_TOKEN}" exactly.`,
-    );
+  const eligible = rows.filter((row) => row.evaluation.eligible);
+  const confirmation = resolvePoolArchiveApplyConfirmation(eligible, confirmArg, {
+    allowNonEmpty,
+  });
+  if (!confirmation.ok) {
+    console.error(confirmation.error);
     process.exit(1);
   }
 
-  const eligible = rows.filter((row) => row.evaluation.eligible);
   if (eligible.length === 0) {
     console.log("No eligible pools to archive.");
     return;
   }
 
   const archivedAt = new Date().toISOString();
-  const payload = buildEmptyPoolArchiveApplyPayload(archivedAt);
 
   let archivedCount = 0;
   const failures: { poolId: string; name: string; error: string }[] = [];
 
   for (const row of eligible) {
+    const payload = buildPoolArchiveApplyPayload(
+      archivedAt,
+      resolveArchiveReasonForPool(row.participantCount, customReason),
+    );
+
     const { error } = await supabase
       .from("pools")
       .update({
