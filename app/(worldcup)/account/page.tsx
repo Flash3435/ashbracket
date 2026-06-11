@@ -556,7 +556,7 @@ export default async function AccountPage({ searchParams }: PageProps) {
                       href={`/account/reveal?participant=${p.id}`}
                       className="ash-link"
                     >
-                      Reveal picks
+                      See everyone&apos;s picks
                     </Link>
                   ) : null}
                   {p.pool_is_public ? (

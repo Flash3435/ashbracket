@@ -66,7 +66,7 @@ export function AccountPicksProfileLinks({
                         href={buildAccountRevealProfileLinkHref(p.id, revealBasePath)}
                         className="rounded-md bg-ash-body px-2.5 py-1 text-xs font-medium text-ash-accent underline-offset-2 ring-1 ring-ash-border hover:bg-ash-surface hover:underline"
                       >
-                        Reveal picks
+                        See everyone&apos;s picks
                       </Link>
                     )
                   ) : null}

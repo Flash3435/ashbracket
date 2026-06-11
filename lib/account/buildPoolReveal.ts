@@ -1,4 +1,5 @@
 import { poolLocked } from "../pools/poolLocked";
+import type { EveryonesPickEntry } from "./buildEveryonesPicksList";
 import type { PreBracketRevealSection } from "./resolvePoolPreBracketReveal";
 import {
   PRE_BRACKET_REVEAL_INTRO,
@@ -37,6 +38,7 @@ export type PoolRevealData = {
   preBracketSections: PreBracketRevealSection[];
   showPreBracketReveal: boolean;
   preBracketIntro: string | null;
+  everyonesPicks: EveryonesPickEntry[];
 };
 
 export type ChampionPickInput = {
@@ -59,6 +61,7 @@ export type BuildPoolRevealInput = {
   canShowParticipantNames: boolean;
   knockoutBracketPicksUnlocked?: boolean;
   preBracketSections?: PreBracketRevealSection[];
+  everyonesPicks?: EveryonesPickEntry[];
   nowMs?: number;
 };
 
@@ -92,6 +95,7 @@ export function buildPoolReveal(input: BuildPoolRevealInput): PoolRevealData {
 
   const knockoutBracketPicksUnlocked = input.knockoutBracketPicksUnlocked !== false;
   const preBracketSections = input.preBracketSections ?? [];
+  const everyonesPicks = input.everyonesPicks ?? [];
 
   const emptyLocked: PoolRevealData = {
     locked: false,
@@ -114,6 +118,7 @@ export function buildPoolReveal(input: BuildPoolRevealInput): PoolRevealData {
     preBracketSections,
     showPreBracketReveal: false,
     preBracketIntro: null,
+    everyonesPicks: [],
   };
 
   if (!locked) return emptyLocked;
@@ -216,6 +221,7 @@ export function buildPoolReveal(input: BuildPoolRevealInput): PoolRevealData {
     preBracketSections,
     showPreBracketReveal,
     preBracketIntro: showPreBracketReveal ? PRE_BRACKET_REVEAL_INTRO : null,
+    everyonesPicks,
   };
 }
 

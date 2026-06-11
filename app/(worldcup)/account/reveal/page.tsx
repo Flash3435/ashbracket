@@ -190,7 +190,8 @@ export default async function AccountRevealPage({ searchParams }: PageProps) {
                   {ctx.selectedPoolName} reveal
                 </h2>
                 <p className="mt-1 text-sm text-ash-muted">
-                  Compare locked picks from completed brackets in this pool.
+                  Browse everyone&apos;s locked brackets, then compare pool trends
+                  and champion favorites below.
                 </p>
               </div>
               <PoolRevealPage

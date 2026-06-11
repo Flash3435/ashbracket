@@ -172,7 +172,7 @@ const lockedNav = buildAccountPageNavState({
   picksHref: "/account/picks",
   activityHref: "/account/activity",
 });
-assert.equal(lockedNav.navPlan.primary.label, "Reveal picks");
+assert.equal(lockedNav.navPlan.primary.label, "See everyone's picks");
 assert.equal(lockedNav.showParticipantEditCopy, false);
 assert.equal(
   lockedNav.suppressStandaloneNavRow,
@@ -189,7 +189,7 @@ const customOpenNav = buildAccountPageNavState({
   activityHref: "/account/activity",
 });
 assert.equal(customOpenNav.navPlan.primary.label, "View picks");
-assert.equal(customOpenNav.navPlan.tertiary?.label, "Reveal picks");
+assert.equal(customOpenNav.navPlan.tertiary?.label, "See everyone's picks");
 assert.equal(
   customOpenNav.suppressStandaloneNavRow,
   false,

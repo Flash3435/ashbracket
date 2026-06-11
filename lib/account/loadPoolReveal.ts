@@ -10,9 +10,87 @@ import {
 import { poolLocked } from "../pools/poolLocked";
 import { participantPicksCompleteFromDrafts } from "../predictions/participantPicksCompletenessRules";
 import type { AccountKnockoutSelection } from "./loadAccountKnockoutSelection";
+import { buildEveryonesPicksList } from "./buildEveryonesPicksList";
 import { buildPoolReveal, type PoolRevealData } from "./buildPoolReveal";
-import { resolvePoolChampionPickInputs } from "./resolvePoolChampionPicks";
+import {
+  championTeamIdFromDraftSlots,
+  championTeamIdFromPredictions,
+  resolvePoolChampionPickInputs,
+} from "./resolvePoolChampionPicks";
 import { resolvePoolPreBracketRevealSections } from "./resolvePoolPreBracketReveal";
+
+function championByParticipantFromInputs(
+  participantIds: string[],
+  inputs: NonNullable<
+    Awaited<ReturnType<typeof loadPicksCompletenessInputsForPool>>
+  >,
+): Map<string, { teamName: string; teamCode?: string }> {
+  const teamById = new Map(inputs.teams.map((t) => [t.id, t]));
+  const out = new Map<string, { teamName: string; teamCode?: string }>();
+  const draftContext = {
+    stageByCode: inputs.stageByCode,
+    predictions: inputs.predictions,
+    bonusKeys: inputs.bonusKeys,
+    teams: inputs.teams,
+    groupTeamCountryCodesByLetter: inputs.groupTeamCountryCodesByLetter,
+  };
+
+  for (const participantId of participantIds) {
+    let teamId = championTeamIdFromPredictions(inputs.predictions, participantId);
+    if (!teamId) {
+      teamId = championTeamIdFromDraftSlots({
+        ...draftContext,
+        participantId,
+      });
+    }
+    if (!teamId) continue;
+    const team = teamById.get(teamId);
+    out.set(participantId, {
+      teamName: team?.name?.trim() || "Unknown team",
+      teamCode: team?.countryCode?.trim() || undefined,
+    });
+  }
+  return out;
+}
+
+function completionByParticipantFromInputs(
+  participantIds: string[],
+  inputs: NonNullable<
+    Awaited<ReturnType<typeof loadPicksCompletenessInputsForPool>>
+  >,
+) {
+  const out = new Map<
+    string,
+    ReturnType<typeof buildCompletionStatusForParticipant>
+  >();
+  for (const pid of participantIds) {
+    out.set(pid, buildCompletionStatusForParticipant(inputs, pid));
+  }
+  return out;
+}
+
+function buildEveryonesPicksForPool(input: {
+  locked: boolean;
+  participantRows: Array<{ id: string; display_name: string | null }>;
+  completeParticipantIds: string[];
+  inputs: Awaited<ReturnType<typeof loadPicksCompletenessInputsForPool>>;
+}) {
+  const participantIds = input.participantRows.map((r) => r.id);
+  const championByParticipantId = input.inputs
+    ? championByParticipantFromInputs(participantIds, input.inputs)
+    : new Map<string, { teamName: string; teamCode?: string }>();
+  const completionByParticipantId = input.inputs
+    ? completionByParticipantFromInputs(participantIds, input.inputs)
+    : undefined;
+
+  return buildEveryonesPicksList({
+    locked: input.locked,
+    participantRows: input.participantRows,
+    completeParticipantIds: input.completeParticipantIds,
+    championByParticipantId,
+    completionByParticipantId,
+  });
+}
 
 /**
  * Loads pool reveal data for a signed-in pool member.
@@ -71,6 +149,14 @@ export async function loadPoolReveal(
   }
 
   const completeParticipantIds = participantIds.filter((id) => !incomplete.has(id));
+  const everyonesPicks = locked
+    ? buildEveryonesPicksForPool({
+        locked,
+        participantRows,
+        completeParticipantIds,
+        inputs,
+      })
+    : [];
 
   if (!locked) {
     return buildPoolReveal({
@@ -84,6 +170,7 @@ export async function loadPoolReveal(
       canShowParticipantNames: false,
       knockoutBracketPicksUnlocked,
       preBracketSections: [],
+      everyonesPicks,
       nowMs,
     });
   }
@@ -100,6 +187,7 @@ export async function loadPoolReveal(
       canShowParticipantNames: true,
       knockoutBracketPicksUnlocked,
       preBracketSections: [],
+      everyonesPicks,
       nowMs,
     });
   }
@@ -140,6 +228,7 @@ export async function loadPoolReveal(
     canShowParticipantNames: true,
     knockoutBracketPicksUnlocked,
     preBracketSections,
+    everyonesPicks,
     nowMs,
   });
 }

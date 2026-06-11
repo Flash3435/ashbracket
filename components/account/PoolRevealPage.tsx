@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useState } from "react";
+import { EveryonesPicksSection } from "@/components/account/EveryonesPicksSection";
 import { TeamFlagName } from "@/components/tournament/TeamFlagName";
 import type { PoolRevealData } from "@/lib/account/buildPoolReveal";
 
@@ -155,6 +156,13 @@ export function PoolRevealPage({
   activityHref,
   dashboardHref,
 }: Props) {
+  const everyonesPicks = (
+    <EveryonesPicksSection
+      locked={data.locked}
+      participants={data.everyonesPicks}
+    />
+  );
+
   const maxCount =
     data.championPicks.length > 0
       ? Math.max(...data.championPicks.map((c) => c.count))
@@ -162,12 +170,15 @@ export function PoolRevealPage({
 
   if (!data.locked) {
     return (
-      <LockedState
-        data={data}
-        picksHref={picksHref}
-        activityHref={activityHref}
-        dashboardHref={dashboardHref}
-      />
+      <div className="space-y-6">
+        {everyonesPicks}
+        <LockedState
+          data={data}
+          picksHref={picksHref}
+          activityHref={activityHref}
+          dashboardHref={dashboardHref}
+        />
+      </div>
     );
   }
 
@@ -177,6 +188,7 @@ export function PoolRevealPage({
 
     return (
       <div className="space-y-6">
+        {everyonesPicks}
         <p className="text-sm text-ash-muted">
           Pool: <span className="font-medium text-ash-text">{poolName}</span>
         </p>
@@ -204,6 +216,14 @@ export function PoolRevealPage({
           />
         </div>
 
+        <section className="space-y-4">
+          <div>
+            <h2 className="text-base font-bold text-ash-text">Pool trends</h2>
+            <p className="mt-0.5 text-xs text-ash-muted">
+              How the pool split on group, third-place, and bonus picks.
+            </p>
+          </div>
+
         {data.preBracketSections.map((section) => (
           <section
             key={`${section.id}-${section.title}`}
@@ -225,6 +245,7 @@ export function PoolRevealPage({
             </ul>
           </section>
         ))}
+        </section>
 
         <div className="flex flex-wrap gap-3">
           <Link href={picksHref} className="btn-ghost inline-flex text-sm ring-1 ring-ash-border">
@@ -243,18 +264,22 @@ export function PoolRevealPage({
 
   if (data.totalChampionBrackets === 0) {
     return (
-      <div className="rounded-xl border border-ash-border bg-ash-surface p-6 text-center">
-        <p className="text-sm text-ash-muted">
-          {data.totalCompleted === 0
-            ? `No completed brackets to reveal yet for ${poolName}.`
-            : `No locked picks to reveal yet for ${poolName}.`}
-        </p>
-        <Link
-          href={dashboardHref}
-          className="btn-ghost mt-4 inline-flex text-sm ring-1 ring-ash-border"
-        >
-          Back to dashboard
-        </Link>
+      <div className="space-y-6">
+        {everyonesPicks}
+        <div className="rounded-xl border border-ash-border bg-ash-surface p-6 text-center">
+          <h2 className="text-base font-bold text-ash-text">Pool trends</h2>
+          <p className="mt-2 text-sm text-ash-muted">
+            {data.totalCompleted === 0
+              ? `No completed brackets to reveal yet for ${poolName}.`
+              : `No champion pick trends to show yet for ${poolName}.`}
+          </p>
+          <Link
+            href={dashboardHref}
+            className="btn-ghost mt-4 inline-flex text-sm ring-1 ring-ash-border"
+          >
+            Back to dashboard
+          </Link>
+        </div>
       </div>
     );
   }
@@ -264,6 +289,7 @@ export function PoolRevealPage({
 
   return (
     <div className="space-y-6">
+      {everyonesPicks}
       <p className="text-sm text-ash-muted">
         Pool: <span className="font-medium text-ash-text">{poolName}</span>
       </p>
@@ -316,6 +342,14 @@ export function PoolRevealPage({
         </section>
       ) : null}
 
+      <section className="space-y-4">
+        <div>
+          <h2 className="text-base font-bold text-ash-text">Pool trends</h2>
+          <p className="mt-0.5 text-xs text-ash-muted">
+            Champion favorites and how the pool split on winners.
+          </p>
+        </div>
+
       {data.uniqueChampionCount > 0 ? (
         <section className="rounded-xl border border-ash-border bg-ash-surface p-4">
           <h2 className="text-base font-bold text-ash-text">Solo champion picks</h2>
@@ -348,7 +382,7 @@ export function PoolRevealPage({
       ) : null}
 
       <section className="rounded-xl border border-ash-border bg-ash-surface p-4">
-        <h2 className="text-base font-bold text-ash-text">Champion picks</h2>
+        <h3 className="text-base font-bold text-ash-text">Champion picks</h3>
         <p className="mt-0.5 text-xs text-ash-muted">
           Champion diversity: {data.championDiversityCount} different{" "}
           {data.championDiversityCount === 1 ? "team" : "teams"} across{" "}
@@ -369,7 +403,7 @@ export function PoolRevealPage({
       {data.canShowParticipantNames &&
       data.championPicks.some((c) => (c.participantNames?.length ?? 0) > 0) ? (
         <section className="rounded-xl border border-ash-border bg-ash-surface p-4">
-          <h2 className="text-base font-bold text-ash-text">Who picked who</h2>
+          <h3 className="text-base font-bold text-ash-text">Who picked who</h3>
           <p className="mt-0.5 text-xs text-ash-muted">
             Champion picks by participant.
           </p>
@@ -395,6 +429,7 @@ export function PoolRevealPage({
           </ul>
         </section>
       ) : null}
+      </section>
     </div>
   );
 }

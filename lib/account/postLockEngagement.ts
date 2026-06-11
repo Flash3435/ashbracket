@@ -49,7 +49,7 @@ export function buildPostLockNavPlan(input: PostLockNavInput): PostLockNavPlan {
       secondary: { label: "Activity", href: activityHref },
       tertiary: input.revealHref
         ? {
-            label: input.picksLocked ? "Reveal picks" : "Preview reveal",
+            label: input.picksLocked ? "See everyone's picks" : "Preview reveal",
             href: input.revealHref,
           }
         : null,
@@ -62,7 +62,7 @@ export function buildPostLockNavPlan(input: PostLockNavInput): PostLockNavPlan {
   if (hasReveal) {
     return {
       postLockEngagement: true,
-      primary: { label: "Reveal picks", href: revealHref },
+      primary: { label: "See everyone's picks", href: revealHref },
       secondary: input.leaderboardHref
         ? { label: "View leaderboard", href: input.leaderboardHref }
         : { label: "View picks", href: input.picksHref },

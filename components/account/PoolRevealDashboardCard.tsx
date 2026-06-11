@@ -16,8 +16,8 @@ export function poolRevealDashboardCopy(locked: boolean): {
   if (locked) {
     return {
       title: "Compare brackets",
-      body: "Reveal champion picks, solo picks, and how the pool split on favorites.",
-      cta: "Reveal picks",
+      body: "Browse everyone's locked picks, then see champion trends and how the pool split.",
+      cta: "See everyone's picks",
     };
   }
   return {

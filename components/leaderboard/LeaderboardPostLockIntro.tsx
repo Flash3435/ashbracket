@@ -13,7 +13,7 @@ export function LeaderboardPostLockIntro({ revealHref }: Props) {
       {revealHref ? (
         <p className="mt-2 text-sm">
           <Link href={revealHref} className="ash-link font-medium">
-            Reveal picks
+            See everyone&apos;s picks
           </Link>
           <span className="text-ash-muted"> — compare everyone&apos;s brackets</span>
         </p>

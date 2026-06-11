@@ -23,7 +23,7 @@ const lockedPlan = buildPostLockNavPlan({
   knockoutBracketPicksUnlocked: false,
 });
 assert.equal(lockedPlan.postLockEngagement, true);
-assert.equal(lockedPlan.primary.label, "Reveal picks");
+assert.equal(lockedPlan.primary.label, "See everyone's picks");
 assert.equal(lockedPlan.secondary.label, "View leaderboard");
 assert.equal(lockedPlan.tertiary?.label, "View activity");
 
@@ -43,7 +43,7 @@ const customOpenPlan = buildPostLockNavPlan({
 });
 assert.equal(customOpenPlan.postLockEngagement, false);
 assert.equal(customOpenPlan.primary.label, "View picks");
-assert.equal(customOpenPlan.tertiary?.label, "Reveal picks");
+assert.equal(customOpenPlan.tertiary?.label, "See everyone's picks");
 
 const noRevealPlan = buildPostLockNavPlan({
   ...base,

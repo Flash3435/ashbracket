@@ -49,6 +49,7 @@ const baseInput = {
   assert.strictEqual(data.championDiversityCount, 0);
   assert.strictEqual(data.mostPopularChampion, null);
   assert.strictEqual(data.canShowParticipantNames, false);
+  assert.strictEqual(data.everyonesPicks.length, 0);
 }
 
 // After lock: champion counts

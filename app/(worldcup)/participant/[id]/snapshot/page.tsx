@@ -103,6 +103,10 @@ export default async function ParticipantBracketSnapshotPage({
           <Link href="/account" className="ash-link text-sm">
             ← Back to account
           </Link>
+        ) : from === "reveal" ? (
+          <Link href="/account/reveal" className="ash-link text-sm">
+            ← Back to reveal
+          </Link>
         ) : (
           <Link href={`/participant/${result.participantId}`} className="ash-link text-sm">
             ← Public profile & scoring

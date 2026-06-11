@@ -3,8 +3,8 @@ import { poolRevealDashboardCopy } from "../../components/account/PoolRevealDash
 
 const locked = poolRevealDashboardCopy(true);
 assert.ok(locked.title.includes("Compare brackets"));
-assert.ok(locked.cta.includes("Reveal picks"));
-assert.ok(locked.body.includes("champion picks"));
+assert.ok(locked.cta.includes("everyone"));
+assert.ok(locked.body.includes("everyone"));
 
 const unlocked = poolRevealDashboardCopy(false);
 assert.ok(unlocked.title.includes("Picks reveal after lock"));
