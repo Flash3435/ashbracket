@@ -5,6 +5,7 @@ import { ACCOUNT_REVEAL_RESULTS_HASH } from "@/lib/account/buildAccountProfileLi
 import { PageContainer } from "@/components/ui/PageContainer";
 import { PageTitle } from "@/components/ui/PageTitle";
 import { loadPoolReveal } from "@/lib/account/loadPoolReveal";
+import { loadTournamentTeamStatLeaders } from "@/lib/tournament/matchTeamStats/loadTournamentTeamStatLeaders";
 import { createClient } from "@/lib/supabase/server";
 import {
   loadAccountKnockoutSelection,
@@ -38,6 +39,8 @@ export default async function AccountRevealPage({ searchParams }: PageProps) {
 
   let revealError: string | null = null;
   let revealData: Awaited<ReturnType<typeof loadPoolReveal>> | null = null;
+  let bonusWatchRes: Awaited<ReturnType<typeof loadTournamentTeamStatLeaders>> | null =
+    null;
 
   if (ctx.selectedId && selectedPoolId && !ctx.loadError) {
     try {
@@ -59,6 +62,11 @@ export default async function AccountRevealPage({ searchParams }: PageProps) {
     : "";
   const dashboardHref = `/account${dashboardQs}`;
   const locked = poolLocked(ctx.selectedLockAt);
+  if (locked && selectedPoolId && !ctx.loadError) {
+    bonusWatchRes = await loadTournamentTeamStatLeaders(supabase, {
+      poolId: selectedPoolId,
+    });
+  }
   let leaderboardHref: string | null = null;
   if (selectedPoolId) {
     const { data: poolRow } = await supabase
@@ -201,6 +209,7 @@ export default async function AccountRevealPage({ searchParams }: PageProps) {
                 picksHref={picksHref}
                 activityHref={activityHref}
                 dashboardHref={dashboardHref}
+                bonusWatchView={bonusWatchRes?.ok ? bonusWatchRes.view : null}
               />
             </div>
           ) : null}

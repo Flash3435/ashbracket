@@ -9,6 +9,8 @@ import { fetchPublicLiveScoresLastUpdated } from "@/lib/tournament/liveDailyUpda
 import { createClient } from "@/lib/supabase/server";
 import { createServiceRoleClient } from "@/lib/supabase/service";
 import { poolLocked } from "@/lib/pools/poolLocked";
+import { TournamentStatLeadersPanel } from "@/components/tournament/TournamentStatLeadersPanel";
+import { loadTournamentTeamStatLeaders } from "@/lib/tournament/matchTeamStats/loadTournamentTeamStatLeaders";
 import type { LeaderboardPublicRowDb } from "../../../../types/leaderboard";
 import { notFound } from "next/navigation";
 
@@ -58,6 +60,10 @@ export default async function PublicPoolLeaderboardPage({ params }: PageProps) {
 
   const lockAt = (pool.lock_at as string | null) ?? null;
   const picksLocked = poolLocked(lockAt);
+  const bonusWatchRes =
+    isLivePool && picksLocked
+      ? await loadTournamentTeamStatLeaders(supabase, { poolId: poolIdTrimmed })
+      : null;
   const revealHref =
     picksLocked && viewerParticipantId
       ? `/account/reveal?participant=${viewerParticipantId}`
@@ -85,6 +91,7 @@ export default async function PublicPoolLeaderboardPage({ params }: PageProps) {
         liveScoresLastUpdatedAt={isLivePool ? liveScoresLastUpdatedAt : null}
         picksLocked={picksLocked}
         revealHref={revealHref}
+        bonusWatchView={bonusWatchRes?.ok ? bonusWatchRes.view : null}
       />
     </PageContainer>
   );

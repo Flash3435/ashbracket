@@ -5,6 +5,8 @@ import { useState } from "react";
 import { EveryonesPicksSection } from "@/components/account/EveryonesPicksSection";
 import { TeamFlagName } from "@/components/tournament/TeamFlagName";
 import type { PoolRevealData } from "@/lib/account/buildPoolReveal";
+import { TournamentStatLeadersPanel } from "@/components/tournament/TournamentStatLeadersPanel";
+import type { TournamentStatLeadersView } from "@/lib/tournament/matchTeamStats/buildTournamentStatLeadersView";
 
 type Props = {
   data: PoolRevealData;
@@ -12,7 +14,17 @@ type Props = {
   picksHref: string;
   activityHref: string;
   dashboardHref: string;
+  bonusWatchView?: TournamentStatLeadersView | null;
 };
+
+function BonusWatchSection({
+  view,
+}: {
+  view: TournamentStatLeadersView | null | undefined;
+}) {
+  if (!view) return null;
+  return <TournamentStatLeadersPanel variant="user" view={view} />;
+}
 
 function StatCard({
   label,
@@ -192,6 +204,7 @@ export function PoolRevealPage({
   picksHref,
   activityHref,
   dashboardHref,
+  bonusWatchView = null,
 }: Props) {
   const everyonesPicks = (
     <EveryonesPicksSection
@@ -253,6 +266,8 @@ export function PoolRevealPage({
           />
         </div>
 
+        <BonusWatchSection view={bonusWatchView} />
+
         <section className="space-y-4">
           <div>
             <h2 className="text-base font-bold text-ash-text">Pool trends</h2>
@@ -303,6 +318,7 @@ export function PoolRevealPage({
     return (
       <div className="space-y-6">
         {everyonesPicks}
+        <BonusWatchSection view={bonusWatchView} />
         <div className="rounded-xl border border-ash-border bg-ash-surface p-6 text-center">
           <h2 className="text-base font-bold text-ash-text">Pool trends</h2>
           <p className="mt-2 text-sm text-ash-muted">
@@ -378,6 +394,8 @@ export function PoolRevealPage({
           ) : null}
         </section>
       ) : null}
+
+      <BonusWatchSection view={bonusWatchView} />
 
       <section className="space-y-4">
         <div>

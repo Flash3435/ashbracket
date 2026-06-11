@@ -1,4 +1,6 @@
 import { LiveDailyUpdatePanel } from "@/components/admin/LiveDailyUpdatePanel";
+import { TournamentStatLeadersPanel } from "@/components/tournament/TournamentStatLeadersPanel";
+import { loadTournamentTeamStatLeaders } from "@/lib/tournament/matchTeamStats/loadTournamentTeamStatLeaders";
 import { LiveMatchScoreEntryWorkflow } from "@/components/admin/LiveMatchScoreEntryWorkflow";
 import { MatchStatsEntryPromoCard } from "@/components/admin/MatchStatsEntryPromoCard";
 import { LiveScoresFetchPromoCard } from "@/components/admin/LiveScoresFetchPromoCard";
@@ -58,6 +60,7 @@ export default async function AdminTournamentPage() {
         )
       : null;
   const isProduction = isProductionDeployment();
+  const statLeadersRes = await loadTournamentTeamStatLeaders(supabase);
 
   return (
     <PageContainer>
@@ -84,6 +87,18 @@ export default async function AdminTournamentPage() {
         }
         className="mb-6"
       />
+
+      {statLeadersRes.ok ? (
+        <TournamentStatLeadersPanel
+          variant="admin"
+          view={statLeadersRes.view}
+          className="mb-6"
+        />
+      ) : edition ? (
+        <p className="mb-6 text-sm text-ash-muted" role="status">
+          Could not load tournament stat leaders ({statLeadersRes.error}).
+        </p>
+      ) : null}
 
       <div className="ash-surface mb-6 space-y-2 p-4 text-sm text-ash-muted">
         <p>

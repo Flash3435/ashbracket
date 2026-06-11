@@ -34,6 +34,8 @@ import { isPastAshbracket2026PoolLockDeadline } from "../../../lib/account/resol
 import { isGlobalAdmin } from "@/lib/auth/permissions";
 import { publicLeaderboardHrefForPool } from "../../../lib/pool/publicLeaderboardHref";
 import { fetchPublicTournamentProgress } from "../../../lib/tournament/fetchPublicTournamentProgress";
+import { TournamentStatLeadersPanel } from "@/components/tournament/TournamentStatLeadersPanel";
+import { loadTournamentTeamStatLeaders } from "@/lib/tournament/matchTeamStats/loadTournamentTeamStatLeaders";
 
 export const dynamic = "force-dynamic";
 
@@ -224,6 +226,14 @@ export default async function AccountPage({ searchParams }: PageProps) {
     userEmail: user.email ?? null,
   });
 
+  let bonusWatchRes: Awaited<ReturnType<typeof loadTournamentTeamStatLeaders>> | null =
+    null;
+  if (locked && picksCtx?.selectedPoolId && !picksCtx.loadError) {
+    bonusWatchRes = await loadTournamentTeamStatLeaders(supabase, {
+      poolId: picksCtx.selectedPoolId,
+    });
+  }
+
   let poolSnapshot: {
     totalParticipants: number;
     completeBrackets: number;
@@ -343,7 +353,7 @@ export default async function AccountPage({ searchParams }: PageProps) {
       {!error && list.length > 0 ? (
         <>
           {postLockEngagement ? (
-            <div className="mb-6">
+            <div className="mb-6 space-y-4">
               <PostLockEngagementCard
                 variant="account"
                 picksLocked={locked}
@@ -356,6 +366,9 @@ export default async function AccountPage({ searchParams }: PageProps) {
                 activityHref={activityHref}
                 snapshot={poolSnapshot}
               />
+              {bonusWatchRes?.ok ? (
+                <TournamentStatLeadersPanel variant="user" view={bonusWatchRes.view} />
+              ) : null}
             </div>
           ) : null}
 

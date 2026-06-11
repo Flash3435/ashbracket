@@ -59,6 +59,16 @@ export function topTeamStatLeaders(
     .slice(0, limit);
 }
 
+/** All teams tied for first place (empty when no totals exist). */
+export function firstPlaceTeamStatLeaders(totals: Map<string, number>): TeamStatLeaderRow[] {
+  if (totals.size === 0) return [];
+  const max = Math.max(...totals.values());
+  return [...totals.entries()]
+    .filter(([, total]) => total === max)
+    .map(([teamId, total]) => ({ teamId, total }))
+    .sort((a, b) => a.teamId.localeCompare(b.teamId));
+}
+
 /** Goals for one team in one match — derived from final score fields only. */
 export function goalsForTeamFromMatch(
   match: MatchForTeamStatAggregation,
