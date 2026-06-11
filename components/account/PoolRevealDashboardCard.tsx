@@ -15,14 +15,14 @@ export function poolRevealDashboardCopy(locked: boolean): {
 } {
   if (locked) {
     return {
-      title: "Pool reveal",
-      body: "See how the pool picked once the deadline has passed.",
-      cta: "View pool reveal",
+      title: "Compare brackets",
+      body: "Reveal champion picks, solo picks, and how the pool split on favorites.",
+      cta: "Reveal picks",
     };
   }
   return {
-    title: "Pool reveal unlocks after picks lock",
-    body: "See champion picks, solo picks, and pool consensus once the deadline passes.",
+    title: "Picks reveal after lock",
+    body: "Preview champion trends once the deadline passes — full reveal unlocks at lock.",
     cta: "Preview reveal",
   };
 }

@@ -9,6 +9,11 @@ import {
   loadAccountKnockoutSelection,
   poolLocked,
 } from "../../../../lib/account/loadAccountKnockoutSelection";
+import {
+  buildPostLockNavPlan,
+  isPostLockEngagementMode,
+} from "../../../../lib/account/postLockEngagement";
+import { publicLeaderboardHrefForPool } from "../../../../lib/pool/publicLeaderboardHref";
 import { filterActivityFeedForParticipantView } from "../../../../lib/poolActivity/activityFeedParticipantFilter";
 import { loadPoolActivityForViewer } from "../../../../lib/poolActivity/loadPoolActivityForViewer";
 import Link from "next/link";
@@ -47,6 +52,37 @@ export default async function AccountActivityPage({ searchParams }: PageProps) {
     locked && ctx.selectedId
       ? `/account/reveal?participant=${ctx.selectedId}`
       : null;
+  const postLockEngagement = isPostLockEngagementMode(
+    locked,
+    ctx.knockoutBracketPicksUnlocked,
+  );
+
+  let leaderboardHref: string | null = null;
+  if (selectedPoolId && ctx.selectedId) {
+    const { data: poolRow } = await supabase
+      .from("pools")
+      .select("is_public")
+      .eq("id", selectedPoolId)
+      .maybeSingle();
+    if (poolRow) {
+      leaderboardHref = publicLeaderboardHrefForPool({
+        id: selectedPoolId,
+        isPublic: Boolean(poolRow.is_public),
+      });
+    }
+  }
+
+  const activityNavPlan =
+    ctx.selectedId && !ctx.loadError
+      ? buildPostLockNavPlan({
+          picksLocked: locked,
+          knockoutBracketPicksUnlocked: ctx.knockoutBracketPicksUnlocked,
+          revealHref,
+          leaderboardHref,
+          picksHref: `/account/picks?participant=${ctx.selectedId}`,
+          activityHref: `/account/activity?participant=${ctx.selectedId}`,
+        })
+      : null;
 
   if (ctx.selectedId && selectedPoolId && !ctx.loadError) {
     try {
@@ -68,26 +104,44 @@ export default async function AccountActivityPage({ searchParams }: PageProps) {
         <Link href="/account" className="ash-link text-sm">
           ← Dashboard
         </Link>
-        {ctx.selectedId && !ctx.loadError ? (
+        {ctx.selectedId && !ctx.loadError && activityNavPlan ? (
           <>
             <span className="text-ash-border" aria-hidden>
               |
             </span>
-            <Link
-              href={`/account/picks?participant=${ctx.selectedId}`}
-              className="ash-link text-sm"
-            >
-              {accountPicksNavLabel(locked)}
+            <Link href={activityNavPlan.primary.href} className="ash-link text-sm font-medium">
+              {activityNavPlan.primary.label}
             </Link>
             <span className="text-ash-border" aria-hidden>
               |
             </span>
-            <Link
-              href={`/account/reveal?participant=${ctx.selectedId}`}
-              className="ash-link text-sm"
-            >
-              Reveal
+            <Link href={activityNavPlan.secondary.href} className="ash-link text-sm">
+              {activityNavPlan.secondary.label}
             </Link>
+            {activityNavPlan.tertiary ? (
+              <>
+                <span className="text-ash-border" aria-hidden>
+                  |
+                </span>
+                <Link href={activityNavPlan.tertiary.href} className="ash-link text-sm">
+                  {activityNavPlan.tertiary.label}
+                </Link>
+              </>
+            ) : null}
+            {postLockEngagement &&
+            activityNavPlan.secondary.label !== accountPicksNavLabel(locked) ? (
+              <>
+                <span className="text-ash-border" aria-hidden>
+                  |
+                </span>
+                <Link
+                  href={`/account/picks?participant=${ctx.selectedId}`}
+                  className="ash-link text-sm"
+                >
+                  {accountPicksNavLabel(locked)}
+                </Link>
+              </>
+            ) : null}
           </>
         ) : null}
       </div>

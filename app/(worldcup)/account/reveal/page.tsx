@@ -4,7 +4,11 @@ import { PageContainer } from "@/components/ui/PageContainer";
 import { PageTitle } from "@/components/ui/PageTitle";
 import { loadPoolReveal } from "@/lib/account/loadPoolReveal";
 import { createClient } from "@/lib/supabase/server";
-import { loadAccountKnockoutSelection } from "../../../../lib/account/loadAccountKnockoutSelection";
+import {
+  loadAccountKnockoutSelection,
+  poolLocked,
+} from "../../../../lib/account/loadAccountKnockoutSelection";
+import { publicLeaderboardHrefForPool } from "../../../../lib/pool/publicLeaderboardHref";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 
@@ -54,6 +58,21 @@ export default async function AccountRevealPage({ searchParams }: PageProps) {
     ? `?participant=${ctx.selectedId}`
     : "";
   const dashboardHref = `/account${dashboardQs}`;
+  const locked = poolLocked(ctx.selectedLockAt);
+  let leaderboardHref: string | null = null;
+  if (selectedPoolId) {
+    const { data: poolRow } = await supabase
+      .from("pools")
+      .select("is_public")
+      .eq("id", selectedPoolId)
+      .maybeSingle();
+    if (poolRow) {
+      leaderboardHref = publicLeaderboardHrefForPool({
+        id: selectedPoolId,
+        isPublic: Boolean(poolRow.is_public),
+      });
+    }
+  }
 
   return (
     <PageContainer>
@@ -63,19 +82,36 @@ export default async function AccountRevealPage({ searchParams }: PageProps) {
         </Link>
         {ctx.selectedId && !ctx.loadError ? (
           <>
-            <span className="text-ash-border" aria-hidden>
-              |
-            </span>
-            <Link href={activityHref} className="ash-link text-sm">
-              Activity
-            </Link>
+            {locked && leaderboardHref ? (
+              <>
+                <span className="text-ash-border" aria-hidden>
+                  |
+                </span>
+                <Link href={leaderboardHref} className="ash-link text-sm font-medium">
+                  View leaderboard
+                </Link>
+              </>
+            ) : (
+              <>
+                <span className="text-ash-border" aria-hidden>
+                  |
+                </span>
+                <Link href={activityHref} className="ash-link text-sm">
+                  Activity
+                </Link>
+              </>
+            )}
           </>
         ) : null}
       </div>
 
       <PageTitle
-        title="Pool reveal"
-        description="See how the pool picked once the deadline has passed."
+        title={locked ? "Compare brackets" : "Pool reveal"}
+        description={
+          locked
+            ? "Reveal everyone's picks, compare champion choices, and see how the pool split."
+            : "Picks reveal after lock — preview what unlocks once the deadline passes."
+        }
       />
 
       {ctx.loadError ? (

@@ -8,6 +8,7 @@ import { fetchPoolPublicStats } from "@/lib/pool/fetchPoolPublicStats";
 import { fetchPublicLiveScoresLastUpdated } from "@/lib/tournament/liveDailyUpdateStatus";
 import { createClient } from "@/lib/supabase/server";
 import { createServiceRoleClient } from "@/lib/supabase/service";
+import { poolLocked } from "@/lib/pools/poolLocked";
 import type { LeaderboardPublicRowDb } from "../../../../types/leaderboard";
 import { notFound } from "next/navigation";
 
@@ -27,7 +28,7 @@ export default async function PublicPoolLeaderboardPage({ params }: PageProps) {
   const service = createServiceRoleClient();
   const { data: pool, error: poolError } = await service
     .from("pools")
-    .select("id, name, is_public, is_simulation")
+    .select("id, name, is_public, is_simulation, lock_at")
     .eq("id", poolIdTrimmed)
     .maybeSingle();
 
@@ -55,6 +56,13 @@ export default async function PublicPoolLeaderboardPage({ params }: PageProps) {
         mapPublicLeaderboardRow(row as LeaderboardPublicRowDb),
       );
 
+  const lockAt = (pool.lock_at as string | null) ?? null;
+  const picksLocked = poolLocked(lockAt);
+  const revealHref =
+    picksLocked && viewerParticipantId
+      ? `/account/reveal?participant=${viewerParticipantId}`
+      : null;
+
   return (
     <PageContainer>
       <PicksDeadlineBannerFromPool poolId={poolIdTrimmed} className="mb-6" />
@@ -75,6 +83,8 @@ export default async function PublicPoolLeaderboardPage({ params }: PageProps) {
         leaderboardError={leaderboardRes.error?.message ?? null}
         viewerParticipantId={viewerParticipantId}
         liveScoresLastUpdatedAt={isLivePool ? liveScoresLastUpdatedAt : null}
+        picksLocked={picksLocked}
+        revealHref={revealHref}
       />
     </PageContainer>
   );

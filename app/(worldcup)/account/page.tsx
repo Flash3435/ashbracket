@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { PostLockEngagementCard } from "@/components/account/PostLockEngagementCard";
 import { PoolRevealDashboardCard } from "@/components/account/PoolRevealDashboardCard";
 import { PicksDeadlineBannerFromPool } from "@/components/pool/PicksDeadlineBannerFromPool";
 import { WhoToCheerForCard } from "@/components/account/WhoToCheerForCard";
@@ -22,7 +23,13 @@ import {
   loadAccountKnockoutSelection,
   poolLocked,
 } from "../../../lib/account/loadAccountKnockoutSelection";
+import { loadPoolReveal } from "../../../lib/account/loadPoolReveal";
+import {
+  buildPostLockNavPlan,
+  isPostLockEngagementMode,
+} from "../../../lib/account/postLockEngagement";
 import { resolveAccountParticipantId } from "../../../lib/account/resolveAccountParticipantId";
+import { publicLeaderboardHrefForPool } from "../../../lib/pool/publicLeaderboardHref";
 import { fetchPublicTournamentProgress } from "../../../lib/tournament/fetchPublicTournamentProgress";
 
 export const dynamic = "force-dynamic";
@@ -69,6 +76,7 @@ export default async function AccountPage({ searchParams }: PageProps) {
       pools (
         name,
         lock_at,
+        is_public,
         payment_type,
         entry_fee_label,
         entry_fee_amount,
@@ -85,6 +93,7 @@ export default async function AccountPage({ searchParams }: PageProps) {
   type PoolEmbedRow = {
     name: string;
     lock_at: string | null;
+    is_public: boolean | null;
     payment_type: string;
     entry_fee_label: string | null;
     entry_fee_amount: number | string | null;
@@ -104,6 +113,7 @@ export default async function AccountPage({ searchParams }: PageProps) {
       is_paid: Boolean(r.is_paid),
       pool_name: pool?.name ?? "Pool",
       pool_lock_at: pool?.lock_at ?? null,
+      pool_is_public: Boolean(pool?.is_public),
       pool_payment: pool
         ? mapPoolPaymentFromPool(pool)
         : mapPoolPaymentFromPool({ payment_type: "free" }),
@@ -171,6 +181,52 @@ export default async function AccountPage({ searchParams }: PageProps) {
           knockoutBracketPicksUnlocked: picksCtx.knockoutBracketPicksUnlocked,
         })
       : false;
+
+  const selectedListEntry = picksCtx?.selectedPoolId
+    ? list.find((p) => p.pool_id === picksCtx.selectedPoolId)
+    : null;
+  const leaderboardHref = selectedListEntry
+    ? publicLeaderboardHrefForPool({
+        id: selectedListEntry.pool_id,
+        isPublic: selectedListEntry.pool_is_public,
+      })
+    : null;
+  const activityHref = picksCtx?.selectedParticipant?.id
+    ? `/account/activity?participant=${picksCtx.selectedParticipant.id}`
+    : "/account/activity";
+  const postLockEngagement =
+    picksCtx != null &&
+    isPostLockEngagementMode(locked, picksCtx.knockoutBracketPicksUnlocked);
+  const navPlan = buildPostLockNavPlan({
+    picksLocked: locked,
+    knockoutBracketPicksUnlocked: picksCtx?.knockoutBracketPicksUnlocked ?? true,
+    revealHref,
+    leaderboardHref,
+    picksHref: editPicksFromDashboardHref,
+    activityHref,
+  });
+
+  let poolSnapshot: {
+    totalParticipants: number;
+    completeBrackets: number;
+    mostPopularChampion: string | null;
+  } | null = null;
+  if (postLockEngagement && picksCtx?.selectedPoolId && !picksCtx.loadError) {
+    try {
+      const revealData = await loadPoolReveal(
+        supabase,
+        picksCtx.selectedPoolId,
+        picksCtx,
+      );
+      poolSnapshot = {
+        totalParticipants: revealData.totalParticipants,
+        completeBrackets: revealData.totalCompleted,
+        mostPopularChampion: revealData.mostPopularChampion?.teamName ?? null,
+      };
+    } catch {
+      poolSnapshot = null;
+    }
+  }
 
   return (
     <PageContainer>
@@ -275,23 +331,50 @@ export default async function AccountPage({ searchParams }: PageProps) {
 
       {!error && list.length > 0 ? (
         <>
+          {postLockEngagement ? (
+            <div className="mb-6">
+              <PostLockEngagementCard
+                variant="account"
+                picksLocked={locked}
+                knockoutBracketPicksUnlocked={
+                  picksCtx?.knockoutBracketPicksUnlocked ?? true
+                }
+                revealHref={revealHref}
+                leaderboardHref={leaderboardHref}
+                picksHref={editPicksFromDashboardHref}
+                activityHref={activityHref}
+                snapshot={poolSnapshot}
+              />
+            </div>
+          ) : null}
+
           <div className="mb-4 flex flex-wrap gap-3">
-            <Link href={picksHref} className="btn-primary inline-flex">
-              {accountPicksNavLabel(locked)}
+            <Link href={navPlan.primary.href} className="btn-primary inline-flex">
+              {navPlan.primary.label}
             </Link>
             <Link
-              href={
-                list.length === 1
-                  ? `/account/activity?participant=${list[0].id}`
-                  : "/account/activity"
-              }
+              href={navPlan.secondary.href}
               className="btn-ghost inline-flex ring-1 ring-ash-border"
             >
-              Activity
+              {navPlan.secondary.label}
             </Link>
-            <Link href={revealHref} className="btn-ghost inline-flex ring-1 ring-ash-border">
-              Reveal
-            </Link>
+            {navPlan.tertiary ? (
+              <Link
+                href={navPlan.tertiary.href}
+                className="btn-ghost inline-flex ring-1 ring-ash-border"
+              >
+                {navPlan.tertiary.label}
+              </Link>
+            ) : null}
+            {postLockEngagement &&
+            navPlan.secondary.label !== accountPicksNavLabel(locked) ? (
+              <Link
+                href={editPicksFromDashboardHref}
+                className="btn-ghost inline-flex text-sm ring-1 ring-ash-border"
+              >
+                {accountPicksNavLabel(locked)}
+              </Link>
+            ) : null}
           </div>
 
           {picksCtx && picksCtx.profileLinkItems.length > 1 ? (
@@ -464,6 +547,19 @@ export default async function AccountPage({ searchParams }: PageProps) {
                   >
                     Activity
                   </Link>
+                  {poolLocked(p.pool_lock_at) ? (
+                    <Link
+                      href={`/account/reveal?participant=${p.id}`}
+                      className="ash-link"
+                    >
+                      Reveal picks
+                    </Link>
+                  ) : null}
+                  {p.pool_is_public ? (
+                    <Link href={`/pool/${p.pool_id}`} className="ash-link">
+                      Leaderboard
+                    </Link>
+                  ) : null}
                   <Link href={`/account?participant=${p.id}`} className="ash-link">
                     This pool on My bracket
                   </Link>

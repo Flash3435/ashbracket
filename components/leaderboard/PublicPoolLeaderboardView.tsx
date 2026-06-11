@@ -13,6 +13,7 @@ import type { PoolPublicStats } from "../../lib/pool/fetchPoolPublicStats";
 import { PoolPublicStatsSummary } from "../pool/PoolPublicStatsSummary";
 import { ViewerYouChip } from "../ui/ViewerYouChip";
 import { formatUsdCents } from "@/lib/format/usdCents";
+import { LeaderboardPostLockIntro } from "./LeaderboardPostLockIntro";
 
 function summaryCard(label: string, value: string, hint: string) {
   return (
@@ -123,6 +124,9 @@ type Props = {
   viewerParticipantId?: string | null;
   /** Live pools only: last successful daily score update for the official tournament. */
   liveScoresLastUpdatedAt?: string | null;
+  /** When true, show post-lock intro with optional reveal link. */
+  picksLocked?: boolean;
+  revealHref?: string | null;
 };
 
 export function PublicPoolLeaderboardView({
@@ -133,6 +137,8 @@ export function PublicPoolLeaderboardView({
   leaderboardError,
   viewerParticipantId = null,
   liveScoresLastUpdatedAt = null,
+  picksLocked = false,
+  revealHref = null,
 }: Props) {
   if (leaderboardError) {
     return (
@@ -179,6 +185,9 @@ export function PublicPoolLeaderboardView({
 
   return (
     <div className="space-y-8 sm:space-y-10">
+      {picksLocked ? (
+        <LeaderboardPostLockIntro revealHref={revealHref} />
+      ) : null}
       <section className="ash-surface relative overflow-hidden px-5 py-5 sm:px-6 sm:py-6">
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_right,rgba(22,163,74,0.14),transparent_45%),linear-gradient(180deg,rgba(255,255,255,0.03),transparent_70%)]" />
         <div className="relative space-y-4">

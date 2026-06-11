@@ -52,12 +52,24 @@ export function AccountPicksProfileLinks({
                   {p.poolName}
                 </span>
                 <div className="mt-2 flex flex-wrap gap-2">
+                  {p.picksLocked && revealBasePath ? (
+                    <Link
+                      href={`${revealBasePath}?participant=${p.id}`}
+                      className={`rounded-md px-2.5 py-1 text-xs font-medium underline-offset-2 hover:underline ${
+                        active
+                          ? "bg-ash-accent text-white hover:bg-ash-accent-hover"
+                          : "bg-ash-body text-ash-accent ring-1 ring-ash-border hover:bg-ash-surface"
+                      }`}
+                    >
+                      Reveal picks
+                    </Link>
+                  ) : null}
                   <Link
                     href={`/account/picks?participant=${p.id}`}
                     className={`rounded-md px-2.5 py-1 text-xs font-medium underline-offset-2 hover:underline ${
-                      active
+                      !p.picksLocked && active
                         ? "bg-ash-accent text-white hover:bg-ash-accent-hover"
-                        : "bg-ash-body text-ash-accent ring-1 ring-ash-border hover:bg-ash-surface"
+                        : "bg-ash-body text-ash-text ring-1 ring-ash-border hover:bg-ash-surface"
                     }`}
                   >
                     {p.picksLocked ? "View picks" : "Edit picks"}
@@ -78,12 +90,12 @@ export function AccountPicksProfileLinks({
                       Activity
                     </Link>
                   ) : null}
-                  {revealBasePath ? (
+                  {!p.picksLocked && revealBasePath ? (
                     <Link
                       href={`${revealBasePath}?participant=${p.id}`}
                       className="rounded-md bg-ash-body px-2.5 py-1 text-xs font-medium text-ash-text ring-1 ring-ash-border hover:bg-ash-surface"
                     >
-                      Reveal
+                      Preview reveal
                     </Link>
                   ) : null}
                 </div>
