@@ -18,6 +18,7 @@ import { PageTitle } from "@/components/ui/PageTitle";
 import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
 import {
+  accountPicksNavLabel,
   loadAccountKnockoutSelection,
   poolLocked,
 } from "../../../lib/account/loadAccountKnockoutSelection";
@@ -67,6 +68,7 @@ export default async function AccountPage({ searchParams }: PageProps) {
       is_paid,
       pools (
         name,
+        lock_at,
         payment_type,
         entry_fee_label,
         entry_fee_amount,
@@ -82,6 +84,7 @@ export default async function AccountPage({ searchParams }: PageProps) {
 
   type PoolEmbedRow = {
     name: string;
+    lock_at: string | null;
     payment_type: string;
     entry_fee_label: string | null;
     entry_fee_amount: number | string | null;
@@ -100,6 +103,7 @@ export default async function AccountPage({ searchParams }: PageProps) {
       pool_id: r.pool_id as string,
       is_paid: Boolean(r.is_paid),
       pool_name: pool?.name ?? "Pool",
+      pool_lock_at: pool?.lock_at ?? null,
       pool_payment: pool
         ? mapPoolPaymentFromPool(pool)
         : mapPoolPaymentFromPool({ payment_type: "free" }),
@@ -180,9 +184,13 @@ export default async function AccountPage({ searchParams }: PageProps) {
         <PageTitle
           title="My bracket"
           description={
-            user.email
-              ? `Signed in as ${user.email}. Below is your bracket snapshot for the selected pool profile — use Edit picks to continue or change picks.`
-              : "Your bracket overview for the selected pool profile. Use Edit picks to update your picks."
+            locked
+              ? user.email
+                ? `Signed in as ${user.email}. Below is your bracket snapshot for the selected pool profile. Picks are locked, so this is now a read-only view.`
+                : "Your bracket overview for the selected pool profile. Picks are locked, so this is now a read-only view."
+              : user.email
+                ? `Signed in as ${user.email}. Below is your bracket snapshot for the selected pool profile — use Edit picks to continue or change picks.`
+                : "Your bracket overview for the selected pool profile. Use Edit picks to update your picks."
           }
         />
       </div>
@@ -269,7 +277,7 @@ export default async function AccountPage({ searchParams }: PageProps) {
         <>
           <div className="mb-4 flex flex-wrap gap-3">
             <Link href={picksHref} className="btn-primary inline-flex">
-              Edit picks
+              {accountPicksNavLabel(locked)}
             </Link>
             <Link
               href={
@@ -421,7 +429,7 @@ export default async function AccountPage({ searchParams }: PageProps) {
                 href={`/account/picks?participant=${picksCtx.selectedParticipant.id}`}
                 className="btn-ghost mt-4 inline-flex border-amber-700/50 text-amber-50 hover:bg-amber-950/40"
               >
-                Edit picks
+                {accountPicksNavLabel(locked)}
               </Link>
             </div>
           ) : null}
@@ -448,7 +456,7 @@ export default async function AccountPage({ searchParams }: PageProps) {
                     href={`/account/picks?participant=${p.id}`}
                     className="ash-link"
                   >
-                    Edit picks
+                    {accountPicksNavLabel(poolLocked(p.pool_lock_at))}
                   </Link>
                   <Link
                     href={`/account/activity?participant=${p.id}`}

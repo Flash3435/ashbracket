@@ -5,6 +5,7 @@ import { PageTitle } from "@/components/ui/PageTitle";
 import { canManagePool, isGlobalAdmin } from "@/lib/auth/permissions";
 import { createClient } from "@/lib/supabase/server";
 import {
+  accountPicksNavLabel,
   loadAccountKnockoutSelection,
   poolLocked,
 } from "../../../../lib/account/loadAccountKnockoutSelection";
@@ -76,7 +77,7 @@ export default async function AccountActivityPage({ searchParams }: PageProps) {
               href={`/account/picks?participant=${ctx.selectedId}`}
               className="ash-link text-sm"
             >
-              Edit picks
+              {accountPicksNavLabel(locked)}
             </Link>
             <span className="text-ash-border" aria-hidden>
               |

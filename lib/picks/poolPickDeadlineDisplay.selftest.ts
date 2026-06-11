@@ -3,6 +3,7 @@ import {
   buildPoolPickDeadlineStatus,
   formatPoolPickDeadlineLabel,
   formatRelativeTimeUntilEn,
+  isPreKnockoutLockedAt,
 } from "./poolPickDeadlineDisplay";
 import { ASHBRACKET_2026_POOL_LOCK_AT_ISO } from "../datetime/poolLockDeadline";
 
@@ -52,13 +53,17 @@ import { ASHBRACKET_2026_POOL_LOCK_AT_ISO } from "../datetime/poolLockDeadline";
   assert.ok(status.detail?.includes("Round of 32"));
 }
 
-// Open with deadline — headline uses Eastern calendar day near lock
+// Injected nowMs — before lock
 {
-  const nowMs = new Date("2026-06-11T12:00:00Z").getTime();
+  const beforeLockMs = new Date("2026-06-11T12:00:00Z").getTime();
+  assert.strictEqual(
+    isPreKnockoutLockedAt(ASHBRACKET_2026_POOL_LOCK_AT_ISO, beforeLockMs),
+    false,
+  );
   const status = buildPoolPickDeadlineStatus({
     lockAtIso: ASHBRACKET_2026_POOL_LOCK_AT_ISO,
     knockoutBracketPicksUnlocked: false,
-    nowMs,
+    nowMs: beforeLockMs,
   });
   assert.strictEqual(status.preKnockoutLocked, false);
   assert.ok(
@@ -66,6 +71,22 @@ import { ASHBRACKET_2026_POOL_LOCK_AT_ISO } from "../datetime/poolLockDeadline";
     status.headline,
   );
   assert.ok(status.deadlineLabel?.includes("ET"), status.deadlineLabel ?? "");
+}
+
+// Injected nowMs — after lock (stable even when real clock is past deadline)
+{
+  const afterLockMs = new Date("2026-06-11T17:00:00Z").getTime();
+  assert.strictEqual(
+    isPreKnockoutLockedAt(ASHBRACKET_2026_POOL_LOCK_AT_ISO, afterLockMs),
+    true,
+  );
+  const status = buildPoolPickDeadlineStatus({
+    lockAtIso: ASHBRACKET_2026_POOL_LOCK_AT_ISO,
+    knockoutBracketPicksUnlocked: false,
+    nowMs: afterLockMs,
+  });
+  assert.strictEqual(status.preKnockoutLocked, true);
+  assert.strictEqual(status.chipLabel, "locked");
 }
 
 // Locked — knockout still editable

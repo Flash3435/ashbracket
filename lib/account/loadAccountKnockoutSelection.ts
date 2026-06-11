@@ -24,6 +24,11 @@ import {
 
 export { poolLocked };
 
+/** Participant nav CTA — edit before lock, view after. */
+export function accountPicksNavLabel(picksLocked: boolean): string {
+  return picksLocked ? "View picks" : "Edit picks";
+}
+
 /** Stages needed to build the full participant picks wizard. */
 export const ACCOUNT_TOURNAMENT_STAGE_CODES = [
   "group",
@@ -89,7 +94,12 @@ export type AccountKnockoutSelection = {
   predictions: Prediction[];
   bonusKeysOrdered: string[];
   initialSlots: KnockoutPickSlotDraft[];
-  profileLinkItems: Array<{ id: string; displayName: string; poolName: string }>;
+  profileLinkItems: Array<{
+    id: string;
+    displayName: string;
+    poolName: string;
+    picksLocked: boolean;
+  }>;
   /** Group letter → country codes from official group fixtures; empty when unavailable. */
   groupTeamCountryCodesByLetter: Record<string, string[]>;
   /**
@@ -321,6 +331,7 @@ export async function loadAccountKnockoutSelection(
     id: p.id,
     displayName: p.display_name,
     poolName: p.pools?.name ?? "Pool",
+    picksLocked: poolLocked(p.pools?.lock_at),
   }));
 
   return {

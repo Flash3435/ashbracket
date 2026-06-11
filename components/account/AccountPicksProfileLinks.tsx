@@ -4,6 +4,7 @@ export type AccountPicksProfileLinkItem = {
   id: string;
   displayName: string;
   poolName: string;
+  picksLocked?: boolean;
 };
 
 type AccountPicksProfileLinksProps = {
@@ -59,7 +60,7 @@ export function AccountPicksProfileLinks({
                         : "bg-ash-body text-ash-accent ring-1 ring-ash-border hover:bg-ash-surface"
                     }`}
                   >
-                    Edit picks
+                    {p.picksLocked ? "View picks" : "Edit picks"}
                   </Link>
                   {summaryBasePath ? (
                     <Link

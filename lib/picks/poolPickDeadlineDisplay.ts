@@ -3,7 +3,6 @@ import {
   formatPoolLockDeadlineTimeOnly,
   poolLockDeadlineCalendarKey,
 } from "../datetime/poolLockDeadline";
-import { poolLocked } from "../pools/poolLocked";
 
 export type PoolPickDeadlineTone = "open" | "soon" | "locked" | "neutral";
 
@@ -151,9 +150,20 @@ function buildLockedCopy(args: {
   };
 }
 
+/** Whether pre-knockout picks are frozen at `nowMs` (matches save enforcement semantics). */
+export function isPreKnockoutLockedAt(
+  lockAtIso: string | null | undefined,
+  nowMs: number,
+): boolean {
+  if (lockAtIso == null || lockAtIso.trim() === "") return false;
+  const t = new Date(lockAtIso).getTime();
+  if (Number.isNaN(t)) return false;
+  return t <= nowMs;
+}
+
 /**
  * Participant-facing deadline / lock messaging for World Cup pool picks.
- * Presentation only — uses the same `poolLocked` check as save enforcement.
+ * Presentation only — uses the same lock instant comparison as save enforcement.
  */
 export function buildPoolPickDeadlineStatus(input: {
   lockAtIso: string | null | undefined;
@@ -167,7 +177,7 @@ export function buildPoolPickDeadlineStatus(input: {
   const readOnly = input.readOnly === true;
   const nowMs = input.nowMs ?? Date.now();
   const lockAtIso = input.lockAtIso?.trim() || null;
-  const preKnockoutLocked = poolLocked(lockAtIso);
+  const preKnockoutLocked = isPreKnockoutLockedAt(lockAtIso, nowMs);
 
   if (!lockAtIso) {
     return {

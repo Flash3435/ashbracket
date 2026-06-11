@@ -9,6 +9,7 @@ import { PageContainer } from "@/components/ui/PageContainer";
 import { PageTitle } from "@/components/ui/PageTitle";
 import { createClient } from "@/lib/supabase/server";
 import {
+  accountPicksNavLabel,
   loadAccountKnockoutSelection,
   poolLocked,
 } from "../../../../../lib/account/loadAccountKnockoutSelection";
@@ -93,7 +94,9 @@ export default async function AccountPicksSummaryPage({ searchParams }: PageProp
           }
           className="ash-link text-sm"
         >
-          Edit picks wizard
+          {locked
+            ? `${accountPicksNavLabel(true)} wizard`
+            : "Edit picks wizard"}
         </Link>
       </div>
 

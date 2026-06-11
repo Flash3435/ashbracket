@@ -117,7 +117,7 @@ export default async function ParticipantBracketSnapshotPage({
               href={`/account/picks?participant=${result.participantId}`}
               className="ash-link text-sm"
             >
-              Edit your picks
+              {locked ? "View your picks" : "Edit your picks"}
             </Link>
           </>
         ) : null}
