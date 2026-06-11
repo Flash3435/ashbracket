@@ -15,7 +15,7 @@ import {
 import { resolvePoolEmailTargets } from "../communications/recipientResolve";
 
 const poolId = "22222222-2222-4222-8222-222222222222";
-const lockAtIso = "2026-06-11T03:59:00.000Z"; // Jun 10, 2026, 11:59 p.m. ET
+const lockAtIso = "2026-06-11T16:00:00.000Z"; // Jun 11, 2026, 12:00 p.m. ET
 
 const nishBreakdown = {
   missingSummary: "Missing: bonus picks (2/5).",
@@ -144,7 +144,7 @@ assert.strictEqual(someIncomplete.mailableIncompleteCount, 2);
 assert.strictEqual(someIncomplete.skippedNoEmailCount, 1);
 assert.strictEqual(
   someIncomplete.deadlineLabel,
-  "Jun 10, 2026, 11:59 p.m. ET",
+  "Jun 11, 2026, 12:00 p.m. ET",
   "deadline uses compact Eastern Time formatter",
 );
 assert.ok(
@@ -256,7 +256,7 @@ const rendered = renderTemplatedPoolEmail({
 assert.match(rendered.text, /Hi Nish,/);
 assert.match(
   rendered.text,
-  /June 10, 2026 at 11:59 p\.?m\.? Eastern Time/i,
+  /June 11, 2026 at 12:00 p\.?m\.? Eastern Time/i,
   "deadline in reminder uses long Eastern Time, not UTC",
 );
 assert.match(

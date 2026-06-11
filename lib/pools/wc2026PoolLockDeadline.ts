@@ -1,10 +1,10 @@
 import { ASHBRACKET_2026_POOL_LOCK_AT_ISO } from "../datetime/poolLockDeadline";
 
-/** Canonical World Cup 2026 live-pool pick lock instant (June 10, 2026 11:59 p.m. ET). */
+/** Canonical World Cup 2026 live-pool pick lock instant (June 11, 2026 12:00 p.m. ET). */
 export const WC2026_OFFICIAL_POOL_LOCK_AT_ISO = ASHBRACKET_2026_POOL_LOCK_AT_ISO;
 
 /** SQL timestamptz literal used in migrations. */
-export const WC2026_OFFICIAL_POOL_LOCK_AT_SQL = "2026-06-11 03:59:00+00";
+export const WC2026_OFFICIAL_POOL_LOCK_AT_SQL = "2026-06-11 16:00:00+00";
 
 /** Known incorrect defaults to replace during backfill only. */
 export const KNOWN_BAD_WC2026_POOL_LOCK_AT_ISO_VALUES = [
@@ -12,6 +12,10 @@ export const KNOWN_BAD_WC2026_POOL_LOCK_AT_ISO_VALUES = [
   "2026-06-08T17:59:00.000Z",
   "2026-06-08T17:59:00Z",
   "2026-06-08T17:59:00+00:00",
+  /** Previous AshBracket official deadline (Jun 10, 2026 11:59 p.m. ET). */
+  "2026-06-11T03:59:00.000Z",
+  "2026-06-11T03:59:00Z",
+  "2026-06-11T03:59:00+00:00",
   /** Suspected private-pool default (Jun 11, 2026 1:59 a.m. ET). */
   "2026-06-11T05:59:00.000Z",
   "2026-06-11T05:59:00Z",
