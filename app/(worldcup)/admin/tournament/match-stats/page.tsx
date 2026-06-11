@@ -1,5 +1,8 @@
 import { MatchTeamStatsAdminPanel } from "@/components/admin/MatchTeamStatsAdminPanel";
+import { PublishBonusResultsPanel } from "@/components/admin/PublishBonusResultsPanel";
 import { SimulationModeBanner } from "@/components/admin/SimulationModeBanner";
+import { isProductionDeployment } from "@/lib/admin/deploymentEnvironment";
+import { fetchLiveTournamentSyncImpactSummary } from "@/lib/admin/fetchAdminImpactSummary";
 import { TournamentStatLeadersPanel } from "@/components/tournament/TournamentStatLeadersPanel";
 import { PageContainer } from "@/components/ui/PageContainer";
 import { PageTitle } from "@/components/ui/PageTitle";
@@ -43,6 +46,11 @@ export default async function AdminMatchStatsPage() {
   const statLeadersRes = edition?.id
     ? await loadTournamentTeamStatLeaders(supabase)
     : null;
+  const syncImpact =
+    edition?.id != null
+      ? await fetchLiveTournamentSyncImpactSummary(supabase)
+      : null;
+  const isProduction = isProductionDeployment();
 
   return (
     <PageContainer>
@@ -91,6 +99,15 @@ export default async function AdminMatchStatsPage() {
             <p className="mt-8 text-sm text-ash-muted" role="status">
               Could not load stat leaders ({statLeadersRes.error}).
             </p>
+          ) : null}
+
+          {syncImpact ? (
+            <div className="mt-8">
+              <PublishBonusResultsPanel
+                isProduction={isProduction}
+                impact={syncImpact}
+              />
+            </div>
           ) : null}
         </>
       )}

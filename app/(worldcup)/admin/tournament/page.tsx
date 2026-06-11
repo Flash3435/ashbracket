@@ -1,4 +1,5 @@
 import { LiveDailyUpdatePanel } from "@/components/admin/LiveDailyUpdatePanel";
+import { PublishBonusResultsPanel } from "@/components/admin/PublishBonusResultsPanel";
 import { TournamentStatLeadersPanel } from "@/components/tournament/TournamentStatLeadersPanel";
 import { loadTournamentTeamStatLeaders } from "@/lib/tournament/matchTeamStats/loadTournamentTeamStatLeaders";
 import { LiveMatchScoreEntryWorkflow } from "@/components/admin/LiveMatchScoreEntryWorkflow";
@@ -98,6 +99,15 @@ export default async function AdminTournamentPage() {
         <p className="mb-6 text-sm text-ash-muted" role="status">
           Could not load tournament stat leaders ({statLeadersRes.error}).
         </p>
+      ) : null}
+
+      {syncImpact ? (
+        <div className="mb-6">
+          <PublishBonusResultsPanel
+            isProduction={isProduction}
+            impact={syncImpact}
+          />
+        </div>
       ) : null}
 
       <div className="ash-surface mb-6 space-y-2 p-4 text-sm text-ash-muted">

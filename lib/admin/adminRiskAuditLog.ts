@@ -9,6 +9,7 @@ export type AdminRiskAction =
   | "live_scores_preview"
   | "live_scores_apply"
   | "edition_results_edit"
+  | "bonus_results_from_stats"
   | "edition_recompute_pools"
   | "pool_recompute"
   | "pool_communications_send"
