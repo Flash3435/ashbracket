@@ -23,7 +23,8 @@ function isPoolActivityType(v: string): v is PoolActivityType {
     v === "ash_daily_recap" ||
     v === "announcement" ||
     v === "pool_milestone" ||
-    v === "pool_insight"
+    v === "pool_insight" ||
+    v === "ash_score_impact"
   );
 }
 

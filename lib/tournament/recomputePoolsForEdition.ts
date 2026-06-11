@@ -1,8 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import {
-  recomputePoolLedgerWithClient,
-  type WcLedgerRecomputeTrigger,
-} from "@/lib/scoring/recomputePoolLedger";
+import type { WcLedgerRecomputeTrigger } from "@/lib/scoring/recomputePoolLedger";
+import { recomputePoolLedgersWithScoreImpact } from "@/lib/poolActivity/scoreImpact/recomputeWithScoreImpact";
+import type { ScoreImpactRunContext } from "@/lib/poolActivity/scoreImpact/types";
 import { poolIdsForEdition } from "./editionScope";
 
 /**
@@ -12,15 +11,17 @@ export async function recomputePoolsForEdition(
   supabase: SupabaseClient,
   editionId: string,
   trigger: WcLedgerRecomputeTrigger,
+  options?: {
+    scoreImpactContext?: ScoreImpactRunContext;
+    editionIsSimulation?: boolean;
+  },
 ): Promise<{ ok: true } | { ok: false; error: string }> {
   const poolIds = await poolIdsForEdition(supabase, editionId);
-  for (const poolId of poolIds) {
-    const ledger = await recomputePoolLedgerWithClient(supabase, poolId, {
-      ledgerTrigger: trigger,
-    });
-    if (ledger.error) {
-      return { ok: false, error: ledger.error };
-    }
-  }
-  return { ok: true };
+  return recomputePoolLedgersWithScoreImpact(
+    supabase,
+    poolIds,
+    trigger,
+    { editionId, ...options?.scoreImpactContext },
+    { editionIsSimulation: options?.editionIsSimulation },
+  );
 }

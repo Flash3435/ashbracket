@@ -41,6 +41,8 @@ export function activityDisplayPriority(
       return "medium";
     case "ash_daily_recap":
       return "medium";
+    case "ash_score_impact":
+      return "high";
     case "pool_milestone":
       return poolMilestoneDisplayPriority(item);
     case "pool_insight":

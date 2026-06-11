@@ -86,6 +86,8 @@ function typeLabel(
       );
     case "pool_insight":
       return insightCardLabel(item ? itemMetadataInsightLabel(item) : null);
+    case "ash_score_impact":
+      return "AshBot · Score impact";
     default:
       return "Activity";
   }
@@ -118,6 +120,8 @@ function typeIcon(
       const icon = item?.metadata_json.icon;
       return typeof icon === "string" && icon.trim() ? icon : "💡";
     }
+    case "ash_score_impact":
+      return "🤖";
     default:
       return "•";
   }
@@ -125,6 +129,10 @@ function typeIcon(
 
 function insightCardClasses(): string {
   return "border-violet-500/35 bg-gradient-to-br from-violet-500/12 to-ash-body/40 ring-1 ring-violet-500/15";
+}
+
+function scoreImpactCardClasses(): string {
+  return "border-cyan-500/35 bg-gradient-to-br from-cyan-500/12 to-ash-body/40 ring-1 ring-cyan-500/15";
 }
 
 function milestoneCardClasses(label: PoolMilestoneLabel | null): string {
@@ -190,6 +198,7 @@ export function PoolActivityFeed({
         const isAnnouncement = item.type === "announcement";
         const isMilestone = item.type === "pool_milestone";
         const isInsight = item.type === "pool_insight";
+        const isScoreImpact = item.type === "ash_score_impact";
         const milestoneLabel = isMilestone
           ? itemMetadataMilestoneLabel(item)
           : null;
@@ -228,6 +237,8 @@ export function PoolActivityFeed({
                     ? milestoneCardClasses(milestoneLabel)
                     : isInsight
                       ? insightCardClasses()
+                      : isScoreImpact
+                        ? scoreImpactCardClasses()
                       : isAnnouncement
                       ? "border-amber-500/30 bg-gradient-to-br from-amber-500/10 to-ash-body/40"
                       : "border-ash-border bg-ash-surface"

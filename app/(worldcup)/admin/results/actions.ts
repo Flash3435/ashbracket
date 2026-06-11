@@ -26,7 +26,8 @@ import {
 } from "@/lib/tournament/editionScope";
 import { fetchGroupTeamCountryCodesForEdition } from "@/lib/tournament/fetchGroupTeamCountryCodesForEdition";
 import { recomputePoolsForEdition } from "@/lib/tournament/recomputePoolsForEdition";
-import { recomputePoolLedgerForPool } from "@/lib/scoring/recomputePoolLedger";
+import { recomputePoolLedgersWithScoreImpact } from "@/lib/poolActivity/scoreImpact/recomputeWithScoreImpact";
+import { fetchPoolEditionScope } from "@/lib/tournament/editionScope";
 import { revalidatePath } from "next/cache";
 import type { Result, Team } from "../../../../src/types/domain";
 import type { OfficialR32PreviewMatch } from "@/lib/admin/officialRoundOf32FromResults";
@@ -98,11 +99,13 @@ async function requireGlobalAdminEdition(
 async function recomputeAfterEditionResultEdit(
   supabase: SupabaseServer,
   editionId: string,
+  editionIsSimulation: boolean,
 ): Promise<RecomputeStandingsResult> {
   const out = await recomputePoolsForEdition(
     supabase,
     editionId,
     "admin_result_edit",
+    { editionIsSimulation },
   );
   if (!out.ok) return out;
   revalidatePath("/admin/results");
@@ -138,10 +141,17 @@ export async function recomputeStandingsForPoolAction(input: {
       return { ok: false, error: seededPoolScoring.error };
     }
 
-    const ledger = await recomputePoolLedgerForPool(poolId, {
-      ledgerTrigger: "admin_manual_recompute",
-    });
-    if (ledger.error) {
+    const scope = await fetchPoolEditionScope(supabase, poolId);
+    if (!scope.ok) return { ok: false, error: scope.error };
+
+    const ledger = await recomputePoolLedgersWithScoreImpact(
+      supabase,
+      [poolId],
+      "admin_manual_recompute",
+      { editionId: scope.edition.id },
+      { editionIsSimulation: scope.isSimulation },
+    );
+    if (!ledger.ok) {
       return { ok: false, error: ledger.error };
     }
 
@@ -195,6 +205,7 @@ export async function recomputeAllPoolsLedgerAction(input?: {
       supabase,
       liveEdition.id,
       "admin_recompute_all_pools",
+      { editionIsSimulation: false },
     );
     if (!out.ok) return out;
 
@@ -247,6 +258,7 @@ export async function recomputeEditionPoolsLedgerAction(input: {
       supabase,
       gate.edition.id,
       "admin_recompute_all_pools",
+      { editionIsSimulation: gate.edition.isSimulation },
     );
     if (!out.ok) return out;
 
@@ -349,7 +361,11 @@ export async function setKnockoutResultAction(input: {
       if (error) return { ok: false, error: error.message };
     }
 
-    const recompute = await recomputeAfterEditionResultEdit(supabase, editionId);
+    const recompute = await recomputeAfterEditionResultEdit(
+      supabase,
+      editionId,
+      gate.edition.isSimulation,
+    );
     if (!recompute.ok) {
       return {
         ok: false,
@@ -556,7 +572,11 @@ export async function applyOfficialRoundOf32FromEnteredResultsAction(input: {
     });
     if (upErr) return { ok: false, error: upErr.message };
 
-    const recompute = await recomputeAfterEditionResultEdit(supabase, gate.edition.id);
+    const recompute = await recomputeAfterEditionResultEdit(
+      supabase,
+      gate.edition.id,
+      gate.edition.isSimulation,
+    );
     if (!recompute.ok) {
       return {
         ok: false,
