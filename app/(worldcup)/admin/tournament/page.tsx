@@ -1,5 +1,6 @@
 import { LiveDailyUpdatePanel } from "@/components/admin/LiveDailyUpdatePanel";
 import { LiveMatchScoreEntryWorkflow } from "@/components/admin/LiveMatchScoreEntryWorkflow";
+import { MatchStatsEntryPromoCard } from "@/components/admin/MatchStatsEntryPromoCard";
 import { LiveScoresFetchPromoCard } from "@/components/admin/LiveScoresFetchPromoCard";
 import { AdminTournamentAdvancedTools } from "@/components/admin/AdminTournamentAdvancedTools";
 import { SimulationModeBanner } from "@/components/admin/SimulationModeBanner";
@@ -103,14 +104,10 @@ export default async function AdminTournamentPage() {
         </p>
       </div>
 
-      <LiveScoresFetchPromoCard className="mb-6" />
-
-      <p className="mb-6 text-sm text-ash-muted">
-        <Link href="/admin/tournament/match-stats" className="ash-link">
-          Match scores &amp; team stats
-        </Link>
-        <span> — manually enter final scores and card totals for the live edition.</span>
-      </p>
+      <div className="mb-6 grid gap-4 lg:grid-cols-2">
+        <LiveScoresFetchPromoCard />
+        <MatchStatsEntryPromoCard />
+      </div>
 
       <LiveMatchScoreEntryWorkflow />
 

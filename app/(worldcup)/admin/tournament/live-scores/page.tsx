@@ -1,4 +1,5 @@
 import { LiveScoresFetchPanel } from "@/components/admin/LiveScoresFetchPanel";
+import { MatchStatsEntryPromoCard } from "@/components/admin/MatchStatsEntryPromoCard";
 import { SimulationModeBanner } from "@/components/admin/SimulationModeBanner";
 import { PageContainer } from "@/components/ui/PageContainer";
 import { PageTitle } from "@/components/ui/PageTitle";
@@ -39,15 +40,10 @@ export default async function AdminLiveScoresPage() {
 
       <PageTitle
         title="Live score fetch"
-        description="Fetch latest final scores from the configured provider, preview changes, then apply and rebuild standings."
+        description="Option A: fetch final scores from your provider. Prefer manual entry? Use Match stats on the tournament page instead, then recompute standings."
       />
 
-      <p className="mb-6 text-sm text-ash-muted">
-        <Link href="/admin/tournament/match-stats" className="ash-link">
-          Match scores &amp; team stats
-        </Link>
-        <span> — manually enter scores and card totals without using the provider.</span>
-      </p>
+      <MatchStatsEntryPromoCard className="mb-6" />
 
       <SimulationModeBanner
         variant="live"

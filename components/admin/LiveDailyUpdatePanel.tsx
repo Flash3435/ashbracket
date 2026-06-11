@@ -51,16 +51,18 @@ export function LiveDailyUpdatePanel({ isProduction, impact, lastUpdate }: Props
           Recompute from stored scores
         </h2>
         <p className="mt-2 text-sm leading-relaxed text-ash-muted">
-          Use this when scores are already on{" "}
-          <code className="text-xs">tournament_matches</code> (CLI, Supabase, or a
-          completed live score fetch). It rebuilds derived tournament results and
-          recalculates every <span className="font-medium text-ash-text">live</span> pool
-          on the official edition. Simulation test pools and other editions are not
-          touched. To pull scores from your provider first, use{" "}
-          <Link href="/admin/tournament/live-scores" className="ash-link">
-            Fetch latest scores
+          Use this after scores are on <code className="text-xs">tournament_matches</code>{" "}
+          — from{" "}
+          <Link href="/admin/tournament/match-stats" className="ash-link">
+            Match stats
           </Link>
-          .
+          , a completed{" "}
+          <Link href="/admin/tournament/live-scores" className="ash-link">
+            live score fetch
+          </Link>
+          , CLI, or Supabase. It rebuilds derived tournament results and recalculates every{" "}
+          <span className="font-medium text-ash-text">live</span> pool on the official edition.
+          Simulation test pools and other editions are not touched.
         </p>
         <details className="mt-3 rounded-md border border-ash-border/60 bg-ash-body/20 px-3 py-2 text-sm text-ash-muted">
           <summary className="cursor-pointer font-medium text-ash-text">
@@ -68,9 +70,15 @@ export function LiveDailyUpdatePanel({ isProduction, impact, lastUpdate }: Props
           </summary>
           <ol className="mt-2 list-decimal space-y-1.5 pl-5">
             <li>
-              Enter final scores on <code className="text-xs">tournament_matches</code> (CLI or
-              Supabase — see the workflow box above). There is no live match-score form in the
-              app yet.
+              Enter scores via{" "}
+              <Link href="/admin/tournament/match-stats" className="ash-link">
+                Match stats
+              </Link>{" "}
+              or{" "}
+              <Link href="/admin/tournament/live-scores" className="ash-link">
+                Fetch latest scores
+              </Link>{" "}
+              (see the workflow box above).
             </li>
             <li>
               Run{" "}

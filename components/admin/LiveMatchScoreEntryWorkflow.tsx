@@ -1,60 +1,71 @@
 import Link from "next/link";
 
 /**
- * Explains how live match scores reach `tournament_matches` before the daily update runs.
- * There is no in-app live score form yet — simulation uses a separate workflow.
+ * Explains how live match scores reach `tournament_matches` before recompute runs.
  */
 export function LiveMatchScoreEntryWorkflow() {
   return (
     <section className="ash-surface mb-6 space-y-3 border border-amber-700/40 bg-amber-950/15 p-4 text-sm text-ash-muted">
       <h2 className="text-base font-bold text-ash-text">Before you run the daily update</h2>
       <p className="leading-relaxed">
-        <span className="font-medium text-ash-text">Recompute from stored scores</span> reads
-        scores already stored on{" "}
-        <code className="text-xs">tournament_matches</code> for the live official edition.
-        For the primary workflow, use{" "}
-        <Link href="/admin/tournament/live-scores" className="ash-link">
-          Fetch latest scores
+        Use{" "}
+        <Link href="/admin/tournament/match-stats" className="ash-link">
+          Match stats
         </Link>{" "}
-        to download finals from your provider, preview, and apply.
+        to enter final scores and team card totals, or use the{" "}
+        <Link href="/admin/tournament/live-scores" className="ash-link">
+          live score fetch
+        </Link>{" "}
+        workflow if configured. Then run{" "}
+        <span className="font-medium text-ash-text">Recompute from stored scores</span>{" "}
+        below.
       </p>
       <div className="space-y-2">
-        <p className="font-medium text-ash-text">Production-safe ways to enter a final score</p>
+        <p className="font-medium text-ash-text">Workflow</p>
         <ol className="list-decimal space-y-1.5 pl-5">
           <li>
-            <span className="font-medium text-ash-text">Admin UI:</span>{" "}
-            <Link href="/admin/tournament/match-stats" className="ash-link">
-              Match scores &amp; team stats
+            <span className="font-medium text-ash-text">Option A — Fetch latest scores:</span>{" "}
+            <Link href="/admin/tournament/live-scores" className="ash-link">
+              Open live score fetch
             </Link>{" "}
-            — enter home/away final scores and yellow/red card totals, then run{" "}
-            <span className="font-medium text-ash-text">Recompute from stored scores</span>{" "}
-            below.
+            to download finals from your provider, preview, and apply.
           </li>
           <li>
-            <span className="font-medium text-ash-text">CLI:</span> from the repo, run{" "}
-            <code className="text-xs">npm run apply:live-match-score -- --match-code … --home … --away …</code>{" "}
-            (see script header). Then run{" "}
-            <span className="font-medium text-ash-text">Recompute from stored scores</span>{" "}
-            below.
+            <span className="font-medium text-ash-text">Option B — Enter manually:</span>{" "}
+            <Link href="/admin/tournament/match-stats" className="ash-link">
+              Open match stats
+            </Link>{" "}
+            to enter home/away final scores and yellow/red card totals per match.
           </li>
           <li>
-            <span className="font-medium text-ash-text">Supabase Table Editor:</span> edit the
-            live edition row in{" "}
-            <code className="text-xs">tournament_matches</code> — set{" "}
-            <code className="text-xs">home_goals</code>, <code className="text-xs">away_goals</code>
-            , and penalties if needed. Leave{" "}
-            <code className="text-xs">sync_locked</code> false unless you are freezing the row.
+            <span className="font-medium text-ash-text">Then — Recompute:</span> run{" "}
+            <span className="font-medium text-ash-text">Recompute from stored scores</span>{" "}
+            below to rebuild derived results and live pool leaderboards.
+          </li>
+        </ol>
+      </div>
+      <details className="rounded-md border border-ash-border/60 bg-ash-body/20 px-3 py-2">
+        <summary className="cursor-pointer font-medium text-ash-text">
+          Advanced / fallback score entry
+        </summary>
+        <ul className="mt-2 list-disc space-y-1.5 pl-5">
+          <li>
+            <span className="font-medium text-ash-text">CLI:</span>{" "}
+            <code className="text-xs">npm run apply:live-match-score -- --match-code … --home … --away …</code>
+          </li>
+          <li>
+            <span className="font-medium text-ash-text">Supabase Table Editor:</span> edit{" "}
+            <code className="text-xs">tournament_matches</code> directly for the live edition.
           </li>
           <li>
             <span className="font-medium text-ash-text">Pilot / test only:</span>{" "}
             <Link href="/admin/simulation" className="ash-link">
               Simulation testing
             </Link>{" "}
-            has preview/apply fake scores on an isolated simulation edition — never use that
-            path for live pools.
+            — isolated simulation edition only, never for live pools.
           </li>
-        </ol>
-      </div>
+        </ul>
+      </details>
       <p className="leading-relaxed">
         <Link href="/admin/results" className="ash-link">
           Tournament results (live)
