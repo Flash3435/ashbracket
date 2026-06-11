@@ -57,9 +57,14 @@ export default async function AdminLiveScoresPage() {
           configWarning={providerConfig.configWarning}
         />
       ) : (
-        <p className="ash-surface p-4 text-sm text-ash-muted">
-          Official live tournament edition is not installed.
-        </p>
+        <div className="ash-surface space-y-3 p-4 text-sm text-ash-muted">
+          <p>Official live tournament edition is not installed.</p>
+          {!providerConfig.configured && providerConfig.configWarning ? (
+            <p className="rounded-md border border-amber-700/50 bg-amber-950/25 px-3 py-2 text-amber-100">
+              {providerConfig.configWarning}
+            </p>
+          ) : null}
+        </div>
       )}
 
       <p className="mt-8 text-sm text-ash-muted">

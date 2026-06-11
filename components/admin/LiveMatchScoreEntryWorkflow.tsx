@@ -9,14 +9,14 @@ export function LiveMatchScoreEntryWorkflow() {
     <section className="ash-surface mb-6 space-y-3 border border-amber-700/40 bg-amber-950/15 p-4 text-sm text-ash-muted">
       <h2 className="text-base font-bold text-ash-text">Before you run the daily update</h2>
       <p className="leading-relaxed">
-        <span className="font-medium text-ash-text">Update today&apos;s scores</span> reads
+        <span className="font-medium text-ash-text">Recompute from stored scores</span> reads
         scores already stored on{" "}
         <code className="text-xs">tournament_matches</code> for the live official edition.
-        To fetch scores from an external provider first, use{" "}
+        For the primary workflow, use{" "}
         <Link href="/admin/tournament/live-scores" className="ash-link">
-          Live score fetch
-        </Link>
-        .
+          Fetch latest scores
+        </Link>{" "}
+        to download finals from your provider, preview, and apply.
       </p>
       <div className="space-y-2">
         <p className="font-medium text-ash-text">Production-safe ways to enter a final score</p>
@@ -26,7 +26,7 @@ export function LiveMatchScoreEntryWorkflow() {
             repo, run{" "}
             <code className="text-xs">npm run apply:live-match-score -- --match-code … --home … --away …</code>{" "}
             (see script header). Then run{" "}
-            <span className="font-medium text-ash-text">Update today&apos;s scores</span>{" "}
+            <span className="font-medium text-ash-text">Recompute from stored scores</span>{" "}
             below.
           </li>
           <li>

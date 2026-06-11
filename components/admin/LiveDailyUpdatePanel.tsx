@@ -42,20 +42,25 @@ export function LiveDailyUpdatePanel({ isProduction, impact, lastUpdate }: Props
     : null;
 
   return (
-    <div className="ash-surface flex flex-col gap-4 border border-emerald-800/40 bg-emerald-950/10 p-5">
+    <div className="ash-surface flex flex-col gap-4 border border-ash-border/80 bg-ash-body/20 p-5">
       <div>
-        <h2 className="text-lg font-bold text-ash-text">Update today&apos;s scores</h2>
+        <p className="text-[11px] font-semibold uppercase tracking-wide text-ash-muted">
+          Fallback / manual workflow
+        </p>
+        <h2 className="mt-1 text-lg font-bold text-ash-text">
+          Recompute from stored scores
+        </h2>
         <p className="mt-2 text-sm leading-relaxed text-ash-muted">
-          Run this once per day after match scores are recorded in the official schedule.
-          It rebuilds derived tournament results from those scores and recalculates every{" "}
-          <span className="font-medium text-ash-text">live</span> pool on the official
-          edition. Simulation test pools and other editions are not touched. To pull scores
-          from your provider first, use{" "}
+          Use this when scores are already on{" "}
+          <code className="text-xs">tournament_matches</code> (CLI, Supabase, or a
+          completed live score fetch). It rebuilds derived tournament results and
+          recalculates every <span className="font-medium text-ash-text">live</span> pool
+          on the official edition. Simulation test pools and other editions are not
+          touched. To pull scores from your provider first, use{" "}
           <Link href="/admin/tournament/live-scores" className="ash-link">
-            Live score fetch
-          </Link>{" "}
-          — or enter scores manually in{" "}
-          <code className="text-xs">tournament_matches</code>.
+            Fetch latest scores
+          </Link>
+          .
         </p>
         <details className="mt-3 rounded-md border border-ash-border/60 bg-ash-body/20 px-3 py-2 text-sm text-ash-muted">
           <summary className="cursor-pointer font-medium text-ash-text">
@@ -68,7 +73,8 @@ export function LiveDailyUpdatePanel({ isProduction, impact, lastUpdate }: Props
               app yet.
             </li>
             <li>
-              Run <span className="font-medium text-ash-text">Update today&apos;s scores</span>{" "}
+              Run{" "}
+              <span className="font-medium text-ash-text">Recompute from stored scores</span>{" "}
               below to rebuild derived results and leaderboards.
             </li>
             <li>
@@ -124,8 +130,8 @@ export function LiveDailyUpdatePanel({ isProduction, impact, lastUpdate }: Props
       <AdminRiskConfirmPanel
         isProduction={isProduction}
         impact={impact}
-        actionTitle="Update live scores and standings"
-        buttonLabel="Update today's scores"
+        actionTitle="Recompute live scores and standings"
+        buttonLabel="Recompute from stored scores"
         pending={isPending}
         variant="live"
         confirmLabel="I understand this updates live official results and every live pool — not simulation test pools."

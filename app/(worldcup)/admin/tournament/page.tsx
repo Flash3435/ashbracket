@@ -1,5 +1,6 @@
 import { LiveDailyUpdatePanel } from "@/components/admin/LiveDailyUpdatePanel";
 import { LiveMatchScoreEntryWorkflow } from "@/components/admin/LiveMatchScoreEntryWorkflow";
+import { LiveScoresFetchPromoCard } from "@/components/admin/LiveScoresFetchPromoCard";
 import { AdminTournamentAdvancedTools } from "@/components/admin/AdminTournamentAdvancedTools";
 import { SimulationModeBanner } from "@/components/admin/SimulationModeBanner";
 import { PageContainer } from "@/components/ui/PageContainer";
@@ -60,11 +61,6 @@ export default async function AdminTournamentPage() {
   return (
     <PageContainer>
       <p className="mb-4 text-sm text-ash-muted">
-        <Link href="/admin/tournament/live-scores" className="ash-link">
-          Live score fetch
-        </Link>
-        <span> — fetch final scores from your provider, preview, then apply.</span>
-        {" · "}
         <Link href="/admin/tournament/status" className="ash-link">
           Tournament status
         </Link>
@@ -77,7 +73,7 @@ export default async function AdminTournamentPage() {
 
       <PageTitle
         title="Live scores & standings"
-        description="Enter final scores on tournament_matches first, then run the daily update to rebuild official results and every live pool leaderboard."
+        description="Fetch final scores from your provider, or recompute standings from scores already stored on tournament_matches."
       />
 
       <SimulationModeBanner
@@ -107,10 +103,12 @@ export default async function AdminTournamentPage() {
         </p>
       </div>
 
+      <LiveScoresFetchPromoCard className="mb-6" />
+
       <LiveMatchScoreEntryWorkflow />
 
       {syncImpact ? (
-        <>
+        <div className="mt-6 space-y-6">
           <LiveDailyUpdatePanel
             isProduction={isProduction}
             impact={syncImpact}
@@ -120,7 +118,7 @@ export default async function AdminTournamentPage() {
             isProduction={isProduction}
             impact={syncImpact}
           />
-        </>
+        </div>
       ) : null}
 
       <p className="mt-8 text-sm text-ash-muted">
