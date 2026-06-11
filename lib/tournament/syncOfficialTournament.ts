@@ -7,6 +7,10 @@ import {
 import { winnerFromMatchScores } from "./matchOutcome";
 
 export type SyncOfficialTournamentSummary = {
+  /** All matches loaded for the edition. */
+  matchCount: number;
+  /** Matches with both regulation scores on file (may still be in progress). */
+  matchesWithScoresCount: number;
   finishedMatchCount: number;
   derivedResultsInserted: number;
   poolsRecalculated: number;
@@ -356,6 +360,9 @@ export async function syncOfficialTournament(
 
   console.info("[ashbracket:sync] ledger recompute finished for all pools");
 
+  const matchesWithScoresCount = matches.filter(
+    (m) => m.home_goals != null && m.away_goals != null,
+  ).length;
   const finishedMatchCount = matches.filter(
     (m) =>
       m.status === "finished" &&
@@ -367,6 +374,8 @@ export async function syncOfficialTournament(
   return {
     ok: true,
     summary: {
+      matchCount: matches.length,
+      matchesWithScoresCount,
       finishedMatchCount,
       derivedResultsInserted: inserts.length,
       poolsRecalculated: poolIds.length,

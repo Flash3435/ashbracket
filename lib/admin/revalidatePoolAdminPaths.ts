@@ -8,7 +8,10 @@ export function revalidatePoolAdminPaths(poolId: string): void {
   revalidatePath("/rules");
   revalidatePath("/account");
   revalidatePath("/account/picks");
+  revalidatePath("/account/activity");
+  revalidatePath(`/pool/${poolId}`);
   revalidatePath("/admin");
+  revalidatePath("/admin/activity");
   revalidatePath(`/admin/pools/${poolId}`);
   revalidatePath(`/admin/pools/${poolId}/settings`);
   revalidatePath(`/admin/pools/${poolId}/participants`);

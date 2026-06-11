@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 import { runLiveDailyUpdateAction } from "../../app/(worldcup)/admin/tournament/actions";
@@ -45,11 +46,47 @@ export function LiveDailyUpdatePanel({ isProduction, impact, lastUpdate }: Props
       <div>
         <h2 className="text-lg font-bold text-ash-text">Update today&apos;s scores</h2>
         <p className="mt-2 text-sm leading-relaxed text-ash-muted">
-          Run this once per day after completed match scores are on file. It reads live
-          match scores, rebuilds official results, and refreshes every{" "}
-          <span className="font-medium text-ash-text">live</span> pool leaderboard.
-          Simulation test pools are not touched.
+          Run this once per day after match scores are recorded in the official schedule.
+          It rebuilds derived tournament results from those scores and recalculates every{" "}
+          <span className="font-medium text-ash-text">live</span> pool on the official
+          edition. Simulation test pools and other editions are not touched. This does not
+          fetch an external scores API — scores must already be in{" "}
+          <code className="text-xs">tournament_matches</code>.
         </p>
+        <details className="mt-3 rounded-md border border-ash-border/60 bg-ash-body/20 px-3 py-2 text-sm text-ash-muted">
+          <summary className="cursor-pointer font-medium text-ash-text">
+            First match day checklist
+          </summary>
+          <ol className="mt-2 list-decimal space-y-1.5 pl-5">
+            <li>
+              Confirm match scores are on file, then run{" "}
+              <span className="font-medium text-ash-text">Update today&apos;s scores</span>{" "}
+              below.
+            </li>
+            <li>
+              <Link href="/admin/tournament/status" className="ash-link">
+                Review tournament status
+              </Link>{" "}
+              — finished matches, last sync, and leaderboard freshness.
+            </li>
+            <li>
+              <Link href="/admin/results" className="ash-link">
+                Review or correct official results
+              </Link>{" "}
+              — manual edits or locked slots if sync missed something.
+            </li>
+            <li>
+              Open a live pool leaderboard (public or admin standings) and spot-check
+              points moved as expected.
+            </li>
+            <li>
+              <Link href="/admin/activity" className="ash-link">
+                Check global activity
+              </Link>{" "}
+              — score sync does not post feed events; recaps and milestones are separate.
+            </li>
+          </ol>
+        </details>
         {lastFormatted ? (
           <p className="mt-2 text-sm text-ash-muted">
             <span className="font-medium text-ash-text">Last successful update:</span>{" "}
