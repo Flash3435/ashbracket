@@ -12,11 +12,10 @@ export const MOVE_PARTICIPANT_DUPLICATE_BLOCKED_MESSAGE =
 export const MOVE_PARTICIPANT_NO_DESTINATIONS_MESSAGE =
   "You have no other World Cup pools to move participants to.";
 
-export const MOVE_PARTICIPANT_HIDDEN_DUPLICATE_POOLS_MESSAGE =
-  "Some pools are hidden because this participant already exists there.";
+export const MOVE_PARTICIPANT_NO_AVAILABLE_DESTINATIONS_MESSAGE =
+  "There are no available destination pools for this participant.";
 
-export const MOVE_PARTICIPANT_DESTINATION_DUPLICATE_REASON =
-  "Participant already in this pool";
+export type ParticipantDuplicateMatchReason = "user_id" | "email";
 
 export type WorldCupPoolMoveScope = {
   poolId: string;
@@ -85,15 +84,20 @@ export type MoveDestinationDiagnostic = {
   compatible: boolean;
   duplicateUser: boolean;
   duplicateEmail: boolean;
-  duplicateDisplayName: boolean;
+  duplicateMatchReason: ParticipantDuplicateMatchReason | null;
+  matchedParticipant: ParticipantMoveIdentity | null;
   excludedReason: MoveDestinationExclusionReason;
 };
 
 export type MoveDestinationOption = {
   id: string;
   name: string;
-  eligible: boolean;
-  disabledReason?: string;
+};
+
+export type MoveDestinationBlocked = {
+  id: string;
+  name: string;
+  label: string;
 };
 
 export type ParticipantMoveDestinationContext = {
@@ -155,7 +159,8 @@ export function diagnoseMoveDestinationPool(args: {
       compatible: false,
       duplicateUser: false,
       duplicateEmail: false,
-      duplicateDisplayName: false,
+      duplicateMatchReason: null,
+      matchedParticipant: null,
       excludedReason: "source_pool",
     };
   }
@@ -168,7 +173,8 @@ export function diagnoseMoveDestinationPool(args: {
       compatible: false,
       duplicateUser: false,
       duplicateEmail: false,
-      duplicateDisplayName: false,
+      duplicateMatchReason: null,
+      matchedParticipant: null,
       excludedReason: "not_direct_admin",
     };
   }
@@ -187,7 +193,8 @@ export function diagnoseMoveDestinationPool(args: {
       compatible: false,
       duplicateUser: false,
       duplicateEmail: false,
-      duplicateDisplayName: false,
+      duplicateMatchReason: null,
+      matchedParticipant: null,
       excludedReason: "incompatible_edition",
     };
   }
@@ -200,40 +207,27 @@ export function diagnoseMoveDestinationPool(args: {
       compatible: false,
       duplicateUser: false,
       duplicateEmail: false,
-      duplicateDisplayName: false,
+      duplicateMatchReason: null,
+      matchedParticipant: null,
       excludedReason: "incompatible_simulation",
     };
   }
 
-  const movingEmail = normalizeParticipantEmail(args.movingParticipant.email);
-  const movingName = normalizeParticipantDisplayName(args.movingParticipant.displayName);
-  let duplicateUser = false;
-  let duplicateEmail = false;
-  let duplicateDisplayName = false;
+  const duplicate = detectParticipantDuplicateInDestinationPool(
+    args.movingParticipant,
+    args.destinationParticipants,
+  );
 
-  for (const existing of args.destinationParticipants) {
-    if (args.movingParticipant.userId && existing.userId === args.movingParticipant.userId) {
-      duplicateUser = true;
-    }
-    const existingEmail = normalizeParticipantEmail(existing.email);
-    if (movingEmail.length > 0 && existingEmail.length > 0 && movingEmail === existingEmail) {
-      duplicateEmail = true;
-    }
-    const existingName = normalizeParticipantDisplayName(existing.displayName);
-    if (movingName.length > 0 && existingName.length > 0 && movingName === existingName) {
-      duplicateDisplayName = true;
-    }
-  }
-
-  if (duplicateUser || duplicateEmail || duplicateDisplayName) {
+  if (duplicate.isDuplicate) {
     return {
       poolId: destinationScope.poolId,
       poolName,
       directAdmin: true,
       compatible: true,
-      duplicateUser,
-      duplicateEmail,
-      duplicateDisplayName,
+      duplicateUser: duplicate.reason === "user_id",
+      duplicateEmail: duplicate.reason === "email",
+      duplicateMatchReason: duplicate.reason,
+      matchedParticipant: duplicate.matched ?? null,
       excludedReason: "duplicate_participant",
     };
   }
@@ -245,18 +239,67 @@ export function diagnoseMoveDestinationPool(args: {
     compatible: true,
     duplicateUser: false,
     duplicateEmail: false,
-    duplicateDisplayName: false,
+    duplicateMatchReason: null,
+    matchedParticipant: null,
     excludedReason: "eligible",
   };
+}
+
+export function detectParticipantDuplicateInDestinationPool(
+  moving: ParticipantMoveIdentity,
+  destinationParticipants: ParticipantMoveIdentity[],
+): {
+  isDuplicate: boolean;
+  reason: ParticipantDuplicateMatchReason | null;
+  matched?: ParticipantMoveIdentity;
+} {
+  const movingUserId = moving.userId?.trim() || null;
+  const movingEmail = normalizeParticipantEmail(moving.email);
+
+  for (const existing of destinationParticipants) {
+    const existingUserId = existing.userId?.trim() || null;
+    if (movingUserId && existingUserId && movingUserId === existingUserId) {
+      return { isDuplicate: true, reason: "user_id", matched: existing };
+    }
+
+    const existingEmail = normalizeParticipantEmail(existing.email);
+    if (movingEmail.length > 0 && existingEmail.length > 0 && movingEmail === existingEmail) {
+      return { isDuplicate: true, reason: "email", matched: existing };
+    }
+  }
+
+  return { isDuplicate: false, reason: null };
+}
+
+export function formatMoveDestinationBlockedLabel(
+  diagnostic: MoveDestinationDiagnostic,
+): string | null {
+  if (diagnostic.excludedReason === "duplicate_participant") {
+    if (diagnostic.duplicateMatchReason === "user_id") {
+      return `${diagnostic.poolName} — same account already exists`;
+    }
+    if (diagnostic.duplicateMatchReason === "email") {
+      return `${diagnostic.poolName} — same email already exists`;
+    }
+    return `${diagnostic.poolName} — participant already exists`;
+  }
+  if (diagnostic.excludedReason === "incompatible_simulation") {
+    return `${diagnostic.poolName} — simulation pools cannot be mixed`;
+  }
+  if (diagnostic.excludedReason === "incompatible_edition") {
+    return `${diagnostic.poolName} — different World Cup edition`;
+  }
+  return null;
 }
 
 export function buildMoveDestinationOptionsForParticipant(args: {
   context: ParticipantMoveDestinationContext;
   movingParticipant: ParticipantMoveIdentity;
 }): {
-  options: MoveDestinationOption[];
+  eligibleOptions: MoveDestinationOption[];
+  blockedDestinations: MoveDestinationBlocked[];
   diagnostics: MoveDestinationDiagnostic[];
-  helperMessage?: string;
+  emptyMessage?: string;
 } {
   const poolAdminMembershipIds = new Set(args.context.poolAdminMembershipIds);
   const diagnostics = args.context.directManagedPools.map((pool) =>
@@ -271,38 +314,40 @@ export function buildMoveDestinationOptionsForParticipant(args: {
     }),
   );
 
-  const options: MoveDestinationOption[] = [];
-  let hiddenDuplicateCount = 0;
+  const eligibleOptions: MoveDestinationOption[] = [];
+  const blockedDestinations: MoveDestinationBlocked[] = [];
 
   for (const diagnostic of diagnostics) {
     if (diagnostic.excludedReason === "eligible") {
-      options.push({
+      eligibleOptions.push({
         id: diagnostic.poolId,
         name: diagnostic.poolName,
-        eligible: true,
       });
       continue;
     }
-    if (diagnostic.excludedReason === "duplicate_participant") {
-      hiddenDuplicateCount += 1;
-      options.push({
+    const label = formatMoveDestinationBlockedLabel(diagnostic);
+    if (label) {
+      blockedDestinations.push({
         id: diagnostic.poolId,
         name: diagnostic.poolName,
-        eligible: false,
-        disabledReason: MOVE_PARTICIPANT_DESTINATION_DUPLICATE_REASON,
+        label,
       });
     }
   }
 
-  options.sort((a, b) =>
-    a.name.localeCompare(b.name, undefined, { sensitivity: "base" }),
-  );
+  const sortByName = (a: { name: string }, b: { name: string }) =>
+    a.name.localeCompare(b.name, undefined, { sensitivity: "base" });
+  eligibleOptions.sort(sortByName);
+  blockedDestinations.sort(sortByName);
 
   return {
-    options,
+    eligibleOptions,
+    blockedDestinations,
     diagnostics,
-    helperMessage:
-      hiddenDuplicateCount > 0 ? MOVE_PARTICIPANT_HIDDEN_DUPLICATE_POOLS_MESSAGE : undefined,
+    emptyMessage:
+      eligibleOptions.length === 0
+        ? MOVE_PARTICIPANT_NO_AVAILABLE_DESTINATIONS_MESSAGE
+        : undefined,
   };
 }
 
@@ -340,29 +385,12 @@ export function filterEligibleMoveDestinationPools(
     .sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: "base" }));
 }
 
-/** Block moves that would create duplicate membership or scoring ambiguity in the destination pool. */
+/** Block moves when destination pool already has the same linked account or email. */
 export function participantWouldDuplicateInDestinationPool(
   moving: ParticipantMoveIdentity,
   destinationParticipants: ParticipantMoveIdentity[],
 ): boolean {
-  const movingEmail = normalizeParticipantEmail(moving.email);
-  const movingName = normalizeParticipantDisplayName(moving.displayName);
-
-  for (const existing of destinationParticipants) {
-    if (moving.userId && existing.userId === moving.userId) {
-      return true;
-    }
-    const existingEmail = normalizeParticipantEmail(existing.email);
-    if (movingEmail.length > 0 && existingEmail.length > 0 && movingEmail === existingEmail) {
-      return true;
-    }
-    const existingName = normalizeParticipantDisplayName(existing.displayName);
-    if (movingName.length > 0 && existingName.length > 0 && movingName === existingName) {
-      return true;
-    }
-  }
-
-  return false;
+  return detectParticipantDuplicateInDestinationPool(moving, destinationParticipants).isDuplicate;
 }
 
 export function poolsToRecomputeAfterParticipantMove(

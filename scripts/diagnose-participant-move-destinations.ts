@@ -14,7 +14,9 @@
 
 import { createClient } from "@supabase/supabase-js";
 import {
+  detectParticipantDuplicateInDestinationPool,
   diagnoseMoveDestinationPool,
+  formatMoveDestinationBlockedLabel,
   worldCupPoolMoveScopeFromManagedPool,
   type ParticipantMoveIdentity,
 } from "../lib/participants/worldCupParticipantMove";
@@ -136,8 +138,8 @@ async function main() {
   }
 
   const candidatePools = destinationPoolName
-    ? directManagedPools.filter(
-        (pool) => pool.name.toLowerCase() === destinationPoolName.toLowerCase(),
+    ? directManagedPools.filter((pool) =>
+        pool.name.toLowerCase().includes(destinationPoolName.toLowerCase()),
       )
     : directManagedPools;
 
@@ -163,9 +165,10 @@ async function main() {
   console.log("Participant move destination diagnostics");
   console.log("----------------------------------------");
   console.log(`Source pool: ${sourcePool.name} (${sourcePool.id})`);
-  console.log(
-    `Participant: ${moving.displayName} (${moving.email || "no email"}) user_id=${moving.userId ?? "null"}`,
-  );
+  console.log(`Source participant id: ${participant.id}`);
+  console.log(`Source participant email: ${moving.email || "(empty)"}`);
+  console.log(`Source participant user_id: ${moving.userId ?? "null"}`);
+  console.log(`Source participant display_name: ${moving.displayName}`);
   if (actorUserId) {
     console.log(`Actor user: ${userEmail} (${actorUserId})`);
     console.log(`Direct pool_admins ids: ${[...poolAdminMembershipIds].join(", ") || "(none)"}`);
@@ -176,15 +179,40 @@ async function main() {
 
   const sourceScope = worldCupPoolMoveScopeFromManagedPool(sourcePool);
   for (const pool of candidatePools) {
+    const destinationParticipants = destinationParticipantsByPoolId.get(pool.id) ?? [];
+    const duplicate = detectParticipantDuplicateInDestinationPool(
+      moving,
+      destinationParticipants,
+    );
     const diagnostic = diagnoseMoveDestinationPool({
       sourcePool: sourceScope,
       destinationPool: pool,
       currentUserId: actorUserId ?? "",
       poolAdminMembershipIds,
       movingParticipant: moving,
-      destinationParticipants: destinationParticipantsByPoolId.get(pool.id) ?? [],
+      destinationParticipants,
     });
-    console.log(JSON.stringify(diagnostic, null, 2));
+    const blockedLabel = formatMoveDestinationBlockedLabel(diagnostic);
+    console.log(
+      JSON.stringify(
+        {
+          destinationPoolId: pool.id,
+          destinationPoolName: pool.name,
+          destinationParticipantCount: destinationParticipants.length,
+          destinationParticipants,
+          directAdmin: diagnostic.directAdmin,
+          compatible: diagnostic.compatible,
+          duplicateUser: diagnostic.duplicateUser,
+          duplicateEmail: diagnostic.duplicateEmail,
+          duplicateMatchReason: diagnostic.duplicateMatchReason,
+          matchedParticipant: diagnostic.matchedParticipant,
+          excludedReason: diagnostic.excludedReason,
+          blockedLabel,
+        },
+        null,
+        2,
+      ),
+    );
   }
 }
 

@@ -2,12 +2,13 @@ import {
   WORLD_CUP_PARTICIPANT_MOVE_AFFECTED_TABLES,
   areWorldCupPoolsCompatibleForMove,
   buildMoveDestinationOptionsForParticipant,
+  detectParticipantDuplicateInDestinationPool,
   diagnoseMoveDestinationPool,
   filterEligibleMoveDestinationPools,
   formatMoveParticipantSuccessMessage,
   mapMoveWorldCupParticipantRpcError,
   MOVE_PARTICIPANT_DUPLICATE_BLOCKED_MESSAGE,
-  MOVE_PARTICIPANT_HIDDEN_DUPLICATE_POOLS_MESSAGE,
+  MOVE_PARTICIPANT_NO_AVAILABLE_DESTINATIONS_MESSAGE,
   participantWouldDuplicateInDestinationPool,
   poolsToRecomputeAfterParticipantMove,
   validateDirectPoolAdminMoveAccess,
@@ -234,18 +235,69 @@ t(eligible[0]?.name === "Destination A", "destination label preserved");
       displayName: "Adarsh",
     },
   });
-  t(built.options.length === 2, "duplicate pool shown disabled in dropdown");
+  t(built.eligibleOptions.length === 1, "eligible destination stays in select");
+  t(built.eligibleOptions[0]?.id === "pool-dest-a", "PPFamily-style eligible destination remains selectable");
   t(
-    built.options.some(
-      (option) => option.id === "pool-dest-dup" && !option.eligible,
-    ),
-    "duplicate destination is not eligible",
+    built.blockedDestinations.some((blocked) => blocked.id === "pool-dest-dup"),
+    "duplicate destination listed as blocked with reason",
   );
   t(
-    built.helperMessage === MOVE_PARTICIPANT_HIDDEN_DUPLICATE_POOLS_MESSAGE,
-    "helper message explains hidden duplicate destinations",
+    Boolean(
+      built.blockedDestinations
+        .find((blocked) => blocked.id === "pool-dest-dup")
+        ?.label.includes("same email already exists"),
+    ),
+    "duplicate email reason is explicit",
   );
 }
+
+{
+  const built = buildMoveDestinationOptionsForParticipant({
+    context: {
+      sourcePool: sourceScope,
+      directManagedPools: [
+        {
+          id: "pool-dest-a",
+          name: "PPFamily",
+          tournament_edition_id: editionA,
+          is_simulation: false,
+          created_by_user_id: null,
+        },
+      ],
+      destinationParticipantsByPoolId: {
+        "pool-dest-a": [
+          { userId: null, email: "alice@example.com", displayName: "Alice" },
+          { userId: null, email: "bob@example.com", displayName: "Bob" },
+          { userId: "user-other", email: "carol@example.com", displayName: "Carol" },
+        ],
+      },
+      currentUserId: "user-1",
+      poolAdminMembershipIds: ["pool-source", "pool-dest-a"],
+    },
+    movingParticipant: {
+      userId: "user-adarsh",
+      email: "info@chinesetrack.com",
+      displayName: "Adarsh",
+    },
+  });
+  t(built.eligibleOptions.length === 1, "unrelated destination participants do not block move");
+  t(built.eligibleOptions[0]?.name === "PPFamily", "PPFamily remains selectable");
+}
+
+t(
+  !detectParticipantDuplicateInDestinationPool(
+    {
+      userId: "user-adarsh",
+      email: "info@chinesetrack.com",
+      displayName: "Adarsh",
+    },
+    [
+      { userId: null, email: "alice@example.com", displayName: "Alice" },
+      { userId: "user-other", email: "bob@example.com", displayName: "Bob" },
+    ],
+  ).isDuplicate,
+  "duplicate check is scoped to destination pool participants only",
+);
 
 {
   const diagnostic = diagnoseMoveDestinationPool({
@@ -293,12 +345,78 @@ t(
 );
 
 t(
-  participantWouldDuplicateInDestinationPool(
+  !participantWouldDuplicateInDestinationPool(
     { userId: null, email: "", displayName: "Jamie Lee" },
     [{ userId: null, email: "other@example.com", displayName: "jamie lee" }],
   ),
-  "duplicate when display name matches",
+  "display name alone does not count as duplicate",
 );
+
+t(
+  !participantWouldDuplicateInDestinationPool(
+    { userId: null, email: "", displayName: "Jamie" },
+    [{ userId: null, email: "", displayName: "Jamie" }],
+  ),
+  "null user_id does not match null user_id",
+);
+
+t(
+  !participantWouldDuplicateInDestinationPool(
+    { userId: null, email: "", displayName: "Jamie" },
+    [{ userId: null, email: "", displayName: "Someone else" }],
+  ),
+  "empty email does not match empty email",
+);
+
+t(
+  participantWouldDuplicateInDestinationPool(
+    { userId: "user-1", email: "other@example.com", displayName: "Jamie" },
+    [{ userId: "user-1", email: "jamie@example.com", displayName: "Different Name" }],
+  ),
+  "same user_id in destination blocks move even if email differs",
+);
+
+{
+  const built = buildMoveDestinationOptionsForParticipant({
+    context: {
+      sourcePool: sourceScope,
+      directManagedPools: [
+        {
+          id: "pool-dest-dup",
+          name: "Blocked Pool",
+          tournament_edition_id: editionA,
+          is_simulation: false,
+          created_by_user_id: null,
+        },
+      ],
+      destinationParticipantsByPoolId: {
+        "pool-dest-dup": [
+          {
+            userId: "user-adarsh",
+            email: "other@example.com",
+            displayName: "Other label",
+          },
+        ],
+      },
+      currentUserId: "user-1",
+      poolAdminMembershipIds: ["pool-source", "pool-dest-dup"],
+    },
+    movingParticipant: {
+      userId: "user-adarsh",
+      email: "info@chinesetrack.com",
+      displayName: "Adarsh",
+    },
+  });
+  t(built.eligibleOptions.length === 0, "no selectable destinations when all blocked");
+  t(
+    built.emptyMessage === MOVE_PARTICIPANT_NO_AVAILABLE_DESTINATIONS_MESSAGE,
+    "empty dropdown message when no destinations are selectable",
+  );
+  t(
+    Boolean(built.blockedDestinations[0]?.label.includes("same account already exists")),
+    "account duplicate reason is shown for blocked destination",
+  );
+}
 
 t(
   mapMoveWorldCupParticipantRpcError("not authorized for destination pool") ===

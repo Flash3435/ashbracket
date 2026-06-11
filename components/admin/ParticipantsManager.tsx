@@ -183,7 +183,11 @@ export function ParticipantsManager({
 
   const moveOptionsForParticipant = useMemo(() => {
     if (!movingParticipant) {
-      return { options: [], helperMessage: undefined };
+      return {
+        eligibleOptions: [],
+        blockedDestinations: [],
+        emptyMessage: undefined,
+      };
     }
     return buildMoveDestinationOptionsForParticipant({
       context: moveDestinationContext,
@@ -194,11 +198,6 @@ export function ParticipantsManager({
       },
     });
   }, [moveDestinationContext, movingParticipant]);
-
-  const eligibleMoveDestinationOptions = useMemo(
-    () => moveOptionsForParticipant.options.filter((option) => option.eligible),
-    [moveOptionsForParticipant.options],
-  );
 
   const typedPhraseOk =
     !requiresTypedPhrase ||
@@ -434,7 +433,7 @@ export function ParticipantsManager({
         displayName: p.displayName,
       },
     });
-    setMoveDestinationId(built.options.find((option) => option.eligible)?.id ?? "");
+    setMoveDestinationId(built.eligibleOptions[0]?.id ?? "");
     setMovingParticipant(p);
   }
 
@@ -446,7 +445,7 @@ export function ParticipantsManager({
   function handleConfirmMove() {
     if (disabled || !movingParticipant || !moveDestinationId) return;
     const participant = movingParticipant;
-    const destination = eligibleMoveDestinationOptions.find(
+    const destination = moveOptionsForParticipant.eligibleOptions.find(
       (pool) => pool.id === moveDestinationId,
     );
     if (!destination) return;
@@ -1198,27 +1197,33 @@ export function ParticipantsManager({
                   value={moveDestinationId}
                   onChange={(e) => setMoveDestinationId(e.target.value)}
                   disabled={
-                    disabled || isPending || eligibleMoveDestinationOptions.length === 0
+                    disabled ||
+                    isPending ||
+                    moveOptionsForParticipant.eligibleOptions.length === 0
                   }
                   className="mt-2 w-full rounded-md border border-ash-border bg-ash-body px-3 py-2 text-sm text-ash-text shadow-sm outline-none ring-ash-accent/20 focus:border-ash-accent focus:ring-2 disabled:opacity-50"
                 >
-                  {moveOptionsForParticipant.options.map((pool) => (
-                    <option
-                      key={pool.id}
-                      value={pool.id}
-                      disabled={!pool.eligible}
-                    >
-                      {pool.eligible
-                        ? pool.name
-                        : `${pool.name} (${pool.disabledReason})`}
+                  {moveOptionsForParticipant.eligibleOptions.map((pool) => (
+                    <option key={pool.id} value={pool.id}>
+                      {pool.name}
                     </option>
                   ))}
                 </select>
               </label>
-              {moveOptionsForParticipant.helperMessage ? (
+              {moveOptionsForParticipant.emptyMessage ? (
                 <p className="text-xs text-ash-muted">
-                  {moveOptionsForParticipant.helperMessage}
+                  {moveOptionsForParticipant.emptyMessage}
                 </p>
+              ) : null}
+              {moveOptionsForParticipant.blockedDestinations.length > 0 ? (
+                <div className="text-xs text-ash-muted">
+                  <p className="font-medium text-ash-text">Unavailable destinations</p>
+                  <ul className="mt-1 list-disc space-y-1 pl-5">
+                    {moveOptionsForParticipant.blockedDestinations.map((blocked) => (
+                      <li key={blocked.id}>{blocked.label}</li>
+                    ))}
+                  </ul>
+                </div>
               ) : null}
               <p className="rounded-md border border-amber-800/60 bg-amber-950/25 px-3 py-2 text-amber-100">
                 {MOVE_PARTICIPANT_CONFIRM_WARNING}
@@ -1239,7 +1244,7 @@ export function ParticipantsManager({
                   disabled ||
                   isPending ||
                   !moveDestinationId ||
-                  eligibleMoveDestinationOptions.length === 0
+                  moveOptionsForParticipant.eligibleOptions.length === 0
                 }
                 onClick={handleConfirmMove}
                 className="btn-primary disabled:cursor-not-allowed disabled:opacity-50"
