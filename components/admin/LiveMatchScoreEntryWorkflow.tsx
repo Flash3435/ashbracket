@@ -22,8 +22,16 @@ export function LiveMatchScoreEntryWorkflow() {
         <p className="font-medium text-ash-text">Production-safe ways to enter a final score</p>
         <ol className="list-decimal space-y-1.5 pl-5">
           <li>
-            <span className="font-medium text-ash-text">CLI (recommended):</span> from the
-            repo, run{" "}
+            <span className="font-medium text-ash-text">Admin UI:</span>{" "}
+            <Link href="/admin/tournament/match-goals" className="ash-link">
+              Match scores &amp; goal scorers
+            </Link>{" "}
+            — enter home/away goals and goal scorers, then run{" "}
+            <span className="font-medium text-ash-text">Recompute from stored scores</span>{" "}
+            below.
+          </li>
+          <li>
+            <span className="font-medium text-ash-text">CLI:</span> from the repo, run{" "}
             <code className="text-xs">npm run apply:live-match-score -- --match-code … --home … --away …</code>{" "}
             (see script header). Then run{" "}
             <span className="font-medium text-ash-text">Recompute from stored scores</span>{" "}
