@@ -43,6 +43,7 @@ const customOpenPlan = buildPostLockNavPlan({
 });
 assert.equal(customOpenPlan.postLockEngagement, false);
 assert.equal(customOpenPlan.primary.label, "View picks");
+assert.equal(customOpenPlan.tertiary?.label, "Reveal picks");
 
 const noRevealPlan = buildPostLockNavPlan({
   ...base,

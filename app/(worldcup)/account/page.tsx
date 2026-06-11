@@ -19,16 +19,22 @@ import { PageTitle } from "@/components/ui/PageTitle";
 import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
 import {
+  accountCreatePoolLinkState,
+  buildAccountPageNavState,
+  buildAccountPageTitleDescription,
+  isOrganizerOnlyAccount,
+} from "../../../lib/account/accountPageLockState";
+import {
   accountPicksNavLabel,
   loadAccountKnockoutSelection,
   poolLocked,
 } from "../../../lib/account/loadAccountKnockoutSelection";
 import { loadPoolReveal } from "../../../lib/account/loadPoolReveal";
 import {
-  buildPostLockNavPlan,
-  isPostLockEngagementMode,
-} from "../../../lib/account/postLockEngagement";
-import { resolveAccountParticipantId } from "../../../lib/account/resolveAccountParticipantId";
+  isPastAshbracket2026PoolLockDeadline,
+  resolveAccountParticipantId,
+} from "../../../lib/account/resolveAccountParticipantId";
+import { isGlobalAdmin } from "@/lib/auth/permissions";
 import { publicLeaderboardHrefForPool } from "../../../lib/pool/publicLeaderboardHref";
 import { fetchPublicTournamentProgress } from "../../../lib/tournament/fetchPublicTournamentProgress";
 
@@ -77,6 +83,8 @@ export default async function AccountPage({ searchParams }: PageProps) {
         name,
         lock_at,
         is_public,
+        is_simulation,
+        archived_at,
         payment_type,
         entry_fee_label,
         entry_fee_amount,
@@ -94,6 +102,8 @@ export default async function AccountPage({ searchParams }: PageProps) {
     name: string;
     lock_at: string | null;
     is_public: boolean | null;
+    is_simulation: boolean | null;
+    archived_at: string | null;
     payment_type: string;
     entry_fee_label: string | null;
     entry_fee_amount: number | string | null;
@@ -113,6 +123,8 @@ export default async function AccountPage({ searchParams }: PageProps) {
       is_paid: Boolean(r.is_paid),
       pool_name: pool?.name ?? "Pool",
       pool_lock_at: pool?.lock_at ?? null,
+      pool_is_simulation: Boolean(pool?.is_simulation),
+      pool_archived_at: pool?.archived_at ?? null,
       pool_is_public: Boolean(pool?.is_public),
       pool_payment: pool
         ? mapPoolPaymentFromPool(pool)
@@ -137,7 +149,14 @@ export default async function AccountPage({ searchParams }: PageProps) {
   );
 
   const preferredParticipantId = resolveAccountParticipantId(
-    list,
+    list.map((p) => ({
+      id: p.id,
+      pool_id: p.pool_id,
+      pool_lock_at: p.pool_lock_at,
+      pool_name: p.pool_name,
+      is_simulation: p.pool_is_simulation,
+      archived_at: p.pool_archived_at,
+    })),
     sp.participant,
   );
 
@@ -153,7 +172,17 @@ export default async function AccountPage({ searchParams }: PageProps) {
     whoToCheer = whoToCheerForFromSchedule(picksCtx, tp?.matches, te);
   }
 
+  const organizerOnly = isOrganizerOnlyAccount(
+    list.length,
+    organizedPools.length,
+  );
   const locked = picksCtx ? poolLocked(picksCtx.selectedLockAt) : false;
+  const pastCanonicalDeadline = isPastAshbracket2026PoolLockDeadline();
+  const createPoolLink = accountCreatePoolLinkState({
+    pastCanonicalDeadline,
+    organizedPoolCount: organizedPools.length,
+    isGlobalAdmin: await isGlobalAdmin(supabase),
+  });
 
   const picksHref =
     list.length === 1
@@ -194,16 +223,20 @@ export default async function AccountPage({ searchParams }: PageProps) {
   const activityHref = picksCtx?.selectedParticipant?.id
     ? `/account/activity?participant=${picksCtx.selectedParticipant.id}`
     : "/account/activity";
-  const postLockEngagement =
-    picksCtx != null &&
-    isPostLockEngagementMode(locked, picksCtx.knockoutBracketPicksUnlocked);
-  const navPlan = buildPostLockNavPlan({
+  const accountNav = buildAccountPageNavState({
     picksLocked: locked,
     knockoutBracketPicksUnlocked: picksCtx?.knockoutBracketPicksUnlocked ?? true,
     revealHref,
     leaderboardHref,
     picksHref: editPicksFromDashboardHref,
     activityHref,
+  });
+  const { postLockEngagement, navPlan } = accountNav;
+  const pageTitleDescription = buildAccountPageTitleDescription({
+    isOrganizerOnly: organizerOnly,
+    hasSelectedParticipant: Boolean(picksCtx?.selectedParticipant),
+    picksLocked: locked,
+    userEmail: user.email ?? null,
   });
 
   let poolSnapshot: {
@@ -237,18 +270,7 @@ export default async function AccountPage({ searchParams }: PageProps) {
         />
       ) : null}
       <div className="mb-8">
-        <PageTitle
-          title="My bracket"
-          description={
-            locked
-              ? user.email
-                ? `Signed in as ${user.email}. Below is your bracket snapshot for the selected pool profile. Picks are locked, so this is now a read-only view.`
-                : "Your bracket overview for the selected pool profile. Picks are locked, so this is now a read-only view."
-              : user.email
-                ? `Signed in as ${user.email}. Below is your bracket snapshot for the selected pool profile — use Edit picks to continue or change picks.`
-                : "Your bracket overview for the selected pool profile. Use Edit picks to update your picks."
-          }
-        />
+        <PageTitle title="My bracket" description={pageTitleDescription} />
       </div>
 
       <div className="mb-6 space-y-3">
@@ -280,14 +302,16 @@ export default async function AccountPage({ searchParams }: PageProps) {
             </ul>
           </div>
         ) : null}
-        <div>
-          <Link
-            href="/account/pools/new"
-            className="btn-ghost inline-flex text-sm ring-1 ring-ash-border"
-          >
-            Create your own pool
-          </Link>
-        </div>
+        {createPoolLink.show ? (
+          <div>
+            <Link
+              href="/account/pools/new"
+              className="btn-ghost inline-flex text-sm ring-1 ring-ash-border"
+            >
+              {createPoolLink.label}
+            </Link>
+          </div>
+        ) : null}
         <div className="ash-surface p-4">
           <h2 className="text-sm font-semibold text-ash-text">Security</h2>
           <p className="mt-1 text-sm text-ash-muted">
@@ -311,20 +335,22 @@ export default async function AccountPage({ searchParams }: PageProps) {
       {!error && list.length === 0 ? (
         <div className="ash-surface p-6">
           <p className="text-sm text-ash-muted">
-            You are not linked to a pool as a participant yet. Use your join
-            code to create or claim a profile, or start your own pool as the
-            organizer.
+            {organizerOnly
+              ? "You organize pools but do not have a participant profile yet. Manage your pools above, or join a pool with your invite code to follow a locked bracket as a player."
+              : "You are not linked to a pool as a participant yet. Use your join code to create or claim a profile, or start your own pool as the organizer."}
           </p>
           <div className="mt-4 flex flex-wrap gap-2">
             <Link href="/join" className="btn-primary inline-flex">
               Join a pool
             </Link>
-            <Link
-              href="/account/pools/new"
-              className="btn-ghost inline-flex ring-1 ring-ash-border"
-            >
-              Create your own pool
-            </Link>
+            {createPoolLink.show ? (
+              <Link
+                href="/account/pools/new"
+                className="btn-ghost inline-flex ring-1 ring-ash-border"
+              >
+                {createPoolLink.label}
+              </Link>
+            ) : null}
           </div>
         </div>
       ) : null}

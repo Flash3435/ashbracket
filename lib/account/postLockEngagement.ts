@@ -48,7 +48,10 @@ export function buildPostLockNavPlan(input: PostLockNavInput): PostLockNavPlan {
       },
       secondary: { label: "Activity", href: activityHref },
       tertiary: input.revealHref
-        ? { label: "Preview reveal", href: input.revealHref }
+        ? {
+            label: input.picksLocked ? "Reveal picks" : "Preview reveal",
+            href: input.revealHref,
+          }
         : null,
     };
   }
