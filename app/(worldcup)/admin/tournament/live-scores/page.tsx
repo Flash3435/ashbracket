@@ -43,10 +43,10 @@ export default async function AdminLiveScoresPage() {
       />
 
       <p className="mb-6 text-sm text-ash-muted">
-        <Link href="/admin/tournament/match-goals" className="ash-link">
-          Match scores &amp; goal scorers
+        <Link href="/admin/tournament/match-stats" className="ash-link">
+          Match scores &amp; team stats
         </Link>
-        <span> — manually enter scores and goal scorers without using the provider.</span>
+        <span> — manually enter scores and card totals without using the provider.</span>
       </p>
 
       <SimulationModeBanner

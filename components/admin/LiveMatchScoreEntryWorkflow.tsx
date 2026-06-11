@@ -23,10 +23,10 @@ export function LiveMatchScoreEntryWorkflow() {
         <ol className="list-decimal space-y-1.5 pl-5">
           <li>
             <span className="font-medium text-ash-text">Admin UI:</span>{" "}
-            <Link href="/admin/tournament/match-goals" className="ash-link">
-              Match scores &amp; goal scorers
+            <Link href="/admin/tournament/match-stats" className="ash-link">
+              Match scores &amp; team stats
             </Link>{" "}
-            — enter home/away goals and goal scorers, then run{" "}
+            — enter home/away final scores and yellow/red card totals, then run{" "}
             <span className="font-medium text-ash-text">Recompute from stored scores</span>{" "}
             below.
           </li>

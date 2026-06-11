@@ -106,10 +106,10 @@ export default async function AdminTournamentPage() {
       <LiveScoresFetchPromoCard className="mb-6" />
 
       <p className="mb-6 text-sm text-ash-muted">
-        <Link href="/admin/tournament/match-goals" className="ash-link">
-          Match scores &amp; goal scorers
+        <Link href="/admin/tournament/match-stats" className="ash-link">
+          Match scores &amp; team stats
         </Link>
-        <span> — manually enter final scores and goal scorers for the live edition.</span>
+        <span> — manually enter final scores and card totals for the live edition.</span>
       </p>
 
       <LiveMatchScoreEntryWorkflow />
