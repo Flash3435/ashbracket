@@ -12,7 +12,11 @@ export function LiveMatchScoreEntryWorkflow() {
         <span className="font-medium text-ash-text">Update today&apos;s scores</span> reads
         scores already stored on{" "}
         <code className="text-xs">tournament_matches</code> for the live official edition.
-        It does not fetch live data and there is no match-score form on this page yet.
+        To fetch scores from an external provider first, use{" "}
+        <Link href="/admin/tournament/live-scores" className="ash-link">
+          Live score fetch
+        </Link>
+        .
       </p>
       <div className="space-y-2">
         <p className="font-medium text-ash-text">Production-safe ways to enter a final score</p>

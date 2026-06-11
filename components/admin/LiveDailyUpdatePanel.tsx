@@ -49,8 +49,12 @@ export function LiveDailyUpdatePanel({ isProduction, impact, lastUpdate }: Props
           Run this once per day after match scores are recorded in the official schedule.
           It rebuilds derived tournament results from those scores and recalculates every{" "}
           <span className="font-medium text-ash-text">live</span> pool on the official
-          edition. Simulation test pools and other editions are not touched. This does not
-          fetch an external scores API — scores must already be in{" "}
+          edition. Simulation test pools and other editions are not touched. To pull scores
+          from your provider first, use{" "}
+          <Link href="/admin/tournament/live-scores" className="ash-link">
+            Live score fetch
+          </Link>{" "}
+          — or enter scores manually in{" "}
           <code className="text-xs">tournament_matches</code>.
         </p>
         <details className="mt-3 rounded-md border border-ash-border/60 bg-ash-body/20 px-3 py-2 text-sm text-ash-muted">

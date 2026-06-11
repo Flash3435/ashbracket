@@ -60,6 +60,11 @@ export default async function AdminTournamentPage() {
   return (
     <PageContainer>
       <p className="mb-4 text-sm text-ash-muted">
+        <Link href="/admin/tournament/live-scores" className="ash-link">
+          Live score fetch
+        </Link>
+        <span> — fetch final scores from your provider, preview, then apply.</span>
+        {" · "}
         <Link href="/admin/tournament/status" className="ash-link">
           Tournament status
         </Link>

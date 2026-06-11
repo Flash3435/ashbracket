@@ -6,6 +6,8 @@ export type AdminRiskAction =
   | "simulation_results_generate"
   | "live_tournament_sync"
   | "live_daily_update"
+  | "live_scores_preview"
+  | "live_scores_apply"
   | "edition_results_edit"
   | "edition_recompute_pools"
   | "pool_recompute"
