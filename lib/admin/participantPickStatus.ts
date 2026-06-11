@@ -19,6 +19,8 @@ export type ParticipantPicksStatus = {
 
 export type ParticipantWithPicksStatus = Participant & {
   picksStatus: ParticipantPicksStatus | null;
+  /** Linked auth user when the participant has joined. */
+  userId?: string | null;
 };
 
 function countSavedPicks(

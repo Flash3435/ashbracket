@@ -3,8 +3,8 @@ import { isDirectPoolAdmin } from "../auth/permissions";
 import type { AssertCanManageResult } from "./assertCanManagePool";
 
 /**
- * Server-side guard requiring explicit pool_admins membership.
- * Global app admins are not treated as managers unless they have a pool_admins row.
+ * Server-side guard requiring direct pool management (pool_admins or pool creator).
+ * Global app admins are not treated as managers unless they have that relationship.
  */
 export async function assertCanDirectlyManagePool(
   supabase: SupabaseClient,

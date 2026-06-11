@@ -2,7 +2,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import type { ManagedPoolRow } from "./fetchManagedPoolsForViewer";
 
 /**
- * Pools where the session user has an explicit `pool_admins` row (any role).
+ * Pools the session user directly manages via `pool_admins` or `pools.created_by_user_id`.
  * Unlike `fetchManagedPoolsForCurrentUser`, global app admins do not receive every pool.
  */
 export async function fetchDirectlyManagedPoolsForCurrentUser(
@@ -15,7 +15,25 @@ export async function fetchDirectlyManagedPoolsForCurrentUser(
   return { data: (data as ManagedPoolRow[] | null) ?? [], error: null };
 }
 
-/** Keeps only pools with explicit pool_admins membership (for tests and client-side filtering). */
+/** True when the user has pool_admins membership or created the pool. */
+export function userDirectlyManagesPool(
+  pool: Pick<ManagedPoolRow, "id"> & { created_by_user_id?: string | null },
+  userId: string,
+  poolAdminMembershipIds: Set<string>,
+): boolean {
+  return poolAdminMembershipIds.has(pool.id) || pool.created_by_user_id === userId;
+}
+
+/** Keeps pools with explicit pool_admins membership and/or creator ownership. */
+export function filterPoolsToDirectPoolManagement<
+  T extends Pick<ManagedPoolRow, "id"> & { created_by_user_id?: string | null },
+>(pools: T[], poolAdminMembershipIds: Set<string>, userId: string): T[] {
+  return pools.filter((pool) =>
+    userDirectlyManagesPool(pool, userId, poolAdminMembershipIds),
+  );
+}
+
+/** @deprecated Use `filterPoolsToDirectPoolManagement` (pool_admins ids only). */
 export function filterPoolsToDirectAdminMembership<T extends { id: string }>(
   pools: T[],
   directAdminPoolIds: Set<string>,

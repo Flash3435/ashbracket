@@ -16,10 +16,13 @@ import {
   removeParticipantModalSubject,
 } from "@/lib/participants/removeParticipantFromPoolPolicy";
 import {
+  buildMoveDestinationOptionsForParticipant,
+  hasCompatibleDirectMoveDestination,
   MOVE_PARTICIPANT_CONFIRM_WARNING,
   MOVE_PARTICIPANT_MODAL_INTRO,
   MOVE_PARTICIPANT_NO_DESTINATIONS_MESSAGE,
   moveParticipantModalSubject,
+  type ParticipantMoveDestinationContext,
 } from "@/lib/participants/worldCupParticipantMove";
 import type { SimulationPoolEmailUiStatus } from "@/lib/admin/simulationPoolEmailPolicy";
 import {
@@ -32,15 +35,10 @@ import type {
 import { PoolShareInvitePanel } from "./PoolShareInvitePanel";
 import { SimulationPoolEmailStatusBanner } from "./SimulationPoolEmailStatusBanner";
 
-type MoveDestinationPool = {
-  id: string;
-  name: string;
-};
-
 type ParticipantsManagerProps = {
   poolId: string;
   currentPoolName: string;
-  moveDestinationPools: MoveDestinationPool[];
+  moveDestinationContext: ParticipantMoveDestinationContext;
   initialParticipants: ParticipantWithPicksStatus[];
   /** Pool open-join code and URL; from server via `poolShareJoinUrl` */
   joinCode: string | null;
@@ -137,7 +135,7 @@ type InviteFeedback = {
 export function ParticipantsManager({
   poolId,
   currentPoolName,
-  moveDestinationPools,
+  moveDestinationContext,
   initialParticipants,
   joinCode,
   shareUrl,
@@ -181,7 +179,26 @@ export function ParticipantsManager({
   const [moveDestinationId, setMoveDestinationId] = useState("");
   const [moveSuccessMessage, setMoveSuccessMessage] = useState<string | null>(null);
 
-  const canMoveParticipants = moveDestinationPools.length > 0;
+  const canMoveParticipants = hasCompatibleDirectMoveDestination(moveDestinationContext);
+
+  const moveOptionsForParticipant = useMemo(() => {
+    if (!movingParticipant) {
+      return { options: [], helperMessage: undefined };
+    }
+    return buildMoveDestinationOptionsForParticipant({
+      context: moveDestinationContext,
+      movingParticipant: {
+        userId: movingParticipant.userId ?? null,
+        email: movingParticipant.email,
+        displayName: movingParticipant.displayName,
+      },
+    });
+  }, [moveDestinationContext, movingParticipant]);
+
+  const eligibleMoveDestinationOptions = useMemo(
+    () => moveOptionsForParticipant.options.filter((option) => option.eligible),
+    [moveOptionsForParticipant.options],
+  );
 
   const typedPhraseOk =
     !requiresTypedPhrase ||
@@ -409,7 +426,15 @@ export function ParticipantsManager({
     if (disabled || !canMoveParticipants) return;
     setActionError(null);
     setMoveSuccessMessage(null);
-    setMoveDestinationId(moveDestinationPools[0]?.id ?? "");
+    const built = buildMoveDestinationOptionsForParticipant({
+      context: moveDestinationContext,
+      movingParticipant: {
+        userId: p.userId ?? null,
+        email: p.email,
+        displayName: p.displayName,
+      },
+    });
+    setMoveDestinationId(built.options.find((option) => option.eligible)?.id ?? "");
     setMovingParticipant(p);
   }
 
@@ -421,7 +446,9 @@ export function ParticipantsManager({
   function handleConfirmMove() {
     if (disabled || !movingParticipant || !moveDestinationId) return;
     const participant = movingParticipant;
-    const destination = moveDestinationPools.find((pool) => pool.id === moveDestinationId);
+    const destination = eligibleMoveDestinationOptions.find(
+      (pool) => pool.id === moveDestinationId,
+    );
     if (!destination) return;
 
     setActionError(null);
@@ -1170,16 +1197,29 @@ export function ParticipantsManager({
                 <select
                   value={moveDestinationId}
                   onChange={(e) => setMoveDestinationId(e.target.value)}
-                  disabled={disabled || isPending}
+                  disabled={
+                    disabled || isPending || eligibleMoveDestinationOptions.length === 0
+                  }
                   className="mt-2 w-full rounded-md border border-ash-border bg-ash-body px-3 py-2 text-sm text-ash-text shadow-sm outline-none ring-ash-accent/20 focus:border-ash-accent focus:ring-2 disabled:opacity-50"
                 >
-                  {moveDestinationPools.map((pool) => (
-                    <option key={pool.id} value={pool.id}>
-                      {pool.name}
+                  {moveOptionsForParticipant.options.map((pool) => (
+                    <option
+                      key={pool.id}
+                      value={pool.id}
+                      disabled={!pool.eligible}
+                    >
+                      {pool.eligible
+                        ? pool.name
+                        : `${pool.name} (${pool.disabledReason})`}
                     </option>
                   ))}
                 </select>
               </label>
+              {moveOptionsForParticipant.helperMessage ? (
+                <p className="text-xs text-ash-muted">
+                  {moveOptionsForParticipant.helperMessage}
+                </p>
+              ) : null}
               <p className="rounded-md border border-amber-800/60 bg-amber-950/25 px-3 py-2 text-amber-100">
                 {MOVE_PARTICIPANT_CONFIRM_WARNING}
               </p>
@@ -1195,7 +1235,12 @@ export function ParticipantsManager({
               </button>
               <button
                 type="button"
-                disabled={disabled || isPending || !moveDestinationId}
+                disabled={
+                  disabled ||
+                  isPending ||
+                  !moveDestinationId ||
+                  eligibleMoveDestinationOptions.length === 0
+                }
                 onClick={handleConfirmMove}
                 className="btn-primary disabled:cursor-not-allowed disabled:opacity-50"
               >

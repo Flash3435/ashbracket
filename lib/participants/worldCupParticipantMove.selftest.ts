@@ -1,15 +1,18 @@
 import {
   WORLD_CUP_PARTICIPANT_MOVE_AFFECTED_TABLES,
   areWorldCupPoolsCompatibleForMove,
+  buildMoveDestinationOptionsForParticipant,
+  diagnoseMoveDestinationPool,
   filterEligibleMoveDestinationPools,
   formatMoveParticipantSuccessMessage,
   mapMoveWorldCupParticipantRpcError,
   MOVE_PARTICIPANT_DUPLICATE_BLOCKED_MESSAGE,
+  MOVE_PARTICIPANT_HIDDEN_DUPLICATE_POOLS_MESSAGE,
   participantWouldDuplicateInDestinationPool,
   poolsToRecomputeAfterParticipantMove,
   validateDirectPoolAdminMoveAccess,
 } from "./worldCupParticipantMove";
-import { filterPoolsToDirectAdminMembership } from "../pools/fetchDirectlyManagedPoolsForCurrentUser";
+import { filterPoolsToDirectPoolManagement } from "../pools/fetchDirectlyManagedPoolsForCurrentUser";
 
 let failed = 0;
 function t(cond: boolean, msg: string) {
@@ -109,9 +112,10 @@ t(eligible[0]?.name === "Destination A", "destination label preserved");
     },
   ];
   const directAdminPoolIds = new Set(["pool-source", "pool-dest-a"]);
-  const directOnly = filterPoolsToDirectAdminMembership(
+  const directOnly = filterPoolsToDirectPoolManagement(
     globalAdminVisiblePools,
     directAdminPoolIds,
+    "user-1",
   );
   const moveOptions = filterEligibleMoveDestinationPools(sourceScope, directOnly);
   t(moveOptions.length === 1, "global admin without pool_admins sees only direct destinations");
@@ -138,6 +142,130 @@ t(eligible[0]?.name === "Destination A", "destination label preserved");
     ["pool-source", "pool-dest-a"],
   );
   t(!access.ok, "global admin without destination pool_admins is blocked server-side");
+}
+
+{
+  const creatorPools = [
+    ...managedPools,
+    {
+      id: "pool-creator-only",
+      name: "Creator Pool",
+      tournament_edition_id: editionA,
+      is_simulation: false,
+      created_by_user_id: "user-creator",
+    },
+  ];
+  const creatorManaged = filterPoolsToDirectPoolManagement(
+    creatorPools,
+    new Set(["pool-source"]),
+    "user-creator",
+  );
+  const creatorMoveOptions = filterEligibleMoveDestinationPools(sourceScope, creatorManaged);
+  t(
+    creatorMoveOptions.some((pool) => pool.id === "pool-creator-only"),
+    "pool creator without global-admin status can see created pool as destination",
+  );
+}
+
+{
+  const diagnostic = diagnoseMoveDestinationPool({
+    sourcePool: sourceScope,
+    destinationPool: {
+      id: "pool-dest-a",
+      name: "Destination A",
+      tournament_edition_id: editionA,
+      is_simulation: false,
+      created_by_user_id: null,
+    },
+    currentUserId: "user-1",
+    poolAdminMembershipIds: new Set(["pool-source", "pool-dest-a"]),
+    movingParticipant: {
+      userId: "user-adarsh",
+      email: "adarsh@example.com",
+      displayName: "Adarsh",
+    },
+    destinationParticipants: [
+      {
+        userId: "user-adarsh",
+        email: "adarsh@example.com",
+        displayName: "Adarsh K",
+      },
+    ],
+  });
+  t(diagnostic.excludedReason === "duplicate_participant", "duplicate destination is diagnosed");
+  t(diagnostic.duplicateUser, "duplicate user_id flagged");
+}
+
+{
+  const built = buildMoveDestinationOptionsForParticipant({
+    context: {
+      sourcePool: sourceScope,
+      directManagedPools: [
+        {
+          id: "pool-dest-a",
+          name: "Destination A",
+          tournament_edition_id: editionA,
+          is_simulation: false,
+          created_by_user_id: null,
+        },
+        {
+          id: "pool-dest-dup",
+          name: "Fampool",
+          tournament_edition_id: editionA,
+          is_simulation: false,
+          created_by_user_id: null,
+        },
+      ],
+      destinationParticipantsByPoolId: {
+        "pool-dest-dup": [
+          {
+            userId: null,
+            email: "adarsh@example.com",
+            displayName: "Someone else",
+          },
+        ],
+      },
+      currentUserId: "user-1",
+      poolAdminMembershipIds: ["pool-source", "pool-dest-a", "pool-dest-dup"],
+    },
+    movingParticipant: {
+      userId: null,
+      email: "adarsh@example.com",
+      displayName: "Adarsh",
+    },
+  });
+  t(built.options.length === 2, "duplicate pool shown disabled in dropdown");
+  t(
+    built.options.some(
+      (option) => option.id === "pool-dest-dup" && !option.eligible,
+    ),
+    "duplicate destination is not eligible",
+  );
+  t(
+    built.helperMessage === MOVE_PARTICIPANT_HIDDEN_DUPLICATE_POOLS_MESSAGE,
+    "helper message explains hidden duplicate destinations",
+  );
+}
+
+{
+  const diagnostic = diagnoseMoveDestinationPool({
+    sourcePool: sourceScope,
+    destinationPool: {
+      id: "pool-sim",
+      name: "Simulation",
+      tournament_edition_id: editionA,
+      is_simulation: true,
+      created_by_user_id: null,
+    },
+    currentUserId: "user-1",
+    poolAdminMembershipIds: new Set(["pool-sim"]),
+    movingParticipant: { userId: null, email: "", displayName: "Adarsh" },
+    destinationParticipants: [],
+  });
+  t(
+    diagnostic.excludedReason === "incompatible_simulation",
+    "simulation-incompatible pool remains excluded",
+  );
 }
 
 t(
