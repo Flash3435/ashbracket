@@ -1,5 +1,9 @@
 import assert from "node:assert";
-import { buildAccountProfileLinkHref } from "./buildAccountProfileLinkHref";
+import {
+  ACCOUNT_REVEAL_RESULTS_HASH,
+  buildAccountProfileLinkHref,
+  buildAccountRevealProfileLinkHref,
+} from "./buildAccountProfileLinkHref";
 
 const participantId = "a0000001-0000-4000-8000-000000000102";
 
@@ -7,6 +11,12 @@ assert.equal(
   buildAccountProfileLinkHref("/account/reveal", participantId),
   `/account/reveal?participant=${participantId}`,
   "reveal profile link includes participant id",
+);
+
+assert.equal(
+  buildAccountRevealProfileLinkHref(participantId),
+  `/account/reveal?participant=${participantId}#${ACCOUNT_REVEAL_RESULTS_HASH}`,
+  "reveal picks link scrolls to results anchor",
 );
 
 assert.equal(

@@ -1,5 +1,7 @@
 import { AccountPicksProfileLinks } from "@/components/account/AccountPicksProfileLinks";
 import { PoolRevealPage } from "@/components/account/PoolRevealPage";
+import { RevealResultsScrollAnchor } from "@/components/account/RevealResultsScrollAnchor";
+import { ACCOUNT_REVEAL_RESULTS_HASH } from "@/lib/account/buildAccountProfileLinkHref";
 import { PageContainer } from "@/components/ui/PageContainer";
 import { PageTitle } from "@/components/ui/PageTitle";
 import { loadPoolReveal } from "@/lib/account/loadPoolReveal";
@@ -178,14 +180,28 @@ export default async function AccountRevealPage({ searchParams }: PageProps) {
           ) : null}
 
           {revealData && ctx.selectedId ? (
-            <PoolRevealPage
-              key={ctx.selectedId}
-              data={revealData}
-              poolName={ctx.selectedPoolName}
-              picksHref={picksHref}
-              activityHref={activityHref}
-              dashboardHref={dashboardHref}
-            />
+            <div
+              id={ACCOUNT_REVEAL_RESULTS_HASH}
+              className="scroll-mt-24"
+            >
+              <RevealResultsScrollAnchor selectedParticipantId={ctx.selectedId} />
+              <div className="mb-6">
+                <h2 className="text-xl font-bold text-ash-text sm:text-2xl">
+                  {ctx.selectedPoolName} reveal
+                </h2>
+                <p className="mt-1 text-sm text-ash-muted">
+                  Compare locked picks from completed brackets in this pool.
+                </p>
+              </div>
+              <PoolRevealPage
+                key={ctx.selectedId}
+                data={revealData}
+                poolName={ctx.selectedPoolName}
+                picksHref={picksHref}
+                activityHref={activityHref}
+                dashboardHref={dashboardHref}
+              />
+            </div>
           ) : null}
         </>
       ) : null}

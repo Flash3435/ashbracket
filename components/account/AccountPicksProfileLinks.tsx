@@ -1,5 +1,8 @@
 import Link from "next/link";
-import { buildAccountProfileLinkHref } from "@/lib/account/buildAccountProfileLinkHref";
+import {
+  buildAccountProfileLinkHref,
+  buildAccountRevealProfileLinkHref,
+} from "@/lib/account/buildAccountProfileLinkHref";
 
 export type AccountPicksProfileLinkItem = {
   id: string;
@@ -54,16 +57,18 @@ export function AccountPicksProfileLinks({
                 </span>
                 <div className="mt-2 flex flex-wrap gap-2">
                   {p.picksLocked && revealBasePath ? (
-                    <Link
-                      href={buildAccountProfileLinkHref(revealBasePath, p.id)}
-                      className={`rounded-md px-2.5 py-1 text-xs font-medium underline-offset-2 hover:underline ${
-                        active
-                          ? "bg-ash-accent text-white hover:bg-ash-accent-hover"
-                          : "bg-ash-body text-ash-accent ring-1 ring-ash-border hover:bg-ash-surface"
-                      }`}
-                    >
-                      Reveal picks
-                    </Link>
+                    active ? (
+                      <span className="rounded-md bg-ash-accent px-2.5 py-1 text-xs font-medium text-white">
+                        Viewing reveal
+                      </span>
+                    ) : (
+                      <Link
+                        href={buildAccountRevealProfileLinkHref(p.id, revealBasePath)}
+                        className="rounded-md bg-ash-body px-2.5 py-1 text-xs font-medium text-ash-accent underline-offset-2 ring-1 ring-ash-border hover:bg-ash-surface hover:underline"
+                      >
+                        Reveal picks
+                      </Link>
+                    )
                   ) : null}
                   <Link
                     href={buildAccountProfileLinkHref("/account/picks", p.id)}
@@ -92,12 +97,18 @@ export function AccountPicksProfileLinks({
                     </Link>
                   ) : null}
                   {!p.picksLocked && revealBasePath ? (
-                    <Link
-                      href={buildAccountProfileLinkHref(revealBasePath, p.id)}
-                      className="rounded-md bg-ash-body px-2.5 py-1 text-xs font-medium text-ash-text ring-1 ring-ash-border hover:bg-ash-surface"
-                    >
-                      Preview reveal
-                    </Link>
+                    active ? (
+                      <span className="rounded-md bg-ash-accent px-2.5 py-1 text-xs font-medium text-white">
+                        Viewing reveal
+                      </span>
+                    ) : (
+                      <Link
+                        href={buildAccountRevealProfileLinkHref(p.id, revealBasePath)}
+                        className="rounded-md bg-ash-body px-2.5 py-1 text-xs font-medium text-ash-text ring-1 ring-ash-border hover:bg-ash-surface"
+                      >
+                        Preview reveal
+                      </Link>
+                    )
                   ) : null}
                 </div>
               </div>
