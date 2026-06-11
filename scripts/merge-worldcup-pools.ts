@@ -199,6 +199,7 @@ async function main() {
 
   const sourceLedger = await recomputePoolLedgerWithClient(supabase, sourcePool.id, {
     ledgerTrigger: "admin_manual_recompute",
+    skipRevalidation: true,
   });
   if (sourceLedger.error) {
     console.error(`Source pool ledger recompute failed: ${sourceLedger.error}`);
@@ -211,6 +212,7 @@ async function main() {
     destinationPool.id,
     {
       ledgerTrigger: "admin_manual_recompute",
+      skipRevalidation: true,
     },
   );
   if (destinationLedger.error) {

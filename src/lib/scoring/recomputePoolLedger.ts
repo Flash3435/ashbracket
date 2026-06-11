@@ -21,6 +21,8 @@ export type WcLedgerRecomputeTrigger =
 
 export type RecomputePoolLedgerOptions = {
   ledgerTrigger?: WcLedgerRecomputeTrigger;
+  /** Skip Next.js cache revalidation (required for CLI scripts outside the app runtime). */
+  skipRevalidation?: boolean;
 };
 
 async function recordLedgerRecomputeDiagnostic(
@@ -164,10 +166,12 @@ export async function recomputePoolLedgerWithClient(
     await recordLedgerRecomputeDiagnostic(supabase, poolId, options.ledgerTrigger);
   }
 
-  revalidatePoolAdminPaths(poolId);
-  revalidatePath("/admin/results");
-  revalidatePath("/admin/tournament");
-  revalidatePath("/admin/tournament/status");
+  if (!options?.skipRevalidation) {
+    revalidatePoolAdminPaths(poolId);
+    revalidatePath("/admin/results");
+    revalidatePath("/admin/tournament");
+    revalidatePath("/admin/tournament/status");
+  }
 
   return {};
 }
