@@ -39,6 +39,8 @@
     "test:move-participant": "tsx lib/participants/worldCupParticipantMove.selftest.ts",
     "test:pool-merge": "tsx lib/participants/worldCupPoolMerge.selftest.ts",
     "merge-worldcup-pools": "tsx scripts/merge-worldcup-pools.ts",
+    "archive-empty-pools": "tsx scripts/archive-empty-pools.ts",
+    "test:pool-archive": "tsx lib/pools/poolArchive.selftest.ts",
     "test:pool-activity-engagement": "tsx lib/poolActivity/poolActivityFeedEngagement.selftest.ts",
     "test:global-activity": "tsx lib/poolActivity/globalActivity.selftest.ts",
     "test:pool-milestones": "tsx lib/poolActivity/poolMilestones.selftest.ts",

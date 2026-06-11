@@ -25,6 +25,9 @@ export type ManagedPoolRow = {
   tie_break_note: string | null;
   tournament_edition_id: string;
   is_simulation: boolean;
+  archived_at: string | null;
+  archived_by_user_id: string | null;
+  archive_reason: string | null;
 };
 
 /**

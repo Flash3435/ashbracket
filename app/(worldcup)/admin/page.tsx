@@ -11,6 +11,7 @@ import { fetchManagedPoolsForCurrentUser } from "@/lib/pools/fetchManagedPoolsFo
 import type { ManagedPoolRow } from "@/lib/pools/fetchManagedPoolsForViewer";
 import { fetchParticipantCountsByPoolId } from "@/lib/pools/fetchParticipantCountsByPoolId";
 import { sortManagedPoolsForAdminHome } from "@/lib/pools/sortManagedPoolsForAdminHome";
+import { splitActiveAndArchivedManagedPools } from "@/lib/pools/poolArchive";
 import {
   fetchUserDirectPoolInvolvement,
   splitManagedPoolsForAdminHome,
@@ -44,6 +45,8 @@ export default async function AdminHomePage() {
   const { data: pools, error } =
     await fetchManagedPoolsForCurrentUser(supabase);
   const list = pools ?? [];
+  const { activePools, archivedPools } =
+    splitActiveAndArchivedManagedPools(list);
 
   const global = await isGlobalAdmin(supabase);
 
@@ -54,13 +57,14 @@ export default async function AdminHomePage() {
   const involvementError = involvementResult.error;
   const { directPools, otherAdminVisiblePools } = involvementResult.involvement
     ? splitManagedPoolsForAdminHome(
-        list,
+        activePools,
         user.id,
         involvementResult.involvement,
       )
-    : { directPools: list, otherAdminVisiblePools: [] as typeof list };
+    : { directPools: activePools, otherAdminVisiblePools: [] as typeof list };
 
-  const poolIds = list.map((p) => p.id);
+  const poolIds = activePools.map((p) => p.id);
+  const archivedPoolIds = archivedPools.map((p) => p.id);
   const participantCountsResult = await fetchParticipantCountsByPoolId(
     supabase,
     poolIds,
@@ -77,13 +81,26 @@ export default async function AdminHomePage() {
     countsByPoolId,
   );
 
+  const archivedParticipantCountsResult =
+    archivedPoolIds.length > 0
+      ? await fetchParticipantCountsByPoolId(supabase, archivedPoolIds)
+      : null;
+  const archivedCountsByPoolId =
+    archivedParticipantCountsResult?.countsByPoolId ?? new Map<string, number>();
+  const archivedPoolsForList = poolsWithParticipantCounts(
+    sortManagedPoolsForAdminHome(archivedPools, archivedCountsByPoolId),
+    archivedCountsByPoolId,
+  );
+
   // Single-pool organizers go straight to the pool dashboard. Global admins
   // stay here so they can create additional pools and use tournament tools.
-  if (!error && list.length === 1 && !global) {
-    redirect(`/admin/pools/${list[0].id}`);
+  if (!error && activePools.length === 1 && !global) {
+    redirect(`/admin/pools/${activePools[0].id}`);
   }
 
-  const showPoolSections = !error && list.length > 0;
+  const showPoolSections = !error && activePools.length > 0;
+  const showArchivedPoolsSection =
+    !error && global && archivedPoolsForList.length > 0;
 
   return (
     <PageContainer>
@@ -177,6 +194,19 @@ export default async function AdminHomePage() {
             Participant count includes invited and manual participants.
           </p>
         </div>
+      ) : null}
+
+      {showArchivedPoolsSection ? (
+        <details className="mt-8 rounded-lg border border-ash-border bg-ash-body/20 p-4">
+          <summary className="cursor-pointer text-sm font-semibold text-ash-text">
+            Archived pools ({archivedPoolsForList.length})
+          </summary>
+          <p className="mt-2 text-sm text-ash-muted">
+            Hidden from normal lists. Archived pools are not deleted and can
+            still be opened directly.
+          </p>
+          <AdminManagedPoolList pools={archivedPoolsForList} />
+        </details>
       ) : null}
 
       {global ? (
