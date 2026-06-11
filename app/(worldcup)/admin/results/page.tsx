@@ -148,13 +148,21 @@ export default async function AdminResultsPage() {
         </p>
       ) : null}
       {!loadError && teams.length > 0 ? <AdminResultsR32StatusSummary summary={r32Summary} /> : null}
-      <p className="mb-6 text-sm text-ash-muted">
-        For the normal daily workflow, use{" "}
+      <p className="mb-6 text-sm leading-relaxed text-ash-muted">
+        This page edits official <span className="font-medium text-ash-text">bracket results</span>{" "}
+        in the <code className="text-xs">results</code> table (group 1st/2nd, third-place
+        qualifiers, knockout slots) — not individual match scores on{" "}
+        <code className="text-xs">tournament_matches</code>. For the normal daily workflow,
+        enter final scores on match rows first (see{" "}
+        <Link href="/admin/tournament" className="ash-link">
+          Live scores &amp; standings
+        </Link>
+        ), then run{" "}
         <Link href="/admin/tournament" className="ash-link">
           Update today&apos;s scores
-        </Link>{" "}
-        to refresh standings from match scores. Manual result edits below may need the
-        advanced recalculate option.
+        </Link>
+        . Use the editors below only for manual corrections, locked overrides, or Round of 32
+        setup — they may need the advanced recalculate option.
       </p>
       {liveEditionId && liveImpact ? (
         <AdminResultsAdvancedTools

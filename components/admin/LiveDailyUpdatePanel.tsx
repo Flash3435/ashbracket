@@ -59,9 +59,13 @@ export function LiveDailyUpdatePanel({ isProduction, impact, lastUpdate }: Props
           </summary>
           <ol className="mt-2 list-decimal space-y-1.5 pl-5">
             <li>
-              Confirm match scores are on file, then run{" "}
-              <span className="font-medium text-ash-text">Update today&apos;s scores</span>{" "}
-              below.
+              Enter final scores on <code className="text-xs">tournament_matches</code> (CLI or
+              Supabase — see the workflow box above). There is no live match-score form in the
+              app yet.
+            </li>
+            <li>
+              Run <span className="font-medium text-ash-text">Update today&apos;s scores</span>{" "}
+              below to rebuild derived results and leaderboards.
             </li>
             <li>
               <Link href="/admin/tournament/status" className="ash-link">

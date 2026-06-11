@@ -1,4 +1,5 @@
 import { LiveDailyUpdatePanel } from "@/components/admin/LiveDailyUpdatePanel";
+import { LiveMatchScoreEntryWorkflow } from "@/components/admin/LiveMatchScoreEntryWorkflow";
 import { AdminTournamentAdvancedTools } from "@/components/admin/AdminTournamentAdvancedTools";
 import { SimulationModeBanner } from "@/components/admin/SimulationModeBanner";
 import { PageContainer } from "@/components/ui/PageContainer";
@@ -71,7 +72,7 @@ export default async function AdminTournamentPage() {
 
       <PageTitle
         title="Live scores & standings"
-        description="Once per day, after match scores are recorded, run the update below to refresh official results and every live pool leaderboard."
+        description="Enter final scores on tournament_matches first, then run the daily update to rebuild official results and every live pool leaderboard."
       />
 
       <SimulationModeBanner
@@ -100,6 +101,8 @@ export default async function AdminTournamentPage() {
           {edition ? finishedGroupMatches : "—"}
         </p>
       </div>
+
+      <LiveMatchScoreEntryWorkflow />
 
       {syncImpact ? (
         <>
