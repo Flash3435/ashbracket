@@ -34,6 +34,43 @@ function StatCard({
   );
 }
 
+function ParticipantPickList({
+  label,
+  expandedLabel,
+  names,
+  emptyMessage,
+}: {
+  label: string;
+  expandedLabel: string;
+  names: string[];
+  emptyMessage?: string;
+}) {
+  const [expanded, setExpanded] = useState(false);
+
+  return (
+    <div>
+      <button
+        type="button"
+        onClick={() => setExpanded((v) => !v)}
+        className="text-xs font-medium text-ash-accent underline-offset-2 hover:underline"
+      >
+        {expanded ? expandedLabel : label}
+      </button>
+      {expanded ? (
+        names.length > 0 ? (
+          <ul className="mt-1.5 space-y-0.5 text-sm text-ash-muted">
+            {names.map((name) => (
+              <li key={name}>{name}</li>
+            ))}
+          </ul>
+        ) : (
+          <p className="mt-1.5 text-sm italic text-ash-muted">{emptyMessage}</p>
+        )
+      ) : null}
+    </div>
+  );
+}
+
 function ChampionRow({
   pick,
   maxCount,
@@ -43,10 +80,10 @@ function ChampionRow({
   maxCount: number;
   showNames: boolean;
 }) {
-  const [expanded, setExpanded] = useState(false);
   const barWidth = maxCount > 0 ? Math.round((pick.count / maxCount) * 100) : 0;
-  const names = pick.participantNames ?? [];
-  const canExpand = showNames && names.length > 0;
+  const pickedNames = pick.participantNames ?? [];
+  const notPickedNames = pick.notPickedParticipantNames ?? [];
+  const canShowLists = showNames;
 
   return (
     <li className="py-3 first:pt-0 last:pb-0">
@@ -74,22 +111,22 @@ function ChampionRow({
           style={{ width: `${barWidth}%` }}
         />
       </div>
-      {canExpand ? (
-        <div className="mt-2">
-          <button
-            type="button"
-            onClick={() => setExpanded((v) => !v)}
-            className="text-xs font-medium text-ash-accent underline-offset-2 hover:underline"
-          >
-            {expanded ? "Hide picks" : `Who picked ${pick.teamName}`}
-          </button>
-          {expanded ? (
-            <ul className="mt-1.5 space-y-0.5 text-sm text-ash-muted">
-              {names.map((name) => (
-                <li key={name}>{name}</li>
-              ))}
-            </ul>
+      {canShowLists ? (
+        <div className="mt-2 space-y-1.5">
+          {pickedNames.length > 0 ? (
+            <ParticipantPickList
+              label={`Who picked ${pick.teamName}`}
+              expandedLabel="Hide picks"
+              names={pickedNames}
+            />
           ) : null}
+          <ParticipantPickList
+            label="Who went another way"
+            expandedLabel="Hide list"
+            names={notPickedNames}
+            emptyMessage="Nobody — everyone picked this."
+          />
+          <p className="text-[11px] text-ash-muted/80">Incomplete brackets excluded.</p>
         </div>
       ) : null}
     </li>

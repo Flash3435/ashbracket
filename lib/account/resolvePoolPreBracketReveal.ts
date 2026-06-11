@@ -39,6 +39,7 @@ function aggregateTeamPicks(input: {
 }): ChampionPickSummary[] {
   const completeSet = new Set(input.completeParticipantIds);
   const teamById = new Map(input.teams.map((t) => [t.id, t]));
+  const participantsWithSectionPicks = new Set<string>();
   const byTeam = new Map<
     string,
     {
@@ -54,6 +55,8 @@ function aggregateTeamPicks(input: {
     if (!input.match(row)) continue;
     const teamId = (row.teamId ?? "").trim();
     if (!teamId) continue;
+
+    participantsWithSectionPicks.add(row.participantId);
 
     let entry = byTeam.get(teamId);
     if (!entry) {
@@ -90,6 +93,12 @@ function aggregateTeamPicks(input: {
       const names = input.canShowParticipantNames
         ? [...entry.participantNames].sort((a, b) => a.localeCompare(b))
         : undefined;
+      const notPickedNames = input.canShowParticipantNames
+        ? [...participantsWithSectionPicks]
+            .filter((pid) => !entry.participantIds.has(pid))
+            .map((pid) => displayNameFromRow(input.participantRows, pid))
+            .sort((a, b) => a.localeCompare(b))
+        : undefined;
       return {
         teamId,
         teamName: entry.teamName,
@@ -97,6 +106,7 @@ function aggregateTeamPicks(input: {
         count,
         percentage,
         participantNames: names,
+        notPickedParticipantNames: notPickedNames,
       };
     })
     .sort(

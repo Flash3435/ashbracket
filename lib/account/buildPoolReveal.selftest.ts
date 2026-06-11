@@ -137,6 +137,42 @@ const baseInput = {
     ],
   });
   assert.deepStrictEqual(data.championPicks[0]!.participantNames, ["Adarsh", "Nish"]);
+  assert.deepStrictEqual(data.championPicks[0]!.notPickedParticipantNames, []);
+}
+
+// Champion not-picked: holdouts who picked a different winner
+{
+  const data = buildPoolReveal({
+    ...baseInput,
+    championPicks: [
+      pick({ teamId: "t-bra", teamName: "Brazil", participantId: "p1", participantDisplayName: "Adarsh" }),
+      pick({ teamId: "t-bra", teamName: "Brazil", participantId: "p2", participantDisplayName: "Nish" }),
+      pick({ teamId: "t-arg", teamName: "Argentina", participantId: "p3", participantDisplayName: "Lakshmi" }),
+      pick({ teamId: "t-can", teamName: "Canada", participantId: "p4", participantDisplayName: "Dipa" }),
+    ],
+  });
+  assert.deepStrictEqual(data.championPicks[0]!.notPickedParticipantNames, [
+    "Dipa",
+    "Lakshmi",
+  ]);
+  assert.deepStrictEqual(data.championPicks[1]!.notPickedParticipantNames, [
+    "Adarsh",
+    "Dipa",
+    "Nish",
+  ]);
+}
+
+// Champion unanimous: empty not-picked list
+{
+  const data = buildPoolReveal({
+    ...baseInput,
+    completeParticipantIds: ["p1", "p2"],
+    championPicks: [
+      pick({ teamId: "t-bra", teamName: "Brazil", participantId: "p1", participantDisplayName: "A" }),
+      pick({ teamId: "t-bra", teamName: "Brazil", participantId: "p2", participantDisplayName: "B" }),
+    ],
+  });
+  assert.deepStrictEqual(data.championPicks[0]!.notPickedParticipantNames, []);
 }
 
 // No emails or internal IDs in output

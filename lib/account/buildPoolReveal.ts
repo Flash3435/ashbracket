@@ -13,6 +13,8 @@ export type ChampionPickSummary = {
   count: number;
   percentage: number;
   participantNames?: string[];
+  /** Complete participants with a valid pick in this section who chose differently. */
+  notPickedParticipantNames?: string[];
 };
 
 export type PoolRevealData = {
@@ -124,6 +126,8 @@ export function buildPoolReveal(input: BuildPoolRevealInput): PoolRevealData {
   if (!locked) return emptyLocked;
 
   const completeSet = new Set(input.completeParticipantIds);
+  const participantsWithChampionPick = new Set<string>();
+  const displayNameByParticipantId = new Map<string, string>();
   const byTeam = new Map<
     string,
     {
@@ -138,6 +142,12 @@ export function buildPoolReveal(input: BuildPoolRevealInput): PoolRevealData {
     if (!completeSet.has(row.participantId)) continue;
     const teamId = row.teamId.trim();
     if (!teamId) continue;
+
+    participantsWithChampionPick.add(row.participantId);
+    displayNameByParticipantId.set(
+      row.participantId,
+      row.participantDisplayName.trim() || "Participant",
+    );
 
     let entry = byTeam.get(teamId);
     if (!entry) {
@@ -172,6 +182,12 @@ export function buildPoolReveal(input: BuildPoolRevealInput): PoolRevealData {
       const names = showNames
         ? [...entry.participantNames].sort((a, b) => a.localeCompare(b))
         : undefined;
+      const notPickedNames = showNames
+        ? [...participantsWithChampionPick]
+            .filter((pid) => !entry.participantIds.has(pid))
+            .map((pid) => displayNameByParticipantId.get(pid) ?? "Participant")
+            .sort((a, b) => a.localeCompare(b))
+        : undefined;
       return {
         teamId,
         teamName: entry.teamName,
@@ -179,6 +195,7 @@ export function buildPoolReveal(input: BuildPoolRevealInput): PoolRevealData {
         count,
         percentage,
         participantNames: names,
+        notPickedParticipantNames: notPickedNames,
       };
     }),
   );
