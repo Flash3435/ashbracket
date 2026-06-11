@@ -1,6 +1,6 @@
 "use client";
 
-import { KickoffTimeDisplay } from "@/components/datetime/KickoffTimeDisplay";
+import { formatKickoffAmericaEdmonton } from "@/lib/datetime/scheduleDisplay";
 import type { MatchGoalRecord } from "@/lib/tournament/matchGoals/types";
 import type { MatchGoalsAdminMatch } from "@/lib/tournament/matchGoals/loadMatchGoalsAdminData";
 import Link from "next/link";
@@ -41,6 +41,12 @@ function formatMinute(goal: MatchGoalRecord): string {
     return `${goal.minute}+${goal.stoppageMinute}'`;
   }
   return `${goal.minute}'`;
+}
+
+function kickoffAdminLabel(iso: string | null | undefined): string {
+  const parts = formatKickoffAmericaEdmonton(iso);
+  if (parts.singleLineFallback) return parts.singleLineFallback;
+  return `${parts.dateLine} · ${parts.timeLine}`;
 }
 
 function parseOptionalInt(raw: string): number | null {
@@ -239,7 +245,7 @@ export function MatchGoalsAdminPanel({ matches, goals }: Props) {
           <div className="space-y-1 text-sm">
             <h2 className="text-base font-bold text-ash-text">{selectedMatch.matchCode}</h2>
             <p className="text-ash-muted">
-              <KickoffTimeDisplay iso={selectedMatch.kickoffAt} layout="singleLine" />
+              {kickoffAdminLabel(selectedMatch.kickoffAt)}
               {" · "}
               {selectedMatch.homeTeamName} vs {selectedMatch.awayTeamName}
               {" · "}
