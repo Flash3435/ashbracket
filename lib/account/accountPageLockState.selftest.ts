@@ -174,6 +174,11 @@ const lockedNav = buildAccountPageNavState({
 });
 assert.equal(lockedNav.navPlan.primary.label, "Reveal picks");
 assert.equal(lockedNav.showParticipantEditCopy, false);
+assert.equal(
+  lockedNav.suppressStandaloneNavRow,
+  true,
+  "locked account page hides duplicate standalone nav row",
+);
 
 const customOpenNav = buildAccountPageNavState({
   picksLocked: true,
@@ -185,6 +190,11 @@ const customOpenNav = buildAccountPageNavState({
 });
 assert.equal(customOpenNav.navPlan.primary.label, "View picks");
 assert.equal(customOpenNav.navPlan.tertiary?.label, "Reveal picks");
+assert.equal(
+  customOpenNav.suppressStandaloneNavRow,
+  false,
+  "custom-open pool keeps standalone nav row",
+);
 
 const unlockedNav = buildAccountPageNavState({
   picksLocked: false,
@@ -197,6 +207,11 @@ const unlockedNav = buildAccountPageNavState({
 assert.equal(unlockedNav.navPlan.primary.label, "Edit picks");
 assert.equal(unlockedNav.navPlan.tertiary?.label, "Preview reveal");
 assert.equal(unlockedNav.showParticipantEditCopy, true);
+assert.equal(
+  unlockedNav.suppressStandaloneNavRow,
+  false,
+  "unlocked pool keeps standalone nav row",
+);
 
 assert.deepEqual(
   accountCreatePoolLinkState({

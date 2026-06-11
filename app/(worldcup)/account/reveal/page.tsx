@@ -32,9 +32,7 @@ export default async function AccountRevealPage({ searchParams }: PageProps) {
   const participantParam = sp.participant?.trim() ?? "";
   const ctx = await loadAccountKnockoutSelection(user.id, participantParam);
 
-  const selectedPoolId = ctx.selectedId
-    ? ctx.myParticipants.find((p) => p.id === ctx.selectedId)?.pool_id
-    : null;
+  const selectedPoolId = ctx.selectedPoolId;
 
   let revealError: string | null = null;
   let revealData: Awaited<ReturnType<typeof loadPoolReveal>> | null = null;
@@ -181,6 +179,7 @@ export default async function AccountRevealPage({ searchParams }: PageProps) {
 
           {revealData && ctx.selectedId ? (
             <PoolRevealPage
+              key={ctx.selectedId}
               data={revealData}
               poolName={ctx.selectedPoolName}
               picksHref={picksHref}

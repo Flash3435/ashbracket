@@ -30,10 +30,7 @@ import {
   poolLocked,
 } from "../../../lib/account/loadAccountKnockoutSelection";
 import { loadPoolReveal } from "../../../lib/account/loadPoolReveal";
-import {
-  isPastAshbracket2026PoolLockDeadline,
-  resolveAccountParticipantId,
-} from "../../../lib/account/resolveAccountParticipantId";
+import { isPastAshbracket2026PoolLockDeadline } from "../../../lib/account/resolveAccountParticipantId";
 import { isGlobalAdmin } from "@/lib/auth/permissions";
 import { publicLeaderboardHrefForPool } from "../../../lib/pool/publicLeaderboardHref";
 import { fetchPublicTournamentProgress } from "../../../lib/tournament/fetchPublicTournamentProgress";
@@ -148,21 +145,9 @@ export default async function AccountPage({ searchParams }: PageProps) {
       }),
   );
 
-  const preferredParticipantId = resolveAccountParticipantId(
-    list.map((p) => ({
-      id: p.id,
-      pool_id: p.pool_id,
-      pool_lock_at: p.pool_lock_at,
-      pool_name: p.pool_name,
-      is_simulation: p.pool_is_simulation,
-      archived_at: p.pool_archived_at,
-    })),
-    sp.participant,
-  );
-
   const picksCtx =
-    !error && list.length > 0 && preferredParticipantId
-      ? await loadAccountKnockoutSelection(user.id, preferredParticipantId)
+    !error && list.length > 0
+      ? await loadAccountKnockoutSelection(user.id, sp.participant?.trim() ?? "")
       : null;
 
   let whoToCheer: ReturnType<typeof whoToCheerForFromSchedule> | null = null;
@@ -231,7 +216,7 @@ export default async function AccountPage({ searchParams }: PageProps) {
     picksHref: editPicksFromDashboardHref,
     activityHref,
   });
-  const { postLockEngagement, navPlan } = accountNav;
+  const { postLockEngagement, navPlan, suppressStandaloneNavRow } = accountNav;
   const pageTitleDescription = buildAccountPageTitleDescription({
     isOrganizerOnly: organizerOnly,
     hasSelectedParticipant: Boolean(picksCtx?.selectedParticipant),
@@ -374,34 +359,27 @@ export default async function AccountPage({ searchParams }: PageProps) {
             </div>
           ) : null}
 
-          <div className="mb-4 flex flex-wrap gap-3">
-            <Link href={navPlan.primary.href} className="btn-primary inline-flex">
-              {navPlan.primary.label}
-            </Link>
-            <Link
-              href={navPlan.secondary.href}
-              className="btn-ghost inline-flex ring-1 ring-ash-border"
-            >
-              {navPlan.secondary.label}
-            </Link>
-            {navPlan.tertiary ? (
+          {!suppressStandaloneNavRow ? (
+            <div className="mb-4 flex flex-wrap gap-3">
+              <Link href={navPlan.primary.href} className="btn-primary inline-flex">
+                {navPlan.primary.label}
+              </Link>
               <Link
-                href={navPlan.tertiary.href}
+                href={navPlan.secondary.href}
                 className="btn-ghost inline-flex ring-1 ring-ash-border"
               >
-                {navPlan.tertiary.label}
+                {navPlan.secondary.label}
               </Link>
-            ) : null}
-            {postLockEngagement &&
-            navPlan.secondary.label !== accountPicksNavLabel(locked) ? (
-              <Link
-                href={editPicksFromDashboardHref}
-                className="btn-ghost inline-flex text-sm ring-1 ring-ash-border"
-              >
-                {accountPicksNavLabel(locked)}
-              </Link>
-            ) : null}
-          </div>
+              {navPlan.tertiary ? (
+                <Link
+                  href={navPlan.tertiary.href}
+                  className="btn-ghost inline-flex ring-1 ring-ash-border"
+                >
+                  {navPlan.tertiary.label}
+                </Link>
+              ) : null}
+            </div>
+          ) : null}
 
           {picksCtx && picksCtx.profileLinkItems.length > 1 ? (
             <AccountPicksProfileLinks

@@ -176,8 +176,8 @@ export function PoolRevealPage({
       <div className="rounded-xl border border-ash-border bg-ash-surface p-6 text-center">
         <p className="text-sm text-ash-muted">
           {data.totalCompleted === 0
-            ? "No completed brackets to reveal yet."
-            : "No champion picks to reveal yet among completed brackets."}
+            ? `No completed brackets to reveal yet for ${poolName}.`
+            : `No champion picks found for ${poolName} yet among completed brackets.`}
         </p>
         <Link
           href={dashboardHref}

@@ -16,6 +16,7 @@ import type { Participant } from "../../types/participant";
 import type { KnockoutPickSlotDraft } from "../../types/adminKnockoutPicks";
 import { fetchOfficialRoundOf32Complete } from "../tournament/fetchOfficialRoundOf32Complete";
 import { poolLocked } from "../pools/poolLocked";
+import { resolveKnockoutSelectionParticipantId } from "./accountKnockoutSelectionId";
 import {
   mapPoolPaymentFromPool,
   mapPoolPaymentRow,
@@ -39,12 +40,11 @@ export const ACCOUNT_TOURNAMENT_STAGE_CODES = [
   "final",
 ] as const;
 
-const UUID_RE =
-  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-
 export type PoolEmbed = {
   name: string;
   lock_at: string | null;
+  is_simulation: boolean | null;
+  archived_at: string | null;
   tournament_edition_id: string | null;
   payment_type: string;
   entry_fee_label: string | null;
@@ -117,10 +117,6 @@ export async function loadAccountKnockoutSelection(
   userId: string,
   participantParam: string,
 ): Promise<AccountKnockoutSelection> {
-  const trimmed = participantParam.trim();
-  const paramId =
-    trimmed && UUID_RE.test(trimmed) ? trimmed : null;
-
   let myParticipants: MyParticipantRow[] = [];
   let teams: Team[] = [];
   let stages: TournamentStage[] = [];
@@ -129,6 +125,9 @@ export async function loadAccountKnockoutSelection(
   let groupTeamCountryCodesByLetter: Record<string, string[]> = {};
   let knockoutBracketPicksUnlocked = true;
   let loadError: string | null = null;
+  let paramId: string | null = null;
+  let invalidQuery = false;
+  let invalidOtherProfile = false;
   let selectedId: string | null = null;
   let selectedParticipant: Participant | null = null;
   let selectedPoolName = "";
@@ -154,6 +153,8 @@ export async function loadAccountKnockoutSelection(
         pools (
           name,
           lock_at,
+          is_simulation,
+          archived_at,
           tournament_edition_id,
           payment_type,
           entry_fee_label,
@@ -221,13 +222,21 @@ export async function loadAccountKnockoutSelection(
       }
     }
 
-    const profileIds = new Set(myParticipants.map((p) => p.id));
-
-    if (paramId && profileIds.has(paramId)) {
-      selectedId = paramId;
-    } else if (!paramId && myParticipants.length === 1) {
-      selectedId = myParticipants[0].id;
-    }
+    const selection = resolveKnockoutSelectionParticipantId(
+      myParticipants.map((p) => ({
+        id: p.id,
+        pool_id: p.pool_id,
+        pool_lock_at: p.pools?.lock_at ?? null,
+        pool_name: p.pools?.name ?? undefined,
+        is_simulation: Boolean(p.pools?.is_simulation),
+        archived_at: p.pools?.archived_at ?? null,
+      })),
+      participantParam,
+    );
+    paramId = selection.paramId;
+    invalidQuery = selection.invalidQuery;
+    invalidOtherProfile = selection.invalidOtherProfile;
+    selectedId = selection.selectedId;
 
     if (!loadError && selectedId) {
       const row = myParticipants.find((p) => p.id === selectedId);
@@ -304,13 +313,6 @@ export async function loadAccountKnockoutSelection(
       e instanceof Error ? e.message : "Failed to load your picks page.";
   }
 
-  const profileIds = new Set(myParticipants.map((p) => p.id));
-
-  const invalidOtherProfile =
-    Boolean(trimmed) &&
-    UUID_RE.test(trimmed) &&
-    !profileIds.has(trimmed);
-
   const stageByCode = Object.fromEntries(
     stages.map((s) => [s.code, s]),
   ) as Partial<Record<TournamentStage["code"], TournamentStage>>;
@@ -337,7 +339,7 @@ export async function loadAccountKnockoutSelection(
   return {
     loadError,
     myParticipants,
-    invalidQuery: Boolean(trimmed) && !UUID_RE.test(trimmed),
+    invalidQuery,
     invalidOtherProfile,
     paramId,
     selectedId,

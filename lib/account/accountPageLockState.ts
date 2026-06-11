@@ -66,6 +66,8 @@ export function buildAccountPageNavState(input: PostLockNavInput) {
   return {
     postLockEngagement,
     navPlan,
+    /** Standalone button row duplicates PostLockEngagementCard after lock. */
+    suppressStandaloneNavRow: postLockEngagement,
     showParticipantEditCopy:
       !postLockEngagement && !input.picksLocked,
   };

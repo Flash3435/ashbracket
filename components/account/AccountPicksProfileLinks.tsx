@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { buildAccountProfileLinkHref } from "@/lib/account/buildAccountProfileLinkHref";
 
 export type AccountPicksProfileLinkItem = {
   id: string;
@@ -54,7 +55,7 @@ export function AccountPicksProfileLinks({
                 <div className="mt-2 flex flex-wrap gap-2">
                   {p.picksLocked && revealBasePath ? (
                     <Link
-                      href={`${revealBasePath}?participant=${p.id}`}
+                      href={buildAccountProfileLinkHref(revealBasePath, p.id)}
                       className={`rounded-md px-2.5 py-1 text-xs font-medium underline-offset-2 hover:underline ${
                         active
                           ? "bg-ash-accent text-white hover:bg-ash-accent-hover"
@@ -65,7 +66,7 @@ export function AccountPicksProfileLinks({
                     </Link>
                   ) : null}
                   <Link
-                    href={`/account/picks?participant=${p.id}`}
+                    href={buildAccountProfileLinkHref("/account/picks", p.id)}
                     className={`rounded-md px-2.5 py-1 text-xs font-medium underline-offset-2 hover:underline ${
                       !p.picksLocked && active
                         ? "bg-ash-accent text-white hover:bg-ash-accent-hover"
@@ -76,7 +77,7 @@ export function AccountPicksProfileLinks({
                   </Link>
                   {summaryBasePath ? (
                     <Link
-                      href={`${summaryBasePath}?participant=${p.id}`}
+                      href={buildAccountProfileLinkHref(summaryBasePath, p.id)}
                       className="rounded-md bg-ash-body px-2.5 py-1 text-xs font-medium text-ash-text ring-1 ring-ash-border hover:bg-ash-surface"
                     >
                       Summary
@@ -84,7 +85,7 @@ export function AccountPicksProfileLinks({
                   ) : null}
                   {activityBasePath ? (
                     <Link
-                      href={`${activityBasePath}?participant=${p.id}`}
+                      href={buildAccountProfileLinkHref(activityBasePath, p.id)}
                       className="rounded-md bg-ash-body px-2.5 py-1 text-xs font-medium text-ash-text ring-1 ring-ash-border hover:bg-ash-surface"
                     >
                       Activity
@@ -92,7 +93,7 @@ export function AccountPicksProfileLinks({
                   ) : null}
                   {!p.picksLocked && revealBasePath ? (
                     <Link
-                      href={`${revealBasePath}?participant=${p.id}`}
+                      href={buildAccountProfileLinkHref(revealBasePath, p.id)}
                       className="rounded-md bg-ash-body px-2.5 py-1 text-xs font-medium text-ash-text ring-1 ring-ash-border hover:bg-ash-surface"
                     >
                       Preview reveal
