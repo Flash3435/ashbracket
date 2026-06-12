@@ -2,6 +2,48 @@ import { buildLiveDailyUpdateSuccessMessage } from "../liveDailyUpdateStatus";
 import type { SyncOfficialTournamentSummary } from "../syncOfficialTournament";
 import type { LiveScoresApplySummary } from "./types";
 
+export function isCardOnlyLiveScoresApply(applySummary: LiveScoresApplySummary): boolean {
+  return applySummary.planned === 0 && applySummary.cardsPlanned > 0;
+}
+
+function cardSummaryLine(applySummary: LiveScoresApplySummary): string {
+  return `Cards — planned: ${applySummary.cardsPlanned}; written: ${applySummary.cardsWritten}; skipped: ${applySummary.cardsSkipped}; manual conflicts: ${applySummary.cardsManualConflict}; failed verification: ${applySummary.cardsFailedVerification}.`;
+}
+
+function scoreSummaryLines(input: {
+  matchesUpdated: number;
+  applySummary: LiveScoresApplySummary;
+}): string[] {
+  if (input.applySummary.planned === 0) return [];
+
+  return [
+    `Applied ${input.matchesUpdated} of ${input.applySummary.planned} planned match score update${input.applySummary.planned === 1 ? "" : "s"} from the live-scores provider.`,
+    `Scores — written: ${input.applySummary.written}; skipped: ${input.applySummary.skipped}; failed verification: ${input.applySummary.failedVerification}.`,
+    `Provider ids saved: ${input.applySummary.providerFixtureIdsSaved}; ledgers recomputed: ${input.applySummary.ledgersRecomputed}.`,
+  ];
+}
+
+function buildCardOnlySuccessMessage(input: {
+  editionName: string;
+  editionCode: string;
+  applySummary: LiveScoresApplySummary;
+  warnings: string[];
+}): string {
+  const lines = [
+    `Provider card totals saved for edition “${input.editionName}” (${input.editionCode}).`,
+    cardSummaryLine(input.applySummary),
+    "No score patches were applied — match scores and pool point ledgers were not recalculated.",
+    "Bonus Watch and tournament stat leader pages were revalidated to pick up updated card totals.",
+    `Revalidated: ${input.applySummary.revalidatedPaths.join(", ")}.`,
+  ];
+
+  if (input.warnings.length > 0) {
+    lines.push(`Warnings: ${input.warnings.join(" ")}`);
+  }
+
+  return lines.join(" ");
+}
+
 export function buildLiveScoresApplySuccessMessage(input: {
   editionName: string;
   editionCode: string;
@@ -11,21 +53,36 @@ export function buildLiveScoresApplySuccessMessage(input: {
   applySummary: LiveScoresApplySummary;
   warnings: string[];
 }): string {
-  const base = buildLiveDailyUpdateSuccessMessage({
-    summary: input.summary,
-    editionName: input.editionName,
-    editionCode: input.editionCode,
-    lastUpdatedAt: input.lastUpdatedAt,
-  });
+  if (isCardOnlyLiveScoresApply(input.applySummary)) {
+    return buildCardOnlySuccessMessage({
+      editionName: input.editionName,
+      editionCode: input.editionCode,
+      applySummary: input.applySummary,
+      warnings: input.warnings,
+    });
+  }
 
   const lines = [
-    `Applied ${input.matchesUpdated} of ${input.applySummary.planned} planned match score update${input.applySummary.planned === 1 ? "" : "s"} from the live-scores provider.`,
-    `Scores — written: ${input.applySummary.written}; skipped: ${input.applySummary.skipped}; failed verification: ${input.applySummary.failedVerification}.`,
-    `Cards — planned: ${input.applySummary.cardsPlanned}; written: ${input.applySummary.cardsWritten}; skipped: ${input.applySummary.cardsSkipped}; manual conflicts: ${input.applySummary.cardsManualConflict}; failed verification: ${input.applySummary.cardsFailedVerification}.`,
-    `Provider ids saved: ${input.applySummary.providerFixtureIdsSaved}; ledgers recomputed: ${input.applySummary.ledgersRecomputed}.`,
-    `Revalidated: ${input.applySummary.revalidatedPaths.join(", ")}.`,
-    base,
+    ...scoreSummaryLines({
+      matchesUpdated: input.matchesUpdated,
+      applySummary: input.applySummary,
+    }),
   ];
+
+  if (input.applySummary.cardsPlanned > 0) {
+    lines.push(cardSummaryLine(input.applySummary));
+  }
+
+  lines.push(`Revalidated: ${input.applySummary.revalidatedPaths.join(", ")}.`);
+
+  lines.push(
+    buildLiveDailyUpdateSuccessMessage({
+      summary: input.summary,
+      editionName: input.editionName,
+      editionCode: input.editionCode,
+      lastUpdatedAt: input.lastUpdatedAt,
+    }),
+  );
 
   const failed = input.applySummary.details.filter((d) => d.planned && !d.verified);
   if (failed.length > 0) {

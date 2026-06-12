@@ -246,23 +246,29 @@ export async function applyLiveScoresAction(input: {
       };
     }
 
-    const recorded = await recordLiveDailyUpdateStatus(
-      supabase,
-      liveEdition.id,
-      applied.summary,
-    );
-    if (!recorded.ok) {
-      return {
-        ok: false,
-        error: `Scores applied but could not save last-update time: ${recorded.error}`,
-        warnings: applied.warnings,
-      };
+    const scoresWereApplied = applied.applySummary.planned > 0;
+    let lastUpdatedAt = new Date().toISOString();
+
+    if (scoresWereApplied) {
+      const recorded = await recordLiveDailyUpdateStatus(
+        supabase,
+        liveEdition.id,
+        applied.summary,
+      );
+      if (!recorded.ok) {
+        return {
+          ok: false,
+          error: `Scores applied but could not save last-update time: ${recorded.error}`,
+          warnings: applied.warnings,
+        };
+      }
+      lastUpdatedAt = recorded.lastUpdatedAt;
     }
 
     const message = buildLiveScoresApplySuccessMessage({
       editionName: liveEdition.name,
       editionCode: liveEdition.code,
-      lastUpdatedAt: recorded.lastUpdatedAt,
+      lastUpdatedAt,
       matchesUpdated: applied.matchesUpdated,
       summary: applied.summary,
       applySummary: applied.applySummary,
@@ -276,7 +282,7 @@ export async function applyLiveScoresAction(input: {
       editionId: liveEdition.id,
       editionCode: liveEdition.code,
       isSimulation: false,
-      affectedMatchCount: applied.matchesUpdated,
+      affectedMatchCount: applied.matchesUpdated + applied.applySummary.cardsWritten,
       affectedPoolCount: poolIds.length,
       affectedParticipantCount: impact?.participantCount,
       detail: message,
@@ -293,7 +299,7 @@ export async function applyLiveScoresAction(input: {
       matchesUpdated: applied.matchesUpdated,
       summary: applied.summary,
       applySummary: applied.applySummary,
-      lastUpdatedAt: recorded.lastUpdatedAt,
+      lastUpdatedAt,
       message,
       warnings: applied.warnings,
     };
