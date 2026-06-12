@@ -8,21 +8,28 @@ import {
   type getNhlDraft26PicksDeadlineDisplay,
 } from "@/lib/nhldraft26/config";
 import { saveNhlDraft26PicksAction } from "@/lib/nhldraft26/picks/actions";
+import {
+  clearNhlDraft26PendingBoard,
+  readNhlDraft26PendingBoard,
+  writeNhlDraft26PendingBoard,
+} from "@/lib/nhldraft26/pendingBoard";
 import { getNhlDraft26ConsensusTop10Ids } from "@/lib/nhldraft26/prospects";
 import {
   NHL_DRAFT26_DISPLAY_NAME_MAX,
   normalizeNhlDraft26DisplayName,
   validateNhlDraft26DisplayName,
 } from "@/lib/nhldraft26/validateDisplayName";
-import { useCallback, useMemo, useState, useTransition } from "react";
+import Link from "next/link";
+import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
 
 type Props = {
   prospects: NhlDraft26Prospect[];
   pickSlots: NhlDraft26PickSlot[];
   initialSavedProspectIds: string[];
   initialDisplayName: string;
-  /** When false, save stays disabled with sign-in messaging. */
-  canAttemptSave: boolean;
+  isSignedIn: boolean;
+  hasSavedPicksInDb: boolean;
+  quickStartConsensus: boolean;
   picksLocked: boolean;
   deadline: ReturnType<typeof getNhlDraft26PicksDeadlineDisplay>;
 };
@@ -35,12 +42,18 @@ function picksSignature(ids: string[]): string {
   return ids.join("\0");
 }
 
+function filterProspectIds(ids: string[], prospectById: Map<string, NhlDraft26Prospect>): string[] {
+  return ids.filter((id) => prospectById.has(id));
+}
+
 export function NhlDraft26PicksEditor({
   prospects,
   pickSlots,
   initialSavedProspectIds,
   initialDisplayName,
-  canAttemptSave,
+  isSignedIn,
+  hasSavedPicksInDb,
+  quickStartConsensus,
   picksLocked,
   deadline,
 }: Props) {
@@ -58,7 +71,50 @@ export function NhlDraft26PicksEditor({
   );
   const [saveMessage, setSaveMessage] = useState<string | null>(null);
   const [saveError, setSaveError] = useState<string | null>(null);
+  const [showSignInPrompt, setShowSignInPrompt] = useState(false);
   const [isPending, startTransition] = useTransition();
+  const hydratedRef = useRef(false);
+
+  useEffect(() => {
+    if (hydratedRef.current) return;
+    hydratedRef.current = true;
+
+    if (hasSavedPicksInDb) {
+      return;
+    }
+
+    const pending = readNhlDraft26PendingBoard();
+    if (pending) {
+      const filteredIds = filterProspectIds(pending.prospectIds, prospectById);
+      if (filteredIds.length > 0 || pending.displayName) {
+        if (filteredIds.length > 0) {
+          setSelectedIds(filteredIds);
+        }
+        if (pending.displayName) {
+          setDisplayName(pending.displayName);
+        }
+        return;
+      }
+    }
+
+    if (quickStartConsensus) {
+      setSelectedIds(getNhlDraft26ConsensusTop10Ids());
+    }
+  }, [hasSavedPicksInDb, quickStartConsensus, prospectById]);
+
+  const normalizedDisplayName = normalizeNhlDraft26DisplayName(displayName);
+
+  useEffect(() => {
+    if (!hydratedRef.current) return;
+    if (isSignedIn) return;
+    if (picksLocked) return;
+
+    writeNhlDraft26PendingBoard({
+      prospectIds: selectedIds,
+      displayName: normalizedDisplayName,
+      updatedAt: new Date().toISOString(),
+    });
+  }, [selectedIds, normalizedDisplayName, isSignedIn, picksLocked]);
 
   const selectedSet = useMemo(() => new Set(selectedIds), [selectedIds]);
   const available = useMemo(
@@ -78,12 +134,11 @@ export function NhlDraft26PicksEditor({
     new Set(selectedIds).size === NHL_DRAFT26_PICK_COUNT;
 
   const currentSignature = picksSignature(selectedIds);
-  const normalizedDisplayName = normalizeNhlDraft26DisplayName(displayName);
   const displayNameValidation = validateNhlDraft26DisplayName(displayName);
   const hasUnsavedChanges =
     currentSignature !== savedSignature ||
     normalizedDisplayName !== savedDisplayName;
-  const editingDisabled = picksLocked || !canAttemptSave;
+  const editingDisabled = picksLocked;
 
   const clearSaveFeedback = useCallback(() => {
     setSaveMessage(null);
@@ -145,10 +200,6 @@ export function NhlDraft26PicksEditor({
   }, [clearSaveFeedback, editingDisabled]);
 
   function handleSave() {
-    if (!canAttemptSave) {
-      setSaveError("Sign in to save picks.");
-      return;
-    }
     if (picksLocked) {
       setSaveError("Pick entry is closed — the deadline has passed.");
       return;
@@ -158,6 +209,16 @@ export function NhlDraft26PicksEditor({
     }
     if (!displayNameValidation.ok) {
       setSaveError(displayNameValidation.error);
+      return;
+    }
+
+    if (!isSignedIn) {
+      writeNhlDraft26PendingBoard({
+        prospectIds: selectedIds,
+        displayName: displayNameValidation.displayName,
+        updatedAt: new Date().toISOString(),
+      });
+      setShowSignInPrompt(true);
       return;
     }
 
@@ -171,6 +232,7 @@ export function NhlDraft26PicksEditor({
         const nextSignature = picksSignature(selectedIds);
         setSavedSignature(nextSignature);
         setSavedDisplayName(displayNameValidation.displayName);
+        clearNhlDraft26PendingBoard();
         setSaveMessage("Saved");
       } else {
         setSaveError(result.error);
@@ -179,12 +241,13 @@ export function NhlDraft26PicksEditor({
   }
 
   const saveDisabled =
-    !canAttemptSave ||
     picksLocked ||
     !isComplete ||
     !displayNameValidation.ok ||
     isPending ||
-    !hasUnsavedChanges;
+    (isSignedIn && !hasUnsavedChanges);
+
+  const signInNext = "/nhldraft26/picks";
 
   return (
     <div className="space-y-6">
@@ -337,8 +400,8 @@ export function NhlDraft26PicksEditor({
             Public leaderboard name
           </label>
           <p className="mt-1 text-xs leading-relaxed text-slate-500">
-            This name may appear publicly on the leaderboard. You can use your Reddit username if
-            you want people to recognize you.
+            This name may appear publicly on the leaderboard. Use your Reddit username if you want
+            people to recognize you.
           </p>
           <input
             id="nhl-draft26-display-name"
@@ -359,7 +422,7 @@ export function NhlDraft26PicksEditor({
               {displayNameValidation.error}
             </p>
           ) : null}
-          {!displayNameValidation.ok && displayName.length === 0 && canAttemptSave && !picksLocked ? (
+          {!displayNameValidation.ok && displayName.length === 0 && !picksLocked ? (
             <p className="mt-1.5 text-xs text-slate-500">
               Required before you can save your board.
             </p>
@@ -374,21 +437,23 @@ export function NhlDraft26PicksEditor({
         >
           {isPending ? "Saving…" : "Save my picks"}
         </button>
-        {!canAttemptSave ? (
-          <p className="text-sm text-amber-200/90">Sign in to save picks.</p>
+        {!isSignedIn && !picksLocked ? (
+          <p className="text-sm text-slate-400">
+            Your email will not appear on the public leaderboard.
+          </p>
         ) : null}
-        {picksLocked && canAttemptSave ? (
+        {picksLocked && isSignedIn ? (
           <p className="text-sm text-amber-200/90">
             Pick entry is closed. You cannot change or submit a new board.
           </p>
         ) : null}
-        {!isComplete && canAttemptSave && !picksLocked ? (
+        {!isComplete && !picksLocked ? (
           <p className="text-sm text-slate-400">
             Choose {NHL_DRAFT26_PICK_COUNT - selectedIds.length} more unique prospect
             {NHL_DRAFT26_PICK_COUNT - selectedIds.length === 1 ? "" : "s"} to save.
           </p>
         ) : null}
-        {hasUnsavedChanges && canAttemptSave && !picksLocked && isComplete ? (
+        {hasUnsavedChanges && isSignedIn && !picksLocked && isComplete ? (
           <p className="text-sm text-amber-200/90">You have unsaved changes.</p>
         ) : null}
         {isPending ? (
@@ -422,6 +487,48 @@ export function NhlDraft26PicksEditor({
           </p>
         ) : null}
       </div>
+
+      {showSignInPrompt ? (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 px-4"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="nhl-draft26-sign-in-title"
+        >
+          <div className="w-full max-w-md rounded-2xl border border-amber-500/25 bg-slate-900 px-5 py-6 shadow-xl">
+            <h2
+              id="nhl-draft26-sign-in-title"
+              className="text-lg font-semibold text-ash-text"
+            >
+              Create a free account or sign in to save your board
+            </h2>
+            <p className="mt-2 text-sm leading-relaxed text-slate-400">
+              Your picks are ready — sign in to save them.
+            </p>
+            <div className="mt-5 flex flex-wrap gap-3">
+              <Link
+                href={`/nhldraft26/signup?next=${encodeURIComponent(signInNext)}`}
+                className="btn-primary no-underline"
+              >
+                Create account
+              </Link>
+              <Link
+                href={`/nhldraft26/login?next=${encodeURIComponent(signInNext)}`}
+                className="btn-ghost border-amber-500/25 no-underline"
+              >
+                Sign in
+              </Link>
+            </div>
+            <button
+              type="button"
+              className="mt-4 text-sm text-slate-500 hover:text-slate-300"
+              onClick={() => setShowSignInPrompt(false)}
+            >
+              Keep editing
+            </button>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }

@@ -1,3 +1,5 @@
+import { NhlDraft26SeedConsensusBoard } from "@/components/nhldraft26/NhlDraft26SeedConsensusBoard";
+import type { NhlDraft26PickSlot } from "@/lib/nhldraft26/draftOrder";
 import type { NhlDraft26ConsensusBoard } from "@/lib/nhldraft26/leaderboard/consensus";
 import type { NhlDraft26PublicEntrySummary } from "@/lib/nhldraft26/leaderboard/queries";
 import type { NhlDraft26Prospect } from "@/lib/nhldraft26/prospectsSeed";
@@ -7,6 +9,7 @@ type Props = {
   board: NhlDraft26ConsensusBoard;
   entries: NhlDraft26PublicEntrySummary[];
   prospectById: Map<string, NhlDraft26Prospect>;
+  pickSlots: NhlDraft26PickSlot[];
 };
 
 function formatUpdatedAt(iso: string): string {
@@ -32,22 +35,10 @@ export function NhlDraft26CommunityLeaderboard({
   board,
   entries,
   prospectById,
+  pickSlots,
 }: Props) {
   if (board.boardCount === 0) {
-    return (
-      <section className="ash-surface px-4 py-10 text-center sm:px-5">
-        <p className="text-lg font-medium text-slate-200">No submitted boards yet</p>
-        <p className="mx-auto mt-2 max-w-md text-sm leading-relaxed text-slate-500">
-          Be the first to post a public top 10 with a leaderboard name. Standings will appear here
-          after the real draft results are entered.
-        </p>
-        <div className="mt-6">
-          <Link href="/nhldraft26/picks" className="btn-primary no-underline">
-            Make my picks
-          </Link>
-        </div>
-      </section>
-    );
+    return <NhlDraft26SeedConsensusBoard pickSlots={pickSlots} prospectById={prospectById} />;
   }
 
   const mostCommonOneLabel = board.mostCommonNumberOne

@@ -41,6 +41,12 @@ export default function NhlDraft26HomePage() {
           <Link href="/nhldraft26/picks" className="btn-primary no-underline">
             Make my picks
           </Link>
+          <Link
+            href="/nhldraft26/picks?quick=consensus"
+            className="btn-ghost border-amber-500/25 no-underline"
+          >
+            Start with consensus top 10
+          </Link>
           <Link href="/nhldraft26/leaderboard" className="btn-ghost border-amber-500/25 no-underline">
             View leaderboard
           </Link>
@@ -48,6 +54,10 @@ export default function NhlDraft26HomePage() {
             Rules
           </Link>
         </div>
+        <p className="mt-4 max-w-xl text-sm leading-relaxed text-slate-400">
+          No account needed to try it. Sign in only when you want to save your board.
+        </p>
+        <p className="mt-1 text-sm text-slate-500">Your email is never shown publicly.</p>
       </section>
 
       <section className="ash-surface px-4 py-5 sm:px-5">

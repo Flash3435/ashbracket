@@ -5,6 +5,7 @@ import {
   fetchNhlDraft26PublicLeaderboardData,
   hasNhlDraft26PublishedResults,
 } from "@/lib/nhldraft26/leaderboard/queries";
+import { getNhlDraft26Top10PickSlots } from "@/lib/nhldraft26/draftOrder";
 import { buildNhlDraft26ProspectMap } from "@/lib/nhldraft26/prospects";
 import { createClient } from "@/lib/supabase/server";
 import type { Metadata } from "next";
@@ -37,6 +38,7 @@ export default async function NhlDraft26LeaderboardPage() {
 
   const { data, error } = await fetchNhlDraft26PublicLeaderboardData(supabase);
   const prospectById = buildNhlDraft26ProspectMap();
+  const pickSlots = getNhlDraft26Top10PickSlots();
   const consensusBoard = buildNhlDraft26ConsensusBoard(data.picks, prospectById);
 
   return (
@@ -50,6 +52,12 @@ export default async function NhlDraft26LeaderboardPage() {
         <div className="mt-4 flex flex-wrap gap-3">
           <Link href="/nhldraft26/picks" className="btn-primary no-underline">
             Make my picks
+          </Link>
+          <Link
+            href="/nhldraft26/picks?quick=consensus"
+            className="btn-ghost border-amber-500/25 no-underline"
+          >
+            Start with consensus top 10
           </Link>
           <Link href="/nhldraft26/rules" className="btn-ghost border-amber-500/25 no-underline">
             Rules
@@ -67,6 +75,7 @@ export default async function NhlDraft26LeaderboardPage() {
         board={consensusBoard}
         entries={data.entries}
         prospectById={prospectById}
+        pickSlots={pickSlots}
       />
     </PageContainer>
   );

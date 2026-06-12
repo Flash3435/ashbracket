@@ -12,7 +12,6 @@ import { buildNhlDraft26ProspectMap, getNhlDraft26ProspectPool } from "@/lib/nhl
 import { createClient } from "@/lib/supabase/server";
 import type { Metadata } from "next";
 import Link from "next/link";
-import { redirect } from "next/navigation";
 
 export const metadata: Metadata = {
   title: "My picks",
@@ -21,6 +20,10 @@ export const metadata: Metadata = {
 
 export const dynamic = "force-dynamic";
 
+type PageProps = {
+  searchParams: Promise<{ quick?: string }>;
+};
+
 function filterSavedProspectIds(
   prospectIds: string[],
   pool: ReturnType<typeof buildNhlDraft26ProspectMap>,
@@ -28,15 +31,14 @@ function filterSavedProspectIds(
   return prospectIds.filter((id) => pool.has(id));
 }
 
-export default async function NhlDraft26PicksPage() {
+export default async function NhlDraft26PicksPage({ searchParams }: PageProps) {
+  const sp = await searchParams;
+  const quickStartConsensus = sp.quick === "consensus";
+
   const supabase = await createClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();
-
-  if (!user) {
-    redirect("/nhldraft26/login?next=/nhldraft26/picks");
-  }
 
   const prospects = getNhlDraft26ProspectPool();
   const pickSlots = getNhlDraft26Top10PickSlots();
@@ -44,12 +46,21 @@ export default async function NhlDraft26PicksPage() {
   const picksLocked = isNhlDraft26PicksLocked();
   const deadline = getNhlDraft26PicksDeadlineDisplay();
 
-  const { data: saved, error: loadError } = await fetchNhlDraft26SavedPicksForUser(
-    supabase,
-    user.id,
-  );
+  let initialSavedProspectIds: string[] = [];
+  let initialDisplayName = "";
+  let loadError: string | null = null;
+  let hadStaleSavedProspectIds = false;
 
-  const initialSavedProspectIds = filterSavedProspectIds(saved.prospectIds, prospectMap);
+  if (user) {
+    const { data: saved, error } = await fetchNhlDraft26SavedPicksForUser(supabase, user.id);
+    loadError = error;
+    initialSavedProspectIds = filterSavedProspectIds(saved.prospectIds, prospectMap);
+    initialDisplayName = saved.displayName ?? "";
+    hadStaleSavedProspectIds =
+      saved.prospectIds.length > 0 && initialSavedProspectIds.length === 0;
+  }
+
+  const hasSavedPicksInDb = initialSavedProspectIds.length > 0;
 
   return (
     <PageContainer compactBottom>
@@ -61,22 +72,34 @@ export default async function NhlDraft26PicksPage() {
           Rank {NHL_DRAFT26_PICK_COUNT} prospects from pick 1 through pick {NHL_DRAFT26_PICK_COUNT}.{" "}
           {NHL_DRAFT26_EVENT.prospectPoolNote}
         </p>
-        <p className="mt-2 text-sm text-slate-500">
-          Signed in as{" "}
-          <span className="text-slate-300">{user.email ?? "your account"}</span>.{" "}
-          <Link
-            href="/nhldraft26/rules"
-            className="text-amber-300/90 underline-offset-2 hover:underline"
-          >
-            Scoring rules
-          </Link>
-        </p>
+        {user ? (
+          <p className="mt-2 text-sm text-slate-500">
+            Signed in as{" "}
+            <span className="text-slate-300">{user.email ?? "your account"}</span>.{" "}
+            <Link
+              href="/nhldraft26/rules"
+              className="text-amber-300/90 underline-offset-2 hover:underline"
+            >
+              Scoring rules
+            </Link>
+          </p>
+        ) : (
+          <p className="mt-2 text-sm text-slate-400">
+            Build your board now. Sign in only when you&apos;re ready to save.{" "}
+            <Link
+              href="/nhldraft26/rules"
+              className="text-amber-300/90 underline-offset-2 hover:underline"
+            >
+              Scoring rules
+            </Link>
+          </p>
+        )}
         {loadError ? (
           <p className="mt-3 rounded-md border border-amber-700/50 bg-amber-950/30 px-3 py-2 text-sm text-amber-100">
             Could not load your saved picks ({loadError}). You can still build a new board below.
           </p>
         ) : null}
-        {saved.prospectIds.length > 0 && initialSavedProspectIds.length === 0 ? (
+        {hadStaleSavedProspectIds ? (
           <p className="mt-3 rounded-md border border-amber-700/50 bg-amber-950/30 px-3 py-2 text-sm text-amber-100">
             Saved picks reference prospects that are no longer in the pool. Choose a new top 10 to
             save again.
@@ -88,8 +111,10 @@ export default async function NhlDraft26PicksPage() {
         prospects={prospects}
         pickSlots={pickSlots}
         initialSavedProspectIds={initialSavedProspectIds}
-        initialDisplayName={saved.displayName ?? ""}
-        canAttemptSave={!!user}
+        initialDisplayName={initialDisplayName}
+        isSignedIn={!!user}
+        hasSavedPicksInDb={hasSavedPicksInDb}
+        quickStartConsensus={quickStartConsensus}
         picksLocked={picksLocked}
         deadline={deadline}
       />
