@@ -20,6 +20,8 @@ export type GlobalActivityForAdminResult = {
   reactions: ActivityReactionsSnapshot;
   /** pool_id → participant_id when the admin is also a pool member */
   viewerParticipantIdByPoolId: Record<string, string>;
+  /** pool_id → lock_at for post-lock feed behavior */
+  lockAtByPoolId: Record<string, string | null>;
   summary: GlobalActivityEngagementSummary;
   poolOverview: GlobalPoolEngagementOverviewRow[];
   poolOptions: Array<{ id: string; name: string }>;
@@ -86,6 +88,11 @@ export async function loadGlobalActivityForAdmin(
     .map((p) => ({ id: p.id, name: p.name }))
     .sort((a, b) => a.name.localeCompare(b.name));
 
+  const lockAtByPoolId: Record<string, string | null> = {};
+  for (const pool of pools) {
+    lockAtByPoolId[pool.id] = pool.lock_at ?? null;
+  }
+
   const viewerParticipantIdByPoolId: Record<string, string> = {};
   for (const row of membershipResult.data ?? []) {
     viewerParticipantIdByPoolId[row.pool_id as string] = row.id as string;
@@ -147,6 +154,7 @@ export async function loadGlobalActivityForAdmin(
     items,
     reactions,
     viewerParticipantIdByPoolId,
+    lockAtByPoolId,
     summary,
     poolOverview,
     poolOptions,

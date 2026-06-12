@@ -80,6 +80,7 @@ export default async function AdminGlobalActivityPage({ searchParams }: PageProp
               items={data.items}
               reactions={data.reactions}
               viewerParticipantIdByPoolId={data.viewerParticipantIdByPoolId}
+              lockAtByPoolId={data.lockAtByPoolId}
               poolOptions={data.poolOptions}
               initialPoolId={poolParam || null}
             />

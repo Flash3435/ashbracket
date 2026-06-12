@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
+import { poolLocked } from "../../lib/pools/poolLocked";
 import { loadPoolActivityForViewer } from "../../lib/poolActivity/loadPoolActivityForViewer";
 import { PoolActivityFeedPanel } from "./PoolActivityFeedPanel";
 
@@ -35,7 +36,19 @@ export async function PoolRecentActivitySection({
   let activity: Awaited<ReturnType<typeof loadPoolActivityForViewer>> | null =
     null;
   let loadError: string | null = null;
+  let locked = false;
+  let revealHref: string | null = null;
   try {
+    const { data: poolRow } = await supabase
+      .from("pools")
+      .select("lock_at")
+      .eq("id", poolId)
+      .maybeSingle();
+    locked = poolLocked((poolRow?.lock_at as string | null) ?? null);
+    revealHref =
+      locked && viewerParticipantId
+        ? `/account/reveal?participant=${viewerParticipantId}`
+        : null;
     activity = await loadPoolActivityForViewer(supabase, poolId, {
       ensureDailyRecap: true,
       limit: itemLimit,
@@ -83,6 +96,8 @@ export async function PoolRecentActivitySection({
           ashbotEnabled={activity?.ashbotEnabled ?? true}
           showFilters={showFilters}
           showAnnouncementComposer={showAnnouncementComposer}
+          poolLocked={locked}
+          revealHref={revealHref}
         />
       )}
     </section>

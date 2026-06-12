@@ -12,6 +12,10 @@ import {
 } from "./buildDeterministicRecapBody";
 import { loadRecapFacts } from "./loadRecapFacts";
 import { recapCalendarDateYmdEdmonton } from "./recapCalendarDate";
+import {
+  COMPLETION_RECAP_KIND,
+  shouldGenerateCompletionDailyRecap,
+} from "./activityFeedTournamentMode";
 import { recapMaterialUnchangedSincePrevious } from "./recapMaterialKey";
 
 function recapFlavorPrompt(facts: RecapFacts, recapDate: string): string {
@@ -63,6 +67,19 @@ export async function ensureDailyAshRecapForPool(poolId: string): Promise<void> 
   }
   if (existing?.id) return;
 
+  const { data: poolRow, error: poolErr } = await supabase
+    .from("pools")
+    .select("lock_at")
+    .eq("id", poolId)
+    .maybeSingle();
+  if (poolErr) {
+    throw new Error(poolErr.message);
+  }
+  const lockAt = (poolRow?.lock_at as string | null) ?? null;
+  if (!shouldGenerateCompletionDailyRecap(lockAt)) {
+    return;
+  }
+
   const { data: latestRecap, error: latestErr } = await supabase
     .from("pool_activity")
     .select("metadata_json")
@@ -101,6 +118,7 @@ export async function ensureDailyAshRecapForPool(poolId: string): Promise<void> 
   const isAi = Boolean(flavor);
 
   const metadataJson: Record<string, unknown> = {
+    recap_kind: COMPLETION_RECAP_KIND,
     recap_date: recapDate,
     recap_material_key_v1: recapMaterialKeyV1,
     participant_count: facts.participantCount,

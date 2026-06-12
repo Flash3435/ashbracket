@@ -189,6 +189,7 @@ export default async function AccountActivityPage({ searchParams }: PageProps) {
                   liveRecapDateYmd={activity.liveRecapDateYmd}
                   ashbotEnabled={activity.ashbotEnabled}
                   revealHref={revealHref}
+                  poolLocked={locked}
                 />
               ) : null}
             </>

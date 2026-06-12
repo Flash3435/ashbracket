@@ -58,8 +58,17 @@ const reconciled = recapActivityDisplayBody(staleBody, {
   submitted_count: 0,
 });
 t(
-  reconciled.startsWith("Ash's daily recap: 0 of 1 brackets are complete."),
+  reconciled.startsWith("0 of 1 brackets are complete."),
   "reconcile stale stored recap body",
+);
+t(
+  !buildDeterministicRecapBody({
+    participantCount: 14,
+    submittedCount: 12,
+    topChampionTeamName: null,
+    topChampionPickCount: 0,
+  }).includes("Ash's daily recap"),
+  "daily recap omits Ash prefix",
 );
 t(reconciled.includes("Flavor line."), "preserve recap flavor");
 

@@ -5,13 +5,17 @@ export type PoolActivityType =
   | "ash_daily_recap"
   | "announcement"
   | "pool_milestone"
-  | "pool_insight";
+  | "pool_insight"
+  | "ash_score_impact";
 
 /** Card header label for pool-wide milestone rows. */
 export type PoolMilestoneLabel = "MILESTONE" | "DEADLINE" | "POOL UPDATE";
 
 /** Card header label for pool-wide insight rows. */
 export type PoolInsightLabel = "POOL INSIGHT";
+
+/** Card header label for AshBot score-impact rows. */
+export type AshScoreImpactLabel = "SCORE IMPACT";
 
 export type PoolActivityFeedRow = {
   id: string;

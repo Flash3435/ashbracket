@@ -1,3 +1,4 @@
+import { formatBracketsCompleteLine } from "../copy/pluralize";
 import type { PoolActivityFeedRow } from "./poolActivityTypes";
 
 export type RecapFacts = {
@@ -124,12 +125,11 @@ export function buildDeterministicRecapBody(facts: RecapFacts): string {
   const { participantCount, submittedCount, topChampionTeamName, topChampionPickCount } =
     facts;
   if (participantCount <= 0) {
-    return "Ash's daily recap: this pool is warming up - no participants yet, so the bracket gossip can wait.";
+    return "This pool is warming up — no participants yet, so the bracket gossip can wait.";
   }
-  let line = `Ash's daily recap: ${submittedCount} of ${participantCount} brackets are complete`;
+  let line = formatBracketsCompleteLine(submittedCount, participantCount);
   if (shouldShowChampionInsight(facts)) {
-    line += `. Among them, ${topChampionTeamName} is the most popular champion pick (${topChampionPickCount} pick${topChampionPickCount === 1 ? "" : "s"})`;
+    line += ` Among them, ${topChampionTeamName} is the most popular champion pick (${topChampionPickCount} pick${topChampionPickCount === 1 ? "" : "s"}).`;
   }
-  line += ".";
   return line;
 }

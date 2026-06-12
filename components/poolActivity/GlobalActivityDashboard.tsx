@@ -12,6 +12,10 @@ import {
   type GlobalActivityFeedFilter,
 } from "@/lib/poolActivity/globalActivityFeedFilter";
 import { applyGlobalActivityFeedGrouping } from "@/lib/poolActivity/activityFeedGrouping";
+import {
+  applyPostLockDefaultAllFeedFilterForGlobal,
+  sortGlobalDisplayItemsForPostLockTournamentMode,
+} from "@/lib/poolActivity/activityFeedTournamentMode";
 import type { GlobalPoolActivityFeedRow } from "@/lib/poolActivity/globalActivityTypes";
 import { GlobalActivityFeed } from "./GlobalActivityFeed";
 
@@ -21,6 +25,7 @@ type GlobalActivityDashboardProps = {
   items: GlobalPoolActivityFeedRow[];
   reactions: ActivityReactionsSnapshot;
   viewerParticipantIdByPoolId: Record<string, string>;
+  lockAtByPoolId: Record<string, string | null>;
   poolOptions: PoolOption[];
   initialPoolId?: string | null;
 };
@@ -29,6 +34,7 @@ export function GlobalActivityDashboard({
   items,
   reactions,
   viewerParticipantIdByPoolId,
+  lockAtByPoolId,
   poolOptions,
   initialPoolId = null,
 }: GlobalActivityDashboardProps) {
@@ -53,8 +59,25 @@ export function GlobalActivityDashboard({
       display,
       participantQuery,
     );
+    if (!showAllSystemCards) {
+      display = applyPostLockDefaultAllFeedFilterForGlobal(display, typeFilter, {
+        lockAtByPoolId,
+      });
+      if (typeFilter === "all") {
+        display = sortGlobalDisplayItemsForPostLockTournamentMode(display, {
+          lockAtByPoolId,
+        });
+      }
+    }
     return display;
-  }, [items, poolFilter, typeFilter, participantQuery, showAllSystemCards]);
+  }, [
+    items,
+    poolFilter,
+    typeFilter,
+    participantQuery,
+    showAllSystemCards,
+    lockAtByPoolId,
+  ]);
 
   const emptyMessage =
     typeFilter !== "all" || poolFilter || participantQuery.trim()

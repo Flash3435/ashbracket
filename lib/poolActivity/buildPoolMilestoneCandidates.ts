@@ -111,7 +111,7 @@ export function buildDeadlineMilestoneCandidates(
   if (lockMs <= nowMs) {
     out.push({
       sourceKey: "lock_passed",
-      bodyText: "🔒 Picks are locked. No more changes.",
+      bodyText: "🔒 Picks are locked. Pool reveal is open.",
       milestoneLabel: "POOL UPDATE",
       metadata: { lock_at: lockAt, incomplete_count: remaining },
     });

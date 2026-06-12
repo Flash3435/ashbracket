@@ -28,21 +28,31 @@ function milestoneLabel(item: PoolActivityFeedRow): string | null {
   return typeof v === "string" ? v : null;
 }
 
+export type ActivityDisplayPriorityOptions = {
+  /** When true, deprioritize pre-lock engagement noise in the default feed. */
+  poolLocked?: boolean;
+};
+
 /** Assigns a display priority tier for feed noise reduction. */
 export function activityDisplayPriority(
   item: PoolActivityFeedRow,
+  options: ActivityDisplayPriorityOptions = {},
 ): ActivityDisplayPriority {
+  const locked = options.poolLocked === true;
+
   switch (item.type) {
     case "announcement":
       return "high";
     case "participant_joined":
     case "participant_submitted_picks":
     case "participant_updated_picks":
-      return "medium";
+      return locked ? "low" : "medium";
     case "ash_daily_recap":
-      return "medium";
+      return locked ? "low" : "medium";
+    case "ash_score_impact":
+      return "high";
     case "pool_milestone":
-      return poolMilestoneDisplayPriority(item);
+      return poolMilestoneDisplayPriority(item, locked);
     case "pool_insight":
       return poolInsightDisplayPriority(item);
     default:
@@ -52,6 +62,7 @@ export function activityDisplayPriority(
 
 function poolMilestoneDisplayPriority(
   item: PoolActivityFeedRow,
+  poolLockedNow: boolean,
 ): ActivityDisplayPriority {
   const sk = sourceKey(item);
   const label = milestoneLabel(item);
@@ -59,7 +70,7 @@ function poolMilestoneDisplayPriority(
   if (
     sk === "lock_passed" ||
     sk === "picks_locked_insights" ||
-    sk === "completion_100"
+    sk === "pool_reveal_open"
   ) {
     return "high";
   }
@@ -68,12 +79,16 @@ function poolMilestoneDisplayPriority(
     return "high";
   }
 
+  if (sk === "completion_100") {
+    return poolLockedNow ? "medium" : "high";
+  }
+
   if (
     sk === "completion_50" ||
     sk === "completion_75" ||
     sk === "completion_remaining_le3"
   ) {
-    return "medium";
+    return poolLockedNow ? "low" : "medium";
   }
 
   if (sk?.startsWith("completion_count_")) {

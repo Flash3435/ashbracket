@@ -7,6 +7,10 @@ import {
 } from "@/lib/poolActivity/activityFeedDisplayFilter";
 import { type ActivityFeedFilter } from "@/lib/poolActivity/activityFeedFilter";
 import { applyPoolActivityFeedGrouping } from "@/lib/poolActivity/activityFeedGrouping";
+import {
+  applyPostLockDefaultAllFeedFilter,
+  sortDisplayItemsForPostLockTournamentMode,
+} from "@/lib/poolActivity/activityFeedTournamentMode";
 import type { ActivityReactionsSnapshot } from "@/lib/poolActivity/activityReactionTypes";
 import type { PoolActivityFeedRow } from "@/lib/poolActivity/poolActivityTypes";
 import { ActivityFeedFilters } from "./ActivityFeedFilters";
@@ -26,6 +30,8 @@ type PoolActivityFeedPanelProps = {
   showAnnouncementComposer?: boolean;
   ashbotEnabled?: boolean;
   revealHref?: string | null;
+  /** When true, default All feed hides completion recaps and favors tournament activity. */
+  poolLocked?: boolean;
 };
 
 export function PoolActivityFeedPanel({
@@ -41,18 +47,26 @@ export function PoolActivityFeedPanel({
   showAnnouncementComposer = true,
   ashbotEnabled = true,
   revealHref = null,
+  poolLocked = false,
 }: PoolActivityFeedPanelProps) {
   const [filter, setFilter] = useState<ActivityFeedFilter>("all");
 
-  const displayItems = useMemo(
-    () => applyPoolActivityFeedGrouping(items, "light", poolId),
-    [items, poolId],
-  );
+  const displayItems = useMemo(() => {
+    const grouped = applyPoolActivityFeedGrouping(
+      items,
+      poolLocked ? "strict" : "light",
+      poolId,
+    );
+    const typeFiltered = filterPoolActivityDisplayItems(grouped, filter);
+    const postLockFiltered = applyPostLockDefaultAllFeedFilter(typeFiltered, filter, {
+      poolLocked,
+    });
+    return sortDisplayItemsForPostLockTournamentMode(postLockFiltered, {
+      poolLocked: poolLocked && filter === "all",
+    });
+  }, [items, poolId, filter, poolLocked]);
 
-  const filteredItems = useMemo(
-    () => filterPoolActivityDisplayItems(displayItems, filter),
-    [displayItems, filter],
-  );
+  const filteredItems = displayItems;
 
   return (
     <>
