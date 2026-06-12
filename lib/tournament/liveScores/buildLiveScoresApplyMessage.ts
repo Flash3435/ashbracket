@@ -20,7 +20,9 @@ export function buildLiveScoresApplySuccessMessage(input: {
 
   const lines = [
     `Applied ${input.matchesUpdated} of ${input.applySummary.planned} planned match score update${input.applySummary.planned === 1 ? "" : "s"} from the live-scores provider.`,
-    `Written: ${input.applySummary.written}; skipped: ${input.applySummary.skipped}; failed verification: ${input.applySummary.failedVerification}; provider ids saved: ${input.applySummary.providerFixtureIdsSaved}; ledgers recomputed: ${input.applySummary.ledgersRecomputed}.`,
+    `Scores — written: ${input.applySummary.written}; skipped: ${input.applySummary.skipped}; failed verification: ${input.applySummary.failedVerification}.`,
+    `Cards — planned: ${input.applySummary.cardsPlanned}; written: ${input.applySummary.cardsWritten}; skipped: ${input.applySummary.cardsSkipped}; manual conflicts: ${input.applySummary.cardsManualConflict}; failed verification: ${input.applySummary.cardsFailedVerification}.`,
+    `Provider ids saved: ${input.applySummary.providerFixtureIdsSaved}; ledgers recomputed: ${input.applySummary.ledgersRecomputed}.`,
     `Revalidated: ${input.applySummary.revalidatedPaths.join(", ")}.`,
     base,
   ];
@@ -52,7 +54,8 @@ export function buildLiveScoresApplyFailureMessage(input: {
 
   const lines = [
     input.error,
-    `Planned: ${input.applySummary.planned}; written: ${input.applySummary.written}; skipped: ${input.applySummary.skipped}; failed verification: ${input.applySummary.failedVerification}.`,
+    `Scores — planned: ${input.applySummary.planned}; written: ${input.applySummary.written}; skipped: ${input.applySummary.skipped}; failed verification: ${input.applySummary.failedVerification}.`,
+    `Cards — planned: ${input.applySummary.cardsPlanned}; written: ${input.applySummary.cardsWritten}; manual conflicts: ${input.applySummary.cardsManualConflict}; failed verification: ${input.applySummary.cardsFailedVerification}.`,
   ];
 
   const failed = input.applySummary.details.filter((d) => d.planned && !d.verified);

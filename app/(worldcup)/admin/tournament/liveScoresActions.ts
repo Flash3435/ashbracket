@@ -14,19 +14,16 @@ import {
   applyLiveScoresAndSync,
   LIVE_SCORES_REVALIDATED_PATHS,
 } from "@/lib/tournament/liveScores/applyLiveScores";
+import { buildLiveScoresPreviewWithCards } from "@/lib/tournament/liveScores/buildLiveScoresPreviewWithCards";
 import {
   buildLiveScoresApplyFailureMessage,
   buildLiveScoresApplySuccessMessage,
 } from "@/lib/tournament/liveScores/buildLiveScoresApplyMessage";
-import { loadTournamentMatchesForLiveScores } from "@/lib/tournament/liveScores/loadTournamentMatches";
 import {
-  buildScoreChangePreview,
+  cardPatchesFromPreviewRows,
   patchesFromPreviewRows,
 } from "@/lib/tournament/liveScores/matchMapping";
-import {
-  fetchLiveWorldCupScores,
-  getLiveScoresProviderConfig,
-} from "@/lib/tournament/liveScores/provider";
+import { getLiveScoresProviderConfig } from "@/lib/tournament/liveScores/provider";
 import type {
   LiveScoresApplySummary,
   ScoreChangePreview,
@@ -99,14 +96,9 @@ export async function fetchLiveScoresPreviewAction(): Promise<LiveScoresPreviewR
       };
     }
 
-    const loaded = await loadTournamentMatchesForLiveScores(supabase, liveEdition.id);
-    if ("error" in loaded) {
-      return { ok: false, error: loaded.error };
-    }
-
     const fetchedAt = new Date().toISOString();
-    const fetchResult = await fetchLiveWorldCupScores(config);
-    if (!fetchResult.ok) {
+    const built = await buildLiveScoresPreviewWithCards(supabase, liveEdition.id, fetchedAt);
+    if (!built.ok) {
       logAdminRiskAction({
         action: "live_scores_preview",
         userId: user.id,
@@ -115,23 +107,16 @@ export async function fetchLiveScoresPreviewAction(): Promise<LiveScoresPreviewR
         editionCode: liveEdition.code,
         isSimulation: false,
         previewOnly: true,
-        detail: fetchResult.error,
+        detail: built.error,
       });
       return {
         ok: false,
-        error: fetchResult.error,
-        configWarning: fetchResult.configWarning,
+        error: built.error,
+        configWarning: built.configWarning,
       };
     }
 
-    const preview = buildScoreChangePreview({
-      provider: fetchResult.provider,
-      providerConfigured: config.configured,
-      configWarning: config.configWarning,
-      fetchedAt,
-      matches: loaded.matches,
-      fixtures: fetchResult.fixtures,
-    });
+    const preview = built.preview;
 
     logAdminRiskAction({
       action: "live_scores_preview",
@@ -141,8 +126,8 @@ export async function fetchLiveScoresPreviewAction(): Promise<LiveScoresPreviewR
       editionCode: liveEdition.code,
       isSimulation: false,
       previewOnly: true,
-      affectedMatchCount: preview.summary.willUpdate,
-      detail: `provider=${preview.provider} willUpdate=${preview.summary.willUpdate}`,
+      affectedMatchCount: preview.summary.willUpdate + preview.summary.cardsWillUpdate,
+      detail: `provider=${preview.provider} willUpdate=${preview.summary.willUpdate} cardsWillUpdate=${preview.summary.cardsWillUpdate}`,
     });
 
     return { ok: true, preview };
@@ -189,39 +174,31 @@ export async function applyLiveScoresAction(input: {
       };
     }
 
-    const loaded = await loadTournamentMatchesForLiveScores(supabase, liveEdition.id);
-    if ("error" in loaded) {
+    const loaded = await buildLiveScoresPreviewWithCards(supabase, liveEdition.id, new Date().toISOString());
+    if (!loaded.ok) {
       return { ok: false, error: loaded.error };
     }
 
-    const fetchResult = await fetchLiveWorldCupScores(config);
-    if (!fetchResult.ok) {
-      return { ok: false, error: fetchResult.error };
-    }
-
-    const fetchedAt = new Date().toISOString();
-    const preview = buildScoreChangePreview({
-      provider: fetchResult.provider,
-      providerConfigured: config.configured,
-      configWarning: config.configWarning,
-      fetchedAt,
-      matches: loaded.matches,
-      fixtures: fetchResult.fixtures,
-    });
+    const preview = loaded.preview;
 
     if (preview.previewId !== input.previewId) {
       return {
         ok: false,
         error:
-          "Provider data changed since preview — fetch latest scores again and confirm the new plan.",
+          "Provider data changed since preview — fetch latest scores and cards again and confirm the new plan.",
       };
     }
 
     const patches = patchesFromPreviewRows(preview.rows);
-    if (patches.length === 0) {
+    const cardPatches = cardPatchesFromPreviewRows(
+      preview.rows,
+      liveEdition.id,
+      loaded.matches,
+    );
+    if (patches.length === 0 && cardPatches.length === 0) {
       return {
         ok: false,
-        error: preview.message ?? "No final score changes to apply.",
+        error: preview.message ?? "No final score or card changes to apply.",
       };
     }
 
@@ -241,6 +218,7 @@ export async function applyLiveScoresAction(input: {
       poolIds,
       previewRows: preview.rows,
       patches,
+      cardPatches,
       providerFixtureIdUpdates,
     });
 

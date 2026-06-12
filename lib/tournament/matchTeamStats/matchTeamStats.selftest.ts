@@ -9,7 +9,7 @@ import {
   MATCH_TEAM_STAT_ROW_KEYS,
   teamStatsAreEmpty,
 } from "./buildTeamStatUpsertRows";
-import { deriveTeamStatTotals, goalsForTeamFromMatch, topTeamStatLeaders } from "./deriveTeamStatTotals";
+import { deriveTeamStatTotals, goalsForTeamFromMatch, resolveTeamStatsForAggregation, topTeamStatLeaders } from "./deriveTeamStatTotals";
 import {
   assertTeamIdsBelongToMatch,
   validateMatchTeamStatsPayload,
@@ -206,6 +206,51 @@ assert.equal(cardTotals.redCardsByTeamId.get("A"), 1);
 assert.equal(cardTotals.redCardsByTeamId.get("B"), 2);
 const yellowLeaders = topTeamStatLeaders(cardTotals.yellowCardsByTeamId);
 assert.equal(yellowLeaders[0]!.teamId, "A");
+
+// manual rows override provider rows for the same match/team
+const precedenceTotals = deriveTeamStatTotals({
+  matches: [],
+  teamStats: resolveTeamStatsForAggregation([
+    {
+      id: "s-manual",
+      editionId,
+      matchId: "m1",
+      teamId: "A",
+      yellowCards: 5,
+      redCards: 0,
+      source: "manual",
+    },
+    {
+      id: "s-provider",
+      editionId,
+      matchId: "m1",
+      teamId: "A",
+      yellowCards: 1,
+      redCards: 2,
+      source: "provider",
+    },
+  ]),
+});
+assert.equal(precedenceTotals.yellowCardsByTeamId.get("A"), 5);
+assert.equal(precedenceTotals.redCardsByTeamId.get("A"), 0);
+
+// provider rows used when no manual row exists
+const providerOnlyTotals = deriveTeamStatTotals({
+  matches: [],
+  teamStats: resolveTeamStatsForAggregation([
+    {
+      id: "s-provider",
+      editionId,
+      matchId: "m1",
+      teamId: "A",
+      yellowCards: 2,
+      redCards: 1,
+      source: "provider",
+    },
+  ]),
+});
+assert.equal(providerOnlyTotals.yellowCardsByTeamId.get("A"), 2);
+assert.equal(providerOnlyTotals.redCardsByTeamId.get("A"), 1);
 
 // 11. corrections overwrite previous totals idempotently (same upsert keys)
 if (validCards.ok) {

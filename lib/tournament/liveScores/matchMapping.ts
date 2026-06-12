@@ -1,6 +1,11 @@
 import { createHash } from "node:crypto";
+import type { NormalizedFixtureEvents } from "./apiFootballEvents";
+import { effectiveDbCardTotals } from "./loadMatchCardStatsForLiveScores";
 import { teamNamesMatch } from "./normalizeTeamName";
 import type {
+  CardChangeRowReason,
+  MatchCardStatsSnapshot,
+  ProviderCardPatchInput,
   ProviderFixtureScore,
   ScoreChangePreview,
   ScoreChangePreviewRow,
@@ -163,6 +168,284 @@ function reasonForFixture(
   return "will_update";
 }
 
+function cardsEqual(
+  aHy: number | null,
+  aAy: number | null,
+  aHr: number | null,
+  aAr: number | null,
+  bHy: number,
+  bAy: number,
+  bHr: number,
+  bAr: number,
+): boolean {
+  return aHy === bHy && aAy === bAy && aHr === bHr && aAr === bAr;
+}
+
+function manualHasAnyCards(snapshot: MatchCardStatsSnapshot | undefined): boolean {
+  if (!snapshot?.manual) return false;
+  const { home, away } = snapshot.manual;
+  return [home.yellowCards, home.redCards, away.yellowCards, away.redCards].some((v) => v != null);
+}
+
+function manualDiffersFromFetched(
+  snapshot: MatchCardStatsSnapshot | undefined,
+  fetched: NormalizedFixtureEvents,
+): boolean {
+  if (!snapshot?.manual) return false;
+  const { home, away } = snapshot.manual;
+  const values = [
+    [home.yellowCards, fetched.homeYellowCards],
+    [away.yellowCards, fetched.awayYellowCards],
+    [home.redCards, fetched.homeRedCards],
+    [away.redCards, fetched.awayRedCards],
+  ] as const;
+  return values.some(([manual, provider]) => manual != null && manual !== provider);
+}
+
+function cardPlanForMappedRow(input: {
+  match: TournamentMatchForLiveScores;
+  fixture: ProviderFixtureScore;
+  scoreReason: ScoreChangeRowReason;
+  ambiguousFixtureIds: Set<string>;
+  cardStats?: MatchCardStatsSnapshot;
+  events?: NormalizedFixtureEvents | null;
+  eventFetchFailed?: boolean;
+}): {
+  cardReason: CardChangeRowReason;
+  cardWillUpdate: boolean;
+  fetchedHomeYellowCards: number | null;
+  fetchedAwayYellowCards: number | null;
+  fetchedHomeRedCards: number | null;
+  fetchedAwayRedCards: number | null;
+  cardWarnings: string[];
+} {
+  const db = effectiveDbCardTotals(input.cardStats);
+  const cardWarnings: string[] = [];
+
+  if (input.ambiguousFixtureIds.has(input.fixture.providerFixtureId)) {
+    return {
+      cardReason: "skipped",
+      cardWillUpdate: false,
+      fetchedHomeYellowCards: null,
+      fetchedAwayYellowCards: null,
+      fetchedHomeRedCards: null,
+      fetchedAwayRedCards: null,
+      cardWarnings,
+    };
+  }
+
+  if (input.match.syncLocked) {
+    return {
+      cardReason: "skipped",
+      cardWillUpdate: false,
+      fetchedHomeYellowCards: null,
+      fetchedAwayYellowCards: null,
+      fetchedHomeRedCards: null,
+      fetchedAwayRedCards: null,
+      cardWarnings,
+    };
+  }
+
+  if (input.fixture.status !== "finished") {
+    return {
+      cardReason: "skipped",
+      cardWillUpdate: false,
+      fetchedHomeYellowCards: null,
+      fetchedAwayYellowCards: null,
+      fetchedHomeRedCards: null,
+      fetchedAwayRedCards: null,
+      cardWarnings,
+    };
+  }
+
+  if (!input.fixture.providerFixtureId) {
+    cardWarnings.push("No provider fixture id — card events were not fetched.");
+    return {
+      cardReason: "no_event_data",
+      cardWillUpdate: false,
+      fetchedHomeYellowCards: null,
+      fetchedAwayYellowCards: null,
+      fetchedHomeRedCards: null,
+      fetchedAwayRedCards: null,
+      cardWarnings,
+    };
+  }
+
+  if (input.eventFetchFailed) {
+    cardWarnings.push("Could not fetch fixture events — card totals unavailable.");
+    return {
+      cardReason: "no_event_data",
+      cardWillUpdate: false,
+      fetchedHomeYellowCards: null,
+      fetchedAwayYellowCards: null,
+      fetchedHomeRedCards: null,
+      fetchedAwayRedCards: null,
+      cardWarnings,
+    };
+  }
+
+  if (!input.events) {
+    cardWarnings.push("No fixture event data returned from provider.");
+    return {
+      cardReason: "no_event_data",
+      cardWillUpdate: false,
+      fetchedHomeYellowCards: null,
+      fetchedAwayYellowCards: null,
+      fetchedHomeRedCards: null,
+      fetchedAwayRedCards: null,
+      cardWarnings,
+    };
+  }
+
+  const fetched = input.events;
+  const fetchedHomeYellowCards = fetched.homeYellowCards;
+  const fetchedAwayYellowCards = fetched.awayYellowCards;
+  const fetchedHomeRedCards = fetched.homeRedCards;
+  const fetchedAwayRedCards = fetched.awayRedCards;
+
+  if (
+    input.fixture.homeGoals != null &&
+    input.fixture.awayGoals != null &&
+    (fetched.homeGoalEvents !== input.fixture.homeGoals ||
+      fetched.awayGoalEvents !== input.fixture.awayGoals)
+  ) {
+    cardWarnings.push(
+      `Event goal count (${fetched.homeGoalEvents}–${fetched.awayGoalEvents}) differs from final score (${input.fixture.homeGoals}–${input.fixture.awayGoals}).`,
+    );
+  }
+
+  cardWarnings.push(...fetched.warnings);
+
+  if (manualDiffersFromFetched(input.cardStats, fetched)) {
+    cardWarnings.push(
+      "Manual card totals differ from provider; keep manual unless forced.",
+    );
+    return {
+      cardReason: "manual_conflict",
+      cardWillUpdate: false,
+      fetchedHomeYellowCards,
+      fetchedAwayYellowCards,
+      fetchedHomeRedCards,
+      fetchedAwayRedCards,
+      cardWarnings,
+    };
+  }
+
+  if (manualHasAnyCards(input.cardStats)) {
+    const manualMatchesFetched = cardsEqual(
+      input.cardStats!.manual!.home.yellowCards,
+      input.cardStats!.manual!.away.yellowCards,
+      input.cardStats!.manual!.home.redCards,
+      input.cardStats!.manual!.away.redCards,
+      fetchedHomeYellowCards,
+      fetchedAwayYellowCards,
+      fetchedHomeRedCards,
+      fetchedAwayRedCards,
+    );
+    if (manualMatchesFetched) {
+      return {
+        cardReason: "unchanged",
+        cardWillUpdate: false,
+        fetchedHomeYellowCards,
+        fetchedAwayYellowCards,
+        fetchedHomeRedCards,
+        fetchedAwayRedCards,
+        cardWarnings,
+      };
+    }
+  }
+
+  const providerSide = input.cardStats?.provider;
+  const compareAgainstProvider = providerSide
+    ? {
+        homeYellow: providerSide.home.yellowCards,
+        awayYellow: providerSide.away.yellowCards,
+        homeRed: providerSide.home.redCards,
+        awayRed: providerSide.away.redCards,
+      }
+    : db;
+
+  const unchanged = cardsEqual(
+    compareAgainstProvider.homeYellow,
+    compareAgainstProvider.awayYellow,
+    compareAgainstProvider.homeRed,
+    compareAgainstProvider.awayRed,
+    fetchedHomeYellowCards,
+    fetchedAwayYellowCards,
+    fetchedHomeRedCards,
+    fetchedAwayRedCards,
+  );
+
+  if (unchanged && (manualHasAnyCards(input.cardStats) || input.cardStats?.provider)) {
+    return {
+      cardReason: "unchanged",
+      cardWillUpdate: false,
+      fetchedHomeYellowCards,
+      fetchedAwayYellowCards,
+      fetchedHomeRedCards,
+      fetchedAwayRedCards,
+      cardWarnings,
+    };
+  }
+
+  if (
+    unchanged &&
+    !manualHasAnyCards(input.cardStats) &&
+    !input.cardStats?.provider
+  ) {
+    return {
+      cardReason: "will_update",
+      cardWillUpdate: true,
+      fetchedHomeYellowCards,
+      fetchedAwayYellowCards,
+      fetchedHomeRedCards,
+      fetchedAwayRedCards,
+      cardWarnings,
+    };
+  }
+
+  if (unchanged) {
+    return {
+      cardReason: "unchanged",
+      cardWillUpdate: false,
+      fetchedHomeYellowCards,
+      fetchedAwayYellowCards,
+      fetchedHomeRedCards,
+      fetchedAwayRedCards,
+      cardWarnings,
+    };
+  }
+
+  return {
+    cardReason: "will_update",
+    cardWillUpdate: true,
+    fetchedHomeYellowCards,
+    fetchedAwayYellowCards,
+    fetchedHomeRedCards,
+    fetchedAwayRedCards,
+    cardWarnings,
+  };
+}
+
+function emptyCardPreviewFields(): Pick<
+  ScoreChangePreviewRow,
+  | "fetchedHomeYellowCards"
+  | "fetchedAwayYellowCards"
+  | "fetchedHomeRedCards"
+  | "fetchedAwayRedCards"
+  | "cardWillUpdate"
+  | "cardReason"
+> {
+  return {
+    fetchedHomeYellowCards: null,
+    fetchedAwayYellowCards: null,
+    fetchedHomeRedCards: null,
+    fetchedAwayRedCards: null,
+    cardWillUpdate: false,
+    cardReason: "unmapped",
+  };
+}
+
 export function buildScoreChangePreview(input: {
   provider: string;
   providerConfigured: boolean;
@@ -170,6 +453,9 @@ export function buildScoreChangePreview(input: {
   fetchedAt: string;
   matches: TournamentMatchForLiveScores[];
   fixtures: ProviderFixtureScore[];
+  cardStatsByMatchId?: Map<string, MatchCardStatsSnapshot>;
+  eventsByFixtureId?: Map<string, NormalizedFixtureEvents | null>;
+  eventFetchFailures?: Set<string>;
 }): ScoreChangePreview {
   const { candidates, ambiguousMatchIds, ambiguousFixtureIds } = findCandidates(
     input.matches,
@@ -183,6 +469,9 @@ export function buildScoreChangePreview(input: {
 
   for (const match of input.matches) {
     const candidate = candidateByMatchId.get(match.id);
+    const cardStats = input.cardStatsByMatchId?.get(match.id);
+    const dbCards = effectiveDbCardTotals(cardStats);
+
     if (!candidate) {
       const reason = reasonForSkippedMatch(match, ambiguousMatchIds);
       rows.push({
@@ -203,6 +492,12 @@ export function buildScoreChangePreview(input: {
         fetchedStatus: null,
         willUpdate: false,
         reason,
+        currentHomeYellowCards: dbCards.homeYellow,
+        currentAwayYellowCards: dbCards.awayYellow,
+        currentHomeRedCards: dbCards.homeRed,
+        currentAwayRedCards: dbCards.awayRed,
+        ...emptyCardPreviewFields(),
+        cardReason: reason === "unmapped" ? "unmapped" : "skipped",
         warnings:
           reason === "ambiguous"
             ? ["Multiple provider fixtures match this AshBracket match by date and team names."]
@@ -223,6 +518,25 @@ export function buildScoreChangePreview(input: {
       warnings.push("Provider team name could not be mapped to a FIFA code.");
     }
 
+    const events =
+      fixture.providerFixtureId && input.eventsByFixtureId
+        ? input.eventsByFixtureId.get(fixture.providerFixtureId)
+        : undefined;
+    const eventFetchFailed =
+      fixture.providerFixtureId != null &&
+      input.eventFetchFailures?.has(fixture.providerFixtureId) === true;
+
+    const cardPlan = cardPlanForMappedRow({
+      match,
+      fixture,
+      scoreReason: reason,
+      ambiguousFixtureIds,
+      cardStats,
+      events,
+      eventFetchFailed,
+    });
+    warnings.push(...cardPlan.cardWarnings);
+
     rows.push({
       matchId: match.id,
       matchCode: match.matchCode,
@@ -241,6 +555,16 @@ export function buildScoreChangePreview(input: {
       fetchedStatus: fixture.status,
       willUpdate: reason === "will_update",
       reason,
+      currentHomeYellowCards: dbCards.homeYellow,
+      currentAwayYellowCards: dbCards.awayYellow,
+      currentHomeRedCards: dbCards.homeRed,
+      currentAwayRedCards: dbCards.awayRed,
+      fetchedHomeYellowCards: cardPlan.fetchedHomeYellowCards,
+      fetchedAwayYellowCards: cardPlan.fetchedAwayYellowCards,
+      fetchedHomeRedCards: cardPlan.fetchedHomeRedCards,
+      fetchedAwayRedCards: cardPlan.fetchedAwayRedCards,
+      cardWillUpdate: cardPlan.cardWillUpdate,
+      cardReason: cardPlan.cardReason,
       warnings,
     });
   }
@@ -249,6 +573,10 @@ export function buildScoreChangePreview(input: {
   const unchanged = rows.filter((r) => r.reason === "unchanged").length;
   const skipped = rows.length - willUpdate - unchanged;
   const warnings = rows.filter((r) => r.warnings.length > 0).length;
+  const cardsWillUpdate = rows.filter((r) => r.cardWillUpdate).length;
+  const cardsUnchanged = rows.filter((r) => r.cardReason === "unchanged").length;
+  const cardsManualConflict = rows.filter((r) => r.cardReason === "manual_conflict").length;
+  const cardsNoEventData = rows.filter((r) => r.cardReason === "no_event_data").length;
   const unmappedProviderFixtures = input.fixtures.filter(
     (f) => !mappedFixtureIds.has(f.providerFixtureId),
   ).length;
@@ -259,10 +587,10 @@ export function buildScoreChangePreview(input: {
   const finishedFixtures = input.fixtures.filter((f) => f.status === "finished").length;
   if (input.fixtures.length === 0) {
     message = "Provider returned no fixtures for this competition.";
-  } else if (finishedFixtures === 0 && willUpdate === 0) {
+  } else if (finishedFixtures === 0 && willUpdate === 0 && cardsWillUpdate === 0) {
     message = "No final matches found from the provider yet.";
-  } else if (willUpdate === 0 && finishedFixtures > 0) {
-    message = "Final scores are on file — nothing new to apply.";
+  } else if (willUpdate === 0 && cardsWillUpdate === 0 && finishedFixtures > 0) {
+    message = "Final scores and card totals are on file — nothing new to apply.";
   }
 
   return {
@@ -279,23 +607,33 @@ export function buildScoreChangePreview(input: {
       skipped,
       warnings,
       unmappedProviderFixtures,
+      cardsWillUpdate,
+      cardsUnchanged,
+      cardsManualConflict,
+      cardsNoEventData,
     },
     message,
   };
 }
 
-/** Stable id from planned score changes only — must not include fetch timestamp. */
+/** Stable id from planned score/card changes only — must not include fetch timestamp. */
 export function computePreviewId(rows: ScoreChangePreviewRow[]): string {
   const payload = rows
-    .filter((r) => r.willUpdate)
+    .filter((r) => r.willUpdate || r.cardWillUpdate)
     .map((r) =>
       [
         r.matchCode,
+        r.willUpdate ? "score" : "",
         r.fetchedHomeGoals,
         r.fetchedAwayGoals,
         r.fetchedHomePenalties ?? "",
         r.fetchedAwayPenalties ?? "",
         r.fetchedStatus ?? "",
+        r.cardWillUpdate ? "cards" : "",
+        r.fetchedHomeYellowCards ?? "",
+        r.fetchedAwayYellowCards ?? "",
+        r.fetchedHomeRedCards ?? "",
+        r.fetchedAwayRedCards ?? "",
       ].join("\0"),
     )
     .sort()
@@ -317,4 +655,39 @@ export function patchesFromPreviewRows(
       status: "finished" as const,
       providerFixtureId: r.providerFixtureId,
     }));
+}
+
+export function cardPatchesFromPreviewRows(
+  rows: ScoreChangePreviewRow[],
+  editionId: string,
+  matches: TournamentMatchForLiveScores[],
+): ProviderCardPatchInput[] {
+  const matchById = new Map(matches.map((m) => [m.id, m]));
+  return rows
+    .filter((r) => r.cardWillUpdate)
+    .flatMap((r) => {
+      const match = matchById.get(r.matchId);
+      if (!match?.homeTeamId || !match.awayTeamId) return [];
+      if (
+        r.fetchedHomeYellowCards == null ||
+        r.fetchedAwayYellowCards == null ||
+        r.fetchedHomeRedCards == null ||
+        r.fetchedAwayRedCards == null
+      ) {
+        return [];
+      }
+      return [
+        {
+          matchId: r.matchId,
+          matchCode: r.matchCode,
+          editionId,
+          homeTeamId: match.homeTeamId,
+          awayTeamId: match.awayTeamId,
+          homeYellowCards: r.fetchedHomeYellowCards,
+          awayYellowCards: r.fetchedAwayYellowCards,
+          homeRedCards: r.fetchedHomeRedCards,
+          awayRedCards: r.fetchedAwayRedCards,
+        },
+      ];
+    });
 }

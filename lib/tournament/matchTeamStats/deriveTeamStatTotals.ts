@@ -17,8 +17,32 @@ function addToMap(map: Map<string, number>, teamId: string, delta: number): void
 /**
  * Tournament-level team totals.
  * - Goals: from final scores on finished matches (both scores set).
- * - Cards: from manual stat rows (included even when score is not final).
+ * - Cards: from team stat rows with manual preferred over provider per match/team.
  */
+export function resolveTeamStatsForAggregation(
+  teamStats: readonly MatchTeamStatRecord[],
+): MatchTeamStatRecord[] {
+  const byMatchTeam = new Map<
+    string,
+    { manual?: MatchTeamStatRecord; provider?: MatchTeamStatRecord }
+  >();
+
+  for (const row of teamStats) {
+    const key = `${row.matchId}\0${row.teamId}`;
+    const entry = byMatchTeam.get(key) ?? {};
+    if (row.source === "manual") entry.manual = row;
+    else if (row.source === "provider") entry.provider = row;
+    byMatchTeam.set(key, entry);
+  }
+
+  const resolved: MatchTeamStatRecord[] = [];
+  for (const entry of byMatchTeam.values()) {
+    if (entry.manual) resolved.push(entry.manual);
+    else if (entry.provider) resolved.push(entry.provider);
+  }
+  return resolved;
+}
+
 export function deriveTeamStatTotals(input: {
   matches: readonly MatchForTeamStatAggregation[];
   teamStats: readonly MatchTeamStatRecord[];
@@ -34,7 +58,8 @@ export function deriveTeamStatTotals(input: {
     addToMap(goalsByTeamId, m.awayTeamId, m.awayGoals);
   }
 
-  for (const row of input.teamStats) {
+  const resolvedStats = resolveTeamStatsForAggregation(input.teamStats);
+  for (const row of resolvedStats) {
     if (row.yellowCards != null) {
       addToMap(yellowCardsByTeamId, row.teamId, row.yellowCards);
     }

@@ -13,7 +13,7 @@ import {
 } from "./buildTournamentStatLeadersView";
 import {
   loadMatchesForTeamStatsAdmin,
-  loadMatchTeamStatsForEdition,
+  loadMatchTeamStatsForAggregation,
 } from "./loadMatchTeamStatsAdminData";
 
 export type BonusResultsPublishContext =
@@ -152,7 +152,7 @@ export async function loadBonusResultsPublishContext(
   const [matchRes, statRes, teamInfoRes, groupStageRes, enabledKeysRes, existingRes] =
     await Promise.all([
       loadMatchesForTeamStatsAdmin(supabase, editionId),
-      loadMatchTeamStatsForEdition(supabase, editionId),
+      loadMatchTeamStatsForAggregation(supabase, editionId),
       loadTeamDisplayInfo(supabase, editionId),
       loadGroupStageId(supabase),
       loadEnabledStatBonusKeys(supabase, editionId),

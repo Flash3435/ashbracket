@@ -6,12 +6,15 @@ import assert from "node:assert/strict";
 import { mapApiFootballStatus } from "./apiFootballProvider";
 import { readLiveScoresProviderConfig } from "./config";
 import { applyLiveScoresAndSync, persistProviderFixtureIds } from "./applyLiveScores";
+import { buildProviderCardUpsertRows } from "./applyProviderCardStats";
 import {
   buildScoreChangePreview,
+  cardPatchesFromPreviewRows,
   computePreviewId,
   patchesFromPreviewRows,
 } from "./matchMapping";
 import { MOCK_PROVIDER_FIXTURES } from "./mockProvider";
+import { mockNormalizedEventsForFixture } from "./mockFixtureEvents";
 import {
   canonicalTeamName,
   fifaCodeFromTeamName,
@@ -19,7 +22,8 @@ import {
   teamNamesMatch,
 } from "./normalizeTeamName";
 import { buildApplyVerificationDetails } from "./verifyAppliedPatches";
-import type { TournamentMatchForLiveScores } from "./types";
+import { buildCardApplyVerificationDetails } from "./verifyAppliedCardStats";
+import type { MatchCardStatsSnapshot, TournamentMatchForLiveScores } from "./types";
 
 function matchRow(
   overrides: Partial<TournamentMatchForLiveScores> & Pick<TournamentMatchForLiveScores, "id" | "matchCode">,
@@ -350,6 +354,161 @@ assert.equal(
   ),
 );
 
+// Card preview: score preview still works when events unavailable
+const noEventsPreview = buildScoreChangePreview({
+  provider: "mock",
+  providerConfigured: true,
+  configWarning: null,
+  fetchedAt: "2026-06-12T12:00:00.000Z",
+  matches: previewMatches,
+  fixtures: MOCK_PROVIDER_FIXTURES,
+  eventsByFixtureId: new Map(),
+});
+assert.equal(noEventsPreview.rows.find((r) => r.matchCode === "WC2026-G-A-01")!.willUpdate, true);
+assert.equal(
+  noEventsPreview.rows.find((r) => r.matchCode === "WC2026-G-A-01")!.cardReason,
+  "no_event_data",
+);
+
+const mexRsaEvents = mockNormalizedEventsForFixture("mock-wc2026-g-a-01", {
+  homeTeamName: "Mexico",
+  awayTeamName: "South Africa",
+  homeFifaCode: "MEX",
+  awayFifaCode: "RSA",
+})!;
+const eventsMap = new Map([["mock-wc2026-g-a-01", mexRsaEvents]]);
+
+const cardPreview = buildScoreChangePreview({
+  provider: "mock",
+  providerConfigured: true,
+  configWarning: null,
+  fetchedAt: "2026-06-12T12:00:00.000Z",
+  matches: previewMatches,
+  fixtures: MOCK_PROVIDER_FIXTURES,
+  cardStatsByMatchId: new Map(),
+  eventsByFixtureId: eventsMap,
+});
+const cardRow = cardPreview.rows.find((r) => r.matchCode === "WC2026-G-A-01")!;
+assert.equal(cardRow.cardReason, "will_update");
+assert.equal(cardRow.fetchedHomeYellowCards, 1);
+assert.equal(cardRow.fetchedAwayRedCards, 1);
+
+const cardPatches = cardPatchesFromPreviewRows(cardPreview.rows, "edition-1", previewMatches);
+assert.equal(cardPatches.length, 1);
+assert.equal(cardPatches[0]!.homeYellowCards, 1);
+
+const manualConflictStats = new Map<string, MatchCardStatsSnapshot>([
+  [
+    "m1",
+    {
+      manual: {
+        home: { yellowCards: 9, redCards: 0 },
+        away: { yellowCards: 0, redCards: 0 },
+      },
+      provider: null,
+    },
+  ],
+]);
+const conflictPreview = buildScoreChangePreview({
+  provider: "mock",
+  providerConfigured: true,
+  configWarning: null,
+  fetchedAt: "2026-06-12T12:00:00.000Z",
+  matches: previewMatches,
+  fixtures: MOCK_PROVIDER_FIXTURES,
+  cardStatsByMatchId: manualConflictStats,
+  eventsByFixtureId: eventsMap,
+});
+assert.equal(
+  conflictPreview.rows.find((r) => r.matchCode === "WC2026-G-A-01")!.cardReason,
+  "manual_conflict",
+);
+
+const providerStats = new Map<string, MatchCardStatsSnapshot>([
+  [
+    "m1",
+    {
+      manual: null,
+      provider: {
+        home: { yellowCards: 0, redCards: 0 },
+        away: { yellowCards: 0, redCards: 0 },
+      },
+    },
+  ],
+]);
+const providerUpdatePreview = buildScoreChangePreview({
+  provider: "mock",
+  providerConfigured: true,
+  configWarning: null,
+  fetchedAt: "2026-06-12T12:00:00.000Z",
+  matches: previewMatches,
+  fixtures: MOCK_PROVIDER_FIXTURES,
+  cardStatsByMatchId: providerStats,
+  eventsByFixtureId: eventsMap,
+});
+assert.equal(
+  providerUpdatePreview.rows.find((r) => r.matchCode === "WC2026-G-A-01")!.cardReason,
+  "will_update",
+);
+
+const mismatchEvents = {
+  ...mexRsaEvents,
+  homeGoalEvents: 99,
+  awayGoalEvents: 99,
+  warnings: [] as string[],
+};
+const mismatchPreview = buildScoreChangePreview({
+  provider: "mock",
+  providerConfigured: true,
+  configWarning: null,
+  fetchedAt: "2026-06-12T12:00:00.000Z",
+  matches: previewMatches,
+  fixtures: MOCK_PROVIDER_FIXTURES,
+  eventsByFixtureId: new Map([["mock-wc2026-g-a-01", mismatchEvents]]),
+});
+assert(
+  mismatchPreview.rows
+    .find((r) => r.matchCode === "WC2026-G-A-01")!
+    .warnings.some((w) => w.includes("Event goal count")),
+);
+
+const noIdPreview = buildScoreChangePreview({
+  provider: "mock",
+  providerConfigured: true,
+  configWarning: null,
+  fetchedAt: "2026-06-12T12:00:00.000Z",
+  matches: [previewMatches[0]!],
+  fixtures: [{ ...MOCK_PROVIDER_FIXTURES[0]!, providerFixtureId: "" }],
+});
+assert.equal(noIdPreview.rows[0]!.cardReason, "no_event_data");
+
+const providerUpsertRows = buildProviderCardUpsertRows(cardPatches[0]!);
+assert.equal(providerUpsertRows.length, 2);
+assert.equal(providerUpsertRows[0]!.source, "provider");
+
+const cardVerification = buildCardApplyVerificationDetails({
+  previewRows: cardPreview.rows,
+  patches: cardPatches,
+  dbRows: [
+    {
+      match_id: "m1",
+      team_id: "home-1",
+      yellow_cards: 1,
+      red_cards: 0,
+      source: "provider",
+    },
+    {
+      match_id: "m1",
+      team_id: "away-1",
+      yellow_cards: 1,
+      red_cards: 1,
+      source: "provider",
+    },
+  ],
+  writtenMatchCodes: ["WC2026-G-A-01"],
+});
+assert(cardVerification[0]!.verified);
+
 async function runApplyTests(): Promise<void> {
   let syncCalled = false;
   let syncPatches: unknown[] = [];
@@ -384,8 +543,46 @@ async function runApplyTests(): Promise<void> {
     },
   };
 
+  const providerStatRows: Array<{
+    match_id: string;
+    team_id: string;
+    yellow_cards: number | null;
+    red_cards: number | null;
+    source: string;
+  }> = [];
+
   const mockSupabase = {
-    from() {
+    from(table: string) {
+      if (table === "tournament_match_team_stats") {
+        return {
+          upsert(rows: typeof providerStatRows) {
+            providerStatRows.length = 0;
+            providerStatRows.push(...rows);
+            return Promise.resolve({ error: null });
+          },
+          select() {
+            return {
+              eq(_col: string, editionId: string) {
+                return {
+                  in(_col2: string, matchIds: string[]) {
+                    return {
+                      eq(_col3: string, source: string) {
+                        return Promise.resolve({
+                          data: providerStatRows.filter(
+                            (r) => matchIds.includes(r.match_id) && r.source === source,
+                          ),
+                          error: null,
+                        });
+                      },
+                    };
+                  },
+                };
+              },
+            };
+          },
+        };
+      }
+
       return {
         update() {
           return {
@@ -444,6 +641,60 @@ async function runApplyTests(): Promise<void> {
   assert.equal(applyOut.applySummary.planned, 1);
   assert.equal(applyOut.applySummary.written, 1);
   assert.equal(applyOut.applySummary.failedVerification, 0);
+  assert.equal(applyOut.applySummary.cardsPlanned, 0);
+
+  const cardOnlyApply = await applyLiveScoresAndSync(mockSupabase, {
+    editionId: "edition-1",
+    editionCode: "fifa_wc_2026",
+    poolIds: ["pool-1"],
+    previewRows: cardPreview.rows,
+    patches: [],
+    cardPatches,
+    syncFn: async () => ({
+      ok: true,
+      summary: {
+        matchCount: 0,
+        matchesWithScoresCount: 0,
+        finishedMatchCount: 0,
+        derivedResultsInserted: 0,
+        poolsRecalculated: 0,
+        syncLockedMatchCount: 0,
+        patchesApplied: 0,
+        patchesSkipped: 0,
+      },
+      patchOutcome: { applied: [], skipped: [] },
+    }),
+  });
+  assert(cardOnlyApply.ok);
+  assert.equal(cardOnlyApply.applySummary.cardsPlanned, 1);
+  assert.equal(cardOnlyApply.applySummary.cardsWritten, 1);
+  assert.equal(cardOnlyApply.applySummary.cardsFailedVerification, 0);
+
+  const cardRerunPreview = buildScoreChangePreview({
+    provider: "mock",
+    providerConfigured: true,
+    configWarning: null,
+    fetchedAt: "2026-06-12T14:00:00.000Z",
+    matches: previewMatches,
+    fixtures: MOCK_PROVIDER_FIXTURES,
+    cardStatsByMatchId: new Map([
+      [
+        "m1",
+        {
+          manual: null,
+          provider: {
+            home: { yellowCards: 1, redCards: 0 },
+            away: { yellowCards: 1, redCards: 1 },
+          },
+        },
+      ],
+    ]),
+    eventsByFixtureId: eventsMap,
+  });
+  assert.equal(
+    cardRerunPreview.rows.find((r) => r.matchCode === "WC2026-G-A-01")!.cardReason,
+    "unchanged",
+  );
 
   const fallbackApply = await applyLiveScoresAndSync(mockSupabase, {
     editionId: "edition-1",

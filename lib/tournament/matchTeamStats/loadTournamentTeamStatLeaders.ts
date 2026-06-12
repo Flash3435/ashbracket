@@ -9,7 +9,7 @@ import {
 } from "./buildTournamentStatLeadersView";
 import {
   loadMatchesForTeamStatsAdmin,
-  loadMatchTeamStatsForEdition,
+  loadMatchTeamStatsForAggregation,
 } from "./loadMatchTeamStatsAdminData";
 
 export type LoadTournamentTeamStatLeadersResult =
@@ -144,7 +144,7 @@ export async function loadTournamentTeamStatLeaders(
   const editionId = edition.id;
   const [matchRes, statRes, teamInfoRes] = await Promise.all([
     loadMatchesForTeamStatsAdmin(supabase, editionId),
-    loadMatchTeamStatsForEdition(supabase, editionId),
+    loadMatchTeamStatsForAggregation(supabase, editionId),
     loadTeamDisplayInfo(supabase, editionId),
   ]);
 

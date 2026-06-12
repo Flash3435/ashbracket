@@ -54,7 +54,7 @@ export async function captureEditionBonusLeaders(
         .eq("edition_id", editionId),
       supabase
         .from("tournament_match_team_stats")
-        .select("team_id, yellow_cards, red_cards")
+        .select("match_id, team_id, yellow_cards, red_cards, source")
         .eq("edition_id", editionId),
     ]);
 
@@ -74,11 +74,11 @@ export async function captureEditionBonusLeaders(
     teamStats: (stats ?? []).map((row) => ({
       id: "",
       editionId,
-      matchId: "",
+      matchId: String(row.match_id ?? ""),
       teamId: row.team_id as string,
       yellowCards: row.yellow_cards as number | null,
       redCards: row.red_cards as number | null,
-      source: "manual",
+      source: String(row.source ?? "manual"),
     })),
   });
 

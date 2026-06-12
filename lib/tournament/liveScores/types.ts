@@ -44,6 +44,24 @@ export type ScoreChangeRowReason =
   | "cancelled"
   | "no_score";
 
+export type CardChangeRowReason =
+  | "will_update"
+  | "unchanged"
+  | "no_event_data"
+  | "manual_conflict"
+  | "skipped"
+  | "unmapped";
+
+export type MatchCardSideTotals = {
+  yellowCards: number | null;
+  redCards: number | null;
+};
+
+export type MatchCardStatsSnapshot = {
+  manual: { home: MatchCardSideTotals; away: MatchCardSideTotals } | null;
+  provider: { home: MatchCardSideTotals; away: MatchCardSideTotals } | null;
+};
+
 export type TournamentMatchForLiveScores = {
   id: string;
   matchCode: string;
@@ -81,6 +99,16 @@ export type ScoreChangePreviewRow = {
   fetchedStatus: LiveScoreProviderStatus | null;
   willUpdate: boolean;
   reason: ScoreChangeRowReason;
+  currentHomeYellowCards: number | null;
+  currentAwayYellowCards: number | null;
+  currentHomeRedCards: number | null;
+  currentAwayRedCards: number | null;
+  fetchedHomeYellowCards: number | null;
+  fetchedAwayYellowCards: number | null;
+  fetchedHomeRedCards: number | null;
+  fetchedAwayRedCards: number | null;
+  cardWillUpdate: boolean;
+  cardReason: CardChangeRowReason;
   warnings: string[];
 };
 
@@ -98,6 +126,10 @@ export type ScoreChangePreview = {
     skipped: number;
     warnings: number;
     unmappedProviderFixtures: number;
+    cardsWillUpdate: number;
+    cardsUnchanged: number;
+    cardsManualConflict: number;
+    cardsNoEventData: number;
   };
   message: string | null;
 };
@@ -110,6 +142,29 @@ export type OfficialMatchScorePatchInput = {
   awayPenalties?: number | null;
   status?: "scheduled" | "live" | "finished" | "postponed" | "cancelled";
   providerFixtureId?: string | null;
+};
+
+export type ProviderCardPatchInput = {
+  matchId: string;
+  matchCode: string;
+  editionId: string;
+  homeTeamId: string;
+  awayTeamId: string;
+  homeYellowCards: number;
+  awayYellowCards: number;
+  homeRedCards: number;
+  awayRedCards: number;
+};
+
+export type LiveScoresApplyCardDetail = {
+  matchCode: string;
+  matchId: string;
+  planned: boolean;
+  written: boolean;
+  verified: boolean;
+  reason: string | null;
+  expectedCards: string | null;
+  actualCards: string | null;
 };
 
 export type LiveScoresApplyMatchDetail = {
@@ -134,6 +189,12 @@ export type LiveScoresApplySummary = {
   failedVerification: number;
   providerFixtureIdsSaved: number;
   ledgersRecomputed: number;
+  cardsPlanned: number;
+  cardsWritten: number;
+  cardsSkipped: number;
+  cardsManualConflict: number;
+  cardsFailedVerification: number;
   revalidatedPaths: string[];
   details: LiveScoresApplyMatchDetail[];
+  cardDetails: LiveScoresApplyCardDetail[];
 };

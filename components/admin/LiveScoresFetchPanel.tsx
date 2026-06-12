@@ -9,10 +9,12 @@ import {
 } from "../../app/(worldcup)/admin/tournament/liveScoresActions";
 import type { AdminImpactSummary } from "@/lib/admin/fetchAdminImpactSummary";
 import type {
+  CardChangeRowReason,
   LiveScoresApplySummary,
   ScoreChangePreview,
   ScoreChangePreviewRow,
 } from "@/lib/tournament/liveScores/types";
+import { formatCardTotals } from "@/lib/tournament/liveScores/loadMatchCardStatsForLiveScores";
 import { AdminRiskConfirmPanel } from "./AdminRiskConfirmPanel";
 
 type Props = {
@@ -33,6 +35,43 @@ function formatScore(
   const base = `${home}–${away}`;
   if (homePen != null && awayPen != null) return `${base} (${homePen}–${awayPen} pens)`;
   return base;
+}
+
+function cardReasonLabel(reason: CardChangeRowReason): string {
+  switch (reason) {
+    case "will_update":
+      return "Cards will update";
+    case "unchanged":
+      return "Cards unchanged";
+    case "no_event_data":
+      return "No event data";
+    case "manual_conflict":
+      return "Manual cards differ — skipped";
+    case "skipped":
+      return "Cards skipped";
+    case "unmapped":
+      return "Cards unmapped";
+    default:
+      return reason;
+  }
+}
+
+function formatDbCards(row: ScoreChangePreviewRow): string {
+  return formatCardTotals(
+    row.currentHomeYellowCards,
+    row.currentAwayYellowCards,
+    row.currentHomeRedCards,
+    row.currentAwayRedCards,
+  );
+}
+
+function formatFetchedCards(row: ScoreChangePreviewRow): string {
+  return formatCardTotals(
+    row.fetchedHomeYellowCards,
+    row.fetchedAwayYellowCards,
+    row.fetchedHomeRedCards,
+    row.fetchedAwayRedCards,
+  );
 }
 
 function reasonLabel(reason: ScoreChangePreviewRow["reason"]): string {
@@ -70,6 +109,8 @@ function PreviewTable({ rows }: { rows: ScoreChangePreviewRow[] }) {
       r.reason === "unmapped" ||
       r.reason === "in_progress" ||
       r.reason === "sync_locked" ||
+      r.cardWillUpdate ||
+      r.cardReason === "manual_conflict" ||
       r.fetchedStatus === "finished",
   );
 
@@ -81,7 +122,7 @@ function PreviewTable({ rows }: { rows: ScoreChangePreviewRow[] }) {
 
   return (
     <div className="overflow-x-auto">
-      <table className="w-full min-w-[720px] text-left text-sm">
+      <table className="w-full min-w-[960px] text-left text-sm">
         <thead>
           <tr className="border-b border-ash-border text-ash-muted">
             <th className="py-2 pr-3 font-medium">Match</th>
@@ -89,6 +130,8 @@ function PreviewTable({ rows }: { rows: ScoreChangePreviewRow[] }) {
             <th className="py-2 pr-3 font-medium">Teams</th>
             <th className="py-2 pr-3 font-medium">DB score</th>
             <th className="py-2 pr-3 font-medium">Fetched</th>
+            <th className="py-2 pr-3 font-medium">Cards DB</th>
+            <th className="py-2 pr-3 font-medium">Cards fetched</th>
             <th className="py-2 pr-3 font-medium">Status</th>
             <th className="py-2 font-medium">Plan</th>
           </tr>
@@ -117,19 +160,34 @@ function PreviewTable({ rows }: { rows: ScoreChangePreviewRow[] }) {
                   row.fetchedAwayPenalties,
                 )}
               </td>
+              <td className="py-2 pr-3 text-xs">{formatDbCards(row)}</td>
+              <td className="py-2 pr-3 text-xs">{formatFetchedCards(row)}</td>
               <td className="py-2 pr-3">{row.fetchedStatus ?? row.currentStatus}</td>
               <td className="py-2">
-                <span
-                  className={
-                    row.willUpdate
-                      ? "font-medium text-emerald-200"
-                      : row.reason === "ambiguous" || row.reason === "unmapped"
-                        ? "text-amber-200"
-                        : "text-ash-muted"
-                  }
-                >
-                  {reasonLabel(row.reason)}
-                </span>
+                <div className="space-y-1">
+                  <span
+                    className={
+                      row.willUpdate
+                        ? "font-medium text-emerald-200"
+                        : row.reason === "ambiguous" || row.reason === "unmapped"
+                          ? "text-amber-200"
+                          : "text-ash-muted"
+                    }
+                  >
+                    Score: {reasonLabel(row.reason)}
+                  </span>
+                  <span
+                    className={
+                      row.cardWillUpdate
+                        ? "block font-medium text-emerald-200"
+                        : row.cardReason === "manual_conflict" || row.cardReason === "no_event_data"
+                          ? "block text-amber-200"
+                          : "block text-ash-muted"
+                    }
+                  >
+                    {cardReasonLabel(row.cardReason)}
+                  </span>
+                </div>
                 {row.warnings.length > 0 ? (
                   <ul className="mt-1 list-disc pl-4 text-xs text-amber-200/90">
                     {row.warnings.map((w) => (
@@ -203,10 +261,11 @@ export function LiveScoresFetchPanel({
   return (
     <div className="ash-surface flex flex-col gap-4 border border-sky-800/40 bg-sky-950/10 p-5">
       <div>
-        <h2 className="text-lg font-bold text-ash-text">Fetch latest final scores</h2>
+        <h2 className="text-lg font-bold text-ash-text">Fetch latest scores and cards</h2>
         <p className="mt-2 text-sm leading-relaxed text-ash-muted">
-          Fetch latest final scores from the configured provider, then update standings.
-          Preview always runs first — scores are not written until you confirm apply.
+          Fetch latest final scores and card totals from the configured provider, then update
+          standings. Preview always runs first — nothing is written until you confirm apply.
+          Manual card entries are kept if they differ from provider data.
         </p>
         <p className="mt-2 text-sm text-ash-muted">
           <span className="font-medium text-ash-text">Provider:</span> {provider}
@@ -265,14 +324,15 @@ export function LiveScoresFetchPanel({
           role="status"
         >
           <p>
-            <span className="font-medium text-ash-text">Planned:</span> {applySummary.planned}
+            <span className="font-medium text-ash-text">Scores planned:</span> {applySummary.planned}
             {" · "}
             <span className="font-medium text-ash-text">Written:</span> {applySummary.written}
             {" · "}
-            <span className="font-medium text-ash-text">Skipped:</span> {applySummary.skipped}
+            <span className="font-medium text-ash-text">Cards written:</span>{" "}
+            {applySummary.cardsWritten}/{applySummary.cardsPlanned}
             {" · "}
-            <span className="font-medium text-ash-text">Failed verification:</span>{" "}
-            {applySummary.failedVerification}
+            <span className="font-medium text-ash-text">Card conflicts:</span>{" "}
+            {applySummary.cardsManualConflict}
           </p>
           {applySummary.details.some((d) => d.planned && !d.verified) ? (
             <ul className="mt-2 list-disc space-y-1 pl-5 text-amber-100">
@@ -317,7 +377,7 @@ export function LiveScoresFetchPanel({
         onClick={fetchPreview}
         className="rounded-lg border border-ash-border bg-ash-body/50 px-4 py-2 text-sm font-medium text-ash-text hover:bg-ash-body/80 disabled:cursor-not-allowed disabled:opacity-50"
       >
-        {isFetching ? "Fetching…" : "Fetch latest scores"}
+        {isFetching ? "Fetching…" : "Fetch latest scores and cards"}
       </button>
 
       {preview ? (
@@ -328,14 +388,14 @@ export function LiveScoresFetchPanel({
               {preview.summary.matchesChecked}
             </p>
             <p>
-              <span className="font-medium text-ash-text">Will update:</span>{" "}
+              <span className="font-medium text-ash-text">Scores will update:</span>{" "}
               {preview.summary.willUpdate}
               {" · "}
-              <span className="font-medium text-ash-text">Unchanged:</span>{" "}
-              {preview.summary.unchanged}
+              <span className="font-medium text-ash-text">Cards will update:</span>{" "}
+              {preview.summary.cardsWillUpdate}
               {" · "}
-              <span className="font-medium text-ash-text">Skipped:</span>{" "}
-              {preview.summary.skipped}
+              <span className="font-medium text-ash-text">Card conflicts:</span>{" "}
+              {preview.summary.cardsManualConflict}
             </p>
             {preview.message ? (
               <p className="mt-2 text-amber-100">{preview.message}</p>
@@ -344,22 +404,22 @@ export function LiveScoresFetchPanel({
 
           <PreviewTable rows={preview.rows} />
 
-          {preview.summary.willUpdate > 0 ? (
+          {preview.summary.willUpdate > 0 || preview.summary.cardsWillUpdate > 0 ? (
             <AdminRiskConfirmPanel
               isProduction={isProduction}
               impact={impact}
-              actionTitle="Apply fetched scores and update standings"
-              buttonLabel="Apply scores & update standings"
+              actionTitle="Apply fetched scores/cards and update standings"
+              buttonLabel="Apply scores/cards & update standings"
               pending={isApplying}
               disabled={isFetching}
               variant="live"
-              confirmLabel="I understand this writes live match scores from the provider and recalculates every live pool."
+              confirmLabel="I understand this writes live match scores and provider card totals from the provider and recalculates every live pool when scores change."
               onConfirm={applyScores}
             />
           ) : (
             <p className="text-sm text-ash-muted">
-              Nothing to apply — only final matches with changed scores are written. In-progress,
-              ambiguous, and sync-locked matches are skipped.
+              Nothing to apply — only final matches with changed scores or provider card totals are
+              written. Manual card entries that differ from the provider are skipped.
             </p>
           )}
         </div>

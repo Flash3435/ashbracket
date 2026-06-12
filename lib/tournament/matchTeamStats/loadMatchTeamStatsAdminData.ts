@@ -37,6 +37,21 @@ export async function loadMatchTeamStatsForEdition(
   return { teamStats: ((data ?? []) as StatRow[]).map(mapStatRow) };
 }
 
+/** All manual + provider rows for stat leader aggregation (precedence applied in deriveTeamStatTotals). */
+export async function loadMatchTeamStatsForAggregation(
+  supabase: SupabaseClient,
+  editionId: string,
+): Promise<{ teamStats: MatchTeamStatRecord[] } | { error: string }> {
+  const { data, error } = await supabase
+    .from("tournament_match_team_stats")
+    .select("id, edition_id, match_id, team_id, yellow_cards, red_cards, source")
+    .eq("edition_id", editionId)
+    .in("source", ["manual", "provider"]);
+
+  if (error) return { error: error.message };
+  return { teamStats: ((data ?? []) as StatRow[]).map(mapStatRow) };
+}
+
 export async function loadMatchesForTeamStatsAdmin(
   supabase: SupabaseClient,
   editionId: string,
