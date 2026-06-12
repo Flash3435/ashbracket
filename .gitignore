@@ -16,6 +16,8 @@
 # next.js
 /.next/
 /out/
+# Intentionally no app/favicon.ico — use app/icon.png; /favicon.ico rewrites in next.config.mjs
+/app/favicon.ico
 
 # production
 /build
