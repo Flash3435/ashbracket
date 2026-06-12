@@ -4,7 +4,7 @@ import type {
 } from "../../types/tournamentPublic";
 import type { KnockoutPickSlotDraft } from "../../types/adminKnockoutPicks";
 import type { Team } from "../../src/types/domain";
-import { formatKickoffAmericaEdmonton } from "../../lib/datetime/scheduleDisplay";
+import { KickoffTimeDisplay } from "../datetime/KickoffTimeDisplay";
 import { countMatchesInvolvingPicks } from "../../lib/participant/participantPickHighlights";
 import {
   buildPublicGroupStandingsTables,
@@ -16,14 +16,6 @@ import {
 } from "../../lib/tournament/publicTournamentSummary";
 import { GroupStandingsGrid } from "./GroupStandingsGrid";
 import { ScheduleMatchPickTeams } from "./ScheduleMatchPickTeams";
-
-function formatWhen(iso: string | null | undefined): string {
-  const p = formatKickoffAmericaEdmonton(iso);
-  if (p.singleLineFallback) {
-    return p.singleLineFallback === "Time TBD" ? "—" : p.singleLineFallback;
-  }
-  return `${p.dateLine} · ${p.timeLine}`;
-}
 
 function scoreLine(m: TournamentMatchPublicRow): string {
   if (m.status !== "finished" && m.status !== "live") return "—";
@@ -88,7 +80,9 @@ function MatchRow({
         <span className={statusPill(m.status)}>{m.status}</span>
       </div>
       <p className="mt-1 font-mono text-[11px] text-ash-border-hover">{m.match_code}</p>
-      <p className="mt-1 text-sm text-ash-muted">{formatWhen(m.kickoff_at)}</p>
+      <p className="mt-1 text-sm text-ash-muted">
+        <KickoffTimeDisplay iso={m.kickoff_at} emptyLabel="—" />
+      </p>
       <div className="mt-2 flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
         <ScheduleMatchPickTeams m={m} pickContext={pickContext} className="min-w-0 flex-1" />
         <p className="shrink-0 text-sm tabular-nums text-ash-muted sm:pt-0.5">

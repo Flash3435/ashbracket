@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { formatKickoffAmericaEdmonton } from "@/lib/datetime/scheduleDisplay";
+import { KickoffTimeDisplay } from "@/components/datetime/KickoffTimeDisplay";
 import type { CheerSuggestion } from "@/lib/account/buildWhoToCheerFor";
 import { DASHBOARD_MATCH_LIMIT } from "@/lib/account/buildWhoToCheerFor";
 import type { KnockoutPickSlotDraft } from "../../types/adminKnockoutPicks";
@@ -108,7 +108,7 @@ export function WhoToCheerForCard({
         <div>
           <h2 className="text-base font-bold text-ash-text">Who to cheer for</h2>
           <p className="mt-0.5 text-xs text-ash-muted">
-            Upcoming matches connected to your bracket. Kickoff times use Mountain Time.
+            Upcoming matches connected to your bracket. Kickoff times use your local time zone.
           </p>
         </div>
         <Link href="/tournament" className="ash-link shrink-0 text-xs">
@@ -149,7 +149,6 @@ export function WhoToCheerForCard({
       {showMatches ? (
         <ul className="mt-3 divide-y divide-ash-border">
           {displaySuggestions.map((s) => {
-            const when = formatKickoffAmericaEdmonton(s.kickoffAt);
             const meta = [s.stageLabel];
             if (s.groupCode) meta.push(`Group ${s.groupCode}`);
             const badgeClass = statusBadgeClass(s.status);
@@ -163,16 +162,13 @@ export function WhoToCheerForCard({
                     <span className={badgeClass}>{badgeLabel}</span>
                   ) : null}
                 </div>
-                {when.singleLineFallback ? (
-                  <p className="mt-1 text-xs text-ash-muted">{when.singleLineFallback}</p>
-                ) : (
-                  <>
-                    <p className="mt-1 text-sm font-medium text-ash-text">{when.dateLine}</p>
-                    {when.timeLine ? (
-                      <p className="text-xs text-ash-muted">{when.timeLine}</p>
-                    ) : null}
-                  </>
-                )}
+                <KickoffTimeDisplay
+                  iso={s.kickoffAt}
+                  layout="split"
+                  dateClassName="mt-1 text-sm font-medium text-ash-text"
+                  timeClassName="text-xs text-ash-muted"
+                  className="mt-1 text-xs text-ash-muted"
+                />
                 <ScheduleMatchPickTeams
                   m={s.match}
                   pickContext={pickContext}

@@ -3,7 +3,9 @@ import { PostLockEngagementCard } from "@/components/account/PostLockEngagementC
 import { PoolRevealDashboardCard } from "@/components/account/PoolRevealDashboardCard";
 import { PicksDeadlineBannerFromPool } from "@/components/pool/PicksDeadlineBannerFromPool";
 import { WhoToCheerForCard } from "@/components/account/WhoToCheerForCard";
+import { LatestRecapCard } from "@/components/dashboard/LatestRecapCard";
 import { whoToCheerForFromSchedule } from "@/lib/account/loadWhoToCheerFor";
+import { loadParticipantLatestRecap } from "@/lib/dashboard/loadParticipantLatestRecap";
 import { formatPoolPickDeadlineLabel } from "@/lib/picks/poolPickDeadlineDisplay";
 import { participantPicksCompleteFromDrafts } from "@/lib/predictions/participantPicksCompletenessRules";
 import { AccountPicksProfileLinks } from "@/components/account/AccountPicksProfileLinks";
@@ -34,6 +36,7 @@ import { isPastAshbracket2026PoolLockDeadline } from "../../../lib/account/resol
 import { isGlobalAdmin } from "@/lib/auth/permissions";
 import { publicLeaderboardHrefForPool } from "../../../lib/pool/publicLeaderboardHref";
 import { fetchPublicTournamentProgress } from "../../../lib/tournament/fetchPublicTournamentProgress";
+import type { TournamentMatchPublicRow } from "../../../types/tournamentPublic";
 import { TournamentStatLeadersPanel } from "@/components/tournament/TournamentStatLeadersPanel";
 import { loadTournamentTeamStatLeaders } from "@/lib/tournament/matchTeamStats/loadTournamentTeamStatLeaders";
 
@@ -153,10 +156,16 @@ export default async function AccountPage({ searchParams }: PageProps) {
       : null;
 
   let whoToCheer: ReturnType<typeof whoToCheerForFromSchedule> | null = null;
+  let latestRecap: Awaited<ReturnType<typeof loadParticipantLatestRecap>> | null =
+    null;
+  let tournamentMatches: TournamentMatchPublicRow[] | null = null;
+  let tournamentErr: string | null = null;
 
   if (picksCtx && !picksCtx.loadError && picksCtx.initialSlots.length > 0) {
     const { data: tp, error: te } = await fetchPublicTournamentProgress();
-    whoToCheer = whoToCheerForFromSchedule(picksCtx, tp?.matches, te);
+    tournamentMatches = tp?.matches ?? null;
+    tournamentErr = te ?? null;
+    whoToCheer = whoToCheerForFromSchedule(picksCtx, tournamentMatches, tournamentErr);
   }
 
   const organizerOnly = isOrganizerOnlyAccount(
@@ -232,6 +241,21 @@ export default async function AccountPage({ searchParams }: PageProps) {
     bonusWatchRes = await loadTournamentTeamStatLeaders(supabase, {
       poolId: picksCtx.selectedPoolId,
     });
+  }
+
+  if (
+    locked &&
+    viewerPicksComplete &&
+    picksCtx &&
+    !picksCtx.loadError &&
+    picksCtx.initialSlots.length > 0
+  ) {
+    latestRecap = await loadParticipantLatestRecap(
+      supabase,
+      picksCtx,
+      tournamentMatches,
+      tournamentErr,
+    );
   }
 
   let poolSnapshot: {
@@ -366,9 +390,26 @@ export default async function AccountPage({ searchParams }: PageProps) {
                 activityHref={activityHref}
                 snapshot={poolSnapshot}
               />
+              {latestRecap?.showCard ? (
+                <LatestRecapCard
+                  recap={latestRecap}
+                  activityHref={activityHref}
+                  initialSlots={picksCtx?.initialSlots}
+                  teams={picksCtx?.teams}
+                />
+              ) : null}
               {bonusWatchRes?.ok ? (
                 <TournamentStatLeadersPanel variant="user" view={bonusWatchRes.view} />
               ) : null}
+            </div>
+          ) : locked && latestRecap?.showCard ? (
+            <div className="mb-6">
+              <LatestRecapCard
+                recap={latestRecap}
+                activityHref={activityHref}
+                initialSlots={picksCtx?.initialSlots}
+                teams={picksCtx?.teams}
+              />
             </div>
           ) : null}
 

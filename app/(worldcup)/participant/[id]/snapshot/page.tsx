@@ -197,12 +197,12 @@ export default async function ParticipantBracketSnapshotPage({
               description={
                 isSelf ? (
                   <>
-                    From the official tournament schedule. Kickoff times use Mountain Time. Live
+                    From the official tournament schedule. Kickoff times use your local time zone. Live
                     and upcoming fixtures for teams in this bracket are listed first.
                   </>
                 ) : (
                   <>
-                    From the official tournament schedule. Kickoff times use Mountain Time. Listed
+                    From the official tournament schedule. Kickoff times use your local time zone. Listed
                     for teams in this participant&apos;s saved bracket.
                   </>
                 )

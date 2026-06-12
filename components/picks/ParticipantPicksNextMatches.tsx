@@ -1,4 +1,4 @@
-import { formatKickoffAmericaEdmonton } from "../../lib/datetime/scheduleDisplay";
+import { KickoffTimeDisplay } from "../datetime/KickoffTimeDisplay";
 import { countryCodesFromKnockoutSlots } from "../../lib/participant/nextMatchesForPickedTeams";
 import { countMatchesInvolvingPicks } from "../../lib/participant/participantPickHighlights";
 import { opponentLineForPickedCodes } from "../../lib/participant/opponentLineForPickedCodes";
@@ -77,7 +77,7 @@ export function ParticipantPicksNextMatches({
     return (
       <p className="text-sm text-ash-muted">
         When the official schedule includes your teams, their next fixtures will
-        show here (kickoff times in Mountain Time).
+        show here (kickoff times in your local time zone).
       </p>
     );
   }
@@ -102,7 +102,6 @@ export function ParticipantPicksNextMatches({
         {matches.map((m) => {
           const meta = [m.stage_label];
           if (m.group_code) meta.push(`Group ${m.group_code}`);
-          const when = formatKickoffAmericaEdmonton(m.kickoff_at);
           const opponent =
             codeSetForOpponent != null && codeSetForOpponent.size > 0
               ? opponentLineForPickedCodes(m, codeSetForOpponent)
@@ -114,18 +113,13 @@ export function ParticipantPicksNextMatches({
                 <p className="text-xs text-ash-muted">{meta.join(" · ")}</p>
                 <span className={statusClass(m.status)}>{m.status}</span>
               </div>
-              {when.singleLineFallback ? (
-                <p className="mt-1 text-sm text-ash-muted">
-                  {when.singleLineFallback}
-                </p>
-              ) : (
-                <>
-                  <p className="mt-1 text-sm font-medium text-ash-text">
-                    {when.dateLine}
-                  </p>
-                  <p className="mt-1 text-sm text-ash-muted">{when.timeLine}</p>
-                </>
-              )}
+              <KickoffTimeDisplay
+                iso={m.kickoff_at}
+                layout="split"
+                dateClassName="mt-1 text-sm font-medium text-ash-text"
+                timeClassName="mt-1 text-sm text-ash-muted"
+                className="mt-1 text-sm text-ash-muted"
+              />
               {opponent ? (
                 <p className="mt-1 text-sm font-medium text-ash-accent">
                   {opponent}

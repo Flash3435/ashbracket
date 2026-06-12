@@ -132,9 +132,8 @@ export function buildTournamentStatLeadersView(input: {
   };
 }
 
-/** Format leader names for display, including ties. */
+/** Comma-separated leader names for tie footnotes (caller adds the "Tied:" prefix). */
 export function formatStatLeaderNames(leaders: TournamentStatLeaderTeam[]): string {
   if (leaders.length === 0) return "";
-  if (leaders.length === 1) return leaders[0]!.teamName;
-  return `Tied: ${leaders.map((l) => l.teamName).join(", ")}`;
+  return leaders.map((l) => l.teamName).join(", ");
 }

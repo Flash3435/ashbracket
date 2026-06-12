@@ -147,7 +147,7 @@ const tiedView = buildTournamentStatLeadersView({
 assert.equal(tiedView.goals.leaders.length, 2);
 assert.equal(
   formatStatLeaderNames(tiedView.goals.leaders),
-  "Tied: France, Spain",
+  "France, Spain",
 );
 
 // 5. empty state when no stats exist
