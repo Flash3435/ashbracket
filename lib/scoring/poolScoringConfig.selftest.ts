@@ -41,21 +41,21 @@ assert.deepEqual(resolved.groupAdvance, {
   exactPoints: 3,
   wrongSlotPoints: 1,
 });
-assert.equal(resolved.thirdPlaceQualifierPoints, 2);
+assert.equal(resolved.thirdPlaceQualifierPoints, 4);
 assert.equal(resolved.knockoutPointsByKind.round_of_16, 4);
 
 const stage2ForRules = resolveStage2PointsForRulesPage({
   rules: scoringRules,
   applyWorldCupDisplayDefaults: false,
 });
-assert.equal(stage2ForRules, 2);
+assert.equal(stage2ForRules, 4);
 
 assert.equal(
   resolveStage2PointsForRulesPage({
     rules: [],
     applyWorldCupDisplayDefaults: true,
   }),
-  2,
+  4,
 );
 
 assert.equal(
@@ -157,6 +157,46 @@ const outcome = computePoolScores({
 });
 
 const deltas = outcome.ledgerLines.map((line) => line.pointsDelta).sort((a, b) => b - a);
-assert.deepEqual(deltas, [3, 2]);
+assert.deepEqual(deltas, [4, 3]);
+
+const teamGoals = "team-goals-0001-0000-0000-000000000001";
+const goalsOutcome = computePoolScores({
+  poolId,
+  predictions: [
+    {
+      id: "pred-goals",
+      poolId,
+      participantId: alice,
+      predictionKind: "bonus_pick",
+      teamId: teamGoals,
+      tournamentStageId: stageGroup,
+      groupCode: null,
+      slotKey: null,
+      bonusKey: "most_goals",
+      valueText: null,
+      createdAt: now,
+      updatedAt: now,
+    },
+  ],
+  results: [
+    {
+      id: "res-goals",
+      tournamentStageId: stageGroup,
+      kind: "bonus_pick",
+      teamId: teamGoals,
+      groupCode: null,
+      slotKey: "most_goals",
+      valueText: null,
+      resolvedAt: now,
+      createdAt: now,
+    },
+  ],
+  scoringRules,
+});
+assert.equal(goalsOutcome.totalsByParticipantId[alice], 25);
+assert.equal(resolved.bonusPointsByKey.most_goals, 25);
+assert.equal(resolved.bonusPointsByKey.most_yellow_cards, 10);
+assert.equal(resolved.bonusPointsByKey.most_red_cards, 10);
+assert.equal(resolved.knockoutPointsByKind.champion, 32);
 
 console.log("poolScoringConfig selftest: ok");

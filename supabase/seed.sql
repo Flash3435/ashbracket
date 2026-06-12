@@ -86,8 +86,8 @@ VALUES
   ('a0000001-0000-4000-8000-000000000001', 'semifinalist', NULL, 16),
   ('a0000001-0000-4000-8000-000000000001', 'finalist', NULL, 24),
   ('a0000001-0000-4000-8000-000000000001', 'champion', NULL, 32),
-  ('a0000001-0000-4000-8000-000000000001', 'third_place_qualifier', NULL, 2),
-  ('a0000001-0000-4000-8000-000000000001', 'bonus_pick', 'most_goals', 50),
+  ('a0000001-0000-4000-8000-000000000001', 'third_place_qualifier', NULL, 4),
+  ('a0000001-0000-4000-8000-000000000001', 'bonus_pick', 'most_goals', 25),
   ('a0000001-0000-4000-8000-000000000001', 'bonus_pick', 'most_yellow_cards', 10),
   ('a0000001-0000-4000-8000-000000000001', 'bonus_pick', 'most_red_cards', 10)
 ON CONFLICT (pool_id, prediction_kind, bonus_key) DO UPDATE SET
