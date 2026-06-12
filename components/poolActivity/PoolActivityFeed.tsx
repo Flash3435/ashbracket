@@ -14,6 +14,7 @@ import {
   type PoolActivityDisplayItem,
 } from "../../lib/poolActivity/activityFeedDisplayTypes";
 import type { PoolInsightLabel, PoolMilestoneLabel } from "../../lib/poolActivity/poolActivityTypes";
+import { scoringRulesUpdate2026ActivityTypeLabel } from "../../lib/poolActivity/scoringRulesUpdateAnnouncement";
 import { AshBotCommentaryLine } from "./AshBotCommentaryLine";
 import {
   ActivityReactionBar,
@@ -80,10 +81,13 @@ function typeLabel(
       return "Ash Daily Recap";
     case "announcement":
       return "Announcement";
-    case "pool_milestone":
+    case "pool_milestone": {
+      const ashbotLabel = item ? scoringRulesUpdate2026ActivityTypeLabel(item) : null;
+      if (ashbotLabel) return ashbotLabel;
       return milestoneCardLabel(
         item ? itemMetadataMilestoneLabel(item) : null,
       );
+    }
     case "pool_insight":
       return insightCardLabel(item ? itemMetadataInsightLabel(item) : null);
     case "ash_score_impact":
@@ -115,6 +119,7 @@ function typeIcon(
     case "announcement":
       return "📢";
     case "pool_milestone":
+      if (item && scoringRulesUpdate2026ActivityTypeLabel(item)) return "🤖";
       return "🏁";
     case "pool_insight": {
       const icon = item?.metadata_json.icon;

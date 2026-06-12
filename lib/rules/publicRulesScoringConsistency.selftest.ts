@@ -15,6 +15,7 @@ import {
   DEFAULT_WORLD_CUP_GROUP_ADVANCE_WRONG_SLOT_POINTS,
   DEFAULT_WORLD_CUP_SCORING_RULE_ROWS,
 } from "../scoring/worldcupPoolDefaults";
+import { bonusRulesTableRowsFromPublicRules } from "./bonusRulesTableRows";
 import {
   resolvePoolScoringConfig,
   resolveStage2PointsForRulesPage,
@@ -78,5 +79,27 @@ assert.deepEqual(
 
 // Legacy misleading default (5) must not reappear for empty third-place rows.
 assert.notEqual(DEFAULT_PUBLIC_RULES_STAGE2_CORRECT, 5);
+
+const bonusTableFallback = bonusRulesTableRowsFromPublicRules([]);
+assert.equal(
+  bonusTableFallback.find((row) => row.label.includes("most goals"))?.points,
+  25,
+);
+
+const bonusTableFromDb = bonusRulesTableRowsFromPublicRules(
+  rules.map((row) => ({
+    predictionKind: row.predictionKind,
+    bonusKey: row.bonusKey,
+    points: row.points,
+    label:
+      row.bonusKey === "most_goals"
+        ? "Team with the most goals in the tournament"
+        : row.bonusKey ?? row.predictionKind,
+  })),
+);
+assert.equal(
+  bonusTableFromDb.find((row) => row.label.includes("most goals"))?.points,
+  25,
+);
 
 console.log("publicRulesScoringConsistency selftest: ok");

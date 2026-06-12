@@ -7,12 +7,11 @@
  * - Dry-run inventory of matching pools and current rule values
  * - Optional `--apply-rules` to write rule changes (same filters as migration)
  * - `--recompute` to refresh points_ledger for affected live pools
+ * - `--announce` to post the AshBot scoring-update note (idempotent; also runs with --apply-rules / --recompute)
  *
  * Usage:
  *   npx tsx scripts/update-wc2026-live-scoring-rules.ts
- *   npx tsx scripts/update-wc2026-live-scoring-rules.ts --apply-rules
- *   npx tsx scripts/update-wc2026-live-scoring-rules.ts --recompute
- *   npx tsx scripts/update-wc2026-live-scoring-rules.ts --apply-rules --recompute
+ *   npx tsx scripts/update-wc2026-live-scoring-rules.ts --apply-rules --announce --recompute
  *
  * Requires `.env.local` with NEXT_PUBLIC_SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY.
  */
@@ -24,6 +23,10 @@ import {
   DEFAULT_WORLD_CUP_GROUP_ADVANCE_WRONG_SLOT_POINTS,
   DEFAULT_WORLD_CUP_SCORING_RULE_ROWS,
 } from "../lib/scoring/worldcupPoolDefaults";
+import {
+  postScoringRulesUpdateAnnouncementsForPools,
+  SCORING_RULES_UPDATE_2026_SOURCE_KEY,
+} from "../lib/poolActivity/scoringRulesUpdateAnnouncement";
 import { loadEnvLocal } from "./loadEnvLocal";
 
 const TARGET_THIRD_PLACE_POINTS = 4;
@@ -84,6 +87,8 @@ async function main(): Promise<void> {
 
   const applyRules = process.argv.includes("--apply-rules");
   const recompute = process.argv.includes("--recompute");
+  const announce =
+    process.argv.includes("--announce") || applyRules || recompute;
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL?.trim() ?? "";
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY?.trim() ?? "";
 
@@ -142,13 +147,14 @@ async function main(): Promise<void> {
   }
 
   console.log(
-    applyRules || recompute
+    applyRules || recompute || announce
       ? "Live WC 2026 scoring rule maintenance"
       : "Dry run — no changes written.",
   );
   console.log(
     `Target values: third_place_qualifier=${TARGET_THIRD_PLACE_POINTS}, most_goals=${TARGET_MOST_GOALS_POINTS}`,
   );
+  console.log(`AshBot dedupe key: ${SCORING_RULES_UPDATE_2026_SOURCE_KEY}`);
   console.log(
     "Excluded: simulation editions/pools, archived pools, custom rule values.",
   );
@@ -158,6 +164,26 @@ async function main(): Promise<void> {
   const poolsNeedingGoals: Wc2026PoolRow[] = [];
   const poolsNeedingFullSeed: Wc2026PoolRow[] = [];
   const poolsAlreadyCorrect: Wc2026PoolRow[] = [];
+
+  const { data: announcementRows, error: announcementQueryError } =
+    await supabase
+      .from("pool_activity")
+      .select("pool_id")
+      .in("pool_id", poolIds)
+      .eq("type", "pool_milestone")
+      .eq("metadata_json->>source_key", SCORING_RULES_UPDATE_2026_SOURCE_KEY);
+
+  if (announcementQueryError) {
+    console.error(
+      "Failed to load existing scoring-update announcements:",
+      announcementQueryError.message,
+    );
+    process.exit(1);
+  }
+
+  const announcedPoolIds = new Set(
+    (announcementRows ?? []).map((row) => row.pool_id as string),
+  );
 
   for (const pool of pools) {
     const rules = rulesByPool.get(pool.id) ?? [];
@@ -240,6 +266,9 @@ async function main(): Promise<void> {
     console.log(
       `  unchanged checks: round_of_16=${r16?.points ?? "missing"}, most_yellow_cards=${yellow?.points ?? "missing"}, most_red_cards=${red?.points ?? "missing"}`,
     );
+    console.log(
+      `  AshBot note: ${announcedPoolIds.has(pool.id) ? "already posted" : "would post"}`,
+    );
     console.log("");
   }
 
@@ -248,6 +277,9 @@ async function main(): Promise<void> {
   console.log(`  need third_place update: ${poolsNeedingThird.length}`);
   console.log(`  need most_goals update:  ${poolsNeedingGoals.length}`);
   console.log(`  already at target:       ${poolsAlreadyCorrect.length}`);
+  console.log(
+    `  AshBot notes posted:     ${announcedPoolIds.size}/${pools.length}`,
+  );
   console.log("");
 
   if (applyRules) {
@@ -348,6 +380,25 @@ async function main(): Promise<void> {
   ) {
     console.log(
       "Rule rows would be updated by migration or --apply-rules. Re-run with --apply-rules to write.",
+    );
+  }
+
+  if (announce) {
+    console.log("");
+    console.log("Posting AshBot scoring-update notes…");
+    const announcementResult = await postScoringRulesUpdateAnnouncementsForPools(
+      supabase,
+      poolIds,
+    );
+    console.log(
+      `AshBot notes: inserted=${announcementResult.inserted}, skipped=${announcementResult.skipped}`,
+    );
+  } else if (
+    announcedPoolIds.size < pools.length
+  ) {
+    console.log("");
+    console.log(
+      "After rules are applied, run with --announce (or --apply-rules / --recompute) to post AshBot notes.",
     );
   }
 
