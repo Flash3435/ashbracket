@@ -49,6 +49,7 @@ const baseInput = {
   assert.strictEqual(data.championDiversityCount, 0);
   assert.strictEqual(data.mostPopularChampion, null);
   assert.strictEqual(data.canShowParticipantNames, false);
+  assert.strictEqual(data.everyonesPicks.length, 0);
 }
 
 // After lock: champion counts
@@ -136,6 +137,42 @@ const baseInput = {
     ],
   });
   assert.deepStrictEqual(data.championPicks[0]!.participantNames, ["Adarsh", "Nish"]);
+  assert.deepStrictEqual(data.championPicks[0]!.notPickedParticipantNames, []);
+}
+
+// Champion not-picked: holdouts who picked a different winner
+{
+  const data = buildPoolReveal({
+    ...baseInput,
+    championPicks: [
+      pick({ teamId: "t-bra", teamName: "Brazil", participantId: "p1", participantDisplayName: "Adarsh" }),
+      pick({ teamId: "t-bra", teamName: "Brazil", participantId: "p2", participantDisplayName: "Nish" }),
+      pick({ teamId: "t-arg", teamName: "Argentina", participantId: "p3", participantDisplayName: "Lakshmi" }),
+      pick({ teamId: "t-can", teamName: "Canada", participantId: "p4", participantDisplayName: "Dipa" }),
+    ],
+  });
+  assert.deepStrictEqual(data.championPicks[0]!.notPickedParticipantNames, [
+    "Dipa",
+    "Lakshmi",
+  ]);
+  assert.deepStrictEqual(data.championPicks[1]!.notPickedParticipantNames, [
+    "Adarsh",
+    "Dipa",
+    "Nish",
+  ]);
+}
+
+// Champion unanimous: empty not-picked list
+{
+  const data = buildPoolReveal({
+    ...baseInput,
+    completeParticipantIds: ["p1", "p2"],
+    championPicks: [
+      pick({ teamId: "t-bra", teamName: "Brazil", participantId: "p1", participantDisplayName: "A" }),
+      pick({ teamId: "t-bra", teamName: "Brazil", participantId: "p2", participantDisplayName: "B" }),
+    ],
+  });
+  assert.deepStrictEqual(data.championPicks[0]!.notPickedParticipantNames, []);
 }
 
 // No emails or internal IDs in output
@@ -185,6 +222,33 @@ const baseInput = {
   assert.strictEqual(data.totalCompleted, 3);
   assert.strictEqual(data.totalChampionBrackets, 2);
   assert.strictEqual(data.championPicks[0]!.percentage, 100);
+}
+
+// Pre-R32 locked pool: pre-bracket reveal instead of empty champion state
+{
+  const data = buildPoolReveal({
+    ...baseInput,
+    championPicks: [],
+    knockoutBracketPicksUnlocked: false,
+    preBracketSections: [
+      {
+        id: "group",
+        title: "Group winners",
+        teamPicks: [
+          {
+            teamId: "t-bra",
+            teamName: "Brazil",
+            teamCode: "BRA",
+            count: 2,
+            percentage: 100,
+          },
+        ],
+      },
+    ],
+  });
+  assert.strictEqual(data.totalChampionBrackets, 0);
+  assert.strictEqual(data.showPreBracketReveal, true);
+  assert.ok(data.preBracketIntro?.includes("Round of 32"));
 }
 
 // Pre-lock loader-shaped input exposes no team strings

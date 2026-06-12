@@ -7,6 +7,7 @@ import {
   formatIncompleteStillFinishingVerb,
   formatLastReminderSentLabel,
   type IncompleteBracketPanelData,
+  type IncompleteBracketParticipant,
 } from "@/lib/admin/incompleteBracketPanel";
 import type { SimulationPoolEmailUiStatus } from "@/lib/admin/simulationPoolEmailPolicy";
 import { SIMULATION_POOL_EMAIL_TYPED_PHRASE } from "@/lib/admin/simulationPoolEmailPolicy";
@@ -27,6 +28,79 @@ type Props = {
 function progressPercent(completed: number, total: number): number {
   if (total <= 0) return 0;
   return Math.round((completed / total) * 100);
+}
+
+function IncompleteParticipantRow({
+  participant,
+}: {
+  participant: IncompleteBracketParticipant;
+}) {
+  const { breakdown } = participant;
+
+  return (
+    <li className="rounded-md border border-ash-border/60 bg-ash-body/30 px-3 py-2">
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="font-medium text-ash-text">{participant.displayName}</span>
+        {!participant.hasEmail ? (
+          <span className="text-xs text-amber-200">(no email)</span>
+        ) : null}
+      </div>
+      <p className="mt-1 text-xs leading-relaxed text-amber-100">
+        {breakdown.missingSummary}
+      </p>
+      <details className="mt-2">
+        <summary className="cursor-pointer text-xs font-semibold text-ash-accent hover:underline">
+          Details
+        </summary>
+        <dl className="mt-2 grid grid-cols-1 gap-x-4 gap-y-2 text-xs sm:grid-cols-2">
+          <div>
+            <dt className="font-medium text-ash-muted">Group picks</dt>
+            <dd className="tabular-nums text-ash-text">{breakdown.groupPicks}</dd>
+          </div>
+          <div>
+            <dt className="font-medium text-ash-muted">Third-place picks</dt>
+            <dd className="tabular-nums text-ash-text">
+              {breakdown.thirdPlacePicks}
+            </dd>
+          </div>
+          <div>
+            <dt className="font-medium text-ash-muted">Bonus picks</dt>
+            <dd className="tabular-nums text-ash-text">{breakdown.bonusPicks}</dd>
+          </div>
+          <div className="sm:col-span-2">
+            <dt className="font-medium text-ash-muted">Knockout</dt>
+            <dd className="text-ash-text">{breakdown.knockoutStatus}</dd>
+          </div>
+        </dl>
+      </details>
+    </li>
+  );
+}
+
+function IncompleteParticipantsList({
+  participants,
+  moreIncompleteCount,
+}: {
+  participants: IncompleteBracketParticipant[];
+  moreIncompleteCount: number;
+}) {
+  return (
+    <div className="mt-4">
+      <p className="text-xs font-semibold uppercase tracking-wide text-ash-muted">
+        Still incomplete
+      </p>
+      <ul className="mt-2 space-y-2 text-sm">
+        {participants.map((p) => (
+          <IncompleteParticipantRow key={p.id} participant={p} />
+        ))}
+        {moreIncompleteCount > 0 ? (
+          <li className="px-1 text-xs text-ash-muted">
+            + {moreIncompleteCount} more
+          </li>
+        ) : null}
+      </ul>
+    </div>
+  );
 }
 
 export function IncompleteBracketsPanel({
@@ -92,7 +166,8 @@ export function IncompleteBracketsPanel({
     data.state === "some_incomplete" &&
     data.mailableIncompleteCount > 0 &&
     !sendsBlocked &&
-    data.emailConfigured;
+    data.emailConfigured &&
+    !data.possibleKeyMismatch;
 
   const showSendAnywayWarning = data.reminderRecentlySent && canSendReminder;
 
@@ -136,7 +211,8 @@ export function IncompleteBracketsPanel({
 
   return (
     <section
-      className={`rounded-lg border border-ash-border bg-ash-body/40 p-4 ${className}`}
+      id="incomplete-brackets"
+      className={`scroll-mt-20 rounded-lg border border-ash-border bg-ash-body/40 p-4 ${className}`}
       aria-label="Incomplete brackets"
     >
       <div className="flex flex-wrap items-start justify-between gap-3">
@@ -159,8 +235,9 @@ export function IncompleteBracketsPanel({
       </div>
 
       {data.state === "unavailable" ? (
-        <p className="mt-3 text-sm text-amber-100">
-          Pick completion status is unavailable right now. Try again in a moment.
+        <p className="mt-3 rounded-md border border-amber-800/60 bg-amber-950/30 px-3 py-2 text-sm text-amber-100">
+          {data.statusUnavailableReason ??
+            "Pick completion status is unavailable right now. Try again in a moment."}
         </p>
       ) : null}
 
@@ -230,6 +307,41 @@ export function IncompleteBracketsPanel({
         </>
       ) : null}
 
+      <p
+        className="mt-3 rounded border border-ash-border/40 bg-ash-body/20 px-2 py-1.5 font-mono text-[10px] leading-relaxed text-ash-muted"
+        aria-label="Admin completion source diagnostics"
+      >
+        build: {data.sourceDiagnostics.buildCommitSha} · source:{" "}
+        {data.sourceDiagnostics.dataSource} · service role:{" "}
+        {data.sourceDiagnostics.serviceRoleAvailable ? "yes" : "no"}
+        {data.sourceDiagnostics.serviceRoleRequired ? " (required)" : ""} ·
+        participants: {data.sourceDiagnostics.participantCount} · predictions:{" "}
+        {data.sourceDiagnostics.predictionRowCount} · group map:{" "}
+        {data.sourceDiagnostics.groupMapSize} · trusted incomplete:{" "}
+        {data.sourceDiagnostics.trustedIncompleteCount}
+        {data.sourceDiagnostics.warningMessage
+          ? ` · warn: ${data.sourceDiagnostics.warningMessage}`
+          : ""}
+      </p>
+
+      {data.completionDebug && data.completionDebug.length > 0 ? (
+        <details className="mt-3 rounded-md border border-ash-border/60 bg-ash-body/20 px-3 py-2 text-xs">
+          <summary className="cursor-pointer font-semibold text-ash-muted">
+            Completion debug ({data.completionDebug.length} participants)
+          </summary>
+          <ul className="mt-2 space-y-1 font-mono text-[11px] text-ash-text">
+            {data.completionDebug.map((row) => (
+              <li key={row.participantId}>
+                {row.displayName}: complete={String(row.isComplete)} missingKeys=
+                {row.missingPickKeysCount} group={row.sections.group} third=
+                {row.sections.third} bonus={row.sections.bonus} knockout=
+                {row.sections.knockout}
+              </li>
+            ))}
+          </ul>
+        </details>
+      ) : null}
+
       {data.state === "all_complete" ? (
         <p className="mt-3 text-sm text-emerald-200">
           Everyone has completed their picks.
@@ -237,37 +349,27 @@ export function IncompleteBracketsPanel({
       ) : null}
 
       {data.state === "past_lock" && data.incompleteCount > 0 ? (
-        <p className="mt-3 text-sm text-ash-muted">
-          Picks are locked.{" "}
-          <span className="font-semibold text-ash-text">
-            {data.incompleteCount}
-          </span>{" "}
-          {data.incompleteCount === 1 ? "participant did" : "participants did"}{" "}
-          not complete their bracket.
-        </p>
+        <>
+          <p className="mt-3 text-sm text-ash-muted">
+            Picks are locked.{" "}
+            <span className="font-semibold text-ash-text">
+              {data.incompleteCount}
+            </span>{" "}
+            {data.incompleteCount === 1 ? "participant did" : "participants did"}{" "}
+            not complete their bracket.
+          </p>
+          <IncompleteParticipantsList
+            participants={data.incompleteParticipants}
+            moreIncompleteCount={data.moreIncompleteCount}
+          />
+        </>
       ) : null}
 
       {data.state === "some_incomplete" && data.incompleteCount > 0 ? (
-        <div className="mt-4">
-          <p className="text-xs font-semibold uppercase tracking-wide text-ash-muted">
-            Still incomplete
-          </p>
-          <ul className="mt-2 space-y-1 text-sm text-ash-text">
-            {data.incompleteParticipants.map((p) => (
-              <li key={p.id} className="flex flex-wrap items-center gap-2">
-                <span>{p.displayName}</span>
-                {!p.hasEmail ? (
-                  <span className="text-xs text-amber-200">(no email)</span>
-                ) : null}
-              </li>
-            ))}
-            {data.moreIncompleteCount > 0 ? (
-              <li className="text-ash-muted">
-                + {data.moreIncompleteCount} more
-              </li>
-            ) : null}
-          </ul>
-        </div>
+        <IncompleteParticipantsList
+          participants={data.incompleteParticipants}
+          moreIncompleteCount={data.moreIncompleteCount}
+        />
       ) : null}
 
       {data.lastReminderSentAt ? (
@@ -281,6 +383,18 @@ export function IncompleteBracketsPanel({
         </p>
       ) : data.state === "some_incomplete" ? (
         <p className="mt-3 text-xs text-ash-muted">No reminders sent yet.</p>
+      ) : null}
+
+      {data.possibleKeyMismatch ? (
+        <p className="mt-2 rounded-md border border-amber-800/50 bg-amber-950/25 px-3 py-2 text-xs text-amber-100">
+          Some incomplete participants have saved picks that did not match required
+          slot keys. Run{" "}
+          <code className="rounded bg-ash-body/80 px-1 py-0.5 font-mono text-[11px]">
+            npx tsx scripts/diagnose-pool-completion.ts {data.poolId}
+          </code>{" "}
+          before sending reminders — their brackets may already be complete in the
+          database.
+        </p>
       ) : null}
 
       {showSendAnywayWarning ? (
@@ -345,11 +459,13 @@ export function IncompleteBracketsPanel({
           >
             {pending
               ? "Sending…"
-              : sendsBlocked
-                ? "Email blocked"
-                : data.mailableIncompleteCount === 0
-                  ? "No mailable recipients"
-                  : "Send reminder to incomplete participants"}
+              : data.possibleKeyMismatch
+                ? "Resolve key mismatch first"
+                : sendsBlocked
+                  ? "Email blocked"
+                  : data.mailableIncompleteCount === 0
+                    ? "No mailable recipients"
+                    : "Send reminder to incomplete participants"}
           </button>
           <Link
             href={data.communicationsHref}

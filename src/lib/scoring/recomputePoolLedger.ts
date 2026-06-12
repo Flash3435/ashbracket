@@ -4,11 +4,9 @@ import { revalidatePoolAdminPaths } from "@/lib/admin/revalidatePoolAdminPaths";
 import { createClient } from "@/lib/supabase/server";
 import { createServiceRoleClient } from "@/lib/supabase/service";
 import { computePoolScores } from "./computePoolScores";
-import {
-  mapPredictionRow,
-  mapResultRow,
-  mapScoringRuleRow,
-} from "./mapSupabaseRows";
+import { fetchPoolPredictions } from "@/lib/predictions/fetchPoolPredictions";
+import { warnIfPoolPredictionsLookTruncated } from "@/lib/supabase/fetchAllRows";
+import { mapResultRow, mapScoringRuleRow } from "./mapSupabaseRows";
 
 type RecomputeResult = { error?: string };
 
@@ -23,6 +21,8 @@ export type WcLedgerRecomputeTrigger =
 
 export type RecomputePoolLedgerOptions = {
   ledgerTrigger?: WcLedgerRecomputeTrigger;
+  /** Skip Next.js cache revalidation (required for CLI scripts outside the app runtime). */
+  skipRevalidation?: boolean;
 };
 
 async function recordLedgerRecomputeDiagnostic(
@@ -59,14 +59,23 @@ export async function recomputePoolLedgerWithClient(
   poolId: string,
   options?: RecomputePoolLedgerOptions,
 ): Promise<RecomputeResult> {
-  const { data: predRaw, error: predErr } = await supabase
-    .from("predictions")
-    .select(
-      "id, pool_id, participant_id, prediction_kind, team_id, tournament_stage_id, group_code, slot_key, bonus_key, value_text, created_at, updated_at",
-    )
-    .eq("pool_id", poolId);
+  const poolPredictions = await fetchPoolPredictions(supabase, { poolId });
+  if (poolPredictions.error) return { error: poolPredictions.error };
 
-  if (predErr) return { error: predErr.message };
+  const { data: participantRows, error: participantErr } = await supabase
+    .from("participants")
+    .select("id")
+    .eq("pool_id", poolId);
+  if (participantErr) return { error: participantErr.message };
+
+  const participantCount = (participantRows ?? []).length;
+  warnIfPoolPredictionsLookTruncated({
+    participantCount,
+    predictionRowCount: poolPredictions.predictions.length,
+    paginationPageCount: poolPredictions.pageCount,
+    context: "recomputePoolLedgerWithClient",
+    poolId,
+  });
 
   const { data: poolRow, error: poolErr } = await supabase
     .from("pools")
@@ -125,7 +134,7 @@ export async function recomputePoolLedgerWithClient(
 
   if (resErr) return { error: resErr.message };
 
-  const predictions = (predRaw ?? []).map(mapPredictionRow);
+  const predictions = poolPredictions.predictions;
   const scoringRules = (rulesRaw ?? []).map(mapScoringRuleRow);
   const results = (resultsRaw ?? []).map(mapResultRow);
 
@@ -157,10 +166,12 @@ export async function recomputePoolLedgerWithClient(
     await recordLedgerRecomputeDiagnostic(supabase, poolId, options.ledgerTrigger);
   }
 
-  revalidatePoolAdminPaths(poolId);
-  revalidatePath("/admin/results");
-  revalidatePath("/admin/tournament");
-  revalidatePath("/admin/tournament/status");
+  if (!options?.skipRevalidation) {
+    revalidatePoolAdminPaths(poolId);
+    revalidatePath("/admin/results");
+    revalidatePath("/admin/tournament");
+    revalidatePath("/admin/tournament/status");
+  }
 
   return {};
 }

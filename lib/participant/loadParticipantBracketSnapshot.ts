@@ -228,7 +228,28 @@ export async function loadParticipantBracketSnapshot(
           .filter((k): k is string => Boolean(k && String(k).trim())),
       ),
     ];
-    const bonusKeysOrdered = participantBonusKeysForPool(bonusKeysFromPreds);
+
+    const { data: ruleRows, error: ruleErr } = await supabase
+      .from("scoring_rules")
+      .select("bonus_key")
+      .eq("pool_id", header.poolId)
+      .eq("prediction_kind", "bonus_pick")
+      .order("bonus_key", { ascending: true });
+
+    if (ruleErr) {
+      return {
+        ok: false,
+        kind: "load_error",
+        message: ruleErr.message,
+      };
+    }
+
+    const fromDb = (ruleRows ?? [])
+      .map((r) => r.bonus_key as string | null)
+      .filter((k): k is string => Boolean(k && k.trim()));
+    const bonusKeysOrdered = participantBonusKeysForPool(
+      fromDb.length > 0 ? fromDb : bonusKeysFromPreds,
+    );
 
     const stageByCode = Object.fromEntries(
       stages.map((s) => [s.code, s]),

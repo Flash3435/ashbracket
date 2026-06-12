@@ -1,10 +1,17 @@
 import { AccountPicksProfileLinks } from "@/components/account/AccountPicksProfileLinks";
 import { PoolRevealPage } from "@/components/account/PoolRevealPage";
+import { RevealResultsScrollAnchor } from "@/components/account/RevealResultsScrollAnchor";
+import { ACCOUNT_REVEAL_RESULTS_HASH } from "@/lib/account/buildAccountProfileLinkHref";
 import { PageContainer } from "@/components/ui/PageContainer";
 import { PageTitle } from "@/components/ui/PageTitle";
 import { loadPoolReveal } from "@/lib/account/loadPoolReveal";
+import { loadTournamentTeamStatLeaders } from "@/lib/tournament/matchTeamStats/loadTournamentTeamStatLeaders";
 import { createClient } from "@/lib/supabase/server";
-import { loadAccountKnockoutSelection } from "../../../../lib/account/loadAccountKnockoutSelection";
+import {
+  loadAccountKnockoutSelection,
+  poolLocked,
+} from "../../../../lib/account/loadAccountKnockoutSelection";
+import { publicLeaderboardHrefForPool } from "../../../../lib/pool/publicLeaderboardHref";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 
@@ -28,12 +35,12 @@ export default async function AccountRevealPage({ searchParams }: PageProps) {
   const participantParam = sp.participant?.trim() ?? "";
   const ctx = await loadAccountKnockoutSelection(user.id, participantParam);
 
-  const selectedPoolId = ctx.selectedId
-    ? ctx.myParticipants.find((p) => p.id === ctx.selectedId)?.pool_id
-    : null;
+  const selectedPoolId = ctx.selectedPoolId;
 
   let revealError: string | null = null;
   let revealData: Awaited<ReturnType<typeof loadPoolReveal>> | null = null;
+  let bonusWatchRes: Awaited<ReturnType<typeof loadTournamentTeamStatLeaders>> | null =
+    null;
 
   if (ctx.selectedId && selectedPoolId && !ctx.loadError) {
     try {
@@ -54,6 +61,26 @@ export default async function AccountRevealPage({ searchParams }: PageProps) {
     ? `?participant=${ctx.selectedId}`
     : "";
   const dashboardHref = `/account${dashboardQs}`;
+  const locked = poolLocked(ctx.selectedLockAt);
+  if (locked && selectedPoolId && !ctx.loadError) {
+    bonusWatchRes = await loadTournamentTeamStatLeaders(supabase, {
+      poolId: selectedPoolId,
+    });
+  }
+  let leaderboardHref: string | null = null;
+  if (selectedPoolId) {
+    const { data: poolRow } = await supabase
+      .from("pools")
+      .select("is_public")
+      .eq("id", selectedPoolId)
+      .maybeSingle();
+    if (poolRow) {
+      leaderboardHref = publicLeaderboardHrefForPool({
+        id: selectedPoolId,
+        isPublic: Boolean(poolRow.is_public),
+      });
+    }
+  }
 
   return (
     <PageContainer>
@@ -63,19 +90,36 @@ export default async function AccountRevealPage({ searchParams }: PageProps) {
         </Link>
         {ctx.selectedId && !ctx.loadError ? (
           <>
-            <span className="text-ash-border" aria-hidden>
-              |
-            </span>
-            <Link href={activityHref} className="ash-link text-sm">
-              Activity
-            </Link>
+            {locked && leaderboardHref ? (
+              <>
+                <span className="text-ash-border" aria-hidden>
+                  |
+                </span>
+                <Link href={leaderboardHref} className="ash-link text-sm font-medium">
+                  View leaderboard
+                </Link>
+              </>
+            ) : (
+              <>
+                <span className="text-ash-border" aria-hidden>
+                  |
+                </span>
+                <Link href={activityHref} className="ash-link text-sm">
+                  Activity
+                </Link>
+              </>
+            )}
           </>
         ) : null}
       </div>
 
       <PageTitle
-        title="Pool reveal"
-        description="See how the pool picked once the deadline has passed."
+        title={locked ? "Compare brackets" : "Pool reveal"}
+        description={
+          locked
+            ? "Reveal everyone's picks, compare champion choices, and see how the pool split."
+            : "Picks reveal after lock — preview what unlocks once the deadline passes."
+        }
       />
 
       {ctx.loadError ? (
@@ -144,13 +188,30 @@ export default async function AccountRevealPage({ searchParams }: PageProps) {
           ) : null}
 
           {revealData && ctx.selectedId ? (
-            <PoolRevealPage
-              data={revealData}
-              poolName={ctx.selectedPoolName}
-              picksHref={picksHref}
-              activityHref={activityHref}
-              dashboardHref={dashboardHref}
-            />
+            <div
+              id={ACCOUNT_REVEAL_RESULTS_HASH}
+              className="scroll-mt-24"
+            >
+              <RevealResultsScrollAnchor selectedParticipantId={ctx.selectedId} />
+              <div className="mb-6">
+                <h2 className="text-xl font-bold text-ash-text sm:text-2xl">
+                  {ctx.selectedPoolName} reveal
+                </h2>
+                <p className="mt-1 text-sm text-ash-muted">
+                  Browse everyone&apos;s locked brackets, then compare pool trends
+                  and champion favorites below.
+                </p>
+              </div>
+              <PoolRevealPage
+                key={ctx.selectedId}
+                data={revealData}
+                poolName={ctx.selectedPoolName}
+                picksHref={picksHref}
+                activityHref={activityHref}
+                dashboardHref={dashboardHref}
+                bonusWatchView={bonusWatchRes?.ok ? bonusWatchRes.view : null}
+              />
+            </div>
           ) : null}
         </>
       ) : null}

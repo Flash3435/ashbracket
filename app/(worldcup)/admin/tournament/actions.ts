@@ -6,7 +6,10 @@ import { createClient } from "@/lib/supabase/server";
 import { isGlobalAdmin } from "../../../../lib/auth/permissions";
 import { OFFICIAL_EDITION_CODE } from "../../../../lib/config/officialTournament";
 import { fetchEditionImpactSummary } from "../../../../lib/admin/fetchAdminImpactSummary";
-import { fetchOfficialLiveEdition, livePoolIds } from "../../../../lib/tournament/editionScope";
+import {
+  fetchOfficialLiveEdition,
+  livePoolIdsForEdition,
+} from "../../../../lib/tournament/editionScope";
 import {
   buildLiveDailyUpdateSuccessMessage,
   recordLiveDailyUpdateStatus,
@@ -68,8 +71,16 @@ export async function runLiveDailyUpdateAction(input: {
       };
     }
 
-    const poolIds = await livePoolIds(supabase);
+    const poolIds = await livePoolIdsForEdition(supabase, liveEdition.id);
     const impact = await fetchEditionImpactSummary(supabase, liveEdition.id);
+
+    if (poolIds.length !== impact?.poolCount) {
+      console.warn("[liveDailyUpdate] pool scope mismatch", {
+        editionId: liveEdition.id,
+        editionPools: impact?.poolCount,
+        livePoolIds: poolIds.length,
+      });
+    }
 
     const out = await syncOfficialTournament(supabase, {
       editionCode: OFFICIAL_EDITION_CODE,
@@ -122,10 +133,14 @@ export async function runLiveDailyUpdateAction(input: {
       detail: message,
     });
 
+    revalidatePath("/tournament");
     revalidatePath("/admin/tournament");
+    revalidatePath("/admin/tournament/live-scores");
     revalidatePath("/admin/tournament/status");
     revalidatePath("/admin/results");
+    revalidatePath("/admin/activity");
     revalidatePath("/rules");
+    revalidatePath("/account/activity");
     revalidatePath("/pool/[poolId]", "layout");
 
     return {

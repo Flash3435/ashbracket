@@ -1,5 +1,10 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { recomputePoolLedgerWithClient } from "@/lib/scoring/recomputePoolLedger";
+import {
+  buildScoreImpactMatchResults,
+  scoreImpactSignatureFromMatchResults,
+} from "@/lib/poolActivity/scoreImpact/buildScoreImpactMatchResults";
+import { loadTeamNameMapForEdition } from "@/lib/poolActivity/scoreImpact/loadScoreImpactContext";
+import { recomputePoolLedgersWithScoreImpact } from "@/lib/poolActivity/scoreImpact/recomputeWithScoreImpact";
 import {
   computeGroupStandings,
   type FinishedGroupMatch,
@@ -7,10 +12,16 @@ import {
 import { winnerFromMatchScores } from "./matchOutcome";
 
 export type SyncOfficialTournamentSummary = {
+  /** All matches loaded for the edition. */
+  matchCount: number;
+  /** Matches with both regulation scores on file (may still be in progress). */
+  matchesWithScoresCount: number;
   finishedMatchCount: number;
   derivedResultsInserted: number;
   poolsRecalculated: number;
   syncLockedMatchCount: number;
+  patchesApplied: number;
+  patchesSkipped: number;
 };
 
 export type OfficialMatchScorePatch = {
@@ -52,17 +63,35 @@ function resultSlotKey(
   return [stageId, kind, groupCode ?? "", slotKey ?? ""].join("\0");
 }
 
-function applyPatches(matches: DbMatch[], patches: OfficialMatchScorePatch[]) {
+export type PatchApplyOutcome = {
+  applied: string[];
+  skipped: Array<{ matchCode: string; reason: "not_found" | "sync_locked" }>;
+};
+
+export function applyPatches(matches: DbMatch[], patches: OfficialMatchScorePatch[]): PatchApplyOutcome {
   const byCode = new Map(matches.map((m) => [m.match_code, m]));
+  const applied: string[] = [];
+  const skipped: PatchApplyOutcome["skipped"] = [];
+
   for (const p of patches) {
     const row = byCode.get(p.matchCode);
-    if (!row || row.sync_locked) continue;
+    if (!row) {
+      skipped.push({ matchCode: p.matchCode, reason: "not_found" });
+      continue;
+    }
+    if (row.sync_locked) {
+      skipped.push({ matchCode: p.matchCode, reason: "sync_locked" });
+      continue;
+    }
     row.home_goals = p.homeGoals;
     row.away_goals = p.awayGoals;
     if (p.homePenalties !== undefined) row.home_penalties = p.homePenalties;
     if (p.awayPenalties !== undefined) row.away_penalties = p.awayPenalties;
     if (p.status) row.status = p.status;
+    applied.push(p.matchCode);
   }
+
+  return { applied, skipped };
 }
 
 function recomputeWinners(matches: DbMatch[]) {
@@ -163,13 +192,14 @@ export async function syncOfficialTournament(
     patches?: OfficialMatchScorePatch[];
   },
 ): Promise<
-  { ok: true; summary: SyncOfficialTournamentSummary } | { ok: false; error: string }
+  | { ok: true; summary: SyncOfficialTournamentSummary; patchOutcome: PatchApplyOutcome }
+  | { ok: false; error: string }
 > {
   const { editionCode, poolIds, patches = [] } = options;
 
   const { data: edition, error: edErr } = await supabase
     .from("tournament_editions")
-    .select("id")
+    .select("id, is_simulation")
     .eq("code", editionCode)
     .maybeSingle();
   if (edErr) return { ok: false, error: edErr.message };
@@ -178,6 +208,7 @@ export async function syncOfficialTournament(
   }
 
   const editionId = edition.id as string;
+  const editionIsSimulation = Boolean(edition.is_simulation);
 
   const { data: rawMatches, error: mErr } = await supabase
     .from("tournament_matches")
@@ -189,7 +220,7 @@ export async function syncOfficialTournament(
   if (mErr) return { ok: false, error: mErr.message };
   const matches = (rawMatches ?? []) as DbMatch[];
 
-  applyPatches(matches, patches);
+  const patchOutcome = applyPatches(matches, patches);
   recomputeWinners(matches);
   propagateBracketAdvance(matches);
 
@@ -341,21 +372,37 @@ export async function syncOfficialTournament(
     { insertCount: inserts.length, poolCount: poolIds.length },
   );
 
-  for (const poolId of poolIds) {
-    const ledger = await recomputePoolLedgerWithClient(supabase, poolId, {
-      ledgerTrigger: "tournament_sync",
+  const teamNameById = await loadTeamNameMapForEdition(supabase, editionId);
+  const matchResults = buildScoreImpactMatchResults({
+    matches,
+    patches,
+    teamNameById,
+  });
+  const scoreSignature = scoreImpactSignatureFromMatchResults(matchResults);
+
+  const ledgerOut = await recomputePoolLedgersWithScoreImpact(
+    supabase,
+    poolIds,
+    "tournament_sync",
+    {
+      editionId,
+      matchResults,
+      scoreSignature,
+    },
+    { editionIsSimulation },
+  );
+  if (!ledgerOut.ok) {
+    console.error("[ashbracket:sync] ledger recompute failed", {
+      error: ledgerOut.error,
     });
-    if (ledger.error) {
-      console.error("[ashbracket:sync] ledger recompute failed", {
-        poolId,
-        error: ledger.error,
-      });
-      return { ok: false, error: ledger.error };
-    }
+    return { ok: false, error: ledgerOut.error };
   }
 
   console.info("[ashbracket:sync] ledger recompute finished for all pools");
 
+  const matchesWithScoresCount = matches.filter(
+    (m) => m.home_goals != null && m.away_goals != null,
+  ).length;
   const finishedMatchCount = matches.filter(
     (m) =>
       m.status === "finished" &&
@@ -367,10 +414,15 @@ export async function syncOfficialTournament(
   return {
     ok: true,
     summary: {
+      matchCount: matches.length,
+      matchesWithScoresCount,
       finishedMatchCount,
       derivedResultsInserted: inserts.length,
       poolsRecalculated: poolIds.length,
       syncLockedMatchCount,
+      patchesApplied: patchOutcome.applied.length,
+      patchesSkipped: patchOutcome.skipped.length,
     },
+    patchOutcome,
   };
 }

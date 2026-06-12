@@ -72,6 +72,16 @@ assert.equal(
   true,
 );
 
+// Backfill previous official default (Jun 10, 2026 11:59 p.m. ET)
+assert.ok(isKnownBadWc2026PoolLockAt("2026-06-11T03:59:00.000Z"));
+assert.equal(
+  shouldBackfillWc2026PoolLockAt({
+    ...liveWc,
+    lockAtIso: "2026-06-11T03:59:00+00",
+  }),
+  true,
+);
+
 // Already correct — skip
 assert.equal(
   shouldBackfillWc2026PoolLockAt({
@@ -115,8 +125,8 @@ assert.equal(
 // Participant display uses Eastern Time for the official instant
 {
   const label = formatPoolPickDeadlineLabel(WC2026_OFFICIAL_POOL_LOCK_AT_ISO);
-  assert.ok(label.includes("Jun 10"), label);
-  assert.ok(label.includes("11:59"), label);
+  assert.ok(label.includes("Jun 11"), label);
+  assert.ok(label.includes("12:00"), label);
   assert.ok(label.endsWith(" ET"), label);
 }
 

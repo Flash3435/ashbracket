@@ -1,5 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { applyFifaRankSnapshot } from "./applyFifaRankSnapshot";
+import { validateKickoffAtUtc } from "./validateWc2026KickoffAt";
 import wc from "./wc2026Data.json";
 import groupFixtures from "./wc2026GroupFixtures.json";
 
@@ -153,6 +154,13 @@ export async function seedOfficialWc2026(
 
     for (let i = 0; i < fixtures.length; i += 1) {
       const fx = fixtures[i]!;
+      const kickoffErr = validateKickoffAtUtc(
+        fx.kickoff_at,
+        `Group ${g} ${fx.home}-${fx.away}`,
+      );
+      if (kickoffErr) {
+        return { ok: false, error: kickoffErr };
+      }
       const homeId = codeToId.get(fx.home);
       const awayId = codeToId.get(fx.away);
       if (!homeId || !awayId) {

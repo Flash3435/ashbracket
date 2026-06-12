@@ -1,5 +1,7 @@
 import { AuthRecoveryRedirect } from "@/components/auth/AuthRecoveryRedirect";
+import { PicksDeadlineBannerFromPool } from "@/components/pool/PicksDeadlineBannerFromPool";
 import { resolvePostLoginDestination } from "@/lib/auth/postLoginDestination";
+import { resolvePublicRulesPoolId } from "@/lib/pool/resolvePublicRulesPoolId";
 import { createClient } from "@/lib/supabase/server";
 import { HomeHero } from "@/components/ui/HomeHero";
 import { HomeMarketingSections } from "@/components/ui/HomeMarketingSections";
@@ -26,6 +28,8 @@ export default async function HomePage() {
     }
   }
 
+  const { poolId: publicPoolId } = await resolvePublicRulesPoolId(supabase);
+
   return (
     <>
       <Suspense fallback={null}>
@@ -33,6 +37,7 @@ export default async function HomePage() {
       </Suspense>
       <HomeHero />
       <PageContainer compactBottom>
+        <PicksDeadlineBannerFromPool poolId={publicPoolId} className="mb-6" />
         <HomeMarketingSections />
       </PageContainer>
     </>

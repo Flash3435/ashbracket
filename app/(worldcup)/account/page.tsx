@@ -1,7 +1,11 @@
 import Link from "next/link";
+import { PostLockEngagementCard } from "@/components/account/PostLockEngagementCard";
 import { PoolRevealDashboardCard } from "@/components/account/PoolRevealDashboardCard";
+import { PicksDeadlineBannerFromPool } from "@/components/pool/PicksDeadlineBannerFromPool";
 import { WhoToCheerForCard } from "@/components/account/WhoToCheerForCard";
+import { LatestRecapCard } from "@/components/dashboard/LatestRecapCard";
 import { whoToCheerForFromSchedule } from "@/lib/account/loadWhoToCheerFor";
+import { loadParticipantLatestRecap } from "@/lib/dashboard/loadParticipantLatestRecap";
 import { formatPoolPickDeadlineLabel } from "@/lib/picks/poolPickDeadlineDisplay";
 import { participantPicksCompleteFromDrafts } from "@/lib/predictions/participantPicksCompletenessRules";
 import { AccountPicksProfileLinks } from "@/components/account/AccountPicksProfileLinks";
@@ -17,11 +21,24 @@ import { PageTitle } from "@/components/ui/PageTitle";
 import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
 import {
+  accountCreatePoolLinkState,
+  buildAccountPageNavState,
+  buildAccountPageTitleDescription,
+  isOrganizerOnlyAccount,
+} from "../../../lib/account/accountPageLockState";
+import {
+  accountPicksNavLabel,
   loadAccountKnockoutSelection,
   poolLocked,
 } from "../../../lib/account/loadAccountKnockoutSelection";
-import { resolveAccountParticipantId } from "../../../lib/account/resolveAccountParticipantId";
+import { loadPoolReveal } from "../../../lib/account/loadPoolReveal";
+import { isPastAshbracket2026PoolLockDeadline } from "../../../lib/account/resolveAccountParticipantId";
+import { isGlobalAdmin } from "@/lib/auth/permissions";
+import { publicLeaderboardHrefForPool } from "../../../lib/pool/publicLeaderboardHref";
 import { fetchPublicTournamentProgress } from "../../../lib/tournament/fetchPublicTournamentProgress";
+import type { TournamentMatchPublicRow } from "../../../types/tournamentPublic";
+import { TournamentStatLeadersPanel } from "@/components/tournament/TournamentStatLeadersPanel";
+import { loadTournamentTeamStatLeaders } from "@/lib/tournament/matchTeamStats/loadTournamentTeamStatLeaders";
 
 export const dynamic = "force-dynamic";
 
@@ -66,6 +83,10 @@ export default async function AccountPage({ searchParams }: PageProps) {
       is_paid,
       pools (
         name,
+        lock_at,
+        is_public,
+        is_simulation,
+        archived_at,
         payment_type,
         entry_fee_label,
         entry_fee_amount,
@@ -81,6 +102,10 @@ export default async function AccountPage({ searchParams }: PageProps) {
 
   type PoolEmbedRow = {
     name: string;
+    lock_at: string | null;
+    is_public: boolean | null;
+    is_simulation: boolean | null;
+    archived_at: string | null;
     payment_type: string;
     entry_fee_label: string | null;
     entry_fee_amount: number | string | null;
@@ -99,6 +124,10 @@ export default async function AccountPage({ searchParams }: PageProps) {
       pool_id: r.pool_id as string,
       is_paid: Boolean(r.is_paid),
       pool_name: pool?.name ?? "Pool",
+      pool_lock_at: pool?.lock_at ?? null,
+      pool_is_simulation: Boolean(pool?.is_simulation),
+      pool_archived_at: pool?.archived_at ?? null,
+      pool_is_public: Boolean(pool?.is_public),
       pool_payment: pool
         ? mapPoolPaymentFromPool(pool)
         : mapPoolPaymentFromPool({ payment_type: "free" }),
@@ -121,24 +150,35 @@ export default async function AccountPage({ searchParams }: PageProps) {
       }),
   );
 
-  const preferredParticipantId = resolveAccountParticipantId(
-    list,
-    sp.participant,
-  );
-
   const picksCtx =
-    !error && list.length > 0 && preferredParticipantId
-      ? await loadAccountKnockoutSelection(user.id, preferredParticipantId)
+    !error && list.length > 0
+      ? await loadAccountKnockoutSelection(user.id, sp.participant?.trim() ?? "")
       : null;
 
   let whoToCheer: ReturnType<typeof whoToCheerForFromSchedule> | null = null;
+  let latestRecap: Awaited<ReturnType<typeof loadParticipantLatestRecap>> | null =
+    null;
+  let tournamentMatches: TournamentMatchPublicRow[] | null = null;
+  let tournamentErr: string | null = null;
 
   if (picksCtx && !picksCtx.loadError && picksCtx.initialSlots.length > 0) {
     const { data: tp, error: te } = await fetchPublicTournamentProgress();
-    whoToCheer = whoToCheerForFromSchedule(picksCtx, tp?.matches, te);
+    tournamentMatches = tp?.matches ?? null;
+    tournamentErr = te ?? null;
+    whoToCheer = whoToCheerForFromSchedule(picksCtx, tournamentMatches, tournamentErr);
   }
 
+  const organizerOnly = isOrganizerOnlyAccount(
+    list.length,
+    organizedPools.length,
+  );
   const locked = picksCtx ? poolLocked(picksCtx.selectedLockAt) : false;
+  const pastCanonicalDeadline = isPastAshbracket2026PoolLockDeadline();
+  const createPoolLink = accountCreatePoolLinkState({
+    pastCanonicalDeadline,
+    organizedPoolCount: organizedPools.length,
+    isGlobalAdmin: await isGlobalAdmin(supabase),
+  });
 
   const picksHref =
     list.length === 1
@@ -167,17 +207,89 @@ export default async function AccountPage({ searchParams }: PageProps) {
         })
       : false;
 
+  const selectedListEntry = picksCtx?.selectedPoolId
+    ? list.find((p) => p.pool_id === picksCtx.selectedPoolId)
+    : null;
+  const leaderboardHref = selectedListEntry
+    ? publicLeaderboardHrefForPool({
+        id: selectedListEntry.pool_id,
+        isPublic: selectedListEntry.pool_is_public,
+      })
+    : null;
+  const activityHref = picksCtx?.selectedParticipant?.id
+    ? `/account/activity?participant=${picksCtx.selectedParticipant.id}`
+    : "/account/activity";
+  const accountNav = buildAccountPageNavState({
+    picksLocked: locked,
+    knockoutBracketPicksUnlocked: picksCtx?.knockoutBracketPicksUnlocked ?? true,
+    revealHref,
+    leaderboardHref,
+    picksHref: editPicksFromDashboardHref,
+    activityHref,
+  });
+  const { postLockEngagement, navPlan, suppressStandaloneNavRow } = accountNav;
+  const pageTitleDescription = buildAccountPageTitleDescription({
+    isOrganizerOnly: organizerOnly,
+    hasSelectedParticipant: Boolean(picksCtx?.selectedParticipant),
+    picksLocked: locked,
+    userEmail: user.email ?? null,
+  });
+
+  let bonusWatchRes: Awaited<ReturnType<typeof loadTournamentTeamStatLeaders>> | null =
+    null;
+  if (locked && picksCtx?.selectedPoolId && !picksCtx.loadError) {
+    bonusWatchRes = await loadTournamentTeamStatLeaders(supabase, {
+      poolId: picksCtx.selectedPoolId,
+    });
+  }
+
+  if (
+    locked &&
+    viewerPicksComplete &&
+    picksCtx &&
+    !picksCtx.loadError &&
+    picksCtx.initialSlots.length > 0
+  ) {
+    latestRecap = await loadParticipantLatestRecap(
+      supabase,
+      picksCtx,
+      tournamentMatches,
+      tournamentErr,
+    );
+  }
+
+  let poolSnapshot: {
+    totalParticipants: number;
+    completeBrackets: number;
+    mostPopularChampion: string | null;
+  } | null = null;
+  if (postLockEngagement && picksCtx?.selectedPoolId && !picksCtx.loadError) {
+    try {
+      const revealData = await loadPoolReveal(
+        supabase,
+        picksCtx.selectedPoolId,
+        picksCtx,
+      );
+      poolSnapshot = {
+        totalParticipants: revealData.totalParticipants,
+        completeBrackets: revealData.totalCompleted,
+        mostPopularChampion: revealData.mostPopularChampion?.teamName ?? null,
+      };
+    } catch {
+      poolSnapshot = null;
+    }
+  }
+
   return (
     <PageContainer>
-      <div className="mb-8">
-        <PageTitle
-          title="My bracket"
-          description={
-            user.email
-              ? `Signed in as ${user.email}. Below is your bracket snapshot for the selected pool profile — use Edit picks to continue or change picks.`
-              : "Your bracket overview for the selected pool profile. Use Edit picks to update your picks."
-          }
+      {picksCtx?.selectedPoolId ? (
+        <PicksDeadlineBannerFromPool
+          poolId={picksCtx.selectedPoolId}
+          className="mb-6"
         />
+      ) : null}
+      <div className="mb-8">
+        <PageTitle title="My bracket" description={pageTitleDescription} />
       </div>
 
       <div className="mb-6 space-y-3">
@@ -209,14 +321,16 @@ export default async function AccountPage({ searchParams }: PageProps) {
             </ul>
           </div>
         ) : null}
-        <div>
-          <Link
-            href="/account/pools/new"
-            className="btn-ghost inline-flex text-sm ring-1 ring-ash-border"
-          >
-            Create your own pool
-          </Link>
-        </div>
+        {createPoolLink.show ? (
+          <div>
+            <Link
+              href="/account/pools/new"
+              className="btn-ghost inline-flex text-sm ring-1 ring-ash-border"
+            >
+              {createPoolLink.label}
+            </Link>
+          </div>
+        ) : null}
         <div className="ash-surface p-4">
           <h2 className="text-sm font-semibold text-ash-text">Security</h2>
           <p className="mt-1 text-sm text-ash-muted">
@@ -240,44 +354,86 @@ export default async function AccountPage({ searchParams }: PageProps) {
       {!error && list.length === 0 ? (
         <div className="ash-surface p-6">
           <p className="text-sm text-ash-muted">
-            You are not linked to a pool as a participant yet. Use your join
-            code to create or claim a profile, or start your own pool as the
-            organizer.
+            {organizerOnly
+              ? "You organize pools but do not have a participant profile yet. Manage your pools above, or join a pool with your invite code to follow a locked bracket as a player."
+              : "You are not linked to a pool as a participant yet. Use your join code to create or claim a profile, or start your own pool as the organizer."}
           </p>
           <div className="mt-4 flex flex-wrap gap-2">
             <Link href="/join" className="btn-primary inline-flex">
               Join a pool
             </Link>
-            <Link
-              href="/account/pools/new"
-              className="btn-ghost inline-flex ring-1 ring-ash-border"
-            >
-              Create your own pool
-            </Link>
+            {createPoolLink.show ? (
+              <Link
+                href="/account/pools/new"
+                className="btn-ghost inline-flex ring-1 ring-ash-border"
+              >
+                {createPoolLink.label}
+              </Link>
+            ) : null}
           </div>
         </div>
       ) : null}
 
       {!error && list.length > 0 ? (
         <>
-          <div className="mb-4 flex flex-wrap gap-3">
-            <Link href={picksHref} className="btn-primary inline-flex">
-              Edit picks
-            </Link>
-            <Link
-              href={
-                list.length === 1
-                  ? `/account/activity?participant=${list[0].id}`
-                  : "/account/activity"
-              }
-              className="btn-ghost inline-flex ring-1 ring-ash-border"
-            >
-              Activity
-            </Link>
-            <Link href={revealHref} className="btn-ghost inline-flex ring-1 ring-ash-border">
-              Reveal
-            </Link>
-          </div>
+          {postLockEngagement ? (
+            <div className="mb-6 space-y-4">
+              <PostLockEngagementCard
+                variant="account"
+                picksLocked={locked}
+                knockoutBracketPicksUnlocked={
+                  picksCtx?.knockoutBracketPicksUnlocked ?? true
+                }
+                revealHref={revealHref}
+                leaderboardHref={leaderboardHref}
+                picksHref={editPicksFromDashboardHref}
+                activityHref={activityHref}
+                snapshot={poolSnapshot}
+              />
+              {latestRecap?.showCard ? (
+                <LatestRecapCard
+                  recap={latestRecap}
+                  activityHref={activityHref}
+                  initialSlots={picksCtx?.initialSlots}
+                  teams={picksCtx?.teams}
+                />
+              ) : null}
+              {bonusWatchRes?.ok ? (
+                <TournamentStatLeadersPanel variant="user" view={bonusWatchRes.view} />
+              ) : null}
+            </div>
+          ) : locked && latestRecap?.showCard ? (
+            <div className="mb-6">
+              <LatestRecapCard
+                recap={latestRecap}
+                activityHref={activityHref}
+                initialSlots={picksCtx?.initialSlots}
+                teams={picksCtx?.teams}
+              />
+            </div>
+          ) : null}
+
+          {!suppressStandaloneNavRow ? (
+            <div className="mb-4 flex flex-wrap gap-3">
+              <Link href={navPlan.primary.href} className="btn-primary inline-flex">
+                {navPlan.primary.label}
+              </Link>
+              <Link
+                href={navPlan.secondary.href}
+                className="btn-ghost inline-flex ring-1 ring-ash-border"
+              >
+                {navPlan.secondary.label}
+              </Link>
+              {navPlan.tertiary ? (
+                <Link
+                  href={navPlan.tertiary.href}
+                  className="btn-ghost inline-flex ring-1 ring-ash-border"
+                >
+                  {navPlan.tertiary.label}
+                </Link>
+              ) : null}
+            </div>
+          ) : null}
 
           {picksCtx && picksCtx.profileLinkItems.length > 1 ? (
             <AccountPicksProfileLinks
@@ -344,7 +500,6 @@ export default async function AccountPage({ searchParams }: PageProps) {
                   knockoutBracketPicksUnlocked={
                     picksCtx.knockoutBracketPicksUnlocked
                   }
-                  showCompactStageProgress
                 />
               ) : (
                 <>
@@ -415,7 +570,7 @@ export default async function AccountPage({ searchParams }: PageProps) {
                 href={`/account/picks?participant=${picksCtx.selectedParticipant.id}`}
                 className="btn-ghost mt-4 inline-flex border-amber-700/50 text-amber-50 hover:bg-amber-950/40"
               >
-                Edit picks
+                {accountPicksNavLabel(locked)}
               </Link>
             </div>
           ) : null}
@@ -442,7 +597,7 @@ export default async function AccountPage({ searchParams }: PageProps) {
                     href={`/account/picks?participant=${p.id}`}
                     className="ash-link"
                   >
-                    Edit picks
+                    {accountPicksNavLabel(poolLocked(p.pool_lock_at))}
                   </Link>
                   <Link
                     href={`/account/activity?participant=${p.id}`}
@@ -450,6 +605,19 @@ export default async function AccountPage({ searchParams }: PageProps) {
                   >
                     Activity
                   </Link>
+                  {poolLocked(p.pool_lock_at) ? (
+                    <Link
+                      href={`/account/reveal?participant=${p.id}`}
+                      className="ash-link"
+                    >
+                      See everyone&apos;s picks
+                    </Link>
+                  ) : null}
+                  {p.pool_is_public ? (
+                    <Link href={`/pool/${p.pool_id}`} className="ash-link">
+                      Leaderboard
+                    </Link>
+                  ) : null}
                   <Link href={`/account?participant=${p.id}`} className="ash-link">
                     This pool on My bracket
                   </Link>

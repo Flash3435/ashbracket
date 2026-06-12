@@ -5,8 +5,8 @@ export const POOL_LOCK_DEADLINE_FRIENDLY_LABEL = "Eastern Time";
 
 export const POOL_LOCK_DEADLINE_SHORT_LABEL = "ET";
 
-/** AshBracket 2026 sample pool — June 10, 2026 11:59 p.m. Eastern Time. */
-export const ASHBRACKET_2026_POOL_LOCK_AT_ISO = "2026-06-11T03:59:00.000Z";
+/** AshBracket 2026 official live-pool pick lock — June 11, 2026 12:00 p.m. Eastern Time. */
+export const ASHBRACKET_2026_POOL_LOCK_AT_ISO = "2026-06-11T16:00:00.000Z";
 
 export type PoolLockDeadlineFormatStyle = "compact" | "long";
 

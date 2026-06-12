@@ -5,6 +5,10 @@ import { createClient } from "@/lib/supabase/server";
 import { recomputePoolLedgerForPool } from "@/lib/scoring/recomputePoolLedger";
 import { applyParticipantPickSlots } from "../../../../lib/predictions/applyParticipantPickSlots";
 import { validateKnockoutPickSaveInput } from "../../../../lib/predictions/validateKnockoutPickPayload";
+import {
+  savePicksSuccess,
+  savePicksUnexpectedError,
+} from "../../../../lib/predictions/participantPicksSaveFlow";
 import { revalidatePath } from "next/cache";
 import type {
   ParticipantPickSlotPayload,
@@ -48,7 +52,7 @@ export async function saveParticipantKnockoutPicksAction(input: {
   try {
     const supabase = await createClient();
     const gate = await assertCanManagePool(supabase, input.poolId);
-    if (!gate.ok) return { ok: false, error: gate.error };
+    if (!gate.ok) return savePicksUnexpectedError(gate.error);
 
     const poolId = input.poolId.trim();
 
@@ -59,9 +63,9 @@ export async function saveParticipantKnockoutPicksAction(input: {
       .eq("pool_id", poolId)
       .maybeSingle();
 
-    if (parErr) return { ok: false, error: parErr.message };
+    if (parErr) return savePicksUnexpectedError(parErr.message);
     if (!participant) {
-      return { ok: false, error: "Participant not found in this pool." };
+      return savePicksUnexpectedError("Participant not found in this pool.");
     }
 
     const applied = await applyParticipantPickSlots(supabase, {
@@ -69,23 +73,22 @@ export async function saveParticipantKnockoutPicksAction(input: {
       participantId: input.participantId,
       slots: input.slots,
     });
-    if (!applied.ok) return applied;
+    if (!applied.ok) return savePicksUnexpectedError(applied.error);
 
     const ledger = await recomputePoolLedgerForPool(poolId, {
       ledgerTrigger: "admin_pick_edit",
     });
     if (ledger.error) {
-      return {
-        ok: false,
-        error: `Picks saved, but the leaderboard could not be updated: ${ledger.error}`,
-      };
+      return savePicksSuccess(
+        `Picks saved, but the leaderboard could not be updated: ${ledger.error}`,
+      );
     }
 
     revalidatePath(`/admin/pools/${poolId}/picks`);
     revalidatePath(`/participant/${input.participantId}`);
 
-    return { ok: true };
+    return savePicksSuccess();
   } catch (e) {
-    return { ok: false, error: messageFromUnknown(e) };
+    return savePicksUnexpectedError(messageFromUnknown(e));
   }
 }

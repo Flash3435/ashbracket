@@ -450,3 +450,11 @@ export function wizardStepIndexForNextSection(
   });
   return idx >= 0 ? idx : null;
 }
+
+export {
+  buildPoolMembershipCompletionStatus,
+  buildPoolMembershipCompletionStatusFromPredictions,
+  formatCompletionProgressLine,
+  formatIncompleteSavedBanner,
+  type PoolMembershipCompletionStatus,
+} from "./poolMembershipCompletionStatus";

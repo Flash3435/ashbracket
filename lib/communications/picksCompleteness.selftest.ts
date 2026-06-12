@@ -8,6 +8,7 @@ import {
   participantPicksCompleteFromDrafts,
   relevantSlotsForCompleteness,
 } from "./picksCompleteness";
+import { buildPoolMembershipCompletionStatus } from "../picks/poolMembershipCompletionStatus";
 
 function stage(
   code: TournamentStage["code"],
@@ -163,6 +164,17 @@ assert.strictEqual(
   ).length,
   4,
   "locked completeness keeps four unselected Stage 2 group rows empty",
+);
+
+const parity = buildPoolMembershipCompletionStatus(slotsFilled, {
+  knockoutBracketPicksUnlocked: false,
+});
+assert.strictEqual(
+  parity.isComplete,
+  participantPicksCompleteFromDrafts(slotsFilled, {
+    knockoutBracketPicksUnlocked: false,
+  }),
+  "admin bulk helper and canonical status must agree when R32 locked",
 );
 
 console.log("picksCompleteness.selftest.ts: ok");

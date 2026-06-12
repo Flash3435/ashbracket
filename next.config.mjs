@@ -1,17 +1,15 @@
-import { loadEnvConfig } from "@next/env";
-import type { NextConfig } from "next";
+import nextEnv from "@next/env";
 import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
 
-/**
- * Parse `.env.local` without relying on cwd (Turbopack / monorepo edge cases).
- */
-function parseDotEnvFile(filePath: string): Record<string, string> {
-  const result: Record<string, string> = {};
+const { loadEnvConfig } = nextEnv;
+
+function parseDotEnvFile(filePath) {
+  const result = {};
   if (!fs.existsSync(filePath)) return result;
   const text = fs.readFileSync(filePath, "utf8");
-  for (const rawLine of text.split(/\r?\n/)) {
+  for (const rawLine of text.split("\n")) {
     const line = rawLine.trim();
     if (!line || line.startsWith("#")) continue;
     const eq = line.indexOf("=");
@@ -29,15 +27,11 @@ function parseDotEnvFile(filePath: string): Record<string, string> {
   return result;
 }
 
-function pick(
-  dotLocal: Record<string, string>,
-  key: string,
-): string {
+function pick(dotLocal, key) {
   const v = process.env[key] ?? dotLocal[key] ?? "";
   return typeof v === "string" ? v.trim() : "";
 }
 
-// Monorepo: pin Turbopack root to this app; parent may have another lockfile.
 const packageRoot = path.dirname(fileURLToPath(import.meta.url));
 loadEnvConfig(packageRoot);
 loadEnvConfig(process.cwd());
@@ -49,8 +43,8 @@ const publishable = pick(dotLocal, "NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY");
 const anonJwt = pick(dotLocal, "NEXT_PUBLIC_SUPABASE_ANON_KEY");
 const supabasePublicKey = anonJwt || publishable;
 
-// Inline into the Edge middleware bundle (Turbopack often omits indirect `process.env` reads).
-const nextConfig: NextConfig = {
+/** @type {import('next').NextConfig} */
+const nextConfig = {
   turbopack: {
     root: packageRoot,
   },

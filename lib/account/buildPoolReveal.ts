@@ -1,4 +1,10 @@
 import { poolLocked } from "../pools/poolLocked";
+import type { EveryonesPickEntry } from "./buildEveryonesPicksList";
+import type { PreBracketRevealSection } from "./resolvePoolPreBracketReveal";
+import {
+  PRE_BRACKET_REVEAL_INTRO,
+  shouldShowPreBracketReveal,
+} from "./resolvePoolPreBracketReveal";
 
 export type ChampionPickSummary = {
   teamId: string;
@@ -7,6 +13,8 @@ export type ChampionPickSummary = {
   count: number;
   percentage: number;
   participantNames?: string[];
+  /** Complete participants with a valid pick in this section who chose differently. */
+  notPickedParticipantNames?: string[];
 };
 
 export type PoolRevealData = {
@@ -28,6 +36,11 @@ export type PoolRevealData = {
   soloChampionPicks: ChampionPickSummary[];
   ashbotLine: string | null;
   canShowParticipantNames: boolean;
+  knockoutBracketPicksUnlocked: boolean;
+  preBracketSections: PreBracketRevealSection[];
+  showPreBracketReveal: boolean;
+  preBracketIntro: string | null;
+  everyonesPicks: EveryonesPickEntry[];
 };
 
 export type ChampionPickInput = {
@@ -48,6 +61,9 @@ export type BuildPoolRevealInput = {
   viewerPicksComplete: boolean;
   /** Same-pool members may view peer picks (participant bracket snapshot). */
   canShowParticipantNames: boolean;
+  knockoutBracketPicksUnlocked?: boolean;
+  preBracketSections?: PreBracketRevealSection[];
+  everyonesPicks?: EveryonesPickEntry[];
   nowMs?: number;
 };
 
@@ -79,6 +95,10 @@ export function buildPoolReveal(input: BuildPoolRevealInput): PoolRevealData {
   const totalCompleted = input.completeParticipantIds.length;
   const totalParticipants = input.totalParticipants;
 
+  const knockoutBracketPicksUnlocked = input.knockoutBracketPicksUnlocked !== false;
+  const preBracketSections = input.preBracketSections ?? [];
+  const everyonesPicks = input.everyonesPicks ?? [];
+
   const emptyLocked: PoolRevealData = {
     locked: false,
     lockAt: input.lockAt,
@@ -96,11 +116,18 @@ export function buildPoolReveal(input: BuildPoolRevealInput): PoolRevealData {
     soloChampionPicks: [],
     ashbotLine: null,
     canShowParticipantNames: false,
+    knockoutBracketPicksUnlocked,
+    preBracketSections,
+    showPreBracketReveal: false,
+    preBracketIntro: null,
+    everyonesPicks: [],
   };
 
   if (!locked) return emptyLocked;
 
   const completeSet = new Set(input.completeParticipantIds);
+  const participantsWithChampionPick = new Set<string>();
+  const displayNameByParticipantId = new Map<string, string>();
   const byTeam = new Map<
     string,
     {
@@ -115,6 +142,12 @@ export function buildPoolReveal(input: BuildPoolRevealInput): PoolRevealData {
     if (!completeSet.has(row.participantId)) continue;
     const teamId = row.teamId.trim();
     if (!teamId) continue;
+
+    participantsWithChampionPick.add(row.participantId);
+    displayNameByParticipantId.set(
+      row.participantId,
+      row.participantDisplayName.trim() || "Participant",
+    );
 
     let entry = byTeam.get(teamId);
     if (!entry) {
@@ -149,6 +182,12 @@ export function buildPoolReveal(input: BuildPoolRevealInput): PoolRevealData {
       const names = showNames
         ? [...entry.participantNames].sort((a, b) => a.localeCompare(b))
         : undefined;
+      const notPickedNames = showNames
+        ? [...participantsWithChampionPick]
+            .filter((pid) => !entry.participantIds.has(pid))
+            .map((pid) => displayNameByParticipantId.get(pid) ?? "Participant")
+            .sort((a, b) => a.localeCompare(b))
+        : undefined;
       return {
         teamId,
         teamName: entry.teamName,
@@ -156,6 +195,7 @@ export function buildPoolReveal(input: BuildPoolRevealInput): PoolRevealData {
         count,
         percentage,
         participantNames: names,
+        notPickedParticipantNames: notPickedNames,
       };
     }),
   );
@@ -169,6 +209,13 @@ export function buildPoolReveal(input: BuildPoolRevealInput): PoolRevealData {
   const leaders = championPicks.filter((c) => c.count === maxCount && maxCount > 0);
   const mostPopularChampion = leaders[0] ?? null;
   const mostPopularChampionTied = leaders.length > 1;
+
+  const showPreBracketReveal = shouldShowPreBracketReveal({
+    locked: true,
+    knockoutBracketPicksUnlocked,
+    totalChampionBrackets,
+    preBracketSections,
+  });
 
   return {
     locked: true,
@@ -187,6 +234,11 @@ export function buildPoolReveal(input: BuildPoolRevealInput): PoolRevealData {
     soloChampionPicks,
     ashbotLine: pickAshbotLine(mostPopularChampion, mostPopularChampionTied),
     canShowParticipantNames: showNames,
+    knockoutBracketPicksUnlocked,
+    preBracketSections,
+    showPreBracketReveal,
+    preBracketIntro: showPreBracketReveal ? PRE_BRACKET_REVEAL_INTRO : null,
+    everyonesPicks,
   };
 }
 

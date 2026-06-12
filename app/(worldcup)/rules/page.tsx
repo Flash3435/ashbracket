@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { PicksDeadlineBannerFromPool } from "@/components/pool/PicksDeadlineBannerFromPool";
 import { createClient } from "@/lib/supabase/server";
 import { formatPoolPoints } from "@/lib/format/poolPoints";
 import { PageContainer } from "@/components/ui/PageContainer";
@@ -175,6 +176,8 @@ export default async function RulesPage() {
   return (
     <PageContainer>
       <PageTitle title={pageTitle} description={pageDescription} />
+
+      <PicksDeadlineBannerFromPool poolId={data.poolId} className="mb-6" />
 
       <LiveScoresUpdateNotice
         lastUpdatedAt={liveScoresLastUpdatedAt}

@@ -103,6 +103,10 @@ export default async function ParticipantBracketSnapshotPage({
           <Link href="/account" className="ash-link text-sm">
             ← Back to account
           </Link>
+        ) : from === "reveal" ? (
+          <Link href="/account/reveal" className="ash-link text-sm">
+            ← Back to reveal
+          </Link>
         ) : (
           <Link href={`/participant/${result.participantId}`} className="ash-link text-sm">
             ← Public profile & scoring
@@ -117,7 +121,7 @@ export default async function ParticipantBracketSnapshotPage({
               href={`/account/picks?participant=${result.participantId}`}
               className="ash-link text-sm"
             >
-              Edit your picks
+              {locked ? "View your picks" : "Edit your picks"}
             </Link>
           </>
         ) : null}
@@ -193,12 +197,12 @@ export default async function ParticipantBracketSnapshotPage({
               description={
                 isSelf ? (
                   <>
-                    From the official tournament schedule. Kickoff times use Mountain Time. Live
+                    From the official tournament schedule. Kickoff times use your local time zone. Live
                     and upcoming fixtures for teams in this bracket are listed first.
                   </>
                 ) : (
                   <>
-                    From the official tournament schedule. Kickoff times use Mountain Time. Listed
+                    From the official tournament schedule. Kickoff times use your local time zone. Listed
                     for teams in this participant&apos;s saved bracket.
                   </>
                 )

@@ -45,9 +45,10 @@ export function LiveTournamentSyncPanel({ isProduction, impact, secondary = fals
           </>
         ) : (
           <>
-            Match scores are usually updated where your tournament data is maintained. You
-            can <span className="font-medium text-ash-text">freeze</span> a match so
-            automated sync skips it and leaves your manual score in place.
+            Match scores must already be on <code className="text-xs">tournament_matches</code>{" "}
+            before this runs (CLI, Supabase, or simulation test data only). You can{" "}
+            <span className="font-medium text-ash-text">freeze</span> a match with{" "}
+            <code className="text-xs">sync_locked</code> so a future patched sync skips it.
           </>
         )}
       </p>

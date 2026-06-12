@@ -1,6 +1,8 @@
 import { formatStillNeedToFinishVerb } from "../copy/pluralize";
 import { formatPoolLockDeadline } from "../datetime/poolLockDeadline";
+import type { AdminIncompleteParticipantBreakdown } from "../picks/poolMembershipCompletionStatus";
 import { formatRelativeTimeUntilEn } from "../picks/poolPickDeadlineDisplay";
+import type { AdminCompletionSourceDiagnostics } from "./trustedPoolPicksCompleteness";
 
 export const INCOMPLETE_BRACKET_REMINDER_TYPE = "incomplete_bracket_reminder";
 
@@ -10,6 +12,8 @@ export type IncompleteBracketParticipant = {
   id: string;
   displayName: string;
   hasEmail: boolean;
+  userId: string | null;
+  breakdown: AdminIncompleteParticipantBreakdown;
 };
 
 export type IncompleteBracketPanelState =
@@ -18,6 +22,19 @@ export type IncompleteBracketPanelState =
   | "some_incomplete"
   | "past_lock"
   | "unavailable";
+
+export type IncompleteBracketCompletionDebugRow = {
+  participantId: string;
+  displayName: string;
+  isComplete: boolean;
+  missingPickKeysCount: number;
+  sections: {
+    group: string;
+    third: string;
+    bonus: string;
+    knockout: string;
+  };
+};
 
 export type IncompleteBracketPanelData = {
   poolId: string;
@@ -35,6 +52,11 @@ export type IncompleteBracketPanelData = {
   timeRemainingLabel: string | null;
   completionDefinitionLabel: string;
   knockoutBracketPicksUnlocked: boolean;
+  /**
+   * When true, at least one incomplete participant has saved picks that did not hydrate
+   * into required slots (possible key mismatch). Reminder sends should be deferred.
+   */
+  possibleKeyMismatch: boolean;
   /** Incomplete participants who can receive email. */
   mailableIncompleteCount: number;
   skippedNoEmailCount: number;
@@ -43,6 +65,12 @@ export type IncompleteBracketPanelData = {
   lastReminderRecipientCount: number | null;
   reminderRecentlySent: boolean;
   communicationsHref: string;
+  /** Populated when INCOMPLETE_PANEL_COMPLETION_DEBUG=1 on the server. */
+  completionDebug?: IncompleteBracketCompletionDebugRow[];
+  /** Always populated for admin visibility while verifying trusted completion reads. */
+  sourceDiagnostics: AdminCompletionSourceDiagnostics;
+  /** Shown when state is unavailable (e.g. missing service role in production). */
+  statusUnavailableReason: string | null;
 };
 
 export type BuildIncompleteBracketPanelInput = {
@@ -55,12 +83,18 @@ export type BuildIncompleteBracketPanelInput = {
     displayName: string;
     email: string;
     picksComplete: boolean;
+    userId?: string | null;
+    breakdown?: AdminIncompleteParticipantBreakdown | null;
+    possibleKeyMismatch?: boolean;
   }>;
   lastReminderSentAt?: string | null;
   lastReminderRecipientCount?: number | null;
   emailConfigured: boolean;
   nowMs?: number;
   statusAvailable?: boolean;
+  completionDebug?: IncompleteBracketCompletionDebugRow[];
+  sourceDiagnostics?: AdminCompletionSourceDiagnostics;
+  statusUnavailableReason?: string | null;
 };
 
 const MAX_VISIBLE_INCOMPLETE = 5;
@@ -139,6 +173,17 @@ export function buildIncompleteBracketPanelData(
         : null;
 
   const communicationsHref = `/admin/pools/${input.poolId}/communications?preset=incomplete_picks`;
+  const sourceDiagnostics = input.sourceDiagnostics ?? {
+    buildCommitSha: "unknown",
+    dataSource: "load-failed",
+    serviceRoleAvailable: false,
+    serviceRoleRequired: false,
+    participantCount: input.participants.length,
+    predictionRowCount: 0,
+    groupMapSize: 0,
+    trustedIncompleteCount: 0,
+    warningMessage: input.statusUnavailableReason ?? null,
+  };
 
   if (input.statusAvailable === false) {
     return {
@@ -158,6 +203,7 @@ export function buildIncompleteBracketPanelData(
         input.knockoutBracketPicksUnlocked,
       ),
       knockoutBracketPicksUnlocked: input.knockoutBracketPicksUnlocked,
+      possibleKeyMismatch: false,
       mailableIncompleteCount: 0,
       skippedNoEmailCount: 0,
       emailConfigured: input.emailConfigured,
@@ -168,6 +214,9 @@ export function buildIncompleteBracketPanelData(
         nowMs,
       ),
       communicationsHref,
+      completionDebug: input.completionDebug,
+      sourceDiagnostics,
+      statusUnavailableReason: input.statusUnavailableReason ?? null,
     };
   }
 
@@ -190,6 +239,7 @@ export function buildIncompleteBracketPanelData(
         input.knockoutBracketPicksUnlocked,
       ),
       knockoutBracketPicksUnlocked: input.knockoutBracketPicksUnlocked,
+      possibleKeyMismatch: false,
       mailableIncompleteCount: 0,
       skippedNoEmailCount: 0,
       emailConfigured: input.emailConfigured,
@@ -200,10 +250,16 @@ export function buildIncompleteBracketPanelData(
         nowMs,
       ),
       communicationsHref,
+      completionDebug: input.completionDebug,
+      sourceDiagnostics,
+      statusUnavailableReason: null,
     };
   }
 
   const incompleteRows = input.participants.filter((p) => !p.picksComplete);
+  const possibleKeyMismatch = incompleteRows.some(
+    (p) => p.possibleKeyMismatch === true,
+  );
   const completedCount = totalParticipants - incompleteRows.length;
   const incompleteCount = incompleteRows.length;
   const incompleteParticipants = incompleteRows
@@ -212,6 +268,16 @@ export function buildIncompleteBracketPanelData(
       id: p.id,
       displayName: p.displayName.trim() || "Participant",
       hasEmail: Boolean(p.email.trim()),
+      userId: p.userId ?? null,
+      breakdown: p.breakdown ?? {
+        missingSummary: "Pick completion details unavailable.",
+        groupPicks: "—",
+        thirdPlacePicks: "—",
+        bonusPicks: "—",
+        knockoutStatus: input.knockoutBracketPicksUnlocked
+          ? "—"
+          : "Not required yet (Round of 32 not published)",
+      },
     }));
   const moreIncompleteCount = Math.max(
     0,
@@ -248,6 +314,7 @@ export function buildIncompleteBracketPanelData(
       input.knockoutBracketPicksUnlocked,
     ),
     knockoutBracketPicksUnlocked: input.knockoutBracketPicksUnlocked,
+    possibleKeyMismatch,
     mailableIncompleteCount,
     skippedNoEmailCount,
     emailConfigured: input.emailConfigured,
@@ -255,5 +322,8 @@ export function buildIncompleteBracketPanelData(
     lastReminderRecipientCount: input.lastReminderRecipientCount ?? null,
     reminderRecentlySent: reminderRecentlySent(input.lastReminderSentAt, nowMs),
     communicationsHref,
+    completionDebug: input.completionDebug,
+    sourceDiagnostics,
+    statusUnavailableReason: null,
   };
 }

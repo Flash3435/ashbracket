@@ -1,5 +1,6 @@
 import { AccountPicksProfileLinks } from "@/components/account/AccountPicksProfileLinks";
 import { ParticipantKnockoutPicksForm } from "@/components/admin/ParticipantKnockoutPicksForm";
+import { PicksDeadlineBannerFromPool } from "@/components/pool/PicksDeadlineBannerFromPool";
 import {
   ParticipantPoolPaymentPanel,
   UnpaidPaymentReminderBanner,
@@ -50,6 +51,7 @@ export default async function AccountPicksPage({ searchParams }: PageProps) {
   }
 
   const locked = poolLocked(ctx.selectedLockAt);
+  const picksReadOnly = locked && !ctx.knockoutBracketPicksUnlocked;
 
   const summaryHref = ctx.selectedId
     ? `/account/picks/summary?participant=${ctx.selectedId}`
@@ -61,6 +63,12 @@ export default async function AccountPicksPage({ searchParams }: PageProps) {
 
   return (
     <PageContainer>
+      {ctx.selectedPoolId ? (
+        <PicksDeadlineBannerFromPool
+          poolId={ctx.selectedPoolId}
+          className="mb-6"
+        />
+      ) : null}
       <div className="mb-6 flex flex-wrap items-center gap-3">
         <Link href="/account" className="ash-link text-sm">
           ← Back to account
@@ -87,9 +95,25 @@ export default async function AccountPicksPage({ searchParams }: PageProps) {
       </div>
 
       <PageTitle
-        title="Your picks"
-        description="Your picks open in bracket view so you can see what’s done and what’s still missing. Stage 1: 1st and 2nd in every group. Stage 2: one third-place advancer per group row (eight total). Stage 3: Round of 32 through champion once the official bracket is published, plus bonus picks. Use list view anytime for step-by-step editing."
+        title={picksReadOnly ? "Your picks (read-only)" : "Your picks"}
+        description={
+          picksReadOnly
+            ? "Picks are locked — this is a read-only view. Knockout bracket picks will open when the official Round of 32 is published."
+            : locked
+              ? "Group stage, third-place, and bonus picks are locked. You can still update knockout bracket picks when the official Round of 32 is published."
+              : "Your picks open in bracket view so you can see what’s done and what’s still missing. Stage 1: 1st and 2nd in every group. Stage 2: one third-place advancer per group row (eight total). Stage 3: Round of 32 through champion once the official bracket is published, plus bonus picks. Use list view anytime for step-by-step editing."
+        }
       />
+
+      {picksReadOnly ? (
+        <p
+          className="mb-6 rounded-md border border-amber-700/50 bg-amber-950/30 px-3 py-2 text-sm text-amber-100"
+          role="status"
+        >
+          Picks are locked — this is a read-only view. Knockout bracket picks
+          will open when the official Round of 32 is published.
+        </p>
+      ) : null}
 
       {ctx.loadError ? (
         <p
@@ -143,7 +167,9 @@ export default async function AccountPicksPage({ searchParams }: PageProps) {
 
           {!ctx.selectedId && ctx.myParticipants.length > 1 ? (
             <p className="text-sm text-ash-muted">
-              Select which pool profile you want to view or edit.
+              {picksReadOnly
+                ? "Select which pool profile you want to view."
+                : "Select which pool profile you want to view or edit."}
             </p>
           ) : null}
 
@@ -195,7 +221,7 @@ export default async function AccountPicksPage({ searchParams }: PageProps) {
                 teams={ctx.teams}
                 groupTeamCountryCodesByLetter={ctx.groupTeamCountryCodesByLetter}
                 disabled={ctx.teams.length === 0}
-                readOnly={false}
+                readOnly={picksReadOnly}
                 preBracketSelectionsLocked={locked}
                 poolLockAtIso={ctx.selectedLockAt}
                 savePicks={saveMyKnockoutPicksAction}

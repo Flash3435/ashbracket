@@ -9,7 +9,8 @@ import {
 import { getSimulationPoolEmailUiStatus } from "@/lib/admin/simulationPoolEmailPolicy";
 import { loadIncompleteBracketPanelForPool } from "@/lib/admin/loadIncompleteBracketPanelForPool";
 import { requireManagedPool } from "@/lib/admin/requireManagedPool";
-import { buildCompletionDiagnosticRows, loadPicksCompletenessInputsForPool } from "@/lib/communications/picksCompleteness";
+import { buildCompletionDiagnosticRows } from "@/lib/communications/picksCompleteness";
+import { loadAdminPicksCompletenessInputsForPool } from "@/lib/admin/trustedPoolPicksCompleteness";
 import { formatPoolLockSummary } from "@/lib/communications/messageTemplates";
 import { poolShareJoinUrl } from "@/lib/site-url";
 import {
@@ -17,9 +18,15 @@ import {
   type ParticipantRow,
 } from "@/lib/participants/participantsDb";
 import { PoolPotAdminSummary } from "@/components/pools/PoolPotAdminSummary";
+import { fetchDirectlyManagedPoolsForCurrentUser } from "@/lib/pools/fetchDirectlyManagedPoolsForCurrentUser";
 import { mapPoolPaymentFromPool, poolIsPaid } from "@/lib/pools/poolPayment";
+import {
+  type ParticipantMoveDestinationContext,
+  worldCupPoolMoveScopeFromManagedPool,
+} from "@/lib/participants/worldCupParticipantMove";
 
 export const dynamic = "force-dynamic";
+export const revalidate = 0;
 
 export default async function AdminPoolParticipantsPage({
   params,
@@ -28,6 +35,9 @@ export default async function AdminPoolParticipantsPage({
 }) {
   const { poolId } = await params;
   const { supabase, pool } = await requireManagedPool(poolId);
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
   const simulationEmailStatus = getSimulationPoolEmailUiStatus(
     Boolean(pool.is_simulation),
   );
@@ -49,6 +59,59 @@ export default async function AdminPoolParticipantsPage({
     new Date(lockAtIso).getTime() <= Date.now();
   const poolPayment = mapPoolPaymentFromPool(pool);
   const poolIsPaidPool = poolIsPaid(poolPayment);
+  const managedPoolsResult = await fetchDirectlyManagedPoolsForCurrentUser(supabase);
+  const directManagedPools = managedPoolsResult.data ?? [];
+  const sourcePoolScope = worldCupPoolMoveScopeFromManagedPool({
+    id: poolId,
+    tournament_edition_id: pool.tournament_edition_id,
+    is_simulation: Boolean(pool.is_simulation),
+  });
+
+  let poolAdminMembershipIds: string[] = [];
+  if (user) {
+    const { data: adminRows } = await supabase
+      .from("pool_admins")
+      .select("pool_id")
+      .eq("user_id", user.id);
+    poolAdminMembershipIds = (adminRows ?? []).map((row) => row.pool_id as string);
+  }
+
+  const destinationParticipantsByPoolId: ParticipantMoveDestinationContext["destinationParticipantsByPoolId"] =
+    {};
+  const destinationPoolIds = directManagedPools
+    .map((managedPool) => managedPool.id)
+    .filter((id) => id !== poolId);
+  if (destinationPoolIds.length > 0) {
+    const { data: destinationParticipantRows } = await supabase
+      .from("participants")
+      .select("pool_id, user_id, email, display_name")
+      .in("pool_id", destinationPoolIds);
+    for (const row of destinationParticipantRows ?? []) {
+      const poolKey = row.pool_id as string;
+      const bucket = destinationParticipantsByPoolId[poolKey] ?? [];
+      bucket.push({
+        userId: (row.user_id as string | null) ?? null,
+        email: String(row.email ?? ""),
+        displayName: String(row.display_name ?? ""),
+      });
+      destinationParticipantsByPoolId[poolKey] = bucket;
+    }
+  }
+
+  const moveDestinationContext: ParticipantMoveDestinationContext = {
+    sourcePool: sourcePoolScope,
+    directManagedPools: directManagedPools.map((managedPool) => ({
+      id: managedPool.id,
+      name: managedPool.name,
+      tournament_edition_id: managedPool.tournament_edition_id,
+      is_simulation: managedPool.is_simulation,
+      created_by_user_id: managedPool.created_by_user_id,
+    })),
+    destinationParticipantsByPoolId,
+    currentUserId: user?.id ?? "",
+    poolAdminMembershipIds,
+  };
+  const currentPoolName = pool.name?.trim() || "This pool";
 
   let initialParticipants: ParticipantWithPicksStatus[] = [];
   let loadError: string | null = null;
@@ -74,16 +137,18 @@ export default async function AdminPoolParticipantsPage({
       >();
 
       if (participantIds.length > 0) {
-        const completenessInputs = await loadPicksCompletenessInputsForPool(
-          supabase,
+        const completenessLoaded = await loadAdminPicksCompletenessInputsForPool(
           poolId,
           participantIds,
+          { fallbackSupabase: supabase },
         );
 
-        if (!completenessInputs) {
+        if (!completenessLoaded.ok) {
           picksStatusWarning =
+            completenessLoaded.diagnostics.warningMessage ??
             "Picks status is unavailable right now. Participant records still load, but completion filters and reminder shortcuts are hidden until the status check succeeds.";
         } else {
+          const completenessInputs = completenessLoaded.inputs;
           const diagnostics = buildCompletionDiagnosticRows(
             completenessInputs,
             poolId,
@@ -123,8 +188,12 @@ export default async function AdminPoolParticipantsPage({
         }
       }
 
+      const participantRowById = new Map(
+        participantRows.map((row) => [row.id, row]),
+      );
       initialParticipants = participants.map((participant) => ({
         ...participant,
+        userId: participantRowById.get(participant.id)?.user_id ?? null,
         picksStatus: picksStatusById.get(participant.id) ?? null,
       }));
     }
@@ -166,6 +235,8 @@ export default async function AdminPoolParticipantsPage({
       ) : null}
       <ParticipantsManager
         poolId={poolId}
+        currentPoolName={currentPoolName}
+        moveDestinationContext={moveDestinationContext}
         initialParticipants={initialParticipants}
         joinCode={jc}
         shareUrl={shareUrl}

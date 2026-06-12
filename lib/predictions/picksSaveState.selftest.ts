@@ -49,6 +49,16 @@ assert.strictEqual(picksSaveButtonLabel(savedState), "Saved");
 assert.strictEqual(picksSaveButtonDisabled(savedState), true);
 assert.strictEqual(picksSaveStatusLine(savedState), "Last saved just now");
 
+const savedWithWarning: PicksSaveUiState = {
+  kind: "saved",
+  lastSavedAt: Date.now(),
+  warning: "Your picks were saved, but this page could not refresh automatically.",
+};
+assert.strictEqual(
+  picksSaveStatusLine(savedWithWarning),
+  "Saved — reload recommended if anything looks out of date",
+);
+
 const savedAfterSubmit = reconcilePicksSaveUiState({
   draftSignature: cleanSig,
   savedSignature: cleanSig,

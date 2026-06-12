@@ -134,6 +134,8 @@ export function shouldShowAshBotComment(
       }
       return false;
     }
+    case "ash_score_impact":
+      return false;
     default:
       return false;
   }
@@ -433,6 +435,8 @@ export function buildAshBotComment(
       if (!templates) return null;
       return pickTemplate(seed, templates, templateOffset);
     }
+    case "ash_score_impact":
+      return null;
     default:
       return null;
   }

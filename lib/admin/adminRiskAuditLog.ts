@@ -6,12 +6,16 @@ export type AdminRiskAction =
   | "simulation_results_generate"
   | "live_tournament_sync"
   | "live_daily_update"
+  | "live_scores_preview"
+  | "live_scores_apply"
   | "edition_results_edit"
+  | "bonus_results_from_stats"
   | "edition_recompute_pools"
   | "pool_recompute"
   | "pool_communications_send"
   | "pool_communications_test"
   | "participant_invite_email"
+  | "participant_pool_move"
   | "pool_admin_invite_email";
 
 export type AdminRiskAuditPayload = {

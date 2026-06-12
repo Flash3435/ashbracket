@@ -49,12 +49,20 @@ export function buildLiveDailyUpdateSuccessMessage(input: {
     `Live standings refreshed for edition “${editionName}” (${editionCode}).`,
   );
   lines.push(
-    `${summary.finishedMatchCount} finished match${summary.finishedMatchCount === 1 ? "" : "es"} on file; ${summary.derivedResultsInserted} derived result${summary.derivedResultsInserted === 1 ? "" : "s"}; ${summary.poolsRecalculated} live pool${summary.poolsRecalculated === 1 ? "" : "s"} recalculated.`,
+    `Checked ${summary.matchCount} match${summary.matchCount === 1 ? "" : "es"}; ${summary.matchesWithScoresCount} with scores on file; ${summary.finishedMatchCount} marked finished; ${summary.derivedResultsInserted} derived result${summary.derivedResultsInserted === 1 ? "" : "s"} written; ${summary.poolsRecalculated} live pool${summary.poolsRecalculated === 1 ? "" : "s"} recalculated.`,
   );
 
-  if (summary.finishedMatchCount === 0) {
+  if (summary.matchCount === 0) {
     lines.push(
-      "No completed match scores are recorded yet — leaderboards were refreshed from current data.",
+      "No matches are on file for this edition — install the official schedule before match day.",
+    );
+  } else if (summary.matchesWithScoresCount === 0) {
+    lines.push(
+      "No match scores are recorded yet — leaderboards were refreshed from current official results only.",
+    );
+  } else if (summary.finishedMatchCount === 0) {
+    lines.push(
+      "Scores exist but no matches are finished yet — group and knockout derived results may be unchanged.",
     );
   } else if (summary.derivedResultsInserted === 0) {
     lines.push(
@@ -65,6 +73,12 @@ export function buildLiveDailyUpdateSuccessMessage(input: {
   if (summary.syncLockedMatchCount > 0) {
     lines.push(
       `${summary.syncLockedMatchCount} match${summary.syncLockedMatchCount === 1 ? "" : "es"} frozen for sync (scores left as entered).`,
+    );
+  }
+
+  if (summary.poolsRecalculated === 0) {
+    lines.push(
+      "No live pools are bound to this edition — official results were rebuilt but no pool ledgers were updated.",
     );
   }
 

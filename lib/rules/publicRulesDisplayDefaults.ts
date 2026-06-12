@@ -68,7 +68,7 @@ export const PUBLIC_RULES_BONUS_ROWS: readonly {
   label: string;
   points: number;
 }[] = [
-  { label: "Team with the most goals", points: 50 },
+  { label: "Team with the most goals", points: 25 },
   { label: "Team with the most yellow cards", points: 10 },
   { label: "Team with the most red cards", points: 10 },
 ];

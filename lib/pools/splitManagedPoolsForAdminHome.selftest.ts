@@ -40,6 +40,9 @@ function pool(
     tie_break_note: null,
     tournament_edition_id: "edition",
     is_simulation: false,
+    archived_at: null,
+    archived_by_user_id: null,
+    archive_reason: null,
     ...overrides,
   };
 }

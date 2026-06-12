@@ -13,6 +13,8 @@ import type { Team } from "../../src/types/domain";
 import { isKnockoutProgressionKind } from "../../lib/predictions/knockoutProgressionKinds";
 import {
   buildPicksProgressSummary,
+  buildPoolMembershipCompletionStatus,
+  formatIncompleteSavedBanner,
   type PickSectionProgress,
   type PickSectionStatus,
 } from "../../lib/picks/picksProgressSummary";
@@ -231,16 +233,38 @@ export function MyKnockoutPicksSummary({
     <div className="space-y-6">
       {showSavedBanner ? (
         <div
-          className="rounded-lg border border-ash-accent/40 bg-ash-accent/10 px-4 py-3 text-sm text-ash-muted"
+          className={`rounded-lg border px-4 py-3 text-sm ${
+            picksProgress.picksComplete
+              ? "border-ash-accent/40 bg-ash-accent/10 text-ash-muted"
+              : "border-amber-700/50 bg-amber-950/30 text-amber-100"
+          }`}
           role="status"
         >
-          <p className="font-semibold text-ash-text">You’re all set — picks saved.</p>
-          <p className="mt-1 text-ash-muted">
-            Snapshot of your full tournament picks.
-            {locked
-              ? " Group & bonus picks are locked — this is a read-only summary."
-              : " You can still edit until the pick deadline."}
+          <p className="font-semibold text-ash-text">
+            {picksProgress.picksComplete
+              ? "You’re all set — required picks complete."
+              : formatIncompleteSavedBanner(
+                  buildPoolMembershipCompletionStatus(slots, {
+                    knockoutBracketPicksUnlocked,
+                  }),
+                )}
           </p>
+          {picksProgress.picksComplete ? (
+            <p className="mt-1 text-ash-muted">
+              Snapshot of your full tournament picks.
+              {locked
+                ? " Group & bonus picks are locked — this is a read-only summary."
+                : " You can still edit until the pick deadline."}
+            </p>
+          ) : (
+            <p className="mt-1 text-amber-100/90">
+              {
+                buildPoolMembershipCompletionStatus(slots, {
+                  knockoutBracketPicksUnlocked,
+                }).displaySummary
+              }
+            </p>
+          )}
         </div>
       ) : null}
 

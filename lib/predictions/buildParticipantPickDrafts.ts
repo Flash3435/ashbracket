@@ -80,12 +80,16 @@ function matchesBonusPick(
   groupStageId: string,
   bonusKey: string,
 ): boolean {
-  return (
-    p.participantId === participantId &&
-    p.predictionKind === "bonus_pick" &&
-    p.tournamentStageId === groupStageId &&
-    p.bonusKey === bonusKey
-  );
+  if (
+    p.participantId !== participantId ||
+    p.predictionKind !== "bonus_pick" ||
+    p.bonusKey !== bonusKey ||
+    !p.teamId?.trim()
+  ) {
+    return false;
+  }
+  // Canonical rows use the group stage; accept any stage for legacy saves.
+  return p.tournamentStageId === groupStageId || p.tournamentStageId != null;
 }
 
 /**
@@ -164,11 +168,11 @@ export function buildThirdPlacePickDrafts(
 
     const savedGroup = (pred.groupCode ?? "").trim().toUpperCase();
     const inferredGroup = teamIdToGroupLetter.get(tid) ?? "";
-    if (savedGroup && inferredGroup && savedGroup !== inferredGroup) {
-      continue;
-    }
-
-    const groupLetter = savedGroup || inferredGroup;
+    // Remap legacy/wrong group_code to the team's actual group when rosters are known.
+    const groupLetter =
+      savedGroup && inferredGroup && savedGroup !== inferredGroup
+        ? inferredGroup
+        : savedGroup || inferredGroup;
     if (!groupLetter || savedTeamIdByGroup.has(groupLetter)) continue;
     savedTeamIdByGroup.set(groupLetter, tid);
   }

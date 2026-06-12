@@ -1,7 +1,7 @@
 import type { KnockoutPickSlotDraft } from "../../types/adminKnockoutPicks";
 
 export type PicksSaveUiState =
-  | { kind: "saved"; lastSavedAt: number | null }
+  | { kind: "saved"; lastSavedAt: number | null; warning?: string }
   | { kind: "dirty"; lastSavedAt: number | null }
   | { kind: "saving"; lastSavedAt: number | null }
   | {
@@ -82,6 +82,9 @@ export function picksSaveStatusLine(state: PicksSaveUiState): string {
     case "saving":
       return "Saving your picks...";
     case "saved":
+      if (state.warning) {
+        return "Saved — reload recommended if anything looks out of date";
+      }
       return state.lastSavedAt == null ? "All changes saved" : "Last saved just now";
     case "error":
       return "Save failed. Review the error and try again.";

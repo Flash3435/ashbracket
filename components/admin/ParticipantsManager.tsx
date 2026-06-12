@@ -6,6 +6,7 @@ import { useEffect, useMemo, useState, useTransition } from "react";
 import {
   createParticipantAction,
   inviteParticipantAction,
+  moveWorldCupParticipantToPoolAction,
   removeParticipantFromPoolAction,
   sendParticipantInviteAction,
   updateParticipantAction,
@@ -14,6 +15,15 @@ import {
   buildRemoveParticipantWarnings,
   removeParticipantModalSubject,
 } from "@/lib/participants/removeParticipantFromPoolPolicy";
+import {
+  buildMoveDestinationOptionsForParticipant,
+  hasCompatibleDirectMoveDestination,
+  MOVE_PARTICIPANT_CONFIRM_WARNING,
+  MOVE_PARTICIPANT_MODAL_INTRO,
+  MOVE_PARTICIPANT_NO_DESTINATIONS_MESSAGE,
+  moveParticipantModalSubject,
+  type ParticipantMoveDestinationContext,
+} from "@/lib/participants/worldCupParticipantMove";
 import type { SimulationPoolEmailUiStatus } from "@/lib/admin/simulationPoolEmailPolicy";
 import {
   SIMULATION_POOL_EMAIL_TYPED_PHRASE,
@@ -27,6 +37,8 @@ import { SimulationPoolEmailStatusBanner } from "./SimulationPoolEmailStatusBann
 
 type ParticipantsManagerProps = {
   poolId: string;
+  currentPoolName: string;
+  moveDestinationContext: ParticipantMoveDestinationContext;
   initialParticipants: ParticipantWithPicksStatus[];
   /** Pool open-join code and URL; from server via `poolShareJoinUrl` */
   joinCode: string | null;
@@ -122,6 +134,8 @@ type InviteFeedback = {
 
 export function ParticipantsManager({
   poolId,
+  currentPoolName,
+  moveDestinationContext,
   initialParticipants,
   joinCode,
   shareUrl,
@@ -160,6 +174,30 @@ export function ParticipantsManager({
   const [removeSuccessMessage, setRemoveSuccessMessage] = useState<string | null>(
     null,
   );
+  const [movingParticipant, setMovingParticipant] =
+    useState<ParticipantWithPicksStatus | null>(null);
+  const [moveDestinationId, setMoveDestinationId] = useState("");
+  const [moveSuccessMessage, setMoveSuccessMessage] = useState<string | null>(null);
+
+  const canMoveParticipants = hasCompatibleDirectMoveDestination(moveDestinationContext);
+
+  const moveOptionsForParticipant = useMemo(() => {
+    if (!movingParticipant) {
+      return {
+        eligibleOptions: [],
+        blockedDestinations: [],
+        emptyMessage: undefined,
+      };
+    }
+    return buildMoveDestinationOptionsForParticipant({
+      context: moveDestinationContext,
+      movingParticipant: {
+        userId: movingParticipant.userId ?? null,
+        email: movingParticipant.email,
+        displayName: movingParticipant.displayName,
+      },
+    });
+  }, [moveDestinationContext, movingParticipant]);
 
   const typedPhraseOk =
     !requiresTypedPhrase ||
@@ -383,10 +421,62 @@ export function ParticipantsManager({
     });
   }
 
+  function openMoveConfirm(p: ParticipantWithPicksStatus) {
+    if (disabled || !canMoveParticipants) return;
+    setActionError(null);
+    setMoveSuccessMessage(null);
+    const built = buildMoveDestinationOptionsForParticipant({
+      context: moveDestinationContext,
+      movingParticipant: {
+        userId: p.userId ?? null,
+        email: p.email,
+        displayName: p.displayName,
+      },
+    });
+    setMoveDestinationId(built.eligibleOptions[0]?.id ?? "");
+    setMovingParticipant(p);
+  }
+
+  function closeMoveConfirm() {
+    setMovingParticipant(null);
+    setMoveDestinationId("");
+  }
+
+  function handleConfirmMove() {
+    if (disabled || !movingParticipant || !moveDestinationId) return;
+    const participant = movingParticipant;
+    const destination = moveOptionsForParticipant.eligibleOptions.find(
+      (pool) => pool.id === moveDestinationId,
+    );
+    if (!destination) return;
+
+    setActionError(null);
+    startTransition(async () => {
+      const res = await moveWorldCupParticipantToPoolAction({
+        sourcePoolId: poolId,
+        destinationPoolId: moveDestinationId,
+        participantId: participant.id,
+      });
+      if (!res.ok) {
+        setActionError(res.error);
+        return;
+      }
+      if (editingId === participant.id) closeEdit();
+      setParticipants((prev) => prev.filter((x) => x.id !== participant.id));
+      setMoveSuccessMessage(
+        res.message ??
+          `${participant.displayName.trim() || participant.email.trim() || "Participant"} was moved to ${destination.name} with all picks preserved.`,
+      );
+      closeMoveConfirm();
+      router.refresh();
+    });
+  }
+
   function openRemoveConfirm(p: ParticipantWithPicksStatus) {
     if (disabled) return;
     setActionError(null);
     setRemoveSuccessMessage(null);
+    setMoveSuccessMessage(null);
     setRemovingParticipant(p);
   }
 
@@ -469,6 +559,14 @@ export function ParticipantsManager({
         <p className="rounded-md border border-emerald-800/70 bg-emerald-950/35 px-3 py-2 text-sm text-emerald-100">
           {removeSuccessMessage}
         </p>
+      ) : null}
+      {moveSuccessMessage ? (
+        <p className="rounded-md border border-emerald-800/70 bg-emerald-950/35 px-3 py-2 text-sm text-emerald-100">
+          {moveSuccessMessage}
+        </p>
+      ) : null}
+      {!canMoveParticipants ? (
+        <p className="text-sm text-ash-muted">{MOVE_PARTICIPANT_NO_DESTINATIONS_MESSAGE}</p>
       ) : null}
 
       {actionError ? (
@@ -931,6 +1029,16 @@ export function ParticipantsManager({
                     >
                       Edit
                     </button>
+                    {canMoveParticipants ? (
+                      <button
+                        type="button"
+                        disabled={disabled || isPending}
+                        onClick={() => openMoveConfirm(p)}
+                        className="mr-2 text-sm font-medium text-ash-accent hover:underline disabled:cursor-not-allowed disabled:opacity-50"
+                      >
+                        Move
+                      </button>
+                    ) : null}
                     <button
                       type="button"
                       disabled={disabled || isPending}
@@ -1025,6 +1133,16 @@ export function ParticipantsManager({
                   >
                     Edit
                   </button>
+                  {canMoveParticipants ? (
+                    <button
+                      type="button"
+                      disabled={disabled || isPending}
+                      onClick={() => openMoveConfirm(p)}
+                      className="text-sm font-medium text-ash-accent hover:underline disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      Move
+                    </button>
+                  ) : null}
                   <button
                     type="button"
                     disabled={disabled || isPending}
@@ -1039,6 +1157,104 @@ export function ParticipantsManager({
           ))
         )}
       </ul>
+
+      {movingParticipant ? (
+        <div
+          className="fixed inset-0 z-50 flex items-end justify-center p-4 sm:items-center"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="move-participant-title"
+        >
+          <button
+            type="button"
+            className="absolute inset-0 bg-black/60"
+            aria-label="Close dialog"
+            onClick={closeMoveConfirm}
+          />
+          <div className="relative z-10 w-full max-w-md rounded-xl border border-ash-border bg-ash-surface p-5 shadow-[0_4px_12px_rgba(0,0,0,0.5)]">
+            <h2
+              id="move-participant-title"
+              className="text-base font-bold text-ash-text"
+            >
+              Move participant
+            </h2>
+            <div className="mt-3 space-y-2 text-sm text-ash-muted">
+              <p>{MOVE_PARTICIPANT_MODAL_INTRO}</p>
+              <p>
+                <span className="font-medium text-ash-text">Participant:</span>{" "}
+                {moveParticipantModalSubject({
+                  displayName: movingParticipant.displayName,
+                  email: movingParticipant.email,
+                })}
+              </p>
+              <p>
+                <span className="font-medium text-ash-text">Current pool:</span>{" "}
+                {currentPoolName}
+              </p>
+              <label className="block pt-1">
+                <span className="font-medium text-ash-text">Destination pool</span>
+                <select
+                  value={moveDestinationId}
+                  onChange={(e) => setMoveDestinationId(e.target.value)}
+                  disabled={
+                    disabled ||
+                    isPending ||
+                    moveOptionsForParticipant.eligibleOptions.length === 0
+                  }
+                  className="mt-2 w-full rounded-md border border-ash-border bg-ash-body px-3 py-2 text-sm text-ash-text shadow-sm outline-none ring-ash-accent/20 focus:border-ash-accent focus:ring-2 disabled:opacity-50"
+                >
+                  {moveOptionsForParticipant.eligibleOptions.map((pool) => (
+                    <option key={pool.id} value={pool.id}>
+                      {pool.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              {moveOptionsForParticipant.emptyMessage ? (
+                <p className="text-xs text-ash-muted">
+                  {moveOptionsForParticipant.emptyMessage}
+                </p>
+              ) : null}
+              {moveOptionsForParticipant.blockedDestinations.length > 0 ? (
+                <div className="text-xs text-ash-muted">
+                  <p className="font-medium text-ash-text">Unavailable destinations</p>
+                  <ul className="mt-1 list-disc space-y-1 pl-5">
+                    {moveOptionsForParticipant.blockedDestinations.map((blocked) => (
+                      <li key={blocked.id}>{blocked.label}</li>
+                    ))}
+                  </ul>
+                </div>
+              ) : null}
+              <p className="rounded-md border border-amber-800/60 bg-amber-950/25 px-3 py-2 text-amber-100">
+                {MOVE_PARTICIPANT_CONFIRM_WARNING}
+              </p>
+            </div>
+            <div className="mt-5 flex justify-end gap-2">
+              <button
+                type="button"
+                disabled={disabled || isPending}
+                onClick={closeMoveConfirm}
+                className="btn-ghost disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={
+                  disabled ||
+                  isPending ||
+                  !moveDestinationId ||
+                  moveOptionsForParticipant.eligibleOptions.length === 0
+                }
+                onClick={handleConfirmMove}
+                className="btn-primary disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                Confirm move
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
 
       {removingParticipant ? (
         <div

@@ -1,4 +1,10 @@
 import { LiveDailyUpdatePanel } from "@/components/admin/LiveDailyUpdatePanel";
+import { PublishBonusResultsPanel } from "@/components/admin/PublishBonusResultsPanel";
+import { TournamentStatLeadersPanel } from "@/components/tournament/TournamentStatLeadersPanel";
+import { loadTournamentTeamStatLeaders } from "@/lib/tournament/matchTeamStats/loadTournamentTeamStatLeaders";
+import { LiveMatchScoreEntryWorkflow } from "@/components/admin/LiveMatchScoreEntryWorkflow";
+import { MatchStatsEntryPromoCard } from "@/components/admin/MatchStatsEntryPromoCard";
+import { LiveScoresFetchPromoCard } from "@/components/admin/LiveScoresFetchPromoCard";
 import { AdminTournamentAdvancedTools } from "@/components/admin/AdminTournamentAdvancedTools";
 import { SimulationModeBanner } from "@/components/admin/SimulationModeBanner";
 import { PageContainer } from "@/components/ui/PageContainer";
@@ -55,6 +61,7 @@ export default async function AdminTournamentPage() {
         )
       : null;
   const isProduction = isProductionDeployment();
+  const statLeadersRes = await loadTournamentTeamStatLeaders(supabase);
 
   return (
     <PageContainer>
@@ -71,7 +78,7 @@ export default async function AdminTournamentPage() {
 
       <PageTitle
         title="Live scores & standings"
-        description="Once per day, after match scores are recorded, run the update below to refresh official results and every live pool leaderboard."
+        description="Fetch final scores from your provider, or recompute standings from scores already stored on tournament_matches."
       />
 
       <SimulationModeBanner
@@ -81,6 +88,27 @@ export default async function AdminTournamentPage() {
         }
         className="mb-6"
       />
+
+      {statLeadersRes.ok ? (
+        <TournamentStatLeadersPanel
+          variant="admin"
+          view={statLeadersRes.view}
+          className="mb-6"
+        />
+      ) : edition ? (
+        <p className="mb-6 text-sm text-ash-muted" role="status">
+          Could not load tournament stat leaders ({statLeadersRes.error}).
+        </p>
+      ) : null}
+
+      {syncImpact ? (
+        <div className="mb-6">
+          <PublishBonusResultsPanel
+            isProduction={isProduction}
+            impact={syncImpact}
+          />
+        </div>
+      ) : null}
 
       <div className="ash-surface mb-6 space-y-2 p-4 text-sm text-ash-muted">
         <p>
@@ -101,8 +129,15 @@ export default async function AdminTournamentPage() {
         </p>
       </div>
 
+      <div className="mb-6 grid gap-4 lg:grid-cols-2">
+        <LiveScoresFetchPromoCard />
+        <MatchStatsEntryPromoCard />
+      </div>
+
+      <LiveMatchScoreEntryWorkflow />
+
       {syncImpact ? (
-        <>
+        <div className="mt-6 space-y-6">
           <LiveDailyUpdatePanel
             isProduction={isProduction}
             impact={syncImpact}
@@ -112,7 +147,7 @@ export default async function AdminTournamentPage() {
             isProduction={isProduction}
             impact={syncImpact}
           />
-        </>
+        </div>
       ) : null}
 
       <p className="mt-8 text-sm text-ash-muted">

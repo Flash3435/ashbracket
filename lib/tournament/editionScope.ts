@@ -92,6 +92,25 @@ export async function poolIdsForEdition(
   return (data ?? []).map((r) => r.id as string);
 }
 
+/** Live (non-simulation) pools for one tournament edition — used by the daily score update. */
+export async function livePoolIdsForEdition(
+  supabase: SupabaseClient,
+  editionId: string,
+): Promise<string[]> {
+  const { data, error } = await supabase
+    .from("pools")
+    .select("id")
+    .eq("tournament_edition_id", editionId)
+    .eq("is_simulation", false);
+
+  if (error) {
+    console.error("[editionScope] livePoolIdsForEdition failed", error.message);
+    return [];
+  }
+  return (data ?? []).map((r) => r.id as string);
+}
+
+/** @deprecated Prefer {@link livePoolIdsForEdition} so recompute stays edition-scoped. */
 export async function livePoolIds(supabase: SupabaseClient): Promise<string[]> {
   const { data, error } = await supabase
     .from("pools")

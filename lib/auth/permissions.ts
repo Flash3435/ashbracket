@@ -13,6 +13,21 @@ export async function isGlobalAdmin(supabase: SupabaseClient): Promise<boolean> 
   return Boolean(data);
 }
 
+/** pool_admins row or pool creator; global admins do not count. */
+export async function isDirectPoolAdmin(
+  supabase: SupabaseClient,
+  poolId: string,
+): Promise<boolean> {
+  const { data, error } = await supabase.rpc("ashbracket_is_direct_pool_manager", {
+    target_pool_id: poolId,
+  });
+  if (error) {
+    console.error("[isDirectPoolAdmin]", error.message);
+    return false;
+  }
+  return Boolean(data);
+}
+
 /** Global admin or pool_admins member for this pool. */
 export async function canManagePool(
   supabase: SupabaseClient,

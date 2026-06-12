@@ -1,11 +1,17 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { ACCOUNT_TOURNAMENT_STAGE_CODES } from "../account/loadAccountKnockoutSelection";
 import {
+  buildPoolMembershipCompletionStatus,
+  buildPoolMembershipCompletionStatusFromPredictions,
+  type PoolMembershipCompletionStatus,
+} from "../picks/poolMembershipCompletionStatus";
+import {
   buildAllParticipantPickDrafts,
   participantBonusKeysForPool,
 } from "../predictions/buildParticipantPickDrafts";
-import { mapPredictionRow } from "../../src/lib/scoring/mapSupabaseRows";
 import type { Prediction, Team, TournamentStage } from "../../src/types/domain";
+import { fetchPoolPredictions } from "../predictions/fetchPoolPredictions";
+import { warnIfPoolPredictionsLookTruncated } from "../supabase/fetchAllRows";
 import { mapTeamRow, mapTournamentStageRow } from "../results/mapRows";
 import {
   participantPicksCompleteFromDrafts,
@@ -13,15 +19,16 @@ import {
 } from "../predictions/participantPicksCompletenessRules";
 import { fetchOfficialRoundOf32Complete } from "../tournament/fetchOfficialRoundOf32Complete";
 import { fetchGroupTeamCountryCodesByLetter } from "../tournament/fetchGroupTeamCountryCodesByLetter";
+import { fetchGroupTeamCountryCodesForEdition } from "../tournament/fetchGroupTeamCountryCodesForEdition";
 import { TEAM_TABLE_SELECT } from "../teams/teamDbSelect";
-
-type PredRow = Parameters<typeof mapPredictionRow>[0];
 
 /** Canonical description of how “bracket complete” is evaluated in app code. */
 export const BRACKET_COMPLETION_RULES_SOURCE =
-  "lib/predictions/participantPicksCompletenessRules.ts::participantPicksCompleteFromDrafts + " +
+  "lib/picks/poolMembershipCompletionStatus.ts::buildPoolMembershipCompletionStatus + " +
   "lib/predictions/buildParticipantPickDrafts.ts::buildAllParticipantPickDrafts " +
   "(group rows + per-group Stage 2 third-place rows + knockout sections + bonus keys)";
+
+export type { PoolMembershipCompletionStatus };
 
 export type PicksCompletenessInputs = {
   stageByCode: Partial<Record<TournamentStage["code"], TournamentStage>>;
@@ -88,49 +95,61 @@ export async function loadPicksCompletenessInputsForPool(
   const [
     { data: poolRow, error: poolErr },
     { data: stageRows, error: stageErr },
-    { data: predRows, error: predErr },
     { data: ruleRows, error: ruleErr },
     { data: teamRows, error: teamsErr },
-    groupTeamCountryCodesByLetter,
-  ] =
-    await Promise.all([
-      supabase
-        .from("pools")
-        .select("tournament_edition_id")
-        .eq("id", poolId)
-        .maybeSingle(),
-      supabase
-        .from("tournament_stages")
-        .select(
-          "id, code, label, sort_order, starts_at, ends_at, created_at, updated_at",
-        )
-        .in("code", stageCodes)
-        .order("sort_order", { ascending: true }),
-      supabase
-        .from("predictions")
-        .select(
-          "id, pool_id, participant_id, prediction_kind, team_id, tournament_stage_id, group_code, slot_key, bonus_key, value_text, created_at, updated_at",
-        )
-        .eq("pool_id", poolId)
-        .in("participant_id", participantIds),
-      supabase
-        .from("scoring_rules")
-        .select("bonus_key")
-        .eq("pool_id", poolId)
-        .eq("prediction_kind", "bonus_pick")
-        .order("bonus_key", { ascending: true }),
-      supabase.from("teams").select(TEAM_TABLE_SELECT).order("name", {
-        ascending: true,
-      }),
-      fetchGroupTeamCountryCodesByLetter(supabase),
-    ]);
+    poolPredictions,
+  ] = await Promise.all([
+    supabase
+      .from("pools")
+      .select("tournament_edition_id")
+      .eq("id", poolId)
+      .maybeSingle(),
+    supabase
+      .from("tournament_stages")
+      .select(
+        "id, code, label, sort_order, starts_at, ends_at, created_at, updated_at",
+      )
+      .in("code", stageCodes)
+      .order("sort_order", { ascending: true }),
+    supabase
+      .from("scoring_rules")
+      .select("bonus_key")
+      .eq("pool_id", poolId)
+      .eq("prediction_kind", "bonus_pick")
+      .order("bonus_key", { ascending: true }),
+    supabase.from("teams").select(TEAM_TABLE_SELECT).order("name", {
+      ascending: true,
+    }),
+    fetchPoolPredictions(supabase, { poolId, participantIds }),
+  ]);
 
-  if (poolErr || stageErr || predErr || ruleErr || teamsErr) {
+  if (poolErr || stageErr || poolPredictions.error || ruleErr || teamsErr) {
     return null;
   }
+
+  warnIfPoolPredictionsLookTruncated({
+    participantCount: participantIds.length,
+    predictionRowCount: poolPredictions.predictions.length,
+    paginationPageCount: poolPredictions.pageCount,
+    context: "loadPicksCompletenessInputsForPool",
+    poolId,
+  });
   const editionId = (poolRow?.tournament_edition_id as string | null) ?? null;
   if (!editionId) {
     return null;
+  }
+
+  let groupTeamCountryCodesByLetter: Record<string, string[]> = {};
+  const editionGroupMap = await fetchGroupTeamCountryCodesForEdition(
+    supabase,
+    editionId,
+  );
+  if (Object.keys(editionGroupMap).length > 0) {
+    groupTeamCountryCodesByLetter = editionGroupMap;
+  } else {
+    groupTeamCountryCodesByLetter = await fetchGroupTeamCountryCodesByLetter(
+      supabase,
+    );
   }
 
   const stages = (stageRows ?? []).map((r) =>
@@ -151,9 +170,7 @@ export async function loadPicksCompletenessInputsForPool(
     stages.map((s) => [s.code, s]),
   ) as Partial<Record<TournamentStage["code"], TournamentStage>>;
 
-  const predictions: Prediction[] = (predRows ?? []).map((row) =>
-    mapPredictionRow(row as PredRow),
-  );
+  const predictions: Prediction[] = poolPredictions.predictions;
   const teams: Team[] = (teamRows ?? []).map(mapTeamRow);
 
   const fromDb = (ruleRows ?? [])
@@ -176,6 +193,21 @@ export async function loadPicksCompletenessInputsForPool(
   };
 }
 
+export function buildCompletionStatusForParticipant(
+  inputs: PicksCompletenessInputs,
+  participantId: string,
+): PoolMembershipCompletionStatus {
+  return buildPoolMembershipCompletionStatusFromPredictions({
+    stageByCode: inputs.stageByCode,
+    predictions: inputs.predictions,
+    participantId,
+    bonusKeys: inputs.bonusKeys,
+    knockoutBracketPicksUnlocked: inputs.knockoutBracketPicksUnlocked,
+    teams: inputs.teams,
+    groupTeamCountryCodesByLetter: inputs.groupTeamCountryCodesByLetter,
+  });
+}
+
 export function buildCompletionDiagnosticRows(
   inputs: PicksCompletenessInputs,
   poolId: string,
@@ -190,6 +222,9 @@ export function buildCompletionDiagnosticRows(
       teams: inputs.teams,
       groupTeamCountryCodesByLetter: inputs.groupTeamCountryCodesByLetter,
     });
+    const status = buildPoolMembershipCompletionStatus(slots, {
+      knockoutBracketPicksUnlocked: inputs.knockoutBracketPicksUnlocked,
+    });
     const relevant = relevantSlotsForCompleteness(
       slots,
       inputs.knockoutBracketPicksUnlocked,
@@ -201,9 +236,6 @@ export function buildCompletionDiagnosticRows(
         missingKinds.add(s.predictionKind);
       }
     }
-    const picksComplete = participantPicksCompleteFromDrafts(slots, {
-      knockoutBracketPicksUnlocked: inputs.knockoutBracketPicksUnlocked,
-    });
     const emptyRelevant = relevant.filter((s) => !s.teamId.trim()).length;
 
     return {
@@ -216,7 +248,7 @@ export function buildCompletionDiagnosticRows(
       ),
       required_prediction_kinds: requiredKinds,
       missing_required_kinds: [...missingKinds].sort((a, b) => a.localeCompare(b)),
-      picks_complete: picksComplete,
+      picks_complete: status.isComplete,
       knockout_bracket_picks_unlocked: inputs.knockoutBracketPicksUnlocked,
       relevant_slot_count: relevant.length,
       empty_relevant_slot_count: emptyRelevant,

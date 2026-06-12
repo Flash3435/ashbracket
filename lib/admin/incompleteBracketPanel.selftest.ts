@@ -15,7 +15,15 @@ import {
 import { resolvePoolEmailTargets } from "../communications/recipientResolve";
 
 const poolId = "22222222-2222-4222-8222-222222222222";
-const lockAtIso = "2026-06-11T03:59:00.000Z"; // Jun 10, 2026, 11:59 p.m. ET
+const lockAtIso = "2026-06-11T16:00:00.000Z"; // Jun 11, 2026, 12:00 p.m. ET
+
+const nishBreakdown = {
+  missingSummary: "Missing: bonus picks (2/5).",
+  groupPicks: "48/48",
+  thirdPlacePicks: "8/8",
+  bonusPicks: "2/5",
+  knockoutStatus: "Not required yet (Round of 32 not published)",
+};
 
 function baseInput(
   overrides: Partial<Parameters<typeof buildIncompleteBracketPanelData>[0]> = {},
@@ -37,18 +45,33 @@ function baseInput(
         displayName: "Nish",
         email: "nish@example.com",
         picksComplete: false,
+        breakdown: nishBreakdown,
       },
       {
         id: "p3",
         displayName: "Dipa",
         email: "",
         picksComplete: false,
+        breakdown: {
+          missingSummary: "Missing: group picks (40/48).",
+          groupPicks: "40/48",
+          thirdPlacePicks: "6/8",
+          bonusPicks: "0/5",
+          knockoutStatus: "Not required yet (Round of 32 not published)",
+        },
       },
       {
         id: "p4",
         displayName: "Khyan",
         email: "khyan@example.com",
         picksComplete: false,
+        breakdown: {
+          missingSummary: "Missing: third-place picks (5/8).",
+          groupPicks: "48/48",
+          thirdPlacePicks: "5/8",
+          bonusPicks: "5/5",
+          knockoutStatus: "Not required yet (Round of 32 not published)",
+        },
       },
     ],
     emailConfigured: true,
@@ -104,11 +127,24 @@ assert.strictEqual(
   "plural incomplete uses need",
 );
 assert.strictEqual(someIncomplete.incompleteParticipants.length, 3);
+assert.strictEqual(
+  someIncomplete.incompleteParticipants[0]?.breakdown.missingSummary,
+  nishBreakdown.missingSummary,
+  "incomplete row carries missing summary",
+);
+assert.strictEqual(
+  someIncomplete.incompleteParticipants[0]?.breakdown.groupPicks,
+  "48/48",
+);
+assert.strictEqual(
+  someIncomplete.incompleteParticipants[0]?.breakdown.knockoutStatus,
+  "Not required yet (Round of 32 not published)",
+);
 assert.strictEqual(someIncomplete.mailableIncompleteCount, 2);
 assert.strictEqual(someIncomplete.skippedNoEmailCount, 1);
 assert.strictEqual(
   someIncomplete.deadlineLabel,
-  "Jun 10, 2026, 11:59 p.m. ET",
+  "Jun 11, 2026, 12:00 p.m. ET",
   "deadline uses compact Eastern Time formatter",
 );
 assert.ok(
@@ -140,6 +176,29 @@ const noParticipants = buildIncompleteBracketPanelData(
   baseInput({ participants: [] }),
 );
 assert.strictEqual(noParticipants.state, "no_participants");
+
+const unavailable = buildIncompleteBracketPanelData(
+  baseInput({
+    statusAvailable: false,
+    statusUnavailableReason:
+      "Admin completion check requires SUPABASE_SERVICE_ROLE_KEY in production.",
+    sourceDiagnostics: {
+      buildCommitSha: "abc1234",
+      dataSource: "missing-service-role",
+      serviceRoleAvailable: false,
+      serviceRoleRequired: true,
+      participantCount: 4,
+      predictionRowCount: 0,
+      groupMapSize: 0,
+      trustedIncompleteCount: 0,
+      warningMessage:
+        "Admin completion check requires SUPABASE_SERVICE_ROLE_KEY in production.",
+    },
+  }),
+);
+assert.strictEqual(unavailable.state, "unavailable");
+assert.ok(unavailable.statusUnavailableReason?.includes("SUPABASE_SERVICE_ROLE_KEY"));
+assert.strictEqual(unavailable.sourceDiagnostics.dataSource, "missing-service-role");
 
 const manyIncomplete = buildIncompleteBracketPanelData(
   baseInput({
@@ -197,7 +256,7 @@ const rendered = renderTemplatedPoolEmail({
 assert.match(rendered.text, /Hi Nish,/);
 assert.match(
   rendered.text,
-  /June 10, 2026 at 11:59 p\.?m\.? Eastern Time/i,
+  /June 11, 2026 at 12:00 p\.?m\.? Eastern Time/i,
   "deadline in reminder uses long Eastern Time, not UTC",
 );
 assert.match(

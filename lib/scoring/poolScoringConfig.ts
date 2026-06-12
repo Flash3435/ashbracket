@@ -55,7 +55,7 @@ export function defaultWorldCupThirdPlaceQualifierPoints(): number {
   const row = DEFAULT_WORLD_CUP_SCORING_RULE_ROWS.find(
     (r) => r.predictionKind === "third_place_qualifier",
   );
-  return row?.points ?? 2;
+  return row?.points ?? 4;
 }
 
 /**
