@@ -1,21 +1,33 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { SAMPLE_POOL_ID } from "../config/sample-pool";
 import { solePublicPoolIdFromScoringView } from "../pools/solePublicPoolIdFromScoringView";
+import {
+  loadActiveLiveWc2026PublicRulesPoolCandidates,
+  pickActivePublicRulesPoolId,
+} from "./selectActivePublicRulesPool";
 
 export type PublicRulesPoolResolution =
   | { poolId: string; source: "configured_sample" }
+  | { poolId: string; source: "active_live_wc2026" }
   | { poolId: string; source: "sole_public_rules_pool" };
 
 /**
- * Pool whose rules /rules should show: configured sample id when it has public
- * scoring rows, otherwise the sole pool in `scoring_rules_public`.
+ * Pool whose rules /rules should show.
  *
- * Matches `resolveHomePublicPool` fallback so rules and leaderboard target the
- * same production pool when `NEXT_PUBLIC_SAMPLE_POOL_ID` is stale.
+ * Prefers an active live `fifa_wc_2026` pool with public rules and scoring rows
+ * (configured sample when eligible, otherwise the stable first active pool).
+ * Falls back to legacy sole-public-pool behavior when no live candidate exists.
  */
 export async function resolvePublicRulesPoolId(
   supabase: SupabaseClient,
 ): Promise<PublicRulesPoolResolution> {
+  const liveCandidates =
+    await loadActiveLiveWc2026PublicRulesPoolCandidates(supabase);
+  const livePick = pickActivePublicRulesPoolId(SAMPLE_POOL_ID, liveCandidates);
+  if (livePick) {
+    return livePick;
+  }
+
   let poolId = SAMPLE_POOL_ID;
 
   const { count, error } = await supabase

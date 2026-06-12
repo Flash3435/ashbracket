@@ -16,6 +16,9 @@ import {
   DEFAULT_WORLD_CUP_SCORING_RULE_ROWS,
 } from "../scoring/worldcupPoolDefaults";
 import { bonusRulesTableRowsFromPublicRules } from "./bonusRulesTableRows";
+import { knockoutRulesTableRowsFromPublicRules } from "./knockoutRulesTableRows";
+import { labelPublicScoringRule } from "./scoringRulePublicLabels";
+import { partitionPublicRulesForDisplay } from "./partitionPublicRulesForDisplay";
 import {
   resolvePoolScoringConfig,
   resolveStage2PointsForRulesPage,
@@ -99,6 +102,36 @@ const bonusTableFromDb = bonusRulesTableRowsFromPublicRules(
 );
 assert.equal(
   bonusTableFromDb.find((row) => row.label.includes("most goals"))?.points,
+  25,
+);
+
+const publicRuleRows = rules.map((row) => ({
+  predictionKind: row.predictionKind,
+  bonusKey: row.bonusKey,
+  points: row.points,
+  label: labelPublicScoringRule(row.predictionKind, row.bonusKey),
+}));
+const { knockoutRules, bonusRules } =
+  partitionPublicRulesForDisplay(publicRuleRows);
+const knockoutTable = knockoutRulesTableRowsFromPublicRules(knockoutRules);
+assert.deepEqual(
+  knockoutTable.map((row) => row.points),
+  [4, 8, 16, 24, 32],
+);
+assert.notDeepEqual(knockoutTable.map((row) => row.points), [10, 20, 50, 100]);
+
+const stage2Points =
+  resolvePoolScoringConfig({
+    poolId,
+    groupAdvanceExactPoints: 3,
+    groupAdvanceWrongSlotPoints: 1,
+    scoringRules: rules,
+  }).thirdPlaceQualifierPoints ?? null;
+assert.equal(stage2Points, 4);
+assert.equal(
+  bonusRulesTableRowsFromPublicRules(bonusRules).find((row) =>
+    row.label.includes("most goals"),
+  )?.points,
   25,
 );
 

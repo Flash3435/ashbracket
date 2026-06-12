@@ -1,5 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { createClient } from "@/lib/supabase/server";
+import { createServiceRoleClient } from "@/lib/supabase/service";
 import { resolvePublicRulesPoolId } from "../pool/resolvePublicRulesPoolId";
 import {
   resolveGroupAdvanceFromPoolColumns,
@@ -265,11 +266,10 @@ export type FetchSamplePoolScoringRulesResult =
 export async function fetchSamplePoolScoringRules(): Promise<FetchSamplePoolScoringRulesResult> {
   try {
     const supabase = await createClient();
-
-    const resolvedPool = await resolvePublicRulesPoolId(supabase);
+    // Pool selection reads `pools` (RLS blocks anon). Service role picks an active live
+    // WC2026 pool; scoring rows still load through anon-safe `scoring_rules_public`.
+    const resolvedPool = await resolvePublicRulesPoolId(createServiceRoleClient());
     const effectivePoolId = resolvedPool.poolId;
-    const usedSolePublicPoolFallback =
-      resolvedPool.source === "sole_public_rules_pool";
 
     const loaded = await loadScoringRulesRawForPool(supabase, effectivePoolId);
     if (!loaded.ok) {
@@ -277,9 +277,10 @@ export async function fetchSamplePoolScoringRules(): Promise<FetchSamplePoolScor
     }
     const rulesRaw = loaded.rulesRaw;
 
-    const displayDefaultOpts = usedSolePublicPoolFallback
-      ? { solePublicPoolFallback: true as const }
-      : undefined;
+    const displayDefaultOpts =
+      resolvedPool.source === "sole_public_rules_pool"
+        ? { solePublicPoolFallback: true as const }
+        : undefined;
 
     if (rulesRaw.length === 0) {
       let poolOnly: PoolRulesPublicRowDb | null = null;
