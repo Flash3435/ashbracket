@@ -133,7 +133,9 @@ export async function runLiveDailyUpdateAction(input: {
       detail: message,
     });
 
+    revalidatePath("/tournament");
     revalidatePath("/admin/tournament");
+    revalidatePath("/admin/tournament/live-scores");
     revalidatePath("/admin/tournament/status");
     revalidatePath("/admin/results");
     revalidatePath("/admin/activity");

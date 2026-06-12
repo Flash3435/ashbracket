@@ -20,6 +20,8 @@ export type SyncOfficialTournamentSummary = {
   derivedResultsInserted: number;
   poolsRecalculated: number;
   syncLockedMatchCount: number;
+  patchesApplied: number;
+  patchesSkipped: number;
 };
 
 export type OfficialMatchScorePatch = {
@@ -61,17 +63,35 @@ function resultSlotKey(
   return [stageId, kind, groupCode ?? "", slotKey ?? ""].join("\0");
 }
 
-function applyPatches(matches: DbMatch[], patches: OfficialMatchScorePatch[]) {
+export type PatchApplyOutcome = {
+  applied: string[];
+  skipped: Array<{ matchCode: string; reason: "not_found" | "sync_locked" }>;
+};
+
+export function applyPatches(matches: DbMatch[], patches: OfficialMatchScorePatch[]): PatchApplyOutcome {
   const byCode = new Map(matches.map((m) => [m.match_code, m]));
+  const applied: string[] = [];
+  const skipped: PatchApplyOutcome["skipped"] = [];
+
   for (const p of patches) {
     const row = byCode.get(p.matchCode);
-    if (!row || row.sync_locked) continue;
+    if (!row) {
+      skipped.push({ matchCode: p.matchCode, reason: "not_found" });
+      continue;
+    }
+    if (row.sync_locked) {
+      skipped.push({ matchCode: p.matchCode, reason: "sync_locked" });
+      continue;
+    }
     row.home_goals = p.homeGoals;
     row.away_goals = p.awayGoals;
     if (p.homePenalties !== undefined) row.home_penalties = p.homePenalties;
     if (p.awayPenalties !== undefined) row.away_penalties = p.awayPenalties;
     if (p.status) row.status = p.status;
+    applied.push(p.matchCode);
   }
+
+  return { applied, skipped };
 }
 
 function recomputeWinners(matches: DbMatch[]) {
@@ -172,7 +192,8 @@ export async function syncOfficialTournament(
     patches?: OfficialMatchScorePatch[];
   },
 ): Promise<
-  { ok: true; summary: SyncOfficialTournamentSummary } | { ok: false; error: string }
+  | { ok: true; summary: SyncOfficialTournamentSummary; patchOutcome: PatchApplyOutcome }
+  | { ok: false; error: string }
 > {
   const { editionCode, poolIds, patches = [] } = options;
 
@@ -199,7 +220,7 @@ export async function syncOfficialTournament(
   if (mErr) return { ok: false, error: mErr.message };
   const matches = (rawMatches ?? []) as DbMatch[];
 
-  applyPatches(matches, patches);
+  const patchOutcome = applyPatches(matches, patches);
   recomputeWinners(matches);
   propagateBracketAdvance(matches);
 
@@ -399,6 +420,9 @@ export async function syncOfficialTournament(
       derivedResultsInserted: inserts.length,
       poolsRecalculated: poolIds.length,
       syncLockedMatchCount,
+      patchesApplied: patchOutcome.applied.length,
+      patchesSkipped: patchOutcome.skipped.length,
     },
+    patchOutcome,
   };
 }

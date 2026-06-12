@@ -8,7 +8,11 @@ import {
   fetchLiveScoresPreviewAction,
 } from "../../app/(worldcup)/admin/tournament/liveScoresActions";
 import type { AdminImpactSummary } from "@/lib/admin/fetchAdminImpactSummary";
-import type { ScoreChangePreview, ScoreChangePreviewRow } from "@/lib/tournament/liveScores/types";
+import type {
+  LiveScoresApplySummary,
+  ScoreChangePreview,
+  ScoreChangePreviewRow,
+} from "@/lib/tournament/liveScores/types";
 import { AdminRiskConfirmPanel } from "./AdminRiskConfirmPanel";
 
 type Props = {
@@ -155,10 +159,12 @@ export function LiveScoresFetchPanel({
   const [error, setError] = useState<string | null>(null);
   const [preview, setPreview] = useState<ScoreChangePreview | null>(null);
   const [applyMessage, setApplyMessage] = useState<string | null>(null);
+  const [applySummary, setApplySummary] = useState<LiveScoresApplySummary | null>(null);
 
   function fetchPreview() {
     setError(null);
     setApplyMessage(null);
+    setApplySummary(null);
     startFetch(async () => {
       const res = await fetchLiveScoresPreviewAction();
       if (!res.ok) {
@@ -174,6 +180,7 @@ export function LiveScoresFetchPanel({
     if (!preview) return;
     setError(null);
     setApplyMessage(null);
+    setApplySummary(null);
     startApply(async () => {
       const res = await applyLiveScoresAction({
         previewId: preview.previewId,
@@ -181,9 +188,11 @@ export function LiveScoresFetchPanel({
       });
       if (!res.ok) {
         setError(res.error);
+        setApplySummary(res.applySummary ?? null);
         return;
       }
       setApplyMessage(res.message);
+      setApplySummary(res.applySummary);
       setPreview(null);
       router.refresh();
     });
@@ -248,6 +257,38 @@ export function LiveScoresFetchPanel({
         <p className="rounded-md border border-red-800/80 bg-red-950/40 px-3 py-2 text-sm text-red-200">
           {error}
         </p>
+      ) : null}
+
+      {applySummary ? (
+        <div
+          className="rounded-md border border-ash-border/70 bg-ash-body/20 px-3 py-2 text-sm text-ash-muted"
+          role="status"
+        >
+          <p>
+            <span className="font-medium text-ash-text">Planned:</span> {applySummary.planned}
+            {" · "}
+            <span className="font-medium text-ash-text">Written:</span> {applySummary.written}
+            {" · "}
+            <span className="font-medium text-ash-text">Skipped:</span> {applySummary.skipped}
+            {" · "}
+            <span className="font-medium text-ash-text">Failed verification:</span>{" "}
+            {applySummary.failedVerification}
+          </p>
+          {applySummary.details.some((d) => d.planned && !d.verified) ? (
+            <ul className="mt-2 list-disc space-y-1 pl-5 text-amber-100">
+              {applySummary.details
+                .filter((d) => d.planned && !d.verified)
+                .map((d) => (
+                  <li key={d.matchCode}>
+                    <span className="font-mono text-xs">{d.matchCode}</span>: expected{" "}
+                    {d.expectedScore ?? "—"} ({d.expectedStatus ?? "finished"}), database has{" "}
+                    {d.actualScore ?? "—"} ({d.actualStatus ?? "missing"})
+                    {d.reason ? ` — ${d.reason}` : ""}
+                  </li>
+                ))}
+            </ul>
+          ) : null}
+        </div>
       ) : null}
 
       {applyMessage ? (

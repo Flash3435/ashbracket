@@ -253,11 +253,7 @@ export function buildScoreChangePreview(input: {
     (f) => !mappedFixtureIds.has(f.providerFixtureId),
   ).length;
 
-  const updateCodes = rows.filter((r) => r.willUpdate).map((r) => r.matchCode).sort();
-  const previewId = createHash("sha256")
-    .update([input.fetchedAt, ...updateCodes].join("\0"))
-    .digest("hex")
-    .slice(0, 16);
+  const previewId = computePreviewId(rows);
 
   let message: string | null = null;
   const finishedFixtures = input.fixtures.filter((f) => f.status === "finished").length;
@@ -286,6 +282,25 @@ export function buildScoreChangePreview(input: {
     },
     message,
   };
+}
+
+/** Stable id from planned score changes only — must not include fetch timestamp. */
+export function computePreviewId(rows: ScoreChangePreviewRow[]): string {
+  const payload = rows
+    .filter((r) => r.willUpdate)
+    .map((r) =>
+      [
+        r.matchCode,
+        r.fetchedHomeGoals,
+        r.fetchedAwayGoals,
+        r.fetchedHomePenalties ?? "",
+        r.fetchedAwayPenalties ?? "",
+        r.fetchedStatus ?? "",
+      ].join("\0"),
+    )
+    .sort()
+    .join("\n");
+  return createHash("sha256").update(payload).digest("hex").slice(0, 16);
 }
 
 export function patchesFromPreviewRows(

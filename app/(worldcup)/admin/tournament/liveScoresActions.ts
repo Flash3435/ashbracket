@@ -10,8 +10,14 @@ import {
   fetchOfficialLiveEdition,
   livePoolIdsForEdition,
 } from "@/lib/tournament/editionScope";
-import { applyLiveScoresAndSync } from "@/lib/tournament/liveScores/applyLiveScores";
-import { buildLiveScoresApplySuccessMessage } from "@/lib/tournament/liveScores/buildLiveScoresApplyMessage";
+import {
+  applyLiveScoresAndSync,
+  LIVE_SCORES_REVALIDATED_PATHS,
+} from "@/lib/tournament/liveScores/applyLiveScores";
+import {
+  buildLiveScoresApplyFailureMessage,
+  buildLiveScoresApplySuccessMessage,
+} from "@/lib/tournament/liveScores/buildLiveScoresApplyMessage";
 import { loadTournamentMatchesForLiveScores } from "@/lib/tournament/liveScores/loadTournamentMatches";
 import {
   buildScoreChangePreview,
@@ -21,7 +27,10 @@ import {
   fetchLiveWorldCupScores,
   getLiveScoresProviderConfig,
 } from "@/lib/tournament/liveScores/provider";
-import type { ScoreChangePreview } from "@/lib/tournament/liveScores/types";
+import type {
+  LiveScoresApplySummary,
+  ScoreChangePreview,
+} from "@/lib/tournament/liveScores/types";
 import { recordLiveDailyUpdateStatus } from "@/lib/tournament/liveDailyUpdateStatus";
 import type { SyncOfficialTournamentSummary } from "@/lib/tournament/syncOfficialTournament";
 import { revalidatePath } from "next/cache";
@@ -39,24 +48,21 @@ export type LiveScoresApplyResult =
       editionName: string;
       matchesUpdated: number;
       summary: SyncOfficialTournamentSummary;
+      applySummary: LiveScoresApplySummary;
       lastUpdatedAt: string;
       message: string;
       warnings: string[];
     }
-  | { ok: false; error: string; warnings?: string[] };
+  | { ok: false; error: string; applySummary?: LiveScoresApplySummary; warnings?: string[] };
 
 function messageFromUnknown(e: unknown): string {
   return e instanceof Error ? e.message : "Unexpected error.";
 }
 
 function revalidateLiveScoresPaths(): void {
-  revalidatePath("/admin/tournament");
-  revalidatePath("/admin/tournament/live-scores");
-  revalidatePath("/admin/tournament/status");
-  revalidatePath("/admin/results");
-  revalidatePath("/admin/activity");
-  revalidatePath("/rules");
-  revalidatePath("/account/activity");
+  for (const path of LIVE_SCORES_REVALIDATED_PATHS) {
+    revalidatePath(path);
+  }
   revalidatePath("/pool/[poolId]", "layout");
 }
 
@@ -230,13 +236,19 @@ export async function applyLiveScoresAction(input: {
       }));
 
     const applied = await applyLiveScoresAndSync(supabase, {
+      editionId: liveEdition.id,
       editionCode: OFFICIAL_EDITION_CODE,
       poolIds,
+      previewRows: preview.rows,
       patches,
       providerFixtureIdUpdates,
     });
 
     if (!applied.ok) {
+      const failureMessage = buildLiveScoresApplyFailureMessage({
+        error: applied.error,
+        applySummary: applied.applySummary,
+      });
       logAdminRiskAction({
         action: "live_scores_apply",
         userId: user.id,
@@ -246,9 +258,14 @@ export async function applyLiveScoresAction(input: {
         isSimulation: false,
         affectedMatchCount: patches.length,
         affectedPoolCount: poolIds.length,
-        detail: applied.error,
+        detail: failureMessage,
       });
-      return { ok: false, error: applied.error, warnings: applied.warnings };
+      return {
+        ok: false,
+        error: failureMessage,
+        applySummary: applied.applySummary,
+        warnings: applied.warnings,
+      };
     }
 
     const recorded = await recordLiveDailyUpdateStatus(
@@ -270,6 +287,7 @@ export async function applyLiveScoresAction(input: {
       lastUpdatedAt: recorded.lastUpdatedAt,
       matchesUpdated: applied.matchesUpdated,
       summary: applied.summary,
+      applySummary: applied.applySummary,
       warnings: applied.warnings,
     });
 
@@ -296,6 +314,7 @@ export async function applyLiveScoresAction(input: {
       editionName: liveEdition.name,
       matchesUpdated: applied.matchesUpdated,
       summary: applied.summary,
+      applySummary: applied.applySummary,
       lastUpdatedAt: recorded.lastUpdatedAt,
       message,
       warnings: applied.warnings,

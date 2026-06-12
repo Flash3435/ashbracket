@@ -111,3 +111,29 @@ export type OfficialMatchScorePatchInput = {
   status?: "scheduled" | "live" | "finished" | "postponed" | "cancelled";
   providerFixtureId?: string | null;
 };
+
+export type LiveScoresApplyMatchDetail = {
+  matchCode: string;
+  matchId: string | null;
+  planned: boolean;
+  written: boolean;
+  verified: boolean;
+  reason: string | null;
+  expectedScore: string | null;
+  actualScore: string | null;
+  expectedStatus: string | null;
+  actualStatus: string | null;
+  expectedWinnerTeamId: string | null;
+  actualWinnerTeamId: string | null;
+};
+
+export type LiveScoresApplySummary = {
+  planned: number;
+  written: number;
+  skipped: number;
+  failedVerification: number;
+  providerFixtureIdsSaved: number;
+  ledgersRecomputed: number;
+  revalidatedPaths: string[];
+  details: LiveScoresApplyMatchDetail[];
+};

@@ -17,6 +17,8 @@ function summary(
     derivedResultsInserted: 0,
     poolsRecalculated: 3,
     syncLockedMatchCount: 0,
+    patchesApplied: 0,
+    patchesSkipped: 0,
     ...overrides,
   };
 }
