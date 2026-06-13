@@ -36,7 +36,8 @@ export function ScoreImpactCardBody({
         <p
           key={line}
           className={
-            display.showGainerNames && line.startsWith("Biggest boost:")
+            (display.showGainerNames && line.startsWith("Biggest boost:")) ||
+            (display.showSoftImpactNames && line.startsWith("Watching closely:"))
               ? "text-ash-text"
               : "text-ash-muted"
           }

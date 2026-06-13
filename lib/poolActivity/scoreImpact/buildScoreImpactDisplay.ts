@@ -1,8 +1,14 @@
 import type {
   ScoreImpactLeaderboardMovementMetadata,
   ScoreImpactReason,
+  ScoreImpactSoftImpactMetadata,
+  ScoreImpactSoftImpactReason,
   ScoreImpactTopGainerMetadata,
 } from "./types";
+import {
+  formatSoftImpactCountLine,
+  formatSoftImpactNamesLine,
+} from "./buildSoftImpact";
 
 export type ParsedScoreImpactMetadata = {
   matchLabel: string | null;
@@ -13,6 +19,7 @@ export type ParsedScoreImpactMetadata = {
   topGainers: ScoreImpactTopGainerMetadata[];
   leaderboardMovement: ScoreImpactLeaderboardMovementMetadata | null;
   reason: ScoreImpactReason | null;
+  softImpact: ScoreImpactSoftImpactMetadata | null;
 };
 
 function readString(v: unknown): string | null {
@@ -52,6 +59,50 @@ function readReason(v: unknown): ScoreImpactReason | null {
   return null;
 }
 
+function readSoftImpactReason(v: unknown): ScoreImpactSoftImpactReason {
+  if (
+    v === "winner_in_path" ||
+    v === "draw_watchlist" ||
+    v === "both_teams_in_path" ||
+    v === "unknown"
+  ) {
+    return v;
+  }
+  return "unknown";
+}
+
+function readSampleNames(raw: unknown): string[] {
+  if (!Array.isArray(raw)) return [];
+  const out: string[] = [];
+  for (const name of raw) {
+    if (typeof name !== "string") continue;
+    const trimmed = name.trim();
+    if (!trimmed) continue;
+    out.push(trimmed);
+  }
+  return out.slice(0, 3);
+}
+
+function readSoftImpact(raw: unknown): ScoreImpactSoftImpactMetadata | null {
+  if (raw == null || typeof raw !== "object") return null;
+  const row = raw as Record<string, unknown>;
+  const enabled = row.enabled === true;
+  const affectedCount = readNumber(row.affected_count) ?? 0;
+  if (!enabled || affectedCount <= 0) return null;
+
+  const teamName = readString(row.team_name) ?? undefined;
+  const teamId = readString(row.team_id) ?? undefined;
+
+  return {
+    enabled: true,
+    team_name: teamName,
+    team_id: teamId,
+    affected_count: affectedCount,
+    sample_names: readSampleNames(row.sample_names),
+    reason: readSoftImpactReason(row.reason),
+  };
+}
+
 function readLeaderboardMovement(
   raw: unknown,
 ): ScoreImpactLeaderboardMovementMetadata | null {
@@ -87,6 +138,7 @@ export function parseScoreImpactMetadata(
     topGainers: topFromLegacy,
     leaderboardMovement: readLeaderboardMovement(metadata.leaderboard_movement),
     reason: readReason(metadata.reason),
+    softImpact: readSoftImpact(metadata.soft_impact),
   };
 }
 
@@ -125,7 +177,30 @@ export type ScoreImpactDisplayLines = {
   detailLines: string[];
   showLeaderboardLink: boolean;
   showGainerNames: boolean;
+  showSoftImpactNames: boolean;
 };
+
+function appendSoftImpactLines(
+  detailLines: string[],
+  softImpact: ScoreImpactSoftImpactMetadata,
+  options: {
+    allowParticipantNames: boolean;
+    compact?: boolean;
+  },
+): void {
+  if (!options.allowParticipantNames) return;
+
+  if (options.compact) {
+    detailLines.push(formatSoftImpactCountLine(softImpact, { compact: true }));
+    return;
+  }
+
+  detailLines.push(formatSoftImpactCountLine(softImpact));
+  const namesLine = formatSoftImpactNamesLine(softImpact.sample_names);
+  if (namesLine) {
+    detailLines.push(namesLine);
+  }
+}
 
 export function buildScoreImpactDisplayLines(
   metadata: Record<string, unknown>,
@@ -134,6 +209,8 @@ export function buildScoreImpactDisplayLines(
     allowParticipantNames: boolean;
     /** Fallback body text for legacy rows without structured metadata. */
     fallbackBodyText?: string;
+    /** Dashboard: one compact soft-impact line instead of count + names. */
+    compact?: boolean;
   },
 ): ScoreImpactDisplayLines | null {
   const parsed = parseScoreImpactMetadata(metadata);
@@ -152,6 +229,7 @@ export function buildScoreImpactDisplayLines(
       detailLines: parts.slice(1),
       showLeaderboardLink: false,
       showGainerNames: false,
+      showSoftImpactNames: false,
     };
   }
 
@@ -197,6 +275,7 @@ export function buildScoreImpactDisplayLines(
       detailLines,
       showLeaderboardLink: true,
       showGainerNames,
+      showSoftImpactNames: false,
     };
   }
 
@@ -209,11 +288,21 @@ export function buildScoreImpactDisplayLines(
     detailLines.push("Bonus stat leaders updated — check back for scoring changes.");
   }
 
+  const softImpact = !parsed.pointsChanged ? parsed.softImpact : null;
+  const showSoftImpactNames =
+    options.allowParticipantNames &&
+    !options.compact &&
+    Boolean(softImpact && softImpact.sample_names.length > 0);
+  if (softImpact) {
+    appendSoftImpactLines(detailLines, softImpact, options);
+  }
+
   return {
     headline,
     detailLines,
     showLeaderboardLink: false,
     showGainerNames: false,
+    showSoftImpactNames,
   };
 }
 
@@ -221,7 +310,18 @@ export function buildScoreImpactDisplayLines(
 export function clientSafeScoreImpactMetadata(
   metadata: Record<string, unknown>,
 ): Record<string, unknown> {
-  const { point_gainers: _pg, ...rest } = metadata;
+  const { point_gainers: _pg, soft_impact: rawSoftImpact, ...rest } = metadata;
   void _pg;
-  return rest;
+
+  if (rawSoftImpact == null || typeof rawSoftImpact !== "object") {
+    return rest;
+  }
+
+  const soft = { ...(rawSoftImpact as Record<string, unknown>) };
+  delete soft.team_id;
+
+  return {
+    ...rest,
+    soft_impact: soft,
+  };
 }

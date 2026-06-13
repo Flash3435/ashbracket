@@ -37,6 +37,8 @@ export function buildScoreImpactMatchResults(input: {
       label: `${homeName} ${patch.homeGoals}–${patch.awayGoals} ${awayName}`,
       groupCode: match.group_code,
       winnerTeamId: match.winner_team_id,
+      homeTeamId: match.home_team_id,
+      awayTeamId: match.away_team_id,
       stageCode: match.stage_code,
     });
   }

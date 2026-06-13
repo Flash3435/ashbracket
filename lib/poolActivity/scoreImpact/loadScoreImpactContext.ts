@@ -1,7 +1,10 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { deriveTeamStatTotals, topTeamStatLeaders } from "@/lib/tournament/matchTeamStats/deriveTeamStatTotals";
 import type { MatchForTeamStatAggregation } from "@/lib/tournament/matchTeamStats/types";
+import { fetchPoolPredictions } from "@/lib/predictions/fetchPoolPredictions";
+import { buildParticipantTeamPicksFromPredictions } from "./buildSoftImpact";
 import type { BonusLeaderSnapshot } from "./types";
+import type { ParticipantTeamPicks } from "./buildSoftImpact";
 
 type EditionTeamStatRow = {
   team_id: string;
@@ -128,4 +131,20 @@ export async function loadParticipantNamesById(
     );
   }
   return out;
+}
+
+export async function loadParticipantTeamPicksById(
+  supabase: SupabaseClient,
+  poolId: string,
+): Promise<Map<string, ParticipantTeamPicks>> {
+  const { predictions, error } = await fetchPoolPredictions(supabase, { poolId });
+  if (error) throw new Error(error);
+
+  return buildParticipantTeamPicksFromPredictions(
+    predictions.map((p) => ({
+      participantId: p.participantId,
+      teamId: p.teamId,
+      predictionKind: p.predictionKind,
+    })),
+  );
 }
