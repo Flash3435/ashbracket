@@ -54,7 +54,7 @@ function RecapMatchRow({
   if (item.groupCode) meta.push(`Group ${item.groupCode}`);
 
   return (
-    <li className="py-3 first:pt-0 last:pb-0">
+    <div className="py-3 first:pt-0 last:pb-0">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <p className="text-[11px] text-ash-muted">{meta.join(" · ")}</p>
         <span className={impactBadgeClass(item.impact)}>
@@ -91,7 +91,7 @@ function RecapMatchRow({
           {item.rankMovement.newRank}
         </p>
       ) : null}
-    </li>
+    </div>
   );
 }
 
@@ -115,7 +115,7 @@ export function LatestRecapCard({
         <div>
           <h2 className="text-base font-bold text-ash-text">Latest recap</h2>
           <p className="mt-0.5 text-xs text-ash-muted">
-            How recent results connect to your bracket.
+            How the latest result connects to your bracket.
           </p>
         </div>
         <Link href={activityHref} className="ash-link shrink-0 text-xs">
@@ -137,13 +137,14 @@ export function LatestRecapCard({
             </Link>
           </div>
         </div>
-      ) : (
-        <ul className="mt-3 divide-y divide-ash-border">
-          {recap.items.map((item) => (
-            <RecapMatchRow key={item.matchId} item={item} pickContext={pickContext} />
-          ))}
-        </ul>
-      )}
+      ) : recap.items[0] ? (
+        <div className="mt-3">
+          <RecapMatchRow item={recap.items[0]} pickContext={pickContext} />
+          <Link href={activityHref} className="ash-link mt-3 inline-block text-sm">
+            View activity
+          </Link>
+        </div>
+      ) : null}
     </section>
   );
 }

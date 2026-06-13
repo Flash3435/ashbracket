@@ -13,6 +13,7 @@ import type { KnockoutPickSlotDraft } from "../../types/adminKnockoutPicks";
 import type { PredictionKind, Team } from "../../src/types/domain";
 import type { TournamentMatchPublicRow } from "../../types/tournamentPublic";
 
+/** Legacy display limit; recap selection scans all completed matches by default. */
 export const RECAP_MATCH_LIMIT = 3;
 
 export type RecapImpact = "helped" | "mixed" | "hurt" | "neutral";
@@ -83,12 +84,37 @@ function kickoffSortKey(iso: string | null | undefined): number {
 
 export function recentCompletedOfficialMatches(
   matches: TournamentMatchPublicRow[],
-  limit = RECAP_MATCH_LIMIT,
+  limit?: number,
 ): TournamentMatchPublicRow[] {
-  return [...matches]
+  const sorted = [...matches]
     .filter(isFinishedMatchWithScores)
-    .sort((a, b) => kickoffSortKey(b.kickoff_at) - kickoffSortKey(a.kickoff_at))
-    .slice(0, limit);
+    .sort((a, b) => kickoffSortKey(b.kickoff_at) - kickoffSortKey(a.kickoff_at));
+  return limit != null ? sorted.slice(0, limit) : sorted;
+}
+
+function recapImpactTier(impact: RecapImpact): number {
+  if (impact === "helped" || impact === "hurt" || impact === "mixed") return 0;
+  return 1;
+}
+
+/** Pick one recap: helped/hurt/mixed before neutral, then most recent kickoff, then match code. */
+export function selectBestRecapItem(
+  items: ParticipantRecapMatchItem[],
+): ParticipantRecapMatchItem | null {
+  if (items.length === 0) return null;
+
+  return [...items].sort((a, b) => {
+    const tierDiff = recapImpactTier(a.impact) - recapImpactTier(b.impact);
+    if (tierDiff !== 0) return tierDiff;
+
+    const kickDiff = kickoffSortKey(b.kickoffAt) - kickoffSortKey(a.kickoffAt);
+    if (kickDiff !== 0) return kickDiff;
+
+    const codeDiff = a.matchCode.localeCompare(b.matchCode);
+    if (codeDiff !== 0) return codeDiff;
+
+    return a.matchId.localeCompare(b.matchId);
+  })[0]!;
 }
 
 function teamNameForId(teamId: string, teamById: Map<string, Team>): string {
@@ -318,25 +344,27 @@ export function buildParticipantLatestRecap(
     return { showCard: false, variant: "matches", items: [] };
   }
 
-  const recent = recentCompletedOfficialMatches(
-    input.matches,
-    input.limit ?? RECAP_MATCH_LIMIT,
-  );
+  const recent = recentCompletedOfficialMatches(input.matches, input.limit);
 
   if (recent.length === 0) {
     return { showCard: false, variant: "matches", items: [] };
   }
 
-  const items = recent.map((m) =>
+  const candidates = recent.map((m) =>
     buildRecapItemForMatch(m, input.slots, input.teams, input.pointsByMatchCode),
   );
 
-  const anyRelevant = items.some((i) => i.hasRelevantPick);
+  const anyRelevant = candidates.some((i) => i.hasRelevantPick);
   if (!anyRelevant) {
-    return { showCard: true, variant: "compact_neutral", items };
+    return { showCard: true, variant: "compact_neutral", items: [] };
   }
 
-  return { showCard: true, variant: "matches", items };
+  const selected = selectBestRecapItem(candidates);
+  return {
+    showCard: selected != null,
+    variant: "matches",
+    items: selected ? [selected] : [],
+  };
 }
 
 /** Map match_code → points gained for one participant from score-impact activity rows. */
