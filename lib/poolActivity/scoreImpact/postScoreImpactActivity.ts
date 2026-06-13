@@ -1,20 +1,16 @@
 import { createServiceRoleClient } from "@/lib/supabase/service";
 import type { WcLedgerRecomputeTrigger } from "@/lib/scoring/recomputePoolLedger";
 import { buildScoreImpactCommentary } from "./buildScoreImpactCommentary";
+import { buildScoreImpactMetadata } from "./buildScoreImpactMetadata";
 import { detectScoreImpact, scoreImpactHasMeaningfulChange } from "./detectScoreImpact";
 import {
   buildScoreImpactDedupKey,
   buildScoreSignatureFromMatches,
 } from "./scoreImpactDedupKey";
-import {
-  countGroupAdvancePicksForTeam,
-  loadParticipantNamesById,
-  loadTeamNameMapForEdition,
-} from "./loadScoreImpactContext";
+import { loadParticipantNamesById, loadTeamNameMapForEdition } from "./loadScoreImpactContext";
 import { isScoreImpactLedgerTrigger, poolMatchesEditionSimulationScope } from "./scoreImpactTriggers";
 import type {
   BonusLeaderSnapshot,
-  ScoreImpactMatchResult,
   ScoreImpactRunContext,
   ScoreImpactStandingsSnapshot,
 } from "./types";
@@ -24,10 +20,11 @@ async function upsertScoreImpactActivity(input: {
   bodyText: string;
   sourceKey: string;
   metadata: Record<string, unknown>;
-}): Promise<"inserted" | "skipped"> {
+  primaryMatchCode: string | null;
+}): Promise<"inserted" | "updated" | "skipped"> {
   const supabase = createServiceRoleClient();
 
-  const { data: existing, error: findErr } = await supabase
+  const { data: existingByKey, error: findErr } = await supabase
     .from("pool_activity")
     .select("id")
     .eq("pool_id", input.poolId)
@@ -36,7 +33,33 @@ async function upsertScoreImpactActivity(input: {
     .maybeSingle();
 
   if (findErr) throw new Error(findErr.message);
-  if (existing?.id) return "skipped";
+  if (existingByKey?.id) return "skipped";
+
+  if (input.primaryMatchCode) {
+    const { data: existingByMatch, error: matchErr } = await supabase
+      .from("pool_activity")
+      .select("id")
+      .eq("pool_id", input.poolId)
+      .eq("type", "ash_score_impact")
+      .eq("metadata_json->>match_id", input.primaryMatchCode)
+      .maybeSingle();
+
+    if (matchErr) throw new Error(matchErr.message);
+
+    if (existingByMatch?.id) {
+      const { error: updateErr } = await supabase
+        .from("pool_activity")
+        .update({
+          body_text: input.bodyText,
+          metadata_json: input.metadata,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", existingByMatch.id);
+
+      if (updateErr) throw new Error(updateErr.message);
+      return "updated";
+    }
+  }
 
   const { error } = await supabase.from("pool_activity").insert({
     pool_id: input.poolId,
@@ -44,12 +67,7 @@ async function upsertScoreImpactActivity(input: {
     actor_user_id: null,
     type: "ash_score_impact",
     body_text: input.bodyText,
-    metadata_json: {
-      source_key: input.sourceKey,
-      score_impact_label: "SCORE IMPACT",
-      icon: "⚽",
-      ...input.metadata,
-    },
+    metadata_json: input.metadata,
     related_path: null,
     is_ai_generated: false,
   });
@@ -90,7 +108,7 @@ export async function postScoreImpactActivityForPool(input: {
   beforeBonusLeaders?: BonusLeaderSnapshot | null;
   afterBonusLeaders?: BonusLeaderSnapshot | null;
   editionIsSimulation?: boolean;
-}): Promise<"inserted" | "skipped" | "none"> {
+}): Promise<"inserted" | "updated" | "skipped" | "none"> {
   if (!isScoreImpactLedgerTrigger(input.trigger)) return "none";
 
   const scopeOk = await verifyPoolSimulationScope(
@@ -120,22 +138,6 @@ export async function postScoreImpactActivityForPool(input: {
     ? await loadTeamNameMapForEdition(supabase, input.runContext.editionId)
     : new Map<string, string>();
 
-  let winnerPickCount = 0;
-  let primaryWinnerTeamName: string | null = null;
-  if (
-    primaryMatch?.winnerTeamId &&
-    primaryMatch.groupCode &&
-    primaryMatch.stageCode === "group"
-  ) {
-    winnerPickCount = await countGroupAdvancePicksForTeam(
-      supabase,
-      input.poolId,
-      primaryMatch.groupCode,
-      primaryMatch.winnerTeamId,
-    );
-    primaryWinnerTeamName = teamNameById.get(primaryMatch.winnerTeamId) ?? null;
-  }
-
   const participantNames = await loadParticipantNamesById(supabase, input.poolId);
   const analysis = detectScoreImpact({
     beforeRows: input.before.rows,
@@ -144,10 +146,6 @@ export async function postScoreImpactActivityForPool(input: {
     beforeBonusLeaders: input.beforeBonusLeaders,
     afterBonusLeaders: input.afterBonusLeaders,
     teamNameById,
-    winnerPickCount,
-    primaryWinnerTeamName,
-    bracketsScoredCount: undefined,
-    perfectGroupPickers: [],
   });
 
   if (!scoreImpactHasMeaningfulChange(analysis)) return "none";
@@ -165,21 +163,22 @@ export async function postScoreImpactActivityForPool(input: {
     scoreSignature,
   });
 
+  const metadata = buildScoreImpactMetadata({
+    analysis,
+    matchResults,
+    participantNames,
+    trigger: input.trigger,
+    sourceKey,
+    standingsHash: input.after.summaryHash,
+    scoreSignature,
+  });
+
   return upsertScoreImpactActivity({
     poolId: input.poolId,
     bodyText,
     sourceKey,
-    metadata: {
-      trigger: input.trigger,
-      standings_hash: input.after.summaryHash,
-      score_signature: scoreSignature,
-      match_codes: matchResults.map((m) => m.matchCode),
-      point_gainers: analysis.pointGainers.slice(0, 5).map((g) => ({
-        participant_id: g.participantId,
-        display_name: participantNames.get(g.participantId) ?? g.displayName,
-        points_gained: g.pointsGained,
-      })),
-    },
+    metadata,
+    primaryMatchCode: primaryMatch?.matchCode ?? null,
   });
 }
 
@@ -192,12 +191,13 @@ export async function postScoreImpactForPools(input: {
   beforeBonusLeaders?: BonusLeaderSnapshot | null;
   afterBonusLeaders?: BonusLeaderSnapshot | null;
   editionIsSimulation?: boolean;
-}): Promise<{ inserted: number; skipped: number }> {
+}): Promise<{ inserted: number; updated: number; skipped: number }> {
   if (!isScoreImpactLedgerTrigger(input.trigger)) {
-    return { inserted: 0, skipped: 0 };
+    return { inserted: 0, updated: 0, skipped: 0 };
   }
 
   let inserted = 0;
+  let updated = 0;
   let skipped = 0;
 
   for (const poolId of input.poolIds) {
@@ -217,8 +217,9 @@ export async function postScoreImpactForPools(input: {
     });
 
     if (result === "inserted") inserted += 1;
+    if (result === "updated") updated += 1;
     if (result === "skipped") skipped += 1;
   }
 
-  return { inserted, skipped };
+  return { inserted, updated, skipped };
 }

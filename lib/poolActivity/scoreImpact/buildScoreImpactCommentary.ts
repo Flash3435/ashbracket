@@ -10,6 +10,16 @@ function formatBracketCount(n: number): string {
   return n === 1 ? "1 bracket" : `${n} brackets`;
 }
 
+function headlineForAnalysis(analysis: ScoreImpactAnalysis): string | null {
+  if (analysis.reason === "group_complete" && analysis.groupCode) {
+    return `Group ${analysis.groupCode} is complete.`;
+  }
+  if (analysis.primaryMatchLabel) {
+    return `${analysis.primaryMatchLabel} is final.`;
+  }
+  return null;
+}
+
 /**
  * Deterministic AshBot score-impact copy (1–3 sentences). Returns null when nothing useful to say.
  */
@@ -17,50 +27,33 @@ export function buildScoreImpactCommentary(analysis: ScoreImpactAnalysis): strin
   if (!scoreImpactHasMeaningfulChange(analysis)) return null;
 
   const sentences: string[] = [];
-  const matchLabel = analysis.primaryMatchLabel;
+  const headline = headlineForAnalysis(analysis);
 
   if (analysis.pointsChanged) {
-    const gainers = formatTopPointGainers(analysis.pointGainers);
-    const mover = formatBiggestMover(analysis.movers);
+    if (headline) sentences.push(headline);
+
     const scored = analysis.bracketsScoredCount;
+    sentences.push(`${formatBracketCount(scored)} gained points.`);
 
-    if (analysis.perfectGroupPickers.length > 0 && scored > 0) {
-      const perfect = analysis.perfectGroupPickers.slice(0, 2).join(" and ");
-      if (scored === 1 && analysis.perfectGroupPickers.length === 1) {
-        sentences.push(`${perfect} was the only bracket to score on that update.`);
-      } else if (analysis.perfectGroupPickers.length <= 2 && scored > 1) {
-        sentences.push(
-          `${formatBracketCount(scored)} scored, and ${perfect} nailed both top spots.`,
-        );
-      } else {
-        sentences.push(`${formatBracketCount(scored)} just scored.`);
-      }
-    } else if (matchLabel) {
-      sentences.push(`${matchLabel} is in.`);
-    }
-
+    const gainers = formatTopPointGainers(analysis.pointGainers);
     if (gainers) {
-      sentences.push(`Leaderboard shake-up: ${gainers} gained points.`);
-    } else if (scored > 0) {
-      sentences.push(`${formatBracketCount(scored)} picked up points.`);
+      sentences.push(`Biggest boost: ${gainers}.`);
     }
 
+    const mover = formatBiggestMover(analysis.movers);
     if (mover) {
-      sentences.push(`${mover}.`);
+      sentences.push(`Leaderboard shakeup: ${mover}.`);
     }
 
-    return trimSentences(sentences, 3);
+    return trimSentences(sentences, 4);
   }
 
-  if (matchLabel) {
-    sentences.push(`${matchLabel} is in.`);
-    sentences.push("No pool points changed yet.");
-    if (analysis.incompleteGroupNote) {
-      sentences.push(analysis.incompleteGroupNote);
-    } else if (analysis.pickSentimentNote) {
-      sentences.push(analysis.pickSentimentNote);
+  if (headline) {
+    sentences.push(headline);
+    if (analysis.pendingPointsNote) {
+      sentences.push(analysis.pendingPointsNote);
     }
-    return trimSentences(sentences, 3);
+    return trimSentences(sentences, 2);
   }
 
   if (analysis.bonusLeaderNotes.length > 0) {
@@ -77,7 +70,7 @@ export function buildScoreImpactCommentary(analysis: ScoreImpactAnalysis): strin
 function trimSentences(sentences: string[], max: number): string | null {
   const cleaned = sentences.map((s) => s.trim()).filter(Boolean);
   if (cleaned.length === 0) return null;
-  return cleaned.slice(0, max).join(" ");
+  return cleaned.slice(0, max).join("\n");
 }
 
 export { detectScoreImpact, scoreImpactHasMeaningfulChange };

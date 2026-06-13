@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { MatchdayCard } from "@/components/account/MatchdayCard";
 import { NhlDraft26PromoCard } from "@/components/account/NhlDraft26PromoCard";
 import { PostLockEngagementCard } from "@/components/account/PostLockEngagementCard";
 import { PoolRevealDashboardCard } from "@/components/account/PoolRevealDashboardCard";
@@ -6,6 +7,8 @@ import { PicksDeadlineBannerFromPool } from "@/components/pool/PicksDeadlineBann
 import { WhoToCheerForCard } from "@/components/account/WhoToCheerForCard";
 import { LatestRecapCard } from "@/components/dashboard/LatestRecapCard";
 import { whoToCheerForFromSchedule } from "@/lib/account/loadWhoToCheerFor";
+import { matchdayFromSchedule } from "@/lib/account/loadMatchday";
+import { loadRecentScoreImpactForDashboard } from "@/lib/account/loadRecentScoreImpactForDashboard";
 import { loadParticipantLatestRecap } from "@/lib/dashboard/loadParticipantLatestRecap";
 import { formatPoolPickDeadlineLabel } from "@/lib/picks/poolPickDeadlineDisplay";
 import { participantPicksCompleteFromDrafts } from "@/lib/predictions/participantPicksCompletenessRules";
@@ -157,6 +160,10 @@ export default async function AccountPage({ searchParams }: PageProps) {
       : null;
 
   let whoToCheer: ReturnType<typeof whoToCheerForFromSchedule> | null = null;
+  let matchday: ReturnType<typeof matchdayFromSchedule> | null = null;
+  let recentScoreImpact: Awaited<
+    ReturnType<typeof loadRecentScoreImpactForDashboard>
+  > = [];
   let latestRecap: Awaited<ReturnType<typeof loadParticipantLatestRecap>> | null =
     null;
   let tournamentMatches: TournamentMatchPublicRow[] | null = null;
@@ -169,11 +176,32 @@ export default async function AccountPage({ searchParams }: PageProps) {
     whoToCheer = whoToCheerForFromSchedule(picksCtx, tournamentMatches, tournamentErr);
   }
 
+  const locked = picksCtx ? poolLocked(picksCtx.selectedLockAt) : false;
+
+  if (
+    locked &&
+    picksCtx &&
+    !picksCtx.loadError &&
+    picksCtx.initialSlots.length > 0
+  ) {
+    matchday = matchdayFromSchedule(picksCtx, tournamentMatches, tournamentErr);
+    if (picksCtx.selectedPoolId) {
+      try {
+        recentScoreImpact = await loadRecentScoreImpactForDashboard(
+          supabase,
+          picksCtx.selectedPoolId,
+          { allowParticipantNames: locked },
+        );
+      } catch {
+        recentScoreImpact = [];
+      }
+    }
+  }
+
   const organizerOnly = isOrganizerOnlyAccount(
     list.length,
     organizedPools.length,
   );
-  const locked = picksCtx ? poolLocked(picksCtx.selectedLockAt) : false;
   const pastCanonicalDeadline = isPastAshbracket2026PoolLockDeadline();
   const createPoolLink = accountCreatePoolLinkState({
     pastCanonicalDeadline,
@@ -478,6 +506,22 @@ export default async function AccountPage({ searchParams }: PageProps) {
           !picksCtx.loadError &&
           picksCtx.initialSlots.length > 0 ? (
             <div className="space-y-6">
+              {locked && matchday ? (
+                <MatchdayCard
+                  suggestions={matchday.suggestions}
+                  tournamentErr={matchday.tournamentErr}
+                  hasMatchesToday={matchday.hasMatchesToday}
+                  usingUpcomingFallback={matchday.usingUpcomingFallback}
+                  hasAnyPick={matchday.hasAnyPick}
+                  picksIncomplete={locked && !viewerPicksComplete}
+                  activityHref={activityHref}
+                  leaderboardHref={leaderboardHref}
+                  recentScoreImpact={recentScoreImpact}
+                  initialSlots={picksCtx.initialSlots}
+                  teams={picksCtx.teams}
+                />
+              ) : null}
+
               <div className="mb-2">
                 <PicksViewToggle
                   current={view}
@@ -541,12 +585,12 @@ export default async function AccountPage({ searchParams }: PageProps) {
                 viewerPicksComplete={viewerPicksComplete}
               />
 
-              {whoToCheer ? (
+              {whoToCheer && !postLockEngagement ? (
                 <WhoToCheerForCard
                   suggestions={whoToCheer.suggestions}
                   totalRelevantMatches={whoToCheer.totalRelevantMatches}
                   tournamentErr={whoToCheer.tournamentErr}
-                  showIncompleteCta={whoToCheer.showIncompleteCta}
+                  showIncompleteCta={whoToCheer.showIncompleteCta && !locked}
                   hasAnyPick={whoToCheer.hasAnyPick}
                   picksHref={editPicksFromDashboardHref}
                   initialSlots={picksCtx.initialSlots}
