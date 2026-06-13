@@ -2,8 +2,9 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { fetchPoolActivityForPool } from "../poolActivity/fetchPoolActivity";
 import { buildScoreImpactDisplayLines } from "../poolActivity/scoreImpact/buildScoreImpactDisplay";
 import type { PoolActivityFeedRow } from "../poolActivity/poolActivityTypes";
+import { buildScoreImpactDashboardDisplay } from "./parseLegacyScoreImpactDashboardBody";
 
-export const RECENT_SCORE_IMPACT_DASHBOARD_LIMIT = 2;
+export const RECENT_SCORE_IMPACT_DASHBOARD_LIMIT = 1;
 
 export type RecentScoreImpactItem = {
   id: string;
@@ -24,9 +25,9 @@ export function recentScoreImpactFromActivityRows(
 
   const out: RecentScoreImpactItem[] = [];
   for (const row of scoreRows) {
-    const display = buildScoreImpactDisplayLines(row.metadata_json, {
+    const display = buildScoreImpactDashboardDisplay(row.metadata_json, row.body_text, {
       allowParticipantNames: options.allowParticipantNames,
-      fallbackBodyText: row.body_text,
+      buildStructured: buildScoreImpactDisplayLines,
     });
     if (!display) continue;
     out.push({

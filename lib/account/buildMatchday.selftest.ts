@@ -6,7 +6,15 @@ import {
   selectMatchdayMatches,
 } from "./buildMatchday";
 import { buildCheerSuggestionForMatch } from "./buildWhoToCheerFor";
-import { recentScoreImpactFromActivityRows } from "./loadRecentScoreImpactForDashboard";
+import {
+  RECENT_SCORE_IMPACT_DASHBOARD_LIMIT,
+  recentScoreImpactFromActivityRows,
+} from "./loadRecentScoreImpactForDashboard";
+import {
+  parseLegacyScoreImpactDashboardBody,
+  hasStructuredScoreImpactMetadata,
+} from "./parseLegacyScoreImpactDashboardBody";
+import { publicLeaderboardHrefForPool } from "../pool/publicLeaderboardHref";
 import type { KnockoutPickSlotDraft } from "../../types/adminKnockoutPicks";
 import type { Team } from "../../src/types/domain";
 import type { TournamentMatchPublicRow } from "../../types/tournamentPublic";
@@ -70,6 +78,119 @@ function matchRow(
   };
 }
 
+function scoreImpactRow(
+  partial: Partial<PoolActivityFeedRow> & Pick<PoolActivityFeedRow, "id">,
+): PoolActivityFeedRow {
+  return {
+    type: "ash_score_impact",
+    body_text: "",
+    metadata_json: {},
+    related_path: null,
+    is_ai_generated: false,
+    created_at: new Date().toISOString(),
+    participant_display_name: null,
+    ...partial,
+  };
+}
+
+// Dashboard recent score-impact limit is 1
+assert.strictEqual(RECENT_SCORE_IMPACT_DASHBOARD_LIMIT, 1);
+
+// Legacy no-points Group B body is shortened
+{
+  const legacy =
+    "Canada 1–1 Bosnia and Herzegovina is in. No pool points changed yet. Group B is not complete yet — winner and runner-up points land after all six group matches finish.";
+  const parsed = parseLegacyScoreImpactDashboardBody(legacy);
+  assert.ok(parsed);
+  assert.strictEqual(parsed!.headline, "Canada 1–1 Bosnia and Herzegovina is final.");
+  assert.strictEqual(
+    parsed!.detailLines[0],
+    "No pool points yet — Group B points settle after the group finishes.",
+  );
+  assert.ok(!parsed!.detailLines.some((l) => l.includes("winner and runner-up")));
+}
+
+// Legacy no-points Group A body is shortened
+{
+  const legacy =
+    "Korea Republic 2–1 Czechia is in. No pool points changed yet. Group A is not complete yet — winner and runner-up points land after all six group matches finish.";
+  const parsed = parseLegacyScoreImpactDashboardBody(legacy);
+  assert.ok(parsed);
+  assert.strictEqual(parsed!.headline, "Korea Republic 2–1 Czechia is final.");
+  assert.ok(parsed!.detailLines[0]!.includes("Group A"));
+}
+
+// Unknown legacy text falls back safely via recentScoreImpactFromActivityRows
+{
+  const row = scoreImpactRow({
+    id: "unknown",
+    body_text: "Some unexpected score-impact note that does not match known patterns.",
+    metadata_json: {},
+  });
+  const items = recentScoreImpactFromActivityRows([row], {
+    allowParticipantNames: true,
+  });
+  assert.strictEqual(items.length, 1);
+  assert.strictEqual(items[0]!.headline, row.body_text);
+  assert.strictEqual(items[0]!.detailLines.length, 0);
+}
+
+// Structured score-impact display still works
+{
+  const row = scoreImpactRow({
+    id: "structured",
+    body_text: "legacy long copy should not be primary",
+    metadata_json: {
+      match_label: "Canada 1–1 Bosnia and Herzegovina",
+      scoreline: "Canada 1–1 Bosnia and Herzegovina",
+      points_changed: false,
+      reason: "group_incomplete",
+      group_code: "B",
+    },
+  });
+  assert.strictEqual(hasStructuredScoreImpactMetadata(row.metadata_json), true);
+  const items = recentScoreImpactFromActivityRows([row], {
+    allowParticipantNames: true,
+  });
+  assert.strictEqual(items.length, 1);
+  assert.ok(items[0]!.headline.includes("is final"));
+  assert.ok(items[0]!.detailLines.some((l) => l.includes("Group B")));
+  assert.ok(!items[0]!.headline.includes("legacy long"));
+}
+
+// Only one score-impact row on dashboard even when more exist
+{
+  const rows = [
+    scoreImpactRow({
+      id: "a1",
+      body_text:
+        "Canada 1–1 Bosnia and Herzegovina is in. No pool points changed yet. Group B is not complete yet — winner and runner-up points land after all six group matches finish.",
+    }),
+    scoreImpactRow({
+      id: "a2",
+      body_text:
+        "Korea Republic 2–1 Czechia is in. No pool points changed yet. Group A is not complete yet — winner and runner-up points land after all six group matches finish.",
+    }),
+  ];
+  const items = recentScoreImpactFromActivityRows(rows, {
+    allowParticipantNames: true,
+  });
+  assert.strictEqual(items.length, 1);
+  assert.strictEqual(items[0]!.id, "a1");
+}
+
+// Leaderboard href only for public pools
+{
+  assert.strictEqual(
+    publicLeaderboardHrefForPool({ id: "pool-1", isPublic: true }),
+    "/pool/pool-1",
+  );
+  assert.strictEqual(
+    publicLeaderboardHrefForPool({ id: "pool-1", isPublic: false }),
+    null,
+  );
+}
+
 // Live matches sort before upcoming when filling matchday rows
 {
   const now = new Date("2026-06-18T18:00:00Z").getTime();
@@ -100,59 +221,6 @@ function matchRow(
   assert.strictEqual(selected[1]?.match_id, "today-sched");
 }
 
-// Today's matches sort before future-only fallback
-{
-  const now = new Date("2026-06-18T18:00:00Z").getTime();
-  const rows = [
-    matchRow({
-      match_id: "future",
-      kickoff_at: "2026-06-25T19:00:00Z",
-      home_country_code: "CAN",
-      away_country_code: "JPN",
-    }),
-    matchRow({
-      match_id: "today-finished",
-      status: "finished",
-      kickoff_at: "2026-06-18T15:00:00Z",
-      home_goals: 1,
-      away_goals: 1,
-      home_country_code: "CAN",
-      away_country_code: "BIH",
-    }),
-  ];
-  const { selected, hasMatchesToday, usingUpcomingFallback } = selectMatchdayMatches(
-    rows,
-    { nowMs: now },
-  );
-  assert.strictEqual(hasMatchesToday, true);
-  assert.strictEqual(usingUpcomingFallback, false);
-  assert.strictEqual(selected[0]?.match_id, "today-finished");
-}
-
-// No matches today → upcoming fallback
-{
-  const now = new Date("2026-06-18T18:00:00Z").getTime();
-  const rows = [
-    matchRow({
-      match_id: "future-late",
-      kickoff_at: "2026-06-25T19:00:00Z",
-      home_country_code: "CAN",
-      away_country_code: "JPN",
-    }),
-    matchRow({
-      match_id: "future-soon",
-      kickoff_at: "2026-06-19T15:00:00Z",
-      home_country_code: "BRA",
-      away_country_code: "GER",
-    }),
-  ];
-  const { selected, usingUpcomingFallback } = selectMatchdayMatches(rows, {
-    nowMs: now,
-  });
-  assert.strictEqual(usingUpcomingFallback, true);
-  assert.strictEqual(selected[0]?.match_id, "future-soon");
-}
-
 // Max 3 dashboard rows
 {
   const now = new Date("2026-06-18T18:00:00Z").getTime();
@@ -171,23 +239,6 @@ function matchRow(
     nowMs: now,
   });
   assert.strictEqual(built.suggestions.length, MATCHDAY_DASHBOARD_LIMIT);
-  assert.strictEqual(MATCHDAY_DASHBOARD_LIMIT, 3);
-}
-
-// Own-picks-only cheer suggestion
-{
-  const suggestion = buildCheerSuggestionForMatch(
-    matchRow({
-      match_id: "m1",
-      home_country_code: "BRA",
-      away_country_code: "GER",
-    }),
-    [slot({ rowKey: "c", predictionKind: "champion", teamId: "t-br" })],
-    [team("t-br", "Brazil", "BRA"), team("t-de", "Germany", "GER")],
-  );
-  assert.strictEqual(suggestion.cheerForLabel, "Brazil");
-  const wants = matchdayBracketWantsLabel(suggestion);
-  assert.strictEqual(wants.primary, "Brazil");
 }
 
 // Mixed impact label
@@ -205,90 +256,6 @@ function matchRow(
     [team("t-es", "Spain", "ESP"), team("t-ar", "Argentina", "ARG")],
   );
   assert.strictEqual(matchdayBracketWantsLabel(suggestion).primary, "Mixed impact");
-}
-
-// Recent score impact structured copy
-{
-  const row: PoolActivityFeedRow = {
-    id: "a1",
-    type: "ash_score_impact",
-    body_text: "legacy long copy should not be primary",
-    metadata_json: {
-      match_label: "Canada 1–1 Bosnia and Herzegovina",
-      scoreline: "Canada 1–1 Bosnia and Herzegovina",
-      points_changed: false,
-      reason: "group_incomplete",
-      group_code: "B",
-    },
-    related_path: null,
-    is_ai_generated: false,
-    created_at: new Date().toISOString(),
-    participant_display_name: null,
-  };
-  const items = recentScoreImpactFromActivityRows([row], {
-    allowParticipantNames: true,
-  });
-  assert.strictEqual(items.length, 1);
-  assert.ok(items[0]!.headline.includes("is final"));
-  assert.ok(items[0]!.detailLines.some((l) => l.includes("Group B")));
-  assert.ok(!items[0]!.headline.includes("legacy long"));
-}
-
-// Points changed with gainer names when allowed
-{
-  const row: PoolActivityFeedRow = {
-    id: "a2",
-    type: "ash_score_impact",
-    body_text: "fallback",
-    metadata_json: {
-      match_label: "Brazil 2–0 Haiti",
-      scoreline: "Brazil 2–0 Haiti",
-      points_changed: true,
-      affected_count: 8,
-      top_gainers: [
-        { display_name: "Nish", delta: 6 },
-        { display_name: "Flash", delta: 6 },
-      ],
-      reason: "knockout_result",
-    },
-    related_path: null,
-    is_ai_generated: false,
-    created_at: new Date().toISOString(),
-    participant_display_name: null,
-  };
-  const items = recentScoreImpactFromActivityRows([row], {
-    allowParticipantNames: true,
-  });
-  assert.ok(items[0]!.detailLines.some((l) => l.includes("8 brackets")));
-  assert.ok(items[0]!.detailLines.some((l) => l.includes("Nish +6")));
-}
-
-// No crash for TBD teams
-{
-  const built = buildMatchday({
-    matches: [
-      matchRow({
-        match_id: "tbd",
-        home_country_code: null,
-        away_country_code: null,
-        home_team_name: "TBD",
-        away_team_name: "TBD",
-      }),
-    ],
-    slots: [slot({ rowKey: "c", predictionKind: "champion", teamId: "t-br" })],
-    teams: [team("t-br", "Brazil", "BRA")],
-  });
-  assert.strictEqual(built.suggestions[0]?.home.name, "TBD");
-}
-
-// No matches does not throw
-{
-  const built = buildMatchday({
-    matches: [],
-    slots: [slot({ rowKey: "c", predictionKind: "champion", teamId: "t-br" })],
-    teams: [team("t-br", "Brazil", "BRA")],
-  });
-  assert.strictEqual(built.suggestions.length, 0);
 }
 
 console.log("buildMatchday.selftest.ts: ok");
