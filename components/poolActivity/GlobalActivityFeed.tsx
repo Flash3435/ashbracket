@@ -17,12 +17,16 @@ import {
   reactionBarPropsForActivity,
 } from "./ActivityReactionBar";
 import { GroupedMilestoneSummaryCard } from "./GroupedMilestoneSummaryCard";
+import { ScoreImpactCardBody } from "./ScoreImpactCardBody";
 
 type GlobalActivityFeedProps = {
   items: GlobalActivityDisplayItem[];
   reactions: ActivityReactionsSnapshot;
   viewerParticipantIdByPoolId: Record<string, string>;
   emptyFilterMessage?: string;
+  /** When a pool id maps to true, score-impact cards may show participant names. */
+  poolLockedByPoolId?: Record<string, boolean>;
+  leaderboardHrefByPoolId?: Record<string, string | null>;
 };
 
 function itemMetadataInsightLabel(
@@ -134,6 +138,8 @@ export function GlobalActivityFeed({
   reactions,
   viewerParticipantIdByPoolId,
   emptyFilterMessage,
+  poolLockedByPoolId = {},
+  leaderboardHrefByPoolId = {},
 }: GlobalActivityFeedProps) {
   if (items.length === 0) {
     return (
@@ -236,9 +242,18 @@ export function GlobalActivityFeed({
                     ) : null}
                     <span className="text-xs text-ash-muted">{rel}</span>
                   </div>
-                  <p className="mt-1 whitespace-pre-wrap text-sm text-ash-text">
-                    {recapBody}
-                  </p>
+                  {isScoreImpact ? (
+                    <ScoreImpactCardBody
+                      metadata={item.metadata_json}
+                      bodyText={recapBody}
+                      allowParticipantNames={poolLockedByPoolId[item.pool_id] === true}
+                      leaderboardHref={leaderboardHrefByPoolId[item.pool_id] ?? null}
+                    />
+                  ) : (
+                    <p className="mt-1 whitespace-pre-wrap text-sm text-ash-text">
+                      {recapBody}
+                    </p>
+                  )}
                   {showViewPicks ? (
                     <div className="mt-2">
                       <Link

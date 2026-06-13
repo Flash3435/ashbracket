@@ -245,6 +245,7 @@ export default async function AccountActivityPage({ searchParams }: PageProps) {
                   ashbotEnabled={activity.ashbotEnabled}
                   revealHref={revealHref}
                   poolLocked={locked}
+                  leaderboardHref={leaderboardHref}
                 />
               ) : null}
             </>

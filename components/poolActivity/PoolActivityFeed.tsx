@@ -22,6 +22,7 @@ import {
   reactionBarPropsForActivity,
 } from "./ActivityReactionBar";
 import { GroupedMilestoneSummaryCard } from "./GroupedMilestoneSummaryCard";
+import { ScoreImpactCardBody } from "./ScoreImpactCardBody";
 
 type PoolActivityFeedProps = {
   items: PoolActivityDisplayItem[];
@@ -41,6 +42,10 @@ type PoolActivityFeedProps = {
   revealHref?: string | null;
   /** Pool admins only — recap rows may include internal completion diagnostics. */
   showCompletionDiagnostics?: boolean;
+  /** Public pool leaderboard link — shown on score-impact cards after points change. */
+  leaderboardHref?: string | null;
+  /** When true, score-impact cards may show participant names for point gains. */
+  poolLocked?: boolean;
 };
 
 function itemMetadataInsightLabel(
@@ -165,6 +170,8 @@ export function PoolActivityFeed({
   ashbotEnabled = true,
   revealHref = null,
   showCompletionDiagnostics = false,
+  leaderboardHref = null,
+  poolLocked = false,
 }: PoolActivityFeedProps) {
   const canReact = Boolean(poolId && viewerParticipantId && reactions);
   const activityRows = activityRowsFromDisplayItems(items);
@@ -269,9 +276,18 @@ export function PoolActivityFeed({
                     ) : null}
                     <span className="text-xs text-ash-muted">{rel}</span>
                   </div>
-                  <p className="mt-1 whitespace-pre-wrap text-sm text-ash-text">
-                    {recapBody}
-                  </p>
+                  {isScoreImpact ? (
+                    <ScoreImpactCardBody
+                      metadata={item.metadata_json}
+                      bodyText={item.body_text}
+                      allowParticipantNames={poolLocked}
+                      leaderboardHref={leaderboardHref}
+                    />
+                  ) : (
+                    <p className="mt-1 whitespace-pre-wrap text-sm text-ash-text">
+                      {recapBody}
+                    </p>
+                  )}
                   {showViewPicks ? (
                     <div className="mt-2">
                       <Link

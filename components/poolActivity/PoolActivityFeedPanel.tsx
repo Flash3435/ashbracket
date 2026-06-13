@@ -32,6 +32,7 @@ type PoolActivityFeedPanelProps = {
   revealHref?: string | null;
   /** When true, default All feed hides completion recaps and favors tournament activity. */
   poolLocked?: boolean;
+  leaderboardHref?: string | null;
 };
 
 export function PoolActivityFeedPanel({
@@ -48,6 +49,7 @@ export function PoolActivityFeedPanel({
   ashbotEnabled = true,
   revealHref = null,
   poolLocked = false,
+  leaderboardHref = null,
 }: PoolActivityFeedPanelProps) {
   const [filter, setFilter] = useState<ActivityFeedFilter>("all");
 
@@ -92,6 +94,8 @@ export function PoolActivityFeedPanel({
         ashbotEnabled={ashbotEnabled}
         revealHref={revealHref}
         showCompletionDiagnostics={isPoolAdmin}
+        leaderboardHref={leaderboardHref}
+        poolLocked={poolLocked}
       />
     </>
   );

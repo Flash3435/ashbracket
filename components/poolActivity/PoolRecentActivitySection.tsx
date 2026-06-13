@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
+import { publicLeaderboardHrefForPool } from "@/lib/pool/publicLeaderboardHref";
 import { poolLocked } from "../../lib/pools/poolLocked";
 import { loadPoolActivityForViewer } from "../../lib/poolActivity/loadPoolActivityForViewer";
 import { PoolActivityFeedPanel } from "./PoolActivityFeedPanel";
@@ -38,10 +39,11 @@ export async function PoolRecentActivitySection({
   let loadError: string | null = null;
   let locked = false;
   let revealHref: string | null = null;
+  let leaderboardHref: string | null = null;
   try {
     const { data: poolRow } = await supabase
       .from("pools")
-      .select("lock_at")
+      .select("lock_at, is_public")
       .eq("id", poolId)
       .maybeSingle();
     locked = poolLocked((poolRow?.lock_at as string | null) ?? null);
@@ -49,6 +51,12 @@ export async function PoolRecentActivitySection({
       locked && viewerParticipantId
         ? `/account/reveal?participant=${viewerParticipantId}`
         : null;
+    if (poolRow) {
+      leaderboardHref = publicLeaderboardHrefForPool({
+        id: poolId,
+        isPublic: Boolean(poolRow.is_public),
+      });
+    }
     activity = await loadPoolActivityForViewer(supabase, poolId, {
       ensureDailyRecap: true,
       limit: itemLimit,
@@ -98,6 +106,7 @@ export async function PoolRecentActivitySection({
           showAnnouncementComposer={showAnnouncementComposer}
           poolLocked={locked}
           revealHref={revealHref}
+          leaderboardHref={leaderboardHref}
         />
       )}
     </section>
