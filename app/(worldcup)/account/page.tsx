@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { NhlDraft26PromoCard } from "@/components/account/NhlDraft26PromoCard";
 import { PostLockEngagementCard } from "@/components/account/PostLockEngagementCard";
 import { PoolRevealDashboardCard } from "@/components/account/PoolRevealDashboardCard";
 import { PicksDeadlineBannerFromPool } from "@/components/pool/PicksDeadlineBannerFromPool";
@@ -627,6 +628,8 @@ export default async function AccountPage({ searchParams }: PageProps) {
           </ul>
         </>
       ) : null}
+
+      <NhlDraft26PromoCard className="mt-8" />
     </PageContainer>
   );
 }
