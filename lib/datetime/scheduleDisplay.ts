@@ -74,6 +74,17 @@ export function formatKickoffLocalSingleLine(
   return `${parts.dateLine} · ${parts.timeLine}`;
 }
 
+/** Clock time only in the viewer's local zone (or an explicit IANA zone). */
+export function formatKickoffTimeOnly(
+  iso: string | null | undefined,
+  options?: FormatKickoffOptions,
+): string {
+  if (iso == null || iso === "") return "";
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "";
+  return kickoffPartsFromDate(d, options).timeLine;
+}
+
 /**
  * Fixed America/Edmonton display for admin/internal tooling.
  * Participant schedule UI should use formatKickoffLocal / KickoffTimeDisplay instead.

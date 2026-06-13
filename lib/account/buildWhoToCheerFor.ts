@@ -1,5 +1,6 @@
 import { countryCodesFromKnockoutSlots } from "../participant/nextMatchesForPickedTeams";
 import { participantPicksCompleteFromDrafts } from "../predictions/participantPicksCompletenessRules";
+import { sortUpcomingMatchesLiveFirst } from "../tournament/sortTournamentMatches";
 import type { PredictionKind, Team } from "../../src/types/domain";
 import type { KnockoutPickSlotDraft } from "../../types/adminKnockoutPicks";
 import type { TournamentMatchPublicRow } from "../../types/tournamentPublic";
@@ -120,14 +121,7 @@ export function upcomingTournamentMatches(
     return false;
   });
 
-  return [...relevant]
-    .sort((a, b) => {
-      const liveRank = (s: string) => (s === "live" ? 0 : 1);
-      const lr = liveRank(a.status) - liveRank(b.status);
-      if (lr !== 0) return lr;
-      return kickMs(a.kickoff_at) - kickMs(b.kickoff_at);
-    })
-    .slice(0, limit);
+  return sortUpcomingMatchesLiveFirst(relevant).slice(0, limit);
 }
 
 /** Highest UX importance per team id from saved pick slots. */

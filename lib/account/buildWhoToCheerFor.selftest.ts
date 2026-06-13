@@ -140,6 +140,34 @@ function matchRow(
   assert.strictEqual(upcoming[1]?.match_id, "late");
 }
 
+// Cross-group chronological order — Group B before later Group A
+{
+  const now = new Date("2026-06-18T12:00:00Z").getTime();
+  const rows = [
+    matchRow({
+      match_id: "ga-late",
+      match_code: "GA2",
+      group_code: "A",
+      stage_sort_order: 10,
+      kickoff_at: "2026-06-18T22:00:00Z",
+      home_country_code: "BRA",
+      away_country_code: "GER",
+    }),
+    matchRow({
+      match_id: "gb-early",
+      match_code: "GB1",
+      group_code: "B",
+      stage_sort_order: 10,
+      kickoff_at: "2026-06-18T15:00:00Z",
+      home_country_code: "CAN",
+      away_country_code: "JPN",
+    }),
+  ];
+  const upcoming = upcomingTournamentMatches(rows, 5, { nowMs: now });
+  assert.strictEqual(upcoming[0]?.match_id, "gb-early");
+  assert.strictEqual(upcoming[1]?.match_id, "ga-late");
+}
+
 // Dashboard max 3 rows
 {
   const now = Date.now();

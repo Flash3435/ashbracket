@@ -16,6 +16,8 @@ import {
 } from "../../lib/tournament/publicTournamentSummary";
 import { GroupStandingsGrid } from "./GroupStandingsGrid";
 import { ScheduleMatchPickTeams } from "./ScheduleMatchPickTeams";
+import { UpcomingMatchesSchedule } from "./UpcomingMatchesSchedule";
+import { sortMatchesByKickoffChronological } from "../../lib/tournament/sortTournamentMatches";
 
 function scoreLine(m: TournamentMatchPublicRow): string {
   if (m.status !== "finished" && m.status !== "live") return "—";
@@ -112,10 +114,10 @@ export function TournamentProgressView({ payload, schedulePickContext }: Props) 
   const narrative = summarizeTournamentStage(matches);
 
   const completed = matches.filter((m) => m.status === "finished");
-  const upcoming = matches.filter(
-    (m) => m.status === "scheduled" || m.status === "postponed",
+  const upcoming = sortMatchesByKickoffChronological(
+    matches.filter((m) => m.status === "scheduled" || m.status === "postponed"),
   );
-  const live = matches.filter((m) => m.status === "live");
+  const live = sortMatchesByKickoffChronological(matches.filter((m) => m.status === "live"));
 
   const koAdvance = knockoutAdvancementByStage(matches);
 
@@ -279,15 +281,10 @@ export function TournamentProgressView({ payload, schedulePickContext }: Props) 
             No scheduled matches left in the dataset.
           </p>
         ) : (
-          <ul>
-            {upcoming.map((m) => (
-              <MatchRow
-                key={m.match_id}
-                m={m}
-                pickContext={schedulePickContext}
-              />
-            ))}
-          </ul>
+          <UpcomingMatchesSchedule
+            matches={upcoming}
+            pickContext={schedulePickContext}
+          />
         )}
       </section>
 

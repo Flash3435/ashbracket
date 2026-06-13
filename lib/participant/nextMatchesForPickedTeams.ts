@@ -1,6 +1,7 @@
 import type { TournamentMatchPublicRow } from "../../types/tournamentPublic";
 import type { Team } from "../../src/types/domain";
 import type { KnockoutPickSlotDraft } from "../../types/adminKnockoutPicks";
+import { sortUpcomingMatchesLiveFirst } from "../tournament/sortTournamentMatches";
 
 function normCode(c: string | null | undefined): string | null {
   if (c == null || c === "") return null;
@@ -69,12 +70,5 @@ export function nextMatchesForTeamCountryCodes(
     return false;
   });
 
-  return [...relevant]
-    .sort((a, b) => {
-      const liveRank = (s: string) => (s === "live" ? 0 : 1);
-      const lr = liveRank(a.status) - liveRank(b.status);
-      if (lr !== 0) return lr;
-      return kickMs(a.kickoff_at) - kickMs(b.kickoff_at);
-    })
-    .slice(0, limit);
+  return sortUpcomingMatchesLiveFirst(relevant).slice(0, limit);
 }
