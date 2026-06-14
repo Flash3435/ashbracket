@@ -1,5 +1,6 @@
 import { createServiceRoleClient } from "@/lib/supabase/service";
 import type { WcLedgerRecomputeTrigger } from "@/lib/scoring/recomputePoolLedger";
+import { buildSoftImpactForMatch } from "./buildSoftImpact";
 import { buildScoreImpactCommentary } from "./buildScoreImpactCommentary";
 import { buildScoreImpactMetadata } from "./buildScoreImpactMetadata";
 import { detectScoreImpact, scoreImpactHasMeaningfulChange } from "./detectScoreImpact";
@@ -7,7 +8,11 @@ import {
   buildScoreImpactDedupKey,
   buildScoreSignatureFromMatches,
 } from "./scoreImpactDedupKey";
-import { loadParticipantNamesById, loadTeamNameMapForEdition } from "./loadScoreImpactContext";
+import {
+  loadParticipantNamesById,
+  loadParticipantTeamPicksById,
+  loadTeamNameMapForEdition,
+} from "./loadScoreImpactContext";
 import { isScoreImpactLedgerTrigger, poolMatchesEditionSimulationScope } from "./scoreImpactTriggers";
 import type {
   BonusLeaderSnapshot,
@@ -150,7 +155,18 @@ export async function postScoreImpactActivityForPool(input: {
 
   if (!scoreImpactHasMeaningfulChange(analysis)) return "none";
 
-  const bodyText = buildScoreImpactCommentary(analysis);
+  let softImpact = null;
+  if (!analysis.pointsChanged && primaryMatch) {
+    const participantPicks = await loadParticipantTeamPicksById(supabase, input.poolId);
+    softImpact = buildSoftImpactForMatch({
+      match: primaryMatch,
+      teamNameById,
+      participantPicks,
+      participantNames,
+    });
+  }
+
+  const bodyText = buildScoreImpactCommentary(analysis, softImpact);
   if (!bodyText) return "none";
 
   const scoreSignature =
@@ -171,6 +187,7 @@ export async function postScoreImpactActivityForPool(input: {
     sourceKey,
     standingsHash: input.after.summaryHash,
     scoreSignature,
+    softImpact,
   });
 
   return upsertScoreImpactActivity({

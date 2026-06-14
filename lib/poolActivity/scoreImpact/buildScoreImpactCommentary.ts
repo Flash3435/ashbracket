@@ -4,7 +4,11 @@ import {
   formatTopPointGainers,
   scoreImpactHasMeaningfulChange,
 } from "./detectScoreImpact";
-import type { ScoreImpactAnalysis } from "./types";
+import {
+  formatSoftImpactCountLine,
+  formatSoftImpactNamesLine,
+} from "./buildSoftImpact";
+import type { ScoreImpactAnalysis, ScoreImpactSoftImpactMetadata } from "./types";
 
 function formatBracketCount(n: number): string {
   return n === 1 ? "1 bracket" : `${n} brackets`;
@@ -23,7 +27,10 @@ function headlineForAnalysis(analysis: ScoreImpactAnalysis): string | null {
 /**
  * Deterministic AshBot score-impact copy (1–3 sentences). Returns null when nothing useful to say.
  */
-export function buildScoreImpactCommentary(analysis: ScoreImpactAnalysis): string | null {
+export function buildScoreImpactCommentary(
+  analysis: ScoreImpactAnalysis,
+  softImpact?: ScoreImpactSoftImpactMetadata | null,
+): string | null {
   if (!scoreImpactHasMeaningfulChange(analysis)) return null;
 
   const sentences: string[] = [];
@@ -53,7 +60,12 @@ export function buildScoreImpactCommentary(analysis: ScoreImpactAnalysis): strin
     if (analysis.pendingPointsNote) {
       sentences.push(analysis.pendingPointsNote);
     }
-    return trimSentences(sentences, 2);
+    if (softImpact?.enabled && softImpact.affected_count > 0) {
+      sentences.push(formatSoftImpactCountLine(softImpact));
+      const namesLine = formatSoftImpactNamesLine(softImpact.sample_names);
+      if (namesLine) sentences.push(namesLine);
+    }
+    return trimSentences(sentences, 4);
   }
 
   if (analysis.bonusLeaderNotes.length > 0) {

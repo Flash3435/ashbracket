@@ -4,6 +4,7 @@ import type {
   ScoreImpactAnalysis,
   ScoreImpactMatchResult,
   ScoreImpactPointGainerMetadata,
+  ScoreImpactSoftImpactMetadata,
   ScoreImpactTopGainerMetadata,
 } from "./types";
 
@@ -47,6 +48,7 @@ export function buildScoreImpactMetadata(input: {
   sourceKey: string;
   standingsHash: string;
   scoreSignature: string;
+  softImpact?: ScoreImpactSoftImpactMetadata | null;
 }): ScoreImpactActivityMetadata {
   const { analysis, matchResults } = input;
   const primaryMatch = matchResults[0] ?? null;
@@ -81,6 +83,14 @@ export function buildScoreImpactMetadata(input: {
         to_rank: analysis.movers[0].newRank,
       },
     ];
+  }
+
+  if (
+    input.softImpact?.enabled &&
+    input.softImpact.affected_count > 0 &&
+    !analysis.pointsChanged
+  ) {
+    metadata.soft_impact = input.softImpact;
   }
 
   return metadata;

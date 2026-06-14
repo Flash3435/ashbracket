@@ -6,6 +6,8 @@ export type ScoreImpactMatchResult = {
   groupCode: string | null;
   /** Winning team id when the match has a decisive result. */
   winnerTeamId: string | null;
+  homeTeamId?: string | null;
+  awayTeamId?: string | null;
   stageCode: string | null;
 };
 
@@ -76,6 +78,23 @@ export type ScoreImpactLeaderboardMovementMetadata = {
   to_rank: number;
 };
 
+export type ScoreImpactSoftImpactReason =
+  | "winner_in_path"
+  | "draw_watchlist"
+  | "both_teams_in_path"
+  | "unknown";
+
+/** Bracket-path engagement hint when no pool points changed yet. */
+export type ScoreImpactSoftImpactMetadata = {
+  enabled: boolean;
+  team_name?: string;
+  /** Server-side only — stripped before client serialization. */
+  team_id?: string;
+  affected_count: number;
+  sample_names: string[];
+  reason: ScoreImpactSoftImpactReason;
+};
+
 export type ScoreImpactActivityMetadata = {
   source_key: string;
   score_impact_label: "SCORE IMPACT";
@@ -96,6 +115,7 @@ export type ScoreImpactActivityMetadata = {
   point_gainers?: ScoreImpactPointGainerMetadata[];
   leaderboard_movement?: ScoreImpactLeaderboardMovementMetadata[];
   reason: ScoreImpactReason;
+  soft_impact?: ScoreImpactSoftImpactMetadata;
 };
 
 export type ScoreImpactRunContext = {

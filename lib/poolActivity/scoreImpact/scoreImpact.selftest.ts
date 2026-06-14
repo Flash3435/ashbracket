@@ -4,6 +4,11 @@ import { dirname, join } from "node:path";
 import type { PilotStandingsRow } from "@/lib/admin/pilotStandingsSnapshot";
 import { buildScoreImpactCommentary } from "./buildScoreImpactCommentary";
 import {
+  buildParticipantTeamPicksFromPredictions,
+  buildSoftImpactForMatch,
+  isSoftImpactPathPickKind,
+} from "./buildSoftImpact";
+import {
   buildScoreImpactDisplayLines,
   clientSafeScoreImpactMetadata,
   parseScoreImpactMetadata,
@@ -376,6 +381,257 @@ const mixedTieAnalysis = detectScoreImpact({
 t(
   mixedTieAnalysis.pointGainers.map((g) => g.displayName).join(",") === "Nish,Flash,Aditi",
   "equal +6 deltas sort by resulting rank ascending, then name",
+);
+
+const usaTeamId = "team-usa";
+const parTeamId = "team-par";
+const teamNameById = new Map([
+  [usaTeamId, "United States"],
+  [parTeamId, "Paraguay"],
+]);
+const softImpactPredictions = [
+  { participantId: "p1", teamId: usaTeamId, predictionKind: "champion" },
+  { participantId: "p2", teamId: usaTeamId, predictionKind: "group_winner" },
+  { participantId: "p3", teamId: parTeamId, predictionKind: "group_winner" },
+  { participantId: "p4", teamId: usaTeamId, predictionKind: "finalist" },
+  { participantId: "p5", teamId: parTeamId, predictionKind: "champion" },
+];
+const participantPicks = buildParticipantTeamPicksFromPredictions(softImpactPredictions);
+const softImpactNames = new Map([
+  ["p1", "Ash"],
+  ["p2", "Nish"],
+  ["p3", "Flash"],
+  ["p4", "Zara"],
+  ["p5", "Kris"],
+]);
+const usaWinMatch: ScoreImpactMatchResult = {
+  matchCode: "WC2026-G-D-01",
+  label: "United States 4–1 Paraguay",
+  groupCode: "D",
+  winnerTeamId: usaTeamId,
+  homeTeamId: usaTeamId,
+  awayTeamId: parTeamId,
+  stageCode: "group",
+};
+const softImpact = buildSoftImpactForMatch({
+  match: usaWinMatch,
+  teamNameById,
+  participantPicks,
+  participantNames: softImpactNames,
+});
+t(softImpact?.enabled === true, "soft impact enabled for winner with brackets in path");
+t(softImpact?.affected_count === 3, "soft impact counts participants with winner in path");
+t(softImpact?.sample_names.length === 3, "soft impact sample names capped at 3");
+t(
+  softImpact?.sample_names.join(",") === "Ash,Zara,Nish",
+  "soft impact sample names sort by relevance then display name",
+);
+t(softImpact?.reason === "winner_in_path", "soft impact reason is winner_in_path");
+
+t(isSoftImpactPathPickKind("group_winner") === true, "group winner is path pick kind");
+t(isSoftImpactPathPickKind("champion") === true, "champion is path pick kind");
+t(isSoftImpactPathPickKind("bonus_pick") === false, "bonus pick is not path pick kind");
+
+const bonusOnlyPicks = buildParticipantTeamPicksFromPredictions([
+  { participantId: "p-bonus", teamId: usaTeamId, predictionKind: "bonus_pick" },
+]);
+t(
+  !bonusOnlyPicks.has("p-bonus"),
+  "bonus-only pick for winning team is not counted as in their path",
+);
+t(
+  buildSoftImpactForMatch({
+    match: usaWinMatch,
+    teamNameById,
+    participantPicks: bonusOnlyPicks,
+    participantNames: new Map([["p-bonus", "BonusOnly"]]),
+  }) === null,
+  "bonus-only participant omitted from soft impact",
+);
+
+const pathKindPicks = buildParticipantTeamPicksFromPredictions([
+  { participantId: "p-group", teamId: usaTeamId, predictionKind: "group_winner" },
+  { participantId: "p-ko", teamId: usaTeamId, predictionKind: "quarterfinalist" },
+  { participantId: "p-champ", teamId: usaTeamId, predictionKind: "champion" },
+]);
+t(pathKindPicks.size === 3, "group/knockout/champion picks are counted for path");
+const pathOnlyImpact = buildSoftImpactForMatch({
+  match: usaWinMatch,
+  teamNameById,
+  participantPicks: pathKindPicks,
+  participantNames: new Map([
+    ["p-group", "GroupPicker"],
+    ["p-ko", "KoPicker"],
+    ["p-champ", "ChampPicker"],
+  ]),
+});
+t(pathOnlyImpact?.affected_count === 3, "path pick participants included in soft impact count");
+
+const duplicatePathPicks = buildParticipantTeamPicksFromPredictions([
+  { participantId: "p-dup", teamId: usaTeamId, predictionKind: "group_winner" },
+  { participantId: "p-dup", teamId: usaTeamId, predictionKind: "champion" },
+  { participantId: "p-dup", teamId: usaTeamId, predictionKind: "finalist" },
+]);
+t(duplicatePathPicks.size === 1, "multiple path picks for same team dedupe to one participant");
+const dupImpact = buildSoftImpactForMatch({
+  match: usaWinMatch,
+  teamNameById,
+  participantPicks: duplicatePathPicks,
+  participantNames: new Map([["p-dup", "DupPicker"]]),
+});
+t(dupImpact?.affected_count === 1, "duplicate path picks do not inflate soft impact count");
+t(
+  duplicatePathPicks.get("p-dup")?.maxPathImportanceByTeamId.get(usaTeamId) === 100,
+  "duplicate path picks keep highest relevance for sample ordering",
+);
+
+const pathPlusBonusPicks = buildParticipantTeamPicksFromPredictions([
+  { participantId: "p-mix", teamId: usaTeamId, predictionKind: "bonus_pick" },
+  { participantId: "p-mix", teamId: usaTeamId, predictionKind: "group_winner" },
+]);
+t(pathPlusBonusPicks.has("p-mix"), "path + bonus participant counted via path pick only");
+const mixImpact = buildSoftImpactForMatch({
+  match: usaWinMatch,
+  teamNameById,
+  participantPicks: pathPlusBonusPicks,
+  participantNames: new Map([["p-mix", "MixPicker"]]),
+});
+t(mixImpact?.affected_count === 1, "path + bonus participant counted once");
+
+const drawMatch: ScoreImpactMatchResult = {
+  matchCode: "WC2026-G-B-02",
+  label: "Canada 1–1 Bosnia and Herzegovina",
+  groupCode: "B",
+  winnerTeamId: null,
+  homeTeamId: "team-can",
+  awayTeamId: "team-bih",
+  stageCode: "group",
+};
+t(
+  buildSoftImpactForMatch({
+    match: drawMatch,
+    teamNameById,
+    participantPicks,
+    participantNames: softImpactNames,
+  }) === null,
+  "draw result omits soft impact in v1",
+);
+
+const noPointsWithSoftAnalysis = detectScoreImpact({
+  beforeRows: unchangedBefore,
+  afterRows: unchangedAfter,
+  matchResults: [usaWinMatch],
+});
+const noPointsWithSoftMeta = buildScoreImpactMetadata({
+  analysis: noPointsWithSoftAnalysis,
+  matchResults: [usaWinMatch],
+  participantNames: softImpactNames,
+  trigger: "tournament_sync",
+  sourceKey: "score_impact:v1:soft",
+  standingsHash: "hash-soft",
+  scoreSignature: "sig-soft",
+  softImpact,
+});
+t(noPointsWithSoftMeta.top_gainers.length === 0, "no-points card keeps empty top_gainers");
+t(
+  noPointsWithSoftMeta.soft_impact?.affected_count === 3,
+  "no-points metadata includes soft impact count",
+);
+t(
+  noPointsWithSoftMeta.soft_impact?.sample_names.length === 3,
+  "no-points metadata includes max 3 sample names",
+);
+
+const softDisplayLocked = buildScoreImpactDisplayLines(
+  noPointsWithSoftMeta as unknown as Record<string, unknown>,
+  { allowParticipantNames: true },
+);
+t(
+  softDisplayLocked?.detailLines.some((l) => l.includes("Good result for 3 brackets")) === true,
+  "locked pool shows soft impact count line",
+);
+t(
+  softDisplayLocked?.detailLines.some((l) => l.startsWith("Watching closely:")) === true,
+  "locked pool shows soft impact sample names",
+);
+t(
+  !softDisplayLocked?.detailLines.some((l) => l.includes("Biggest boost:")),
+  "no-points card does not show point gainers",
+);
+
+const softDisplayPreLock = buildScoreImpactDisplayLines(
+  noPointsWithSoftMeta as unknown as Record<string, unknown>,
+  { allowParticipantNames: false },
+);
+t(
+  !softDisplayPreLock?.detailLines.some((l) => l.includes("Good result for")),
+  "pre-lock hides soft impact count",
+);
+t(
+  !softDisplayPreLock?.detailLines.some((l) => l.includes("Ash")),
+  "pre-lock hides soft impact names",
+);
+
+const softDisplayCompact = buildScoreImpactDisplayLines(
+  noPointsWithSoftMeta as unknown as Record<string, unknown>,
+  { allowParticipantNames: true, compact: true },
+);
+t(
+  softDisplayCompact?.detailLines.filter((l) => l.includes("boost") || l.startsWith("Watching")).length === 1,
+  "dashboard compact mode shows at most one soft-impact line",
+);
+t(
+  softDisplayCompact?.detailLines.some((l) => l.startsWith("Early boost:")) === true,
+  "dashboard compact uses early boost copy",
+);
+
+const pointsWithSoftMeta = buildScoreImpactMetadata({
+  analysis: manyGainersAnalysis,
+  matchResults: [
+    {
+      matchCode: "WC2026-G-B-01",
+      label: "Brazil 2–0 Haiti",
+      groupCode: "B",
+      winnerTeamId: "brazil",
+      stageCode: "group",
+    },
+  ],
+  participantNames,
+  trigger: "tournament_sync",
+  sourceKey: "score_impact:v1:points",
+  standingsHash: "hash",
+  scoreSignature: "sig",
+  softImpact,
+});
+const pointsWithSoftDisplay = buildScoreImpactDisplayLines(
+  pointsWithSoftMeta as unknown as Record<string, unknown>,
+  { allowParticipantNames: true },
+);
+t(
+  pointsWithSoftDisplay?.detailLines.some((l) => l.startsWith("Biggest boost:")) === true,
+  "points-changed card still shows top gainers",
+);
+t(
+  !pointsWithSoftDisplay?.detailLines.some((l) => l.includes("Good result for")),
+  "points-changed card does not show soft impact copy",
+);
+
+const clientSafeSoft = clientSafeScoreImpactMetadata(
+  noPointsWithSoftMeta as unknown as Record<string, unknown>,
+);
+t(!("point_gainers" in clientSafeSoft), "client-safe metadata strips point_gainers");
+t(
+  (clientSafeSoft.soft_impact as { team_id?: string })?.team_id == null,
+  "client-safe metadata strips soft_impact team_id",
+);
+const softSerialized = JSON.stringify(clientSafeSoft);
+t(!softSerialized.includes("@"), "no emails in client-safe soft impact metadata json");
+t(!/"participant_id"/.test(softSerialized), "no participant_id in client-safe soft impact json");
+
+const softCommentary = buildScoreImpactCommentary(noPointsWithSoftAnalysis, softImpact);
+t(
+  softCommentary?.includes("Good result for 3 brackets") === true,
+  "commentary includes soft impact count when provided",
 );
 
 if (failed > 0) {

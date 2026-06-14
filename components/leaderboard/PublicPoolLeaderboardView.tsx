@@ -13,6 +13,7 @@ import type { PoolPublicStats } from "../../lib/pool/fetchPoolPublicStats";
 import { PoolPublicStatsSummary } from "../pool/PoolPublicStatsSummary";
 import { ViewerYouChip } from "../ui/ViewerYouChip";
 import { formatUsdCents } from "@/lib/format/usdCents";
+import { LEADERBOARD_AWARDED_POINTS_NOTE } from "@/lib/leaderboard/buildPoolStandingsFromLedger";
 import { LeaderboardPostLockIntro } from "./LeaderboardPostLockIntro";
 import { TournamentStatLeadersPanel } from "@/components/tournament/TournamentStatLeadersPanel";
 import type { TournamentStatLeadersView } from "@/lib/tournament/matchTeamStats/buildTournamentStatLeadersView";
@@ -129,7 +130,9 @@ type Props = {
   /** When true, show post-lock intro with optional reveal link. */
   picksLocked?: boolean;
   revealHref?: string | null;
-  bonusWatchView?: TournamentStatLeadersView | null;
+  /** Public page vs signed-in member view for a private pool. */
+  audience?: "public" | "member";
+ bonusWatchView?: TournamentStatLeadersView | null;
 };
 
 export function PublicPoolLeaderboardView({
@@ -142,7 +145,8 @@ export function PublicPoolLeaderboardView({
   liveScoresLastUpdatedAt = null,
   picksLocked = false,
   revealHref = null,
-  bonusWatchView = null,
+  audience = "public",
+ bonusWatchView = null,
 }: Props) {
   if (leaderboardError) {
     return (
@@ -200,7 +204,7 @@ export function PublicPoolLeaderboardView({
         <div className="relative space-y-4">
           <div className="flex flex-wrap gap-2">
             <span className="rounded-full border border-ash-border/70 bg-ash-body/40 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-ash-muted">
-              Public leaderboard
+              {audience === "member" ? "Pool standings" : " Public leaderboard"}
             </span>
             {stats?.prizePoolCents != null && stats.entryFeeCents != null ? (
               <span className="rounded-full border border-emerald-500/30 bg-emerald-950/25 px-3 py-1 text-[11px] font-semibold text-emerald-100">
@@ -267,7 +271,7 @@ export function PublicPoolLeaderboardView({
           <p className="max-w-3xl text-sm leading-relaxed text-ash-muted">
             {presentation.participantCount}{" "}
             {presentation.participantCount === 1 ? "entry" : "entries"} ranked by
-            total points. Tied totals share the same rank.
+            awarded points. Tied totals share the same rank.
           </p>
         </div>
 

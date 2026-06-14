@@ -44,6 +44,7 @@ export function parseLegacyScoreImpactDashboardBody(
       detailLines: [pendingGroupNote(groupCode!.toUpperCase())],
       showLeaderboardLink: false,
       showGainerNames: false,
+      showSoftImpactNames: false,
     };
   }
 
@@ -57,6 +58,7 @@ export function parseLegacyScoreImpactDashboardBody(
       detailLines: [pendingGroupNote(groupCode!.toUpperCase())],
       showLeaderboardLink: false,
       showGainerNames: false,
+      showSoftImpactNames: false,
     };
   }
 
@@ -69,6 +71,7 @@ export function parseLegacyScoreImpactDashboardBody(
       detailLines: [],
       showLeaderboardLink: false,
       showGainerNames: false,
+      showSoftImpactNames: false,
     };
   }
 
@@ -85,6 +88,7 @@ export function parseLegacyScoreImpactDashboardBody(
       detailLines,
       showLeaderboardLink: true,
       showGainerNames: trimmedRest?.startsWith("Biggest boost:") ?? false,
+      showSoftImpactNames: false,
     };
   }
 
@@ -98,6 +102,7 @@ export function parseLegacyScoreImpactDashboardBody(
       detailLines: [pendingGroupNote(groupCode!.toUpperCase())],
       showLeaderboardLink: false,
       showGainerNames: false,
+      showSoftImpactNames: false,
     };
   }
 
@@ -111,7 +116,11 @@ export function buildScoreImpactDashboardDisplay(
     allowParticipantNames: boolean;
     buildStructured: (
       metadata: Record<string, unknown>,
-      opts: { allowParticipantNames: boolean; fallbackBodyText?: string },
+      opts: {
+        allowParticipantNames: boolean;
+        fallbackBodyText?: string;
+        compact?: boolean;
+      },
     ) => ScoreImpactDisplayLines | null;
   },
 ): ScoreImpactDisplayLines | null {
@@ -119,6 +128,7 @@ export function buildScoreImpactDashboardDisplay(
     return options.buildStructured(metadata, {
       allowParticipantNames: options.allowParticipantNames,
       fallbackBodyText: bodyText,
+      compact: true,
     });
   }
 
@@ -128,5 +138,6 @@ export function buildScoreImpactDashboardDisplay(
   return options.buildStructured(metadata, {
     allowParticipantNames: options.allowParticipantNames,
     fallbackBodyText: bodyText,
+    compact: true,
   });
 }

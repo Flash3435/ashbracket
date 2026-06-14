@@ -13,7 +13,7 @@ import {
   buildPostLockNavPlan,
   isPostLockEngagementMode,
 } from "../../../../lib/account/postLockEngagement";
-import { publicLeaderboardHrefForPool } from "../../../../lib/pool/publicLeaderboardHref";
+import { leaderboardHrefForParticipantPool } from "../../../../lib/pool/publicLeaderboardHref";
 import { filterActivityFeedForParticipantView } from "../../../../lib/poolActivity/activityFeedParticipantFilter";
 import { loadPoolActivityForViewer } from "../../../../lib/poolActivity/loadPoolActivityForViewer";
 import Link from "next/link";
@@ -65,9 +65,10 @@ export default async function AccountActivityPage({ searchParams }: PageProps) {
       .eq("id", selectedPoolId)
       .maybeSingle();
     if (poolRow) {
-      leaderboardHref = publicLeaderboardHrefForPool({
-        id: selectedPoolId,
+      leaderboardHref = leaderboardHrefForParticipantPool({
+        poolId: selectedPoolId,
         isPublic: Boolean(poolRow.is_public),
+        participantId: ctx.selectedId,
       });
     }
   }

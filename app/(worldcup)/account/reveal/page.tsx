@@ -11,7 +11,7 @@ import {
   loadAccountKnockoutSelection,
   poolLocked,
 } from "../../../../lib/account/loadAccountKnockoutSelection";
-import { publicLeaderboardHrefForPool } from "../../../../lib/pool/publicLeaderboardHref";
+import { leaderboardHrefForParticipantPool } from "../../../../lib/pool/publicLeaderboardHref";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 
@@ -68,16 +68,17 @@ export default async function AccountRevealPage({ searchParams }: PageProps) {
     });
   }
   let leaderboardHref: string | null = null;
-  if (selectedPoolId) {
+  if (selectedPoolId && ctx.selectedId) {
     const { data: poolRow } = await supabase
       .from("pools")
       .select("is_public")
       .eq("id", selectedPoolId)
       .maybeSingle();
     if (poolRow) {
-      leaderboardHref = publicLeaderboardHrefForPool({
-        id: selectedPoolId,
+      leaderboardHref = leaderboardHrefForParticipantPool({
+        poolId: selectedPoolId,
         isPublic: Boolean(poolRow.is_public),
+        participantId: ctx.selectedId,
       });
     }
   }

@@ -38,7 +38,7 @@ import {
 import { loadPoolReveal } from "../../../lib/account/loadPoolReveal";
 import { isPastAshbracket2026PoolLockDeadline } from "../../../lib/account/resolveAccountParticipantId";
 import { isGlobalAdmin } from "@/lib/auth/permissions";
-import { publicLeaderboardHrefForPool } from "../../../lib/pool/publicLeaderboardHref";
+import { leaderboardHrefForParticipantPool } from "../../../lib/pool/publicLeaderboardHref";
 import { fetchPublicTournamentProgress } from "../../../lib/tournament/fetchPublicTournamentProgress";
 import type { TournamentMatchPublicRow } from "../../../types/tournamentPublic";
 import { TournamentStatLeadersPanel } from "@/components/tournament/TournamentStatLeadersPanel";
@@ -239,12 +239,14 @@ export default async function AccountPage({ searchParams }: PageProps) {
   const selectedListEntry = picksCtx?.selectedPoolId
     ? list.find((p) => p.pool_id === picksCtx.selectedPoolId)
     : null;
-  const leaderboardHref = selectedListEntry
-    ? publicLeaderboardHrefForPool({
-        id: selectedListEntry.pool_id,
-        isPublic: selectedListEntry.pool_is_public,
-      })
-    : null;
+  const leaderboardHref =
+    selectedListEntry && picksCtx?.selectedParticipant?.id
+      ? leaderboardHrefForParticipantPool({
+          poolId: selectedListEntry.pool_id,
+          isPublic: selectedListEntry.pool_is_public,
+          participantId: picksCtx.selectedParticipant.id,
+        })
+      : null;
   const activityHref = picksCtx?.selectedParticipant?.id
     ? `/account/activity?participant=${picksCtx.selectedParticipant.id}`
     : "/account/activity";

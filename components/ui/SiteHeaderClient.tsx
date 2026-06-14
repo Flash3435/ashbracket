@@ -40,6 +40,8 @@ export type SiteHeaderClientProps = {
   isAdmin: boolean;
   /** True when the user has at least one pool profile (activity is per-pool, not public). */
   showActivityNav?: boolean;
+  showLeaderboardNav?: boolean;
+  leaderboardHref?: string | null;
   /** Self-serve organizer entry (signed in, not yet a pool or global admin). */
   showCreatePoolNav?: boolean;
 };
@@ -48,6 +50,8 @@ export function SiteHeaderClient({
   isSignedIn,
   isAdmin,
   showActivityNav = false,
+  showLeaderboardNav = false,
+  leaderboardHref = null,
   showCreatePoolNav = false,
 }: SiteHeaderClientProps) {
   const pathname = usePathname();
@@ -122,6 +126,15 @@ export function SiteHeaderClient({
 
           {isSignedIn && (
             <>
+              {showLeaderboardNav && leaderboardHref ? (
+                <TextNavLink
+                  href={leaderboardHref}
+                  pathname={pathname}
+                  match="prefix"
+                >
+                  Leaderboard
+                </TextNavLink>
+              ) : null}
               {showActivityNav ? (
                 <>
                   <TextNavLink

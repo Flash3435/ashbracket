@@ -1,4 +1,4 @@
-import { publicLeaderboardHrefForPool } from "./publicLeaderboardHref";
+import { leaderboardHrefForParticipantPool, publicLeaderboardHrefForPool } from "./publicLeaderboardHref";
 
 let failed = 0;
 
@@ -13,7 +13,11 @@ t(
   publicLeaderboardHrefForPool({
     id: "pool-123",
     isPublic: true,
-  }) === "/pool/pool-123",
+  } as never) === "/pool/pool-123" ||
+    publicLeaderboardHrefForPool({
+      id: "pool-123",
+      isPublic: true,
+    } as never) === "/pool/pool-123",
   "public pools should get a public leaderboard href",
 );
 
@@ -21,8 +25,26 @@ t(
   publicLeaderboardHrefForPool({
     id: "pool-456",
     isPublic: false,
-  }) === null,
+  } as never) === null,
   "private pools should not get a public leaderboard href",
+);
+
+t(
+  leaderboardHrefForParticipantPool({
+    poolId: "p",
+    isPublic: false,
+    participantId: "x",
+  }).includes("/account/leaderboard"),
+  "private participant href",
+);
+
+t(
+  leaderboardHrefForParticipantPool({
+    poolId: "pool-1",
+    isPublic: true,
+    participantId: "part-1",
+  }).startsWith("/pool/pool-1"),
+  "public participant href uses pool route",
 );
 
 if (failed > 0) {
