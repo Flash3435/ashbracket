@@ -16,7 +16,8 @@ import { formatUsdCents } from "@/lib/format/usdCents";
 import { LEADERBOARD_AWARDED_POINTS_NOTE } from "@/lib/leaderboard/buildPoolStandingsFromLedger";
 import { poolLeaderboardIsActiveFromRows } from "@/lib/leaderboard/poolLeaderboardIsActive";
 import { LeaderboardPostLockIntro } from "./LeaderboardPostLockIntro";
-import { LeaderboardWaitingState } from "./LeaderboardWaitingState";
+import { BracketOutlookView } from "./BracketOutlookView";
+import type { ClientSafeBracketOutlookEntry } from "@/lib/leaderboard/buildBracketOutlook";
 import { TournamentStatLeadersPanel } from "@/components/tournament/TournamentStatLeadersPanel";
 import type { TournamentStatLeadersView } from "@/lib/tournament/matchTeamStats/buildTournamentStatLeadersView";
 
@@ -135,6 +136,9 @@ type Props = {
   /** Public page vs signed-in member view for a private pool. */
   audience?: "public" | "member";
  bonusWatchView?: TournamentStatLeadersView | null;
+  /** Pre-points Bracket Outlook rows (display names + counts only). */
+  bracketOutlookEntries?: ClientSafeBracketOutlookEntry[] | null;
+  showBracketOutlook?: boolean;
 };
 
 export function PublicPoolLeaderboardView({
@@ -149,6 +153,8 @@ export function PublicPoolLeaderboardView({
   revealHref = null,
   audience = "public",
  bonusWatchView = null,
+  bracketOutlookEntries = null,
+  showBracketOutlook = false,
 }: Props) {
   if (leaderboardError) {
     return (
@@ -176,10 +182,12 @@ export function PublicPoolLeaderboardView({
         {picksLocked ? (
           <LeaderboardPostLockIntro revealHref={revealHref} />
         ) : null}
-        <LeaderboardWaitingState
+        <BracketOutlookView
           poolName={poolName}
+          entries={bracketOutlookEntries ?? []}
           entryCount={presentation.participantCount}
           revealHref={revealHref}
+          showOutlook={showBracketOutlook && (bracketOutlookEntries?.length ?? 0) > 0}
         />
       </div>
     );

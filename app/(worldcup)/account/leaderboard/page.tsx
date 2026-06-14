@@ -6,6 +6,12 @@ import { PageContainer } from "@/components/ui/PageContainer";
 import { PageTitle } from "@/components/ui/PageTitle";
 import { loadAccountKnockoutSelection, poolLocked } from "@/lib/account/loadAccountKnockoutSelection";
 import { fetchMemberPoolStandings } from "@/lib/leaderboard/fetchMemberPoolStandings";
+import { fetchBracketOutlookForPool } from "@/lib/leaderboard/fetchBracketOutlookForPool";
+import { shouldShowBracketOutlook } from "@/lib/leaderboard/bracketOutlookVisibility";
+import {
+  BRACKET_OUTLOOK_HEADLINE,
+  toClientSafeBracketOutlookEntries,
+} from "@/lib/leaderboard/buildBracketOutlook";
 import { LEADERBOARD_AWARDED_POINTS_NOTE } from "@/lib/leaderboard/buildPoolStandingsFromLedger";
 import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
@@ -87,6 +93,28 @@ export default async function AccountLeaderboardPage({ searchParams }: PageProps
     supabase,
   });
 
+  const outlookRes = await fetchBracketOutlookForPool(selectedPoolId, {
+    supabase,
+    viewerUserId: user.id,
+  });
+  const showBracketOutlook =
+    outlookRes.ok &&
+    shouldShowBracketOutlook({
+      picksLocked: outlookRes.picksLocked,
+      hasAwardedPoints: outlookRes.hasAwardedPoints,
+      outlook: outlookRes.outlook,
+      completedMatchCount: outlookRes.completedMatchCount,
+    });
+  const bracketOutlookEntries =
+    showBracketOutlook && outlookRes.ok && outlookRes.outlook
+      ? toClientSafeBracketOutlookEntries(outlookRes.outlook)
+      : null;
+
+  const pageTitle = showBracketOutlook ? BRACKET_OUTLOOK_HEADLINE : "Leaderboard";
+  const pageDescription = showBracketOutlook
+    ? "Unofficial early read before official pool points are awarded."
+    : LEADERBOARD_AWARDED_POINTS_NOTE;
+
   const revealHref = `/account/reveal?participant=${ctx.selectedId}`;
   const activityHref = `/account/activity?participant=${ctx.selectedId}`;
   const dashboardHref = `/account?participant=${ctx.selectedId}`;
@@ -112,8 +140,8 @@ export default async function AccountLeaderboardPage({ searchParams }: PageProps
       </div>
 
       <PageTitle
-        title="Leaderboard"
-        description={LEADERBOARD_AWARDED_POINTS_NOTE}
+        title={pageTitle}
+        description={pageDescription}
       />
 
       {ctx.profileLinkItems.length > 1 ? (
@@ -149,6 +177,8 @@ export default async function AccountLeaderboardPage({ searchParams }: PageProps
           picksLocked={locked}
           revealHref={revealHref}
           audience="member"
+          bracketOutlookEntries={bracketOutlookEntries}
+          showBracketOutlook={showBracketOutlook}
         />
       )}
     </PageContainer>

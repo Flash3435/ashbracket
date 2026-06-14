@@ -15,6 +15,7 @@ export async function SiteHeader() {
   let showActivityNav = false;
   let showLeaderboardNav = false;
   let leaderboardHref: string | null = null;
+  let standingsNavLabel: "Leaderboard" | "Outlook" | null = null;
   if (user) {
     const { count, error } = await supabase
       .from("participants")
@@ -25,6 +26,7 @@ export async function SiteHeader() {
     const leaderboardNav = await loadSiteHeaderLeaderboardNav(user.id);
     showLeaderboardNav = leaderboardNav.showLeaderboardNav;
     leaderboardHref = leaderboardNav.leaderboardHref;
+    standingsNavLabel = leaderboardNav.standingsNavLabel;
   }
 
   return (
@@ -34,6 +36,7 @@ export async function SiteHeader() {
       showActivityNav={showActivityNav}
       showLeaderboardNav={showLeaderboardNav}
       leaderboardHref={leaderboardHref}
+      standingsNavLabel={standingsNavLabel}
       showCreatePoolNav={!!user && !isAdmin}
     />
   );

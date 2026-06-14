@@ -38,8 +38,12 @@ import {
 import { loadPoolReveal } from "../../../lib/account/loadPoolReveal";
 import { isPastAshbracket2026PoolLockDeadline } from "../../../lib/account/resolveAccountParticipantId";
 import { isGlobalAdmin } from "@/lib/auth/permissions";
-import { leaderboardNavHrefForParticipantPool } from "../../../lib/pool/leaderboardNavHref";
+import { resolveStandingsNav } from "../../../lib/pool/leaderboardNavHref";
 import { fetchPoolHasAwardedLeaderboardPoints, LEADERBOARD_PENDING_NAV_NOTE } from "../../../lib/leaderboard/poolLeaderboardIsActive";
+import { fetchBracketOutlookForPool } from "../../../lib/leaderboard/fetchBracketOutlookForPool";
+import { shouldShowBracketOutlook } from "../../../lib/leaderboard/bracketOutlookVisibility";
+import { toClientSafeBracketOutlookEntries } from "../../../lib/leaderboard/buildBracketOutlook";
+import { BracketOutlookDashboardCard } from "@/components/leaderboard/BracketOutlookDashboardCard";
 import { fetchPublicTournamentProgress } from "../../../lib/tournament/fetchPublicTournamentProgress";
 import type { TournamentMatchPublicRow } from "../../../types/tournamentPublic";
 import { TournamentStatLeadersPanel } from "@/components/tournament/TournamentStatLeadersPanel";
@@ -251,18 +255,25 @@ export default async function AccountPage({ searchParams }: PageProps) {
     }
   }
 
-  const leaderboardHref =
+  const standingsNav =
     selectedListEntry && picksCtx?.selectedParticipant?.id
-      ? leaderboardNavHrefForParticipantPool({
+      ? resolveStandingsNav({
           poolId: selectedListEntry.pool_id,
           isPublic: selectedListEntry.pool_is_public,
           participantId: picksCtx.selectedParticipant.id,
           picksLocked: locked,
           hasAwardedPoints: hasAwardedLeaderboardPoints,
         })
-      : null;
+      : { href: null, label: null };
+
+  const leaderboardHref =
+    standingsNav.label === "Leaderboard" ? standingsNav.href : null;
+  const outlookHref =
+    standingsNav.label === "Outlook" ? standingsNav.href : null;
   const leaderboardPendingNote =
-    locked && !hasAwardedLeaderboardPoints ? LEADERBOARD_PENDING_NAV_NOTE : null;
+    locked && !hasAwardedLeaderboardPoints && !outlookHref
+      ? LEADERBOARD_PENDING_NAV_NOTE
+      : null;
   const activityHref = picksCtx?.selectedParticipant?.id
     ? `/account/activity?participant=${picksCtx.selectedParticipant.id}`
     : "/account/activity";
@@ -271,6 +282,7 @@ export default async function AccountPage({ searchParams }: PageProps) {
     knockoutBracketPicksUnlocked: picksCtx?.knockoutBracketPicksUnlocked ?? true,
     revealHref,
     leaderboardHref,
+    outlookHref,
     picksHref: editPicksFromDashboardHref,
     activityHref,
   });
@@ -310,6 +322,11 @@ export default async function AccountPage({ searchParams }: PageProps) {
     completeBrackets: number;
     mostPopularChampion: string | null;
   } | null = null;
+  let bracketOutlookDashboardEntries: ReturnType<
+    typeof toClientSafeBracketOutlookEntries
+  > = [];
+  let showBracketOutlookDashboard = false;
+
   if (postLockEngagement && picksCtx?.selectedPoolId && !picksCtx.loadError) {
     try {
       const revealData = await loadPoolReveal(
@@ -324,6 +341,31 @@ export default async function AccountPage({ searchParams }: PageProps) {
       };
     } catch {
       poolSnapshot = null;
+    }
+  }
+
+  if (locked && picksCtx?.selectedPoolId && !hasAwardedLeaderboardPoints) {
+    try {
+      const outlookRes = await fetchBracketOutlookForPool(
+        picksCtx.selectedPoolId,
+        { supabase, viewerUserId: user.id },
+      );
+      if (outlookRes.ok) {
+        showBracketOutlookDashboard = shouldShowBracketOutlook({
+          picksLocked: outlookRes.picksLocked,
+          hasAwardedPoints: outlookRes.hasAwardedPoints,
+          outlook: outlookRes.outlook,
+          completedMatchCount: outlookRes.completedMatchCount,
+        });
+        if (showBracketOutlookDashboard && outlookRes.outlook) {
+          bracketOutlookDashboardEntries = toClientSafeBracketOutlookEntries(
+            outlookRes.outlook,
+          );
+        }
+      }
+    } catch {
+      showBracketOutlookDashboard = false;
+      bracketOutlookDashboardEntries = [];
     }
   }
 
@@ -534,10 +576,20 @@ export default async function AccountPage({ searchParams }: PageProps) {
                   picksIncomplete={locked && !viewerPicksComplete}
                   activityHref={activityHref}
                   leaderboardHref={leaderboardHref}
+                  outlookHref={outlookHref}
                   leaderboardPendingNote={leaderboardPendingNote}
                   recentScoreImpact={recentScoreImpact}
                   initialSlots={picksCtx.initialSlots}
                   teams={picksCtx.teams}
+                />
+              ) : null}
+
+              {showBracketOutlookDashboard && bracketOutlookDashboardEntries.length > 0 ? (
+                <BracketOutlookDashboardCard
+                  entries={bracketOutlookDashboardEntries}
+                  outlookHref={outlookHref}
+                  activityHref={activityHref}
+                  revealHref={revealHref}
                 />
               ) : null}
 

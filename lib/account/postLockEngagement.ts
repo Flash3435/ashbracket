@@ -13,6 +13,7 @@ export type PostLockNavInput = {
   knockoutBracketPicksUnlocked: boolean;
   revealHref: string | null;
   leaderboardHref: string | null;
+  outlookHref?: string | null;
   picksHref: string;
   activityHref: string | null;
 };
@@ -65,7 +66,9 @@ export function buildPostLockNavPlan(input: PostLockNavInput): PostLockNavPlan {
       primary: { label: "See everyone's picks", href: revealHref },
       secondary: input.leaderboardHref
         ? { label: "View leaderboard", href: input.leaderboardHref }
-        : { label: "View picks", href: input.picksHref },
+        : input.outlookHref
+          ? { label: "View outlook", href: input.outlookHref }
+          : { label: "View picks", href: input.picksHref },
       tertiary: { label: "View activity", href: activityHref },
     };
   }
@@ -74,6 +77,15 @@ export function buildPostLockNavPlan(input: PostLockNavInput): PostLockNavPlan {
     return {
       postLockEngagement: true,
       primary: { label: "View leaderboard", href: input.leaderboardHref },
+      secondary: { label: "View picks", href: input.picksHref },
+      tertiary: { label: "View activity", href: activityHref },
+    };
+  }
+
+  if (input.outlookHref) {
+    return {
+      postLockEngagement: true,
+      primary: { label: "View outlook", href: input.outlookHref },
       secondary: { label: "View picks", href: input.picksHref },
       tertiary: { label: "View activity", href: activityHref },
     };

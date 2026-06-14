@@ -17,6 +17,7 @@ type Props = {
   picksIncomplete: boolean;
   activityHref: string;
   leaderboardHref: string | null;
+  outlookHref?: string | null;
   leaderboardPendingNote?: string | null;
   scheduleHref?: string;
   recentScoreImpact: RecentScoreImpactItem[];
@@ -121,6 +122,7 @@ export function MatchdayCard({
   picksIncomplete,
   activityHref,
   leaderboardHref,
+  outlookHref = null,
   leaderboardPendingNote = null,
   scheduleHref = "/tournament",
   recentScoreImpact,
@@ -223,6 +225,10 @@ export function MatchdayCard({
         {leaderboardHref ? (
           <Link href={leaderboardHref} className="ash-link">
             Leaderboard
+          </Link>
+        ) : outlookHref ? (
+          <Link href={outlookHref} className="ash-link">
+            Outlook
           </Link>
         ) : null}
         <Link href={scheduleHref} className="ash-link">

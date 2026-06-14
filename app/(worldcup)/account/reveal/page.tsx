@@ -11,7 +11,7 @@ import {
   loadAccountKnockoutSelection,
   poolLocked,
 } from "../../../../lib/account/loadAccountKnockoutSelection";
-import { leaderboardNavHrefForParticipantPool } from "../../../../lib/pool/leaderboardNavHref";
+import { resolveStandingsNav } from "../../../../lib/pool/leaderboardNavHref";
 import { fetchPoolHasAwardedLeaderboardPoints } from "../../../../lib/leaderboard/poolLeaderboardIsActive";
 import Link from "next/link";
 import { redirect } from "next/navigation";
@@ -69,6 +69,7 @@ export default async function AccountRevealPage({ searchParams }: PageProps) {
     });
   }
   let leaderboardHref: string | null = null;
+  let outlookHref: string | null = null;
   if (selectedPoolId && ctx.selectedId) {
     const { data: poolRow } = await supabase
       .from("pools")
@@ -84,13 +85,16 @@ export default async function AccountRevealPage({ searchParams }: PageProps) {
           hasAwardedPoints = false;
         }
       }
-      leaderboardHref = leaderboardNavHrefForParticipantPool({
+      const standingsNav = resolveStandingsNav({
         poolId: selectedPoolId,
         isPublic: Boolean(poolRow.is_public),
         participantId: ctx.selectedId,
         picksLocked: locked,
         hasAwardedPoints,
       });
+      leaderboardHref =
+        standingsNav.label === "Leaderboard" ? standingsNav.href : null;
+      outlookHref = standingsNav.label === "Outlook" ? standingsNav.href : null;
     }
   }
 
@@ -102,13 +106,16 @@ export default async function AccountRevealPage({ searchParams }: PageProps) {
         </Link>
         {ctx.selectedId && !ctx.loadError ? (
           <>
-            {locked && leaderboardHref ? (
+            {locked && (leaderboardHref || outlookHref) ? (
               <>
                 <span className="text-ash-border" aria-hidden>
                   |
                 </span>
-                <Link href={leaderboardHref} className="ash-link text-sm font-medium">
-                  View leaderboard
+                <Link
+                  href={leaderboardHref ?? outlookHref ?? "#"}
+                  className="ash-link text-sm font-medium"
+                >
+                  {leaderboardHref ? "View leaderboard" : "View outlook"}
                 </Link>
               </>
             ) : (

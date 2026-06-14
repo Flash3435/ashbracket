@@ -1,4 +1,4 @@
-import { leaderboardNavHrefForParticipantPool } from "./leaderboardNavHref";
+import { leaderboardNavHrefForParticipantPool, resolveStandingsNav } from "./leaderboardNavHref";
 
 let failed = 0;
 
@@ -16,12 +16,21 @@ const base = {
 };
 
 t(
-  leaderboardNavHrefForParticipantPool({
+  resolveStandingsNav({
     ...base,
     picksLocked: true,
     hasAwardedPoints: false,
-  }) === null,
-  "locked pool with all zero points hides nav href",
+  }).href?.startsWith("/pool/pool-1") === true,
+  "locked pool with all zero points shows outlook nav href",
+);
+
+t(
+  resolveStandingsNav({
+    ...base,
+    picksLocked: true,
+    hasAwardedPoints: false,
+  }).label === "Outlook",
+  "locked pool with all zero points uses Outlook label",
 );
 
 t(

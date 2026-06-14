@@ -9,6 +9,9 @@ import { fetchPublicLiveScoresLastUpdated } from "@/lib/tournament/liveDailyUpda
 import { createClient } from "@/lib/supabase/server";
 import { createServiceRoleClient } from "@/lib/supabase/service";
 import { poolLocked } from "@/lib/pools/poolLocked";
+import { fetchBracketOutlookForPool } from "@/lib/leaderboard/fetchBracketOutlookForPool";
+import { shouldShowBracketOutlook } from "@/lib/leaderboard/bracketOutlookVisibility";
+import { toClientSafeBracketOutlookEntries } from "@/lib/leaderboard/buildBracketOutlook";
 import { TournamentStatLeadersPanel } from "@/components/tournament/TournamentStatLeadersPanel";
 import { loadTournamentTeamStatLeaders } from "@/lib/tournament/matchTeamStats/loadTournamentTeamStatLeaders";
 import type { LeaderboardPublicRowDb } from "../../../../types/leaderboard";
@@ -69,6 +72,25 @@ export default async function PublicPoolLeaderboardPage({ params }: PageProps) {
       ? `/account/reveal?participant=${viewerParticipantId}`
       : null;
 
+  const outlookRes =
+    picksLocked && !pool.is_simulation
+      ? await fetchBracketOutlookForPool(poolIdTrimmed, {
+          skipMembershipCheck: true,
+        })
+      : null;
+  const showBracketOutlook =
+    outlookRes?.ok === true &&
+    shouldShowBracketOutlook({
+      picksLocked: outlookRes.picksLocked,
+      hasAwardedPoints: outlookRes.hasAwardedPoints,
+      outlook: outlookRes.outlook,
+      completedMatchCount: outlookRes.completedMatchCount,
+    });
+  const bracketOutlookEntries =
+    showBracketOutlook && outlookRes?.ok && outlookRes.outlook
+      ? toClientSafeBracketOutlookEntries(outlookRes.outlook)
+      : null;
+
   return (
     <PageContainer>
       <PicksDeadlineBannerFromPool poolId={poolIdTrimmed} className="mb-6" />
@@ -92,6 +114,8 @@ export default async function PublicPoolLeaderboardPage({ params }: PageProps) {
         picksLocked={picksLocked}
         revealHref={revealHref}
         bonusWatchView={bonusWatchRes?.ok ? bonusWatchRes.view : null}
+        bracketOutlookEntries={bracketOutlookEntries}
+        showBracketOutlook={showBracketOutlook}
       />
     </PageContainer>
   );

@@ -13,7 +13,7 @@ import {
   buildPostLockNavPlan,
   isPostLockEngagementMode,
 } from "../../../../lib/account/postLockEngagement";
-import { leaderboardNavHrefForParticipantPool } from "../../../../lib/pool/leaderboardNavHref";
+import { resolveStandingsNav } from "../../../../lib/pool/leaderboardNavHref";
 import { fetchPoolHasAwardedLeaderboardPoints } from "../../../../lib/leaderboard/poolLeaderboardIsActive";
 import { filterActivityFeedForParticipantView } from "../../../../lib/poolActivity/activityFeedParticipantFilter";
 import { loadPoolActivityForViewer } from "../../../../lib/poolActivity/loadPoolActivityForViewer";
@@ -59,6 +59,7 @@ export default async function AccountActivityPage({ searchParams }: PageProps) {
   );
 
   let leaderboardHref: string | null = null;
+  let outlookHref: string | null = null;
   if (selectedPoolId && ctx.selectedId) {
     const { data: poolRow } = await supabase
       .from("pools")
@@ -74,13 +75,16 @@ export default async function AccountActivityPage({ searchParams }: PageProps) {
           hasAwardedPoints = false;
         }
       }
-      leaderboardHref = leaderboardNavHrefForParticipantPool({
+      const standingsNav = resolveStandingsNav({
         poolId: selectedPoolId,
         isPublic: Boolean(poolRow.is_public),
         participantId: ctx.selectedId,
         picksLocked: locked,
         hasAwardedPoints,
       });
+      leaderboardHref =
+        standingsNav.label === "Leaderboard" ? standingsNav.href : null;
+      outlookHref = standingsNav.label === "Outlook" ? standingsNav.href : null;
     }
   }
 
@@ -91,6 +95,7 @@ export default async function AccountActivityPage({ searchParams }: PageProps) {
           knockoutBracketPicksUnlocked: ctx.knockoutBracketPicksUnlocked,
           revealHref,
           leaderboardHref,
+          outlookHref,
           picksHref: `/account/picks?participant=${ctx.selectedId}`,
           activityHref: `/account/activity?participant=${ctx.selectedId}`,
         })

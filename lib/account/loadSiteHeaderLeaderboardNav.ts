@@ -5,11 +5,12 @@ import {
 } from "./resolveAccountParticipantId";
 import { fetchPoolHasAwardedLeaderboardPoints } from "../leaderboard/poolLeaderboardIsActive";
 import { poolLocked } from "../pools/poolLocked";
-import { leaderboardHrefForParticipantPool } from "../pool/publicLeaderboardHref";
+import { resolveStandingsNav, type StandingsNavLabel } from "../pool/leaderboardNavHref";
 
 export type SiteHeaderLeaderboardNav = {
   showLeaderboardNav: boolean;
   leaderboardHref: string | null;
+  standingsNavLabel: StandingsNavLabel | null;
 };
 
 type ParticipantPoolEmbed = {
@@ -47,7 +48,11 @@ export async function loadSiteHeaderLeaderboardNav(
     .order("created_at", { ascending: true });
 
   if (error || !rows?.length) {
-    return { showLeaderboardNav: false, leaderboardHref: null };
+    return {
+      showLeaderboardNav: false,
+      leaderboardHref: null,
+      standingsNavLabel: null,
+    };
   }
 
   const profiles: AccountParticipantProfile[] = rows.map((row) => {
@@ -66,14 +71,22 @@ export async function loadSiteHeaderLeaderboardNav(
   const defaultParticipantId = pickDefaultAccountParticipantId(profiles);
   const selected = rows.find((r) => r.id === defaultParticipantId) ?? rows[0];
   if (!selected) {
-    return { showLeaderboardNav: false, leaderboardHref: null };
+    return {
+      showLeaderboardNav: false,
+      leaderboardHref: null,
+      standingsNavLabel: null,
+    };
   }
 
   const poolRaw = selected.pools as ParticipantPoolEmbed | ParticipantPoolEmbed[] | null;
   const pool = Array.isArray(poolRaw) ? poolRaw[0] : poolRaw;
   const lockAt = pool?.lock_at ?? null;
   if (!poolLocked(lockAt)) {
-    return { showLeaderboardNav: false, leaderboardHref: null };
+    return {
+      showLeaderboardNav: false,
+      leaderboardHref: null,
+      standingsNavLabel: null,
+    };
   }
 
   let hasAwardedPoints = false;
@@ -82,18 +95,32 @@ export async function loadSiteHeaderLeaderboardNav(
       selected.pool_id as string,
     );
   } catch {
-    return { showLeaderboardNav: false, leaderboardHref: null };
+    return {
+      showLeaderboardNav: false,
+      leaderboardHref: null,
+      standingsNavLabel: null,
+    };
   }
 
-  if (!hasAwardedPoints) {
-    return { showLeaderboardNav: false, leaderboardHref: null };
-  }
-
-  const href = leaderboardHrefForParticipantPool({
+  const standingsNav = resolveStandingsNav({
     poolId: selected.pool_id as string,
     isPublic: Boolean(pool?.is_public),
     participantId: selected.id as string,
+    picksLocked: true,
+    hasAwardedPoints,
   });
 
-  return { showLeaderboardNav: true, leaderboardHref: href };
+  if (!standingsNav.href || !standingsNav.label) {
+    return {
+      showLeaderboardNav: false,
+      leaderboardHref: null,
+      standingsNavLabel: null,
+    };
+  }
+
+  return {
+    showLeaderboardNav: true,
+    leaderboardHref: standingsNav.href,
+    standingsNavLabel: standingsNav.label,
+  };
 }

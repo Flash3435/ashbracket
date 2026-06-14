@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
-import { leaderboardNavHrefForParticipantPool } from "@/lib/pool/leaderboardNavHref";
+import { resolveStandingsNav } from "@/lib/pool/leaderboardNavHref";
 import { fetchPoolHasAwardedLeaderboardPoints } from "@/lib/leaderboard/poolLeaderboardIsActive";
 import { poolLocked } from "../../lib/pools/poolLocked";
 import { loadPoolActivityForViewer } from "../../lib/poolActivity/loadPoolActivityForViewer";
@@ -41,6 +41,7 @@ export async function PoolRecentActivitySection({
   let locked = false;
   let revealHref: string | null = null;
   let leaderboardHref: string | null = null;
+  let outlookHref: string | null = null;
   try {
     const { data: poolRow } = await supabase
       .from("pools")
@@ -52,7 +53,7 @@ export async function PoolRecentActivitySection({
       locked && viewerParticipantId
         ? `/account/reveal?participant=${viewerParticipantId}`
         : null;
-    if (poolRow) {
+    if (poolRow && viewerParticipantId) {
       let hasAwardedPoints = false;
       if (locked) {
         try {
@@ -61,16 +62,16 @@ export async function PoolRecentActivitySection({
           hasAwardedPoints = false;
         }
       }
+      const standingsNav = resolveStandingsNav({
+        poolId,
+        isPublic: Boolean(poolRow.is_public),
+        participantId: viewerParticipantId,
+        picksLocked: locked,
+        hasAwardedPoints,
+      });
       leaderboardHref =
-        viewerParticipantId
-          ? leaderboardNavHrefForParticipantPool({
-              poolId,
-              isPublic: Boolean(poolRow.is_public),
-              participantId: viewerParticipantId,
-              picksLocked: locked,
-              hasAwardedPoints,
-            })
-          : null;
+        standingsNav.label === "Leaderboard" ? standingsNav.href : null;
+      outlookHref = standingsNav.label === "Outlook" ? standingsNav.href : null;
     }
     activity = await loadPoolActivityForViewer(supabase, poolId, {
       ensureDailyRecap: true,
@@ -121,7 +122,7 @@ export async function PoolRecentActivitySection({
           showAnnouncementComposer={showAnnouncementComposer}
           poolLocked={locked}
           revealHref={revealHref}
-          leaderboardHref={leaderboardHref}
+          leaderboardHref={leaderboardHref ?? outlookHref}
         />
       )}
     </section>

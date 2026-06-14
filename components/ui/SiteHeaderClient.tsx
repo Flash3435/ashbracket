@@ -42,6 +42,7 @@ export type SiteHeaderClientProps = {
   showActivityNav?: boolean;
   showLeaderboardNav?: boolean;
   leaderboardHref?: string | null;
+  standingsNavLabel?: "Leaderboard" | "Outlook" | null;
   /** Self-serve organizer entry (signed in, not yet a pool or global admin). */
   showCreatePoolNav?: boolean;
 };
@@ -52,6 +53,7 @@ export function SiteHeaderClient({
   showActivityNav = false,
   showLeaderboardNav = false,
   leaderboardHref = null,
+  standingsNavLabel = null,
   showCreatePoolNav = false,
 }: SiteHeaderClientProps) {
   const pathname = usePathname();
@@ -132,7 +134,7 @@ export function SiteHeaderClient({
                   pathname={pathname}
                   match="prefix"
                 >
-                  Leaderboard
+                  {standingsNavLabel ?? "Leaderboard"}
                 </TextNavLink>
               ) : null}
               {showActivityNav ? (

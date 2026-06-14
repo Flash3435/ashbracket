@@ -6,7 +6,7 @@ import {
   poolLeaderboardIsActiveFromRows,
   LEADERBOARD_PENDING_NAV_NOTE,
 } from "../leaderboard/poolLeaderboardIsActive";
-import { leaderboardNavHrefForParticipantPool } from "../pool/leaderboardNavHref";
+import { leaderboardNavHrefForParticipantPool, resolveStandingsNav } from "../pool/leaderboardNavHref";
 import {
   leaderboardHrefForParticipantPool,
   publicLeaderboardHrefForPool,
@@ -85,6 +85,26 @@ const allZeroRows = buildPoolStandingsFromLedger({
 });
 t(!poolLeaderboardIsActiveFromRows(allZeroRows), "all-zero standings are inactive");
 t(
+  resolveStandingsNav({
+    poolId: "p1",
+    isPublic: true,
+    participantId: "a",
+    picksLocked: true,
+    hasAwardedPoints: false,
+  }).label === "Outlook",
+  "nav label is Outlook before awarded points",
+);
+t(
+  resolveStandingsNav({
+    poolId: "p1",
+    isPublic: false,
+    participantId: "a",
+    picksLocked: true,
+    hasAwardedPoints: true,
+  }).label === "Leaderboard",
+  "nav label is Leaderboard after awarded points",
+);
+t(
   leaderboardNavHrefForParticipantPool({
     poolId: "p1",
     isPublic: true,
@@ -92,7 +112,7 @@ t(
     picksLocked: true,
     hasAwardedPoints: false,
   }) === null,
-  "header-style nav hidden when locked and no awarded points",
+  "legacy leaderboard href hidden when no awarded points",
 );
 t(
   leaderboardNavHrefForParticipantPool({
