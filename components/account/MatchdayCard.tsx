@@ -17,6 +17,7 @@ type Props = {
   picksIncomplete: boolean;
   activityHref: string;
   leaderboardHref: string | null;
+  leaderboardPendingNote?: string | null;
   scheduleHref?: string;
   recentScoreImpact: RecentScoreImpactItem[];
   initialSlots?: KnockoutPickSlotDraft[];
@@ -120,6 +121,7 @@ export function MatchdayCard({
   picksIncomplete,
   activityHref,
   leaderboardHref,
+  leaderboardPendingNote = null,
   scheduleHref = "/tournament",
   recentScoreImpact,
   initialSlots,
@@ -206,6 +208,10 @@ export function MatchdayCard({
             );
           })}
         </ul>
+      ) : null}
+
+      {leaderboardPendingNote ? (
+        <p className="mt-3 text-xs text-ash-muted">{leaderboardPendingNote}</p>
       ) : null}
 
       <RecentScoreImpactBlock items={recentScoreImpact} leaderboardHref={leaderboardHref} />

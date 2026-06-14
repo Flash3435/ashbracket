@@ -3,6 +3,7 @@ import {
   pickDefaultAccountParticipantId,
   type AccountParticipantProfile,
 } from "./resolveAccountParticipantId";
+import { fetchPoolHasAwardedLeaderboardPoints } from "../leaderboard/poolLeaderboardIsActive";
 import { poolLocked } from "../pools/poolLocked";
 import { leaderboardHrefForParticipantPool } from "../pool/publicLeaderboardHref";
 
@@ -72,6 +73,19 @@ export async function loadSiteHeaderLeaderboardNav(
   const pool = Array.isArray(poolRaw) ? poolRaw[0] : poolRaw;
   const lockAt = pool?.lock_at ?? null;
   if (!poolLocked(lockAt)) {
+    return { showLeaderboardNav: false, leaderboardHref: null };
+  }
+
+  let hasAwardedPoints = false;
+  try {
+    hasAwardedPoints = await fetchPoolHasAwardedLeaderboardPoints(
+      selected.pool_id as string,
+    );
+  } catch {
+    return { showLeaderboardNav: false, leaderboardHref: null };
+  }
+
+  if (!hasAwardedPoints) {
     return { showLeaderboardNav: false, leaderboardHref: null };
   }
 

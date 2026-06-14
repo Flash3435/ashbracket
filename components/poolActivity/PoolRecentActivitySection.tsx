@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
-import { leaderboardHrefForParticipantPool } from "@/lib/pool/publicLeaderboardHref";
+import { leaderboardNavHrefForParticipantPool } from "@/lib/pool/leaderboardNavHref";
+import { fetchPoolHasAwardedLeaderboardPoints } from "@/lib/leaderboard/poolLeaderboardIsActive";
 import { poolLocked } from "../../lib/pools/poolLocked";
 import { loadPoolActivityForViewer } from "../../lib/poolActivity/loadPoolActivityForViewer";
 import { PoolActivityFeedPanel } from "./PoolActivityFeedPanel";
@@ -52,13 +53,24 @@ export async function PoolRecentActivitySection({
         ? `/account/reveal?participant=${viewerParticipantId}`
         : null;
     if (poolRow) {
-      leaderboardHref = viewerParticipantId
-        ? leaderboardHrefForParticipantPool({
-            poolId,
-            isPublic: Boolean(poolRow.is_public),
-            participantId: viewerParticipantId,
-          })
-        : null;
+      let hasAwardedPoints = false;
+      if (locked) {
+        try {
+          hasAwardedPoints = await fetchPoolHasAwardedLeaderboardPoints(poolId);
+        } catch {
+          hasAwardedPoints = false;
+        }
+      }
+      leaderboardHref =
+        viewerParticipantId
+          ? leaderboardNavHrefForParticipantPool({
+              poolId,
+              isPublic: Boolean(poolRow.is_public),
+              participantId: viewerParticipantId,
+              picksLocked: locked,
+              hasAwardedPoints,
+            })
+          : null;
     }
     activity = await loadPoolActivityForViewer(supabase, poolId, {
       ensureDailyRecap: true,

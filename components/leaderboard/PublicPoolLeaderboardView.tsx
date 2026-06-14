@@ -14,7 +14,9 @@ import { PoolPublicStatsSummary } from "../pool/PoolPublicStatsSummary";
 import { ViewerYouChip } from "../ui/ViewerYouChip";
 import { formatUsdCents } from "@/lib/format/usdCents";
 import { LEADERBOARD_AWARDED_POINTS_NOTE } from "@/lib/leaderboard/buildPoolStandingsFromLedger";
+import { poolLeaderboardIsActiveFromRows } from "@/lib/leaderboard/poolLeaderboardIsActive";
 import { LeaderboardPostLockIntro } from "./LeaderboardPostLockIntro";
+import { LeaderboardWaitingState } from "./LeaderboardWaitingState";
 import { TournamentStatLeadersPanel } from "@/components/tournament/TournamentStatLeadersPanel";
 import type { TournamentStatLeadersView } from "@/lib/tournament/matchTeamStats/buildTournamentStatLeadersView";
 
@@ -161,10 +163,27 @@ export function PublicPoolLeaderboardView({
 
   const presentation = buildPublicPoolLeaderboardPresentation(rows);
   const cards = poolLeaderboardSummaryCards(presentation, stats);
+  const leaderboardActive = poolLeaderboardIsActiveFromRows(rows);
   const viewerComparison = buildViewerLeaderComparison(rows, viewerParticipantId);
   const hasViewerRow =
     viewerParticipantId != null &&
     presentation.rows.some((r) => r.participantId === viewerParticipantId);
+
+
+  if (presentation.participantCount > 0 && !leaderboardActive) {
+    return (
+      <div className="space-y-8">
+        {picksLocked ? (
+          <LeaderboardPostLockIntro revealHref={revealHref} />
+        ) : null}
+        <LeaderboardWaitingState
+          poolName={poolName}
+          entryCount={presentation.participantCount}
+          revealHref={revealHref}
+        />
+      </div>
+    );
+  }
 
   if (presentation.participantCount === 0) {
     return (

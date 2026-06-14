@@ -3,6 +3,11 @@ import {
   LEADERBOARD_AWARDED_POINTS_NOTE,
 } from "../leaderboard/buildPoolStandingsFromLedger";
 import {
+  poolLeaderboardIsActiveFromRows,
+  LEADERBOARD_PENDING_NAV_NOTE,
+} from "../leaderboard/poolLeaderboardIsActive";
+import { leaderboardNavHrefForParticipantPool } from "../pool/leaderboardNavHref";
+import {
   leaderboardHrefForParticipantPool,
   publicLeaderboardHrefForPool,
 } from "../pool/publicLeaderboardHref";
@@ -68,6 +73,41 @@ t(rows[0]?.rank === 1 && rows[1]?.rank === 2, "assigns ranks from awarded points
 t(LEADERBOARD_AWARDED_POINTS_NOTE.includes("points awarded"), "helper copy mentions awarded points");
 
 t(typeof loadSiteHeaderLeaderboardNav === "function", "site header loader exported");
+
+const allZeroRows = buildPoolStandingsFromLedger({
+  poolId: "p1",
+  poolName: "Test Pool",
+  participants: [
+    { id: "a", display_name: "Alice" },
+    { id: "b", display_name: "Bob" },
+  ],
+  ledgerLines: [],
+});
+t(!poolLeaderboardIsActiveFromRows(allZeroRows), "all-zero standings are inactive");
+t(
+  leaderboardNavHrefForParticipantPool({
+    poolId: "p1",
+    isPublic: true,
+    participantId: "a",
+    picksLocked: true,
+    hasAwardedPoints: false,
+  }) === null,
+  "header-style nav hidden when locked and no awarded points",
+);
+t(
+  leaderboardNavHrefForParticipantPool({
+    poolId: "p1",
+    isPublic: false,
+    participantId: "a",
+    picksLocked: true,
+    hasAwardedPoints: true,
+  })?.includes("/account/leaderboard") === true,
+  "private nav href when locked and points awarded",
+);
+t(
+  LEADERBOARD_PENDING_NAV_NOTE.includes("first official pool points"),
+  "pending nav note explains when leaderboard appears",
+);
 
 if (failed > 0) process.exit(1);
 console.log("leaderboardNav.selftest: ok");

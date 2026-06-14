@@ -38,7 +38,8 @@ import {
 import { loadPoolReveal } from "../../../lib/account/loadPoolReveal";
 import { isPastAshbracket2026PoolLockDeadline } from "../../../lib/account/resolveAccountParticipantId";
 import { isGlobalAdmin } from "@/lib/auth/permissions";
-import { leaderboardHrefForParticipantPool } from "../../../lib/pool/publicLeaderboardHref";
+import { leaderboardNavHrefForParticipantPool } from "../../../lib/pool/leaderboardNavHref";
+import { fetchPoolHasAwardedLeaderboardPoints, LEADERBOARD_PENDING_NAV_NOTE } from "../../../lib/leaderboard/poolLeaderboardIsActive";
 import { fetchPublicTournamentProgress } from "../../../lib/tournament/fetchPublicTournamentProgress";
 import type { TournamentMatchPublicRow } from "../../../types/tournamentPublic";
 import { TournamentStatLeadersPanel } from "@/components/tournament/TournamentStatLeadersPanel";
@@ -239,14 +240,29 @@ export default async function AccountPage({ searchParams }: PageProps) {
   const selectedListEntry = picksCtx?.selectedPoolId
     ? list.find((p) => p.pool_id === picksCtx.selectedPoolId)
     : null;
+  let hasAwardedLeaderboardPoints = false;
+  if (locked && picksCtx?.selectedPoolId) {
+    try {
+      hasAwardedLeaderboardPoints = await fetchPoolHasAwardedLeaderboardPoints(
+        picksCtx.selectedPoolId,
+      );
+    } catch {
+      hasAwardedLeaderboardPoints = false;
+    }
+  }
+
   const leaderboardHref =
     selectedListEntry && picksCtx?.selectedParticipant?.id
-      ? leaderboardHrefForParticipantPool({
+      ? leaderboardNavHrefForParticipantPool({
           poolId: selectedListEntry.pool_id,
           isPublic: selectedListEntry.pool_is_public,
           participantId: picksCtx.selectedParticipant.id,
+          picksLocked: locked,
+          hasAwardedPoints: hasAwardedLeaderboardPoints,
         })
       : null;
+  const leaderboardPendingNote =
+    locked && !hasAwardedLeaderboardPoints ? LEADERBOARD_PENDING_NAV_NOTE : null;
   const activityHref = picksCtx?.selectedParticipant?.id
     ? `/account/activity?participant=${picksCtx.selectedParticipant.id}`
     : "/account/activity";
@@ -518,6 +534,7 @@ export default async function AccountPage({ searchParams }: PageProps) {
                   picksIncomplete={locked && !viewerPicksComplete}
                   activityHref={activityHref}
                   leaderboardHref={leaderboardHref}
+                  leaderboardPendingNote={leaderboardPendingNote}
                   recentScoreImpact={recentScoreImpact}
                   initialSlots={picksCtx.initialSlots}
                   teams={picksCtx.teams}

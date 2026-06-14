@@ -13,7 +13,8 @@ import {
   buildPostLockNavPlan,
   isPostLockEngagementMode,
 } from "../../../../lib/account/postLockEngagement";
-import { leaderboardHrefForParticipantPool } from "../../../../lib/pool/publicLeaderboardHref";
+import { leaderboardNavHrefForParticipantPool } from "../../../../lib/pool/leaderboardNavHref";
+import { fetchPoolHasAwardedLeaderboardPoints } from "../../../../lib/leaderboard/poolLeaderboardIsActive";
 import { filterActivityFeedForParticipantView } from "../../../../lib/poolActivity/activityFeedParticipantFilter";
 import { loadPoolActivityForViewer } from "../../../../lib/poolActivity/loadPoolActivityForViewer";
 import Link from "next/link";
@@ -65,10 +66,20 @@ export default async function AccountActivityPage({ searchParams }: PageProps) {
       .eq("id", selectedPoolId)
       .maybeSingle();
     if (poolRow) {
-      leaderboardHref = leaderboardHrefForParticipantPool({
+      let hasAwardedPoints = false;
+      if (locked) {
+        try {
+          hasAwardedPoints = await fetchPoolHasAwardedLeaderboardPoints(selectedPoolId);
+        } catch {
+          hasAwardedPoints = false;
+        }
+      }
+      leaderboardHref = leaderboardNavHrefForParticipantPool({
         poolId: selectedPoolId,
         isPublic: Boolean(poolRow.is_public),
         participantId: ctx.selectedId,
+        picksLocked: locked,
+        hasAwardedPoints,
       });
     }
   }
