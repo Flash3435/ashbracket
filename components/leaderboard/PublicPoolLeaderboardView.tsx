@@ -18,6 +18,7 @@ import { poolLeaderboardIsActiveFromRows } from "@/lib/leaderboard/poolLeaderboa
 import { LeaderboardPostLockIntro } from "./LeaderboardPostLockIntro";
 import { BracketOutlookView } from "./BracketOutlookView";
 import type { ClientSafeBracketOutlookEntry } from "@/lib/leaderboard/buildBracketOutlook";
+import type { BracketOutlookDistributionSummary } from "@/lib/leaderboard/bracketOutlookSeparation";
 import { TournamentStatLeadersPanel } from "@/components/tournament/TournamentStatLeadersPanel";
 import type { TournamentStatLeadersView } from "@/lib/tournament/matchTeamStats/buildTournamentStatLeadersView";
 
@@ -139,6 +140,8 @@ type Props = {
   /** Pre-points Bracket Outlook rows (display names + counts only). */
   bracketOutlookEntries?: ClientSafeBracketOutlookEntry[] | null;
   showBracketOutlook?: boolean;
+  outlookDistribution?: BracketOutlookDistributionSummary | null;
+  decisiveResultCount?: number;
 };
 
 export function PublicPoolLeaderboardView({
@@ -155,6 +158,8 @@ export function PublicPoolLeaderboardView({
  bonusWatchView = null,
   bracketOutlookEntries = null,
   showBracketOutlook = false,
+  outlookDistribution = null,
+  decisiveResultCount = 0,
 }: Props) {
   if (leaderboardError) {
     return (
@@ -186,8 +191,10 @@ export function PublicPoolLeaderboardView({
           poolName={poolName}
           entries={bracketOutlookEntries ?? []}
           entryCount={presentation.participantCount}
+          decisiveResultCount={decisiveResultCount}
           revealHref={revealHref}
           showOutlook={showBracketOutlook && (bracketOutlookEntries?.length ?? 0) > 0}
+          distribution={outlookDistribution}
         />
       </div>
     );

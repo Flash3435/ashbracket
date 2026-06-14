@@ -7,7 +7,7 @@ import { PageTitle } from "@/components/ui/PageTitle";
 import { loadAccountKnockoutSelection, poolLocked } from "@/lib/account/loadAccountKnockoutSelection";
 import { fetchMemberPoolStandings } from "@/lib/leaderboard/fetchMemberPoolStandings";
 import { fetchBracketOutlookForPool } from "@/lib/leaderboard/fetchBracketOutlookForPool";
-import { shouldShowBracketOutlook } from "@/lib/leaderboard/bracketOutlookVisibility";
+import { STANDINGS_WARMING_UP_HEADLINE } from "@/lib/leaderboard/bracketOutlookSeparation";
 import {
   BRACKET_OUTLOOK_HEADLINE,
   toClientSafeBracketOutlookEntries,
@@ -98,22 +98,22 @@ export default async function AccountLeaderboardPage({ searchParams }: PageProps
     viewerUserId: user.id,
   });
   const showBracketOutlook =
-    outlookRes.ok &&
-    shouldShowBracketOutlook({
-      picksLocked: outlookRes.picksLocked,
-      hasAwardedPoints: outlookRes.hasAwardedPoints,
-      outlook: outlookRes.outlook,
-      completedMatchCount: outlookRes.completedMatchCount,
-    });
+    outlookRes.ok && outlookRes.visibility.showOutlook;
   const bracketOutlookEntries =
     showBracketOutlook && outlookRes.ok && outlookRes.outlook
       ? toClientSafeBracketOutlookEntries(outlookRes.outlook)
       : null;
+  const outlookDistribution =
+    outlookRes.ok ? outlookRes.visibility.distribution : null;
+  const decisiveResultCount =
+    outlookRes.ok ? outlookRes.completedMatchCount : 0;
 
-  const pageTitle = showBracketOutlook ? BRACKET_OUTLOOK_HEADLINE : "Leaderboard";
+  const pageTitle = showBracketOutlook
+    ? BRACKET_OUTLOOK_HEADLINE
+    : STANDINGS_WARMING_UP_HEADLINE;
   const pageDescription = showBracketOutlook
     ? "Unofficial early read before official pool points are awarded."
-    : LEADERBOARD_AWARDED_POINTS_NOTE;
+    : "Official points have not landed yet. Standings will open up once there is a meaningful race.";
 
   const revealHref = `/account/reveal?participant=${ctx.selectedId}`;
   const activityHref = `/account/activity?participant=${ctx.selectedId}`;
@@ -179,6 +179,8 @@ export default async function AccountLeaderboardPage({ searchParams }: PageProps
           audience="member"
           bracketOutlookEntries={bracketOutlookEntries}
           showBracketOutlook={showBracketOutlook}
+          outlookDistribution={outlookDistribution}
+          decisiveResultCount={decisiveResultCount}
         />
       )}
     </PageContainer>

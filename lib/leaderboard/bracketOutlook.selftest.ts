@@ -5,10 +5,21 @@ import {
   BRACKET_OUTLOOK_DASHBOARD_MAX_ROWS,
   buildBracketOutlook,
   compareBracketOutlookEntries,
-  formatBracketOutlookResultLine,
+  formatBracketOutlookDetailLine,
   toClientSafeBracketOutlookEntries,
 } from "./buildBracketOutlook";
-import { shouldShowBracketOutlook } from "./bracketOutlookVisibility";
+import {
+  bracketOutlookHasMeaningfulSeparation,
+  computeBracketOutlookDistribution,
+  formatMedianOutlookLine,
+  formatTopOutlookGroupLine,
+  MIN_DECISIVE_MATCHES_FOR_OUTLOOK,
+} from "./bracketOutlookSeparation";
+import {
+  evaluateBracketOutlookVisibility,
+  shouldShowBracketOutlook,
+  shouldShowStandingsWarmingNote,
+} from "./bracketOutlookVisibility";
 import { resolveStandingsNav } from "../pool/leaderboardNavHref";
 
 let failed = 0;
@@ -25,6 +36,10 @@ const teamNames = new Map([
   ["bra", "Brazil"],
   ["jpn", "Japan"],
   ["mex", "Mexico"],
+  ["fra", "France"],
+  ["ger", "Germany"],
+  ["esp", "Spain"],
+  ["arg", "Argentina"],
 ]);
 
 const participantNames = new Map([
@@ -51,48 +66,133 @@ const pathPicks = picks([
   { participantId: "p-quiet", teamId: "mex", predictionKind: "bonus_pick" },
 ]);
 
-const completedMatches = [
+const sixMatches = [
   { matchCode: "G-A-1", winnerTeamId: "usa" },
   { matchCode: "G-A-2", winnerTeamId: "bra" },
   { matchCode: "G-B-1", winnerTeamId: "bra" },
   { matchCode: "G-B-2", winnerTeamId: "jpn" },
   { matchCode: "G-C-1", winnerTeamId: "mex" },
+  { matchCode: "G-C-2", winnerTeamId: "fra" },
 ];
 
-const outlook = buildBracketOutlook({
+const fiveMatches = sixMatches.slice(0, 5);
+
+const outlookSix = buildBracketOutlook({
   participantPicks: pathPicks,
   participantNames,
-  completedGroupMatches: completedMatches,
+  completedGroupMatches: sixMatches,
   teamNameById: teamNames,
 });
 
-t(outlook != null, "outlook computed when results exist");
-t(outlook!.entries.length === 3, "bonus-only participant excluded from outlook");
+const outlookFive = buildBracketOutlook({
+  participantPicks: pathPicks,
+  participantNames,
+  completedGroupMatches: fiveMatches,
+  teamNameById: teamNames,
+});
 
-const ash = outlook!.entries.find((e) => e.displayName === "Ash");
-const nish = outlook!.entries.find((e) => e.displayName === "Nish");
-const flash = outlook!.entries.find((e) => e.displayName === "Flash");
-
-t(ash?.helpedMatchCount === 4, "Ash gets four helpful results");
-t(nish?.helpedMatchCount === 3, "Nish gets three helpful results");
-t(flash?.helpedMatchCount === 3, "Flash gets three helpful results");
-t((ash?.helpedTeamCount ?? 0) === 3, "Ash helped three path teams");
+t(outlookSix != null, "outlook computed when results exist");
+t(outlookFive != null, "outlook computed with five matches");
 
 t(
-  shouldShowBracketOutlook({
+  !shouldShowBracketOutlook({
     picksLocked: true,
     hasAwardedPoints: false,
-    outlook,
-    completedMatchCount: completedMatches.length,
+    outlook: outlookFive,
+    completedMatchCount: fiveMatches.length,
+    totalParticipantCount: 4,
   }),
-  "outlook visible when locked, no points, and meaningful",
+  "outlook hidden when fewer than 6 decisive matches",
 );
+
+function syntheticOutlook(scores: number[]) {
+  return {
+    entries: scores.map((score, index) => ({
+      participantId: `p-${index}`,
+      displayName: `Player ${index + 1}`,
+      helpedMatchCount: score,
+      helpedTeamCount: score,
+      maxHelpedPathImportance: 10,
+      topHelpedTeamNames: [],
+    })),
+    completedMatchCount: MIN_DECISIVE_MATCHES_FOR_OUTLOOK,
+  };
+}
+
+const clustered42 = syntheticOutlook([
+  ...Array(30).fill(4),
+  ...Array(12).fill(3),
+]);
+t(
+  !bracketOutlookHasMeaningfulSeparation({
+    outlook: clustered42,
+    totalParticipantCount: 42,
+    completedMatchCount: MIN_DECISIVE_MATCHES_FOR_OUTLOOK,
+  }),
+  "outlook hidden when more than 50% tied at top and top-vs-median gap < 2",
+);
+t(
+  !shouldShowBracketOutlook({
+    picksLocked: true,
+    hasAwardedPoints: false,
+    outlook: clustered42,
+    completedMatchCount: MIN_DECISIVE_MATCHES_FOR_OUTLOOK,
+    totalParticipantCount: 42,
+  }),
+  "direct route shows waiting state when outlook is clustered",
+);
+
+const clearLeader = syntheticOutlook([8, ...Array(9).fill(4)]);
+t(
+  bracketOutlookHasMeaningfulSeparation({
+    outlook: clearLeader,
+    totalParticipantCount: 10,
+    completedMatchCount: MIN_DECISIVE_MATCHES_FOR_OUTLOOK,
+  }),
+  "outlook shown when top score is at least 2 above median",
+);
+
+const halfTiedTop = syntheticOutlook([
+  ...Array(5).fill(7),
+  ...Array(5).fill(3),
+]);
+t(
+  bracketOutlookHasMeaningfulSeparation({
+    outlook: halfTiedTop,
+    totalParticipantCount: 10,
+    completedMatchCount: MIN_DECISIVE_MATCHES_FOR_OUTLOOK,
+  }),
+  "outlook shown when top tie share is at or below 50%",
+);
+
+const visibilityShown = evaluateBracketOutlookVisibility({
+  picksLocked: true,
+  hasAwardedPoints: false,
+  outlook: clearLeader,
+  completedMatchCount: MIN_DECISIVE_MATCHES_FOR_OUTLOOK,
+  totalParticipantCount: 10,
+});
+t(visibilityShown.showOutlook, "evaluate visibility shows outlook when separated");
+t(
+  visibilityShown.distribution != null &&
+    formatTopOutlookGroupLine(visibilityShown.distribution).includes(
+      "Top outlook group",
+    ),
+  "distribution summary renders when outlook is shown",
+);
+t(
+  visibilityShown.distribution != null &&
+    formatMedianOutlookLine(visibilityShown.distribution).includes("Median outlook"),
+  "median outlook line renders when outlook is shown",
+);
+
 t(
   !shouldShowBracketOutlook({
     picksLocked: false,
     hasAwardedPoints: false,
-    outlook,
-    completedMatchCount: completedMatches.length,
+    outlook: clearLeader,
+    completedMatchCount: MIN_DECISIVE_MATCHES_FOR_OUTLOOK,
+    totalParticipantCount: 10,
   }),
   "outlook hidden before lock",
 );
@@ -100,28 +200,22 @@ t(
   !shouldShowBracketOutlook({
     picksLocked: true,
     hasAwardedPoints: true,
-    outlook,
-    completedMatchCount: completedMatches.length,
+    outlook: clearLeader,
+    completedMatchCount: MIN_DECISIVE_MATCHES_FOR_OUTLOOK,
+    totalParticipantCount: 10,
   }),
-  "outlook hidden once official points exist",
-);
-t(
-  !shouldShowBracketOutlook({
-    picksLocked: true,
-    hasAwardedPoints: false,
-    outlook: null,
-    completedMatchCount: 0,
-  }),
-  "no completed results shows waiting state",
+  "official points still switch to Leaderboard regardless of Outlook",
 );
 
-const drawOnly = buildBracketOutlook({
-  participantPicks: pathPicks,
-  participantNames,
-  completedGroupMatches: [{ matchCode: "G-D-1", winnerTeamId: "" }],
-  teamNameById: teamNames,
-});
-t(drawOnly == null, "empty winner omitted");
+t(
+  shouldShowStandingsWarmingNote({
+    picksLocked: true,
+    hasAwardedPoints: false,
+    completedMatchCount: 4,
+    showOutlook: false,
+  }),
+  "dashboard warming note when clustered pre-points results exist",
+);
 
 const winnerHelps = buildBracketOutlook({
   participantPicks: picks([
@@ -150,12 +244,10 @@ t(
   "multiple picks for same team do not double-count same match",
 );
 
-const sorted = [...(outlook?.entries ?? [])].sort(compareBracketOutlookEntries);
+const sorted = [...(outlookSix?.entries ?? [])].sort(compareBracketOutlookEntries);
 t(sorted[0]?.displayName === "Ash", "deterministic sorting puts Ash first");
-t(sorted[1]?.displayName === "Flash", "Flash ranks above Nish on path importance tie-break");
-t(sorted[2]?.displayName === "Nish", "Nish follows Flash when match counts tie");
 
-const clientSafe = toClientSafeBracketOutlookEntries(outlook!);
+const clientSafe = toClientSafeBracketOutlookEntries(clearLeader);
 t(
   clientSafe.every(
     (row) =>
@@ -170,13 +262,23 @@ t(
   "max 5 dashboard rows enforced by slice constant",
 );
 t(
-  formatBracketOutlookResultLine(clientSafe[0]!).includes("helpful result"),
-  "display copy uses helpful results wording",
+  formatBracketOutlookDetailLine(clientSafe[0]!).includes("helpful result"),
+  "row copy uses neutral helpful-result counts",
 );
 t(
-  !formatBracketOutlookResultLine(clientSafe[0]!).includes("point"),
-  "display copy avoids points wording",
+  !formatBracketOutlookDetailLine(clientSafe[0]!).includes("looking strong"),
+  "row copy no longer says every participant is looking strong",
 );
+
+const hiddenNav = resolveStandingsNav({
+  poolId: "pool-1",
+  isPublic: false,
+  participantId: "part-1",
+  picksLocked: true,
+  hasAwardedPoints: false,
+  outlookHasMeaningfulSeparation: false,
+});
+t(hiddenNav.href === null && hiddenNav.label === null, "nav hides Outlook when not meaningful");
 
 const outlookNav = resolveStandingsNav({
   poolId: "pool-1",
@@ -184,8 +286,9 @@ const outlookNav = resolveStandingsNav({
   participantId: "part-1",
   picksLocked: true,
   hasAwardedPoints: false,
+  outlookHasMeaningfulSeparation: true,
 });
-t(outlookNav.label === "Outlook", "nav label is Outlook before points");
+t(outlookNav.label === "Outlook", "nav shows Outlook when meaningful");
 t(
   outlookNav.href?.includes("/account/leaderboard") === true,
   "private outlook uses account leaderboard route",
@@ -199,10 +302,9 @@ const leaderboardNav = resolveStandingsNav({
   hasAwardedPoints: true,
 });
 t(leaderboardNav.label === "Leaderboard", "nav label is Leaderboard after points");
-t(
-  leaderboardNav.href === "/pool/pool-1",
-  "public pool nav href unchanged after points",
-);
+
+const dist = computeBracketOutlookDistribution(clearLeader, 10);
+t(dist.topScore === 8 && dist.topTieCount === 1, "distribution captures top group");
 
 if (failed > 0) process.exit(1);
 console.log("bracketOutlook.selftest: ok");

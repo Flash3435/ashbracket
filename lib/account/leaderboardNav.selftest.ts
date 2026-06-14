@@ -91,8 +91,20 @@ t(
     participantId: "a",
     picksLocked: true,
     hasAwardedPoints: false,
+    outlookHasMeaningfulSeparation: true,
   }).label === "Outlook",
-  "nav label is Outlook before awarded points",
+  "nav label is Outlook before awarded points when separated",
+);
+t(
+  resolveStandingsNav({
+    poolId: "p1",
+    isPublic: true,
+    participantId: "a",
+    picksLocked: true,
+    hasAwardedPoints: false,
+    outlookHasMeaningfulSeparation: false,
+  }).label === null,
+  "nav hidden before awarded points when outlook is clustered",
 );
 t(
   resolveStandingsNav({

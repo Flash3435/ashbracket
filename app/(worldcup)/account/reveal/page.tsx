@@ -13,6 +13,7 @@ import {
 } from "../../../../lib/account/loadAccountKnockoutSelection";
 import { resolveStandingsNav } from "../../../../lib/pool/leaderboardNavHref";
 import { fetchPoolHasAwardedLeaderboardPoints } from "../../../../lib/leaderboard/poolLeaderboardIsActive";
+import { fetchBracketOutlookForPool } from "../../../../lib/leaderboard/fetchBracketOutlookForPool";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 
@@ -78,11 +79,24 @@ export default async function AccountRevealPage({ searchParams }: PageProps) {
       .maybeSingle();
     if (poolRow) {
       let hasAwardedPoints = false;
+      let outlookHasMeaningfulSeparation = false;
       if (locked) {
         try {
           hasAwardedPoints = await fetchPoolHasAwardedLeaderboardPoints(selectedPoolId);
         } catch {
           hasAwardedPoints = false;
+        }
+        if (!hasAwardedPoints) {
+          try {
+            const outlookRes = await fetchBracketOutlookForPool(selectedPoolId, {
+              supabase,
+              viewerUserId: user.id,
+            });
+            outlookHasMeaningfulSeparation =
+              outlookRes.ok && outlookRes.visibility.showOutlook;
+          } catch {
+            outlookHasMeaningfulSeparation = false;
+          }
         }
       }
       const standingsNav = resolveStandingsNav({
@@ -91,6 +105,7 @@ export default async function AccountRevealPage({ searchParams }: PageProps) {
         participantId: ctx.selectedId,
         picksLocked: locked,
         hasAwardedPoints,
+        outlookHasMeaningfulSeparation,
       });
       leaderboardHref =
         standingsNav.label === "Leaderboard" ? standingsNav.href : null;

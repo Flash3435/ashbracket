@@ -19,6 +19,8 @@ type Props = {
   leaderboardHref: string | null;
   outlookHref?: string | null;
   leaderboardPendingNote?: string | null;
+  standingsWarmingHeadline?: string | null;
+  standingsWarmingNote?: string | null;
   scheduleHref?: string;
   recentScoreImpact: RecentScoreImpactItem[];
   initialSlots?: KnockoutPickSlotDraft[];
@@ -124,6 +126,8 @@ export function MatchdayCard({
   leaderboardHref,
   outlookHref = null,
   leaderboardPendingNote = null,
+  standingsWarmingHeadline = null,
+  standingsWarmingNote = null,
   scheduleHref = "/tournament",
   recentScoreImpact,
   initialSlots,
@@ -214,6 +218,17 @@ export function MatchdayCard({
 
       {leaderboardPendingNote ? (
         <p className="mt-3 text-xs text-ash-muted">{leaderboardPendingNote}</p>
+      ) : null}
+
+      {standingsWarmingNote ? (
+        <div className="mt-3 rounded-md border border-amber-700/30 bg-amber-950/20 px-3 py-2.5">
+          {standingsWarmingHeadline ? (
+            <p className="text-sm font-medium text-ash-text">{standingsWarmingHeadline}</p>
+          ) : null}
+          <p className="mt-1 text-xs leading-relaxed text-ash-muted">
+            {standingsWarmingNote}
+          </p>
+        </div>
       ) : null}
 
       <RecentScoreImpactBlock items={recentScoreImpact} leaderboardHref={leaderboardHref} />

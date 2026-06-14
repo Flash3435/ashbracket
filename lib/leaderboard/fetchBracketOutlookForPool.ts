@@ -12,15 +12,21 @@ import {
 } from "./buildBracketOutlook";
 import { loadCompletedGroupMatchesForOutlook } from "./loadCompletedGroupMatchesForOutlook";
 import { fetchPoolHasAwardedLeaderboardPoints } from "./poolLeaderboardIsActive";
+import {
+  evaluateBracketOutlookVisibility,
+  type BracketOutlookVisibilityResult,
+} from "./bracketOutlookVisibility";
 
 export type FetchBracketOutlookResult =
   | {
       ok: true;
       outlook: BracketOutlookResult | null;
       completedMatchCount: number;
+      totalParticipantCount: number;
       picksLocked: boolean;
       hasAwardedPoints: boolean;
       poolName: string;
+      visibility: BracketOutlookVisibilityResult;
     }
   | { ok: false; error: string };
 
@@ -68,9 +74,11 @@ export async function fetchBracketOutlookForPool(
       ok: true,
       outlook: null,
       completedMatchCount: 0,
+      totalParticipantCount: 0,
       picksLocked: false,
       hasAwardedPoints: false,
       poolName: String(pool.name ?? "").trim() || "Pool",
+      visibility: { showOutlook: false, distribution: null },
     };
   }
 
@@ -111,9 +119,11 @@ export async function fetchBracketOutlookForPool(
       ok: true,
       outlook: null,
       completedMatchCount: 0,
+      totalParticipantCount: 0,
       picksLocked: true,
       hasAwardedPoints: true,
       poolName,
+      visibility: { showOutlook: false, distribution: null },
     };
   }
 
@@ -123,9 +133,11 @@ export async function fetchBracketOutlookForPool(
       ok: true,
       outlook: null,
       completedMatchCount: 0,
+      totalParticipantCount: 0,
       picksLocked: true,
       hasAwardedPoints: false,
       poolName,
+      visibility: { showOutlook: false, distribution: null },
     };
   }
 
@@ -144,12 +156,23 @@ export async function fetchBracketOutlookForPool(
     teamNameById,
   });
 
+  const totalParticipantCount = participantNames.size;
+  const visibility = evaluateBracketOutlookVisibility({
+    picksLocked: true,
+    hasAwardedPoints: false,
+    outlook,
+    completedMatchCount: completedMatches.length,
+    totalParticipantCount,
+  });
+
   return {
     ok: true,
     outlook,
     completedMatchCount: completedMatches.length,
+    totalParticipantCount,
     picksLocked: true,
     hasAwardedPoints: false,
     poolName,
+    visibility,
   };
 }

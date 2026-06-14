@@ -6,29 +6,39 @@ import {
   formatBracketOutlookDetailLine,
   type ClientSafeBracketOutlookEntry,
 } from "@/lib/leaderboard/buildBracketOutlook";
-import { LeaderboardWaitingState } from "./LeaderboardWaitingState";
+import {
+  formatMedianOutlookLine,
+  formatTopOutlookGroupLine,
+  type BracketOutlookDistributionSummary,
+} from "@/lib/leaderboard/bracketOutlookSeparation";
+import { StandingsWarmingUpState } from "./StandingsWarmingUpState";
 
 type Props = {
   poolName: string;
   entries: ClientSafeBracketOutlookEntry[];
   entryCount: number;
+  decisiveResultCount?: number;
   revealHref?: string | null;
-  /** When false, show waiting state instead (no completed results or no meaningful outlook). */
+  /** When false, show warming-up state instead of the ranked outlook list. */
   showOutlook: boolean;
+  distribution?: BracketOutlookDistributionSummary | null;
 };
 
 export function BracketOutlookView({
   poolName,
   entries,
   entryCount,
+  decisiveResultCount = 0,
   revealHref = null,
   showOutlook,
+  distribution = null,
 }: Props) {
   if (!showOutlook) {
     return (
-      <LeaderboardWaitingState
+      <StandingsWarmingUpState
         poolName={poolName}
         entryCount={entryCount}
+        decisiveResultCount={decisiveResultCount}
         revealHref={revealHref}
       />
     );
@@ -52,6 +62,12 @@ export function BracketOutlookView({
         <p className="mt-3 max-w-3xl text-xs leading-relaxed text-ash-muted">
           {BRACKET_OUTLOOK_DISCLAIMER}
         </p>
+        {distribution ? (
+          <div className="mt-4 max-w-3xl space-y-1 text-sm text-ash-muted">
+            <p>{formatTopOutlookGroupLine(distribution)}</p>
+            <p>{formatMedianOutlookLine(distribution)}</p>
+          </div>
+        ) : null}
       </section>
 
       <section className="space-y-4">
@@ -78,10 +94,6 @@ export function BracketOutlookView({
                   {formatBracketOutlookDetailLine(entry)}
                 </p>
               </div>
-              <p className="mt-1 text-xs text-ash-muted">
-                {entry.displayName}&apos;s bracket is looking strong based on completed
-                group results so far.
-              </p>
             </li>
           ))}
         </ol>

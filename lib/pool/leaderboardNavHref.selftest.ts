@@ -20,8 +20,9 @@ t(
     ...base,
     picksLocked: true,
     hasAwardedPoints: false,
-  }).href?.startsWith("/pool/pool-1") === true,
-  "locked pool with all zero points shows outlook nav href",
+    outlookHasMeaningfulSeparation: false,
+  }).href === null,
+  "locked pool with clustered outlook hides nav href",
 );
 
 t(
@@ -29,8 +30,19 @@ t(
     ...base,
     picksLocked: true,
     hasAwardedPoints: false,
+    outlookHasMeaningfulSeparation: true,
+  }).href?.startsWith("/pool/pool-1") === true,
+  "locked pool with meaningful outlook shows nav href",
+);
+
+t(
+  resolveStandingsNav({
+    ...base,
+    picksLocked: true,
+    hasAwardedPoints: false,
+    outlookHasMeaningfulSeparation: true,
   }).label === "Outlook",
-  "locked pool with all zero points uses Outlook label",
+  "locked pool with meaningful outlook uses Outlook label",
 );
 
 t(

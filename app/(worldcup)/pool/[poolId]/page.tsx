@@ -10,7 +10,6 @@ import { createClient } from "@/lib/supabase/server";
 import { createServiceRoleClient } from "@/lib/supabase/service";
 import { poolLocked } from "@/lib/pools/poolLocked";
 import { fetchBracketOutlookForPool } from "@/lib/leaderboard/fetchBracketOutlookForPool";
-import { shouldShowBracketOutlook } from "@/lib/leaderboard/bracketOutlookVisibility";
 import { toClientSafeBracketOutlookEntries } from "@/lib/leaderboard/buildBracketOutlook";
 import { TournamentStatLeadersPanel } from "@/components/tournament/TournamentStatLeadersPanel";
 import { loadTournamentTeamStatLeaders } from "@/lib/tournament/matchTeamStats/loadTournamentTeamStatLeaders";
@@ -79,17 +78,15 @@ export default async function PublicPoolLeaderboardPage({ params }: PageProps) {
         })
       : null;
   const showBracketOutlook =
-    outlookRes?.ok === true &&
-    shouldShowBracketOutlook({
-      picksLocked: outlookRes.picksLocked,
-      hasAwardedPoints: outlookRes.hasAwardedPoints,
-      outlook: outlookRes.outlook,
-      completedMatchCount: outlookRes.completedMatchCount,
-    });
+    outlookRes?.ok === true && outlookRes.visibility.showOutlook;
   const bracketOutlookEntries =
     showBracketOutlook && outlookRes?.ok && outlookRes.outlook
       ? toClientSafeBracketOutlookEntries(outlookRes.outlook)
       : null;
+  const outlookDistribution =
+    outlookRes?.ok ? outlookRes.visibility.distribution : null;
+  const decisiveResultCount =
+    outlookRes?.ok ? outlookRes.completedMatchCount : 0;
 
   return (
     <PageContainer>
@@ -116,6 +113,8 @@ export default async function PublicPoolLeaderboardPage({ params }: PageProps) {
         bonusWatchView={bonusWatchRes?.ok ? bonusWatchRes.view : null}
         bracketOutlookEntries={bracketOutlookEntries}
         showBracketOutlook={showBracketOutlook}
+        outlookDistribution={outlookDistribution}
+        decisiveResultCount={decisiveResultCount}
       />
     </PageContainer>
   );
