@@ -42,8 +42,7 @@ import { resolveStandingsNav } from "../../../lib/pool/leaderboardNavHref";
 import { fetchPoolHasAwardedLeaderboardPoints, LEADERBOARD_PENDING_NAV_NOTE } from "../../../lib/leaderboard/poolLeaderboardIsActive";
 import { fetchBracketOutlookForPool } from "../../../lib/leaderboard/fetchBracketOutlookForPool";
 import { shouldShowStandingsWarmingNote } from "../../../lib/leaderboard/bracketOutlookVisibility";
-import { STANDINGS_WARMING_UP_DASHBOARD_NOTE, STANDINGS_WARMING_UP_HEADLINE } from "../../../lib/leaderboard/bracketOutlookSeparation";
-import { toClientSafeBracketOutlookEntries } from "../../../lib/leaderboard/buildBracketOutlook";
+import { STANDINGS_WARMING_UP_DASHBOARD_NOTE, STANDINGS_WARMING_UP_HEADLINE, computeBracketOutlookSummary, type BracketOutlookSummary } from "../../../lib/leaderboard/bracketOutlookSeparation";
 import { BracketOutlookDashboardCard } from "@/components/leaderboard/BracketOutlookDashboardCard";
 import { fetchPublicTournamentProgress } from "../../../lib/tournament/fetchPublicTournamentProgress";
 import type { TournamentMatchPublicRow } from "../../../types/tournamentPublic";
@@ -339,9 +338,7 @@ export default async function AccountPage({ searchParams }: PageProps) {
     completeBrackets: number;
     mostPopularChampion: string | null;
   } | null = null;
-  let bracketOutlookDashboardEntries: ReturnType<
-    typeof toClientSafeBracketOutlookEntries
-  > = [];
+  let bracketOutlookDashboardSummary: BracketOutlookSummary | null = null;
   let showBracketOutlookDashboard = false;
 
   if (postLockEngagement && picksCtx?.selectedPoolId && !picksCtx.loadError) {
@@ -363,8 +360,15 @@ export default async function AccountPage({ searchParams }: PageProps) {
 
   if (outlookFetch?.ok && outlookFetch.visibility.showOutlook && outlookFetch.outlook) {
     showBracketOutlookDashboard = true;
-    bracketOutlookDashboardEntries = toClientSafeBracketOutlookEntries(
+    bracketOutlookDashboardSummary = computeBracketOutlookSummary(
       outlookFetch.outlook,
+      outlookFetch.totalParticipantCount,
+      picksCtx?.selectedParticipant?.id
+        ? {
+            participantId: picksCtx.selectedParticipant.id,
+            displayName: picksCtx.selectedParticipant.displayName ?? "",
+          }
+        : null,
     );
   }
 
@@ -596,9 +600,9 @@ export default async function AccountPage({ searchParams }: PageProps) {
                 />
               ) : null}
 
-              {showBracketOutlookDashboard && bracketOutlookDashboardEntries.length > 0 ? (
+              {showBracketOutlookDashboard && bracketOutlookDashboardSummary ? (
                 <BracketOutlookDashboardCard
-                  entries={bracketOutlookDashboardEntries}
+                  summary={bracketOutlookDashboardSummary}
                   outlookHref={outlookHref}
                   activityHref={activityHref}
                   revealHref={revealHref}

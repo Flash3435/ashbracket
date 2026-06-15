@@ -10,7 +10,7 @@ import { createClient } from "@/lib/supabase/server";
 import { createServiceRoleClient } from "@/lib/supabase/service";
 import { poolLocked } from "@/lib/pools/poolLocked";
 import { fetchBracketOutlookForPool } from "@/lib/leaderboard/fetchBracketOutlookForPool";
-import { toClientSafeBracketOutlookEntries } from "@/lib/leaderboard/buildBracketOutlook";
+import { computeBracketOutlookSummary } from "@/lib/leaderboard/bracketOutlookSeparation";
 import { TournamentStatLeadersPanel } from "@/components/tournament/TournamentStatLeadersPanel";
 import { loadTournamentTeamStatLeaders } from "@/lib/tournament/matchTeamStats/loadTournamentTeamStatLeaders";
 import type { LeaderboardPublicRowDb } from "../../../../types/leaderboard";
@@ -79,12 +79,21 @@ export default async function PublicPoolLeaderboardPage({ params }: PageProps) {
       : null;
   const showBracketOutlook =
     outlookRes?.ok === true && outlookRes.visibility.showOutlook;
-  const bracketOutlookEntries =
+  const bracketOutlookSummary =
     showBracketOutlook && outlookRes?.ok && outlookRes.outlook
-      ? toClientSafeBracketOutlookEntries(outlookRes.outlook)
+      ? computeBracketOutlookSummary(
+          outlookRes.outlook,
+          outlookRes.totalParticipantCount,
+          viewerParticipantId
+            ? {
+                participantId: viewerParticipantId,
+                displayName:
+                  rows.find((row) => row.participantId === viewerParticipantId)
+                    ?.displayName ?? "",
+              }
+            : null,
+        )
       : null;
-  const outlookDistribution =
-    outlookRes?.ok ? outlookRes.visibility.distribution : null;
   const decisiveResultCount =
     outlookRes?.ok ? outlookRes.completedMatchCount : 0;
 
@@ -111,9 +120,8 @@ export default async function PublicPoolLeaderboardPage({ params }: PageProps) {
         picksLocked={picksLocked}
         revealHref={revealHref}
         bonusWatchView={bonusWatchRes?.ok ? bonusWatchRes.view : null}
-        bracketOutlookEntries={bracketOutlookEntries}
+        bracketOutlookSummary={bracketOutlookSummary}
         showBracketOutlook={showBracketOutlook}
-        outlookDistribution={outlookDistribution}
         decisiveResultCount={decisiveResultCount}
       />
     </PageContainer>

@@ -1,6 +1,7 @@
 import {
   buildParticipantTeamPicksFromPredictions,
 } from "@/lib/poolActivity/scoreImpact/buildSoftImpact";
+import type { BracketOutlookResult } from "./buildBracketOutlook";
 import {
   BRACKET_OUTLOOK_DASHBOARD_MAX_ROWS,
   buildBracketOutlook,
@@ -11,9 +12,17 @@ import {
 import {
   bracketOutlookHasMeaningfulSeparation,
   computeBracketOutlookDistribution,
-  formatMedianOutlookLine,
-  formatTopOutlookGroupLine,
+  computeBracketOutlookSummary,
+  computeOutlookDistributionBuckets,
+  formatDashboardTopGroupLine,
+  formatDashboardViewerLine,
+  formatHelpfulResultsCount,
+  formatTopOutlookGroupSummary,
+  formatViewerBehindTopGroupLine,
+  MAX_OUTLOOK_DISTRIBUTION_BUCKETS,
   MIN_DECISIVE_MATCHES_FOR_OUTLOOK,
+  TOP_OUTLOOK_GROUP_SAMPLE_NAMES,
+  TOP_OUTLOOK_NAMES_MAX,
 } from "./bracketOutlookSeparation";
 import {
   evaluateBracketOutlookVisibility,
@@ -105,11 +114,14 @@ t(
   "outlook hidden when fewer than 6 decisive matches",
 );
 
-function syntheticOutlook(scores: number[]) {
+function syntheticOutlook(
+  scores: number[],
+  names?: string[],
+): BracketOutlookResult {
   return {
     entries: scores.map((score, index) => ({
       participantId: `p-${index}`,
-      displayName: `Player ${index + 1}`,
+      displayName: names?.[index] ?? `Player ${index + 1}`,
       helpedMatchCount: score,
       helpedTeamCount: score,
       maxHelpedPathImportance: 10,
@@ -175,15 +187,8 @@ const visibilityShown = evaluateBracketOutlookVisibility({
 t(visibilityShown.showOutlook, "evaluate visibility shows outlook when separated");
 t(
   visibilityShown.distribution != null &&
-    formatTopOutlookGroupLine(visibilityShown.distribution).includes(
-      "Top outlook group",
-    ),
-  "distribution summary renders when outlook is shown",
-);
-t(
-  visibilityShown.distribution != null &&
-    formatMedianOutlookLine(visibilityShown.distribution).includes("Median outlook"),
-  "median outlook line renders when outlook is shown",
+    visibilityShown.distribution.topScore === 8,
+  "distribution summary includes top group score when outlook is shown",
 );
 
 t(
@@ -258,11 +263,11 @@ t(
   "no emails/internal IDs or team names in client-safe rows",
 );
 t(
-  clientSafe.slice(0, BRACKET_OUTLOOK_DASHBOARD_MAX_ROWS).length <= 5,
-  "max 5 dashboard rows enforced by slice constant",
+  TOP_OUTLOOK_NAMES_MAX <= 5,
+  "max 5 top names enforced by summary constant",
 );
 t(
-  formatBracketOutlookDetailLine(clientSafe[0]!).includes("helpful result"),
+  formatHelpfulResultsCount(7).includes("helpful result"),
   "row copy uses neutral helpful-result counts",
 );
 t(
@@ -305,6 +310,100 @@ t(leaderboardNav.label === "Leaderboard", "nav label is Leaderboard after points
 
 const dist = computeBracketOutlookDistribution(clearLeader, 10);
 t(dist.topScore === 8 && dist.topTieCount === 1, "distribution captures top group");
+
+const productionLike = syntheticOutlook(
+  [
+    ...Array(13).fill(7),
+    ...Array(18).fill(6),
+    ...Array(8).fill(5),
+    ...Array(2).fill(4),
+    3,
+  ],
+  ["Adi", "Angelo", "Catz", ...Array(39).fill("").map((_, i) => `Player ${i + 4}`)],
+);
+
+const productionSummary = computeBracketOutlookSummary(productionLike, 42);
+t(
+  productionSummary.topScore === 7 && productionSummary.topTieCount === 13,
+  "summary includes top group count and score",
+);
+t(
+  productionSummary.topNames.length <= TOP_OUTLOOK_NAMES_MAX,
+  "full outlook page does not expose all participants in top names",
+);
+t(
+  productionSummary.topNames.length < productionLike.entries.length,
+  "full outlook summary caps participant exposure below full entry count",
+);
+t(
+  productionSummary.topGroupSampleNames.length <= TOP_OUTLOOK_GROUP_SAMPLE_NAMES,
+  "top group sample names capped at 3",
+);
+
+const buckets = computeOutlookDistributionBuckets(productionLike, 42);
+t(
+  buckets.length <= MAX_OUTLOOK_DISTRIBUTION_BUCKETS,
+  "distribution buckets max 4",
+);
+t(
+  buckets.some((bucket) => bucket.label === "4 or fewer" && bucket.bracketCount === 3),
+  "distribution combines lower buckets into X or fewer",
+);
+
+const viewerBehind = computeBracketOutlookSummary(productionLike, 42, {
+  participantId: "p-13",
+  displayName: "Ash",
+});
+t(
+  viewerBehind.viewer?.helpedMatchCount === 6 &&
+    viewerBehind.viewer.behindTopGroup === 1,
+  "viewer behind top group copy inputs",
+);
+t(
+  formatViewerBehindTopGroupLine(viewerBehind.viewer!.behindTopGroup).includes(
+    "1 helpful result behind",
+  ),
+  "viewer behind top group copy",
+);
+
+const viewerInTop = computeBracketOutlookSummary(productionLike, 42, {
+  participantId: "p-0",
+  displayName: "Adi",
+});
+t(viewerInTop.viewer?.inTopGroup === true, "viewer in top group detected");
+t(
+  formatViewerBehindTopGroupLine(viewerInTop.viewer!.behindTopGroup).includes(
+    "top outlook group",
+  ),
+  "viewer in top group copy",
+);
+
+const anonymousSummary = computeBracketOutlookSummary(productionLike, 42);
+t(anonymousSummary.viewer === null, "public anonymous view omits Your bracket");
+
+const smallTopGroup = syntheticOutlook([7, 7, 7], ["Adi", "Angelo", "Catz"]);
+t(
+  formatTopOutlookGroupSummary(
+    computeBracketOutlookSummary(smallTopGroup, 3),
+  ).includes("Adi"),
+  "small top group includes sample names in summary",
+);
+
+t(
+  formatDashboardTopGroupLine(productionSummary).includes("Top group:"),
+  "dashboard card uses summary style for top group",
+);
+t(
+  formatDashboardViewerLine(viewerBehind.viewer!, productionSummary.topScore).includes(
+    "Your bracket:",
+  ),
+  "dashboard card uses summary style for viewer",
+);
+
+t(
+  BRACKET_OUTLOOK_DASHBOARD_MAX_ROWS === 5,
+  "dashboard max rows constant unchanged",
+);
 
 if (failed > 0) process.exit(1);
 console.log("bracketOutlook.selftest: ok");

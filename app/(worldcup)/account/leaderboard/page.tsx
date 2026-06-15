@@ -7,11 +7,13 @@ import { PageTitle } from "@/components/ui/PageTitle";
 import { loadAccountKnockoutSelection, poolLocked } from "@/lib/account/loadAccountKnockoutSelection";
 import { fetchMemberPoolStandings } from "@/lib/leaderboard/fetchMemberPoolStandings";
 import { fetchBracketOutlookForPool } from "@/lib/leaderboard/fetchBracketOutlookForPool";
-import { STANDINGS_WARMING_UP_HEADLINE } from "@/lib/leaderboard/bracketOutlookSeparation";
 import {
   BRACKET_OUTLOOK_HEADLINE,
-  toClientSafeBracketOutlookEntries,
 } from "@/lib/leaderboard/buildBracketOutlook";
+import {
+  STANDINGS_WARMING_UP_HEADLINE,
+  computeBracketOutlookSummary,
+} from "@/lib/leaderboard/bracketOutlookSeparation";
 import { LEADERBOARD_AWARDED_POINTS_NOTE } from "@/lib/leaderboard/buildPoolStandingsFromLedger";
 import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
@@ -99,12 +101,23 @@ export default async function AccountLeaderboardPage({ searchParams }: PageProps
   });
   const showBracketOutlook =
     outlookRes.ok && outlookRes.visibility.showOutlook;
-  const bracketOutlookEntries =
+  const bracketOutlookSummary =
     showBracketOutlook && outlookRes.ok && outlookRes.outlook
-      ? toClientSafeBracketOutlookEntries(outlookRes.outlook)
+      ? computeBracketOutlookSummary(
+          outlookRes.outlook,
+          outlookRes.totalParticipantCount,
+          ctx.selectedId
+            ? {
+                participantId: ctx.selectedId,
+                displayName:
+                  standings.ok
+                    ? (standings.rows.find((row) => row.participantId === ctx.selectedId)
+                        ?.displayName ?? "")
+                    : "",
+              }
+            : null,
+        )
       : null;
-  const outlookDistribution =
-    outlookRes.ok ? outlookRes.visibility.distribution : null;
   const decisiveResultCount =
     outlookRes.ok ? outlookRes.completedMatchCount : 0;
 
@@ -177,9 +190,8 @@ export default async function AccountLeaderboardPage({ searchParams }: PageProps
           picksLocked={locked}
           revealHref={revealHref}
           audience="member"
-          bracketOutlookEntries={bracketOutlookEntries}
+          bracketOutlookSummary={bracketOutlookSummary}
           showBracketOutlook={showBracketOutlook}
-          outlookDistribution={outlookDistribution}
           decisiveResultCount={decisiveResultCount}
         />
       )}

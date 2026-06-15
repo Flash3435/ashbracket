@@ -17,8 +17,7 @@ import { LEADERBOARD_AWARDED_POINTS_NOTE } from "@/lib/leaderboard/buildPoolStan
 import { poolLeaderboardIsActiveFromRows } from "@/lib/leaderboard/poolLeaderboardIsActive";
 import { LeaderboardPostLockIntro } from "./LeaderboardPostLockIntro";
 import { BracketOutlookView } from "./BracketOutlookView";
-import type { ClientSafeBracketOutlookEntry } from "@/lib/leaderboard/buildBracketOutlook";
-import type { BracketOutlookDistributionSummary } from "@/lib/leaderboard/bracketOutlookSeparation";
+import type { BracketOutlookSummary } from "@/lib/leaderboard/bracketOutlookSeparation";
 import { TournamentStatLeadersPanel } from "@/components/tournament/TournamentStatLeadersPanel";
 import type { TournamentStatLeadersView } from "@/lib/tournament/matchTeamStats/buildTournamentStatLeadersView";
 
@@ -137,10 +136,9 @@ type Props = {
   /** Public page vs signed-in member view for a private pool. */
   audience?: "public" | "member";
  bonusWatchView?: TournamentStatLeadersView | null;
-  /** Pre-points Bracket Outlook rows (display names + counts only). */
-  bracketOutlookEntries?: ClientSafeBracketOutlookEntry[] | null;
+  /** Pre-points Bracket Outlook summary (display names + counts only). */
+  bracketOutlookSummary?: BracketOutlookSummary | null;
   showBracketOutlook?: boolean;
-  outlookDistribution?: BracketOutlookDistributionSummary | null;
   decisiveResultCount?: number;
 };
 
@@ -156,9 +154,8 @@ export function PublicPoolLeaderboardView({
   revealHref = null,
   audience = "public",
  bonusWatchView = null,
-  bracketOutlookEntries = null,
+  bracketOutlookSummary = null,
   showBracketOutlook = false,
-  outlookDistribution = null,
   decisiveResultCount = 0,
 }: Props) {
   if (leaderboardError) {
@@ -189,12 +186,11 @@ export function PublicPoolLeaderboardView({
         ) : null}
         <BracketOutlookView
           poolName={poolName}
-          entries={bracketOutlookEntries ?? []}
           entryCount={presentation.participantCount}
           decisiveResultCount={decisiveResultCount}
           revealHref={revealHref}
-          showOutlook={showBracketOutlook && (bracketOutlookEntries?.length ?? 0) > 0}
-          distribution={outlookDistribution}
+          showOutlook={showBracketOutlook && bracketOutlookSummary != null}
+          summary={bracketOutlookSummary}
         />
       </div>
     );
