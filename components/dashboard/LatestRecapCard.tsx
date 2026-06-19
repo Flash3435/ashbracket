@@ -1,97 +1,66 @@
 import Link from "next/link";
-import { KickoffTimeDisplay } from "@/components/datetime/KickoffTimeDisplay";
-import { ScheduleMatchPickTeams } from "@/components/tournament/ScheduleMatchPickTeams";
-import type {
-  ParticipantLatestRecap,
-  ParticipantRecapMatchItem,
-  RecapImpact,
+import {
+  formatRecapMatchHeadline,
+  recapBadgeKind,
+  type ParticipantLatestRecap,
+  type ParticipantRecapMatchItem,
+  type RecapBadgeKind,
 } from "@/lib/dashboard/buildParticipantLatestRecap";
-import type { KnockoutPickSlotDraft } from "../../types/adminKnockoutPicks";
-import type { Team } from "../../src/types/domain";
 
 type Props = {
   recap: ParticipantLatestRecap;
   activityHref: string;
   scheduleHref?: string;
-  initialSlots?: KnockoutPickSlotDraft[];
-  teams?: Team[];
 };
 
-function impactBadgeClass(impact: RecapImpact): string {
-  switch (impact) {
+function impactBadgeClass(kind: RecapBadgeKind): string {
+  switch (kind) {
     case "helped":
       return "rounded-full border border-emerald-700/50 bg-emerald-950/40 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-emerald-200";
     case "mixed":
       return "rounded-full border border-amber-700/50 bg-amber-950/40 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-amber-100";
     case "hurt":
       return "rounded-full border border-red-800/50 bg-red-950/40 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-red-200";
+    case "no_scoring_yet":
+      return "rounded-full border border-sky-800/50 bg-sky-950/40 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-sky-200";
     default:
       return "rounded-full border border-ash-border bg-ash-body/40 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-ash-muted";
   }
 }
 
-function impactBadgeLabel(impact: RecapImpact): string {
-  switch (impact) {
+function impactBadgeLabel(kind: RecapBadgeKind): string {
+  switch (kind) {
     case "helped":
       return "Helped";
     case "mixed":
-      return "Mixed";
+      return "Mixed impact";
     case "hurt":
       return "Hurt";
+    case "no_scoring_yet":
+      return "No scoring yet";
     default:
-      return "Neutral";
+      return "No strong angle";
   }
 }
 
-function RecapMatchRow({
-  item,
-  pickContext,
-}: {
-  item: ParticipantRecapMatchItem;
-  pickContext: { slots: KnockoutPickSlotDraft[]; teams: Team[] } | null;
-}) {
-  const meta = [item.stageLabel];
-  if (item.groupCode) meta.push(`Group ${item.groupCode}`);
+function RecapMatchRow({ item }: { item: ParticipantRecapMatchItem }) {
+  const badge = recapBadgeKind(item);
 
   return (
-    <div className="py-3 first:pt-0 last:pb-0">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <p className="text-[11px] text-ash-muted">{meta.join(" · ")}</p>
-        <span className={impactBadgeClass(item.impact)}>
-          {impactBadgeLabel(item.impact)}
-        </span>
+    <li className="border-b border-ash-border/60 py-2.5 last:border-b-0 last:pb-0 first:pt-0">
+      <div className="flex flex-wrap items-start justify-between gap-2">
+        <p className="text-sm font-semibold text-ash-text">
+          {formatRecapMatchHeadline(item.match)}
+        </p>
+        <span className={impactBadgeClass(badge)}>{impactBadgeLabel(badge)}</span>
       </div>
-      {item.kickoffAt ? (
-        <KickoffTimeDisplay
-          iso={item.kickoffAt}
-          layout="split"
-          dateClassName="mt-1 text-sm font-medium text-ash-text"
-          timeClassName="text-xs text-ash-muted"
-          className="mt-1 text-xs text-ash-muted"
-        />
-      ) : null}
-      <ScheduleMatchPickTeams
-        m={item.match}
-        pickContext={pickContext}
-        className="mt-2"
-      />
-      <p className="mt-2 text-sm font-semibold tabular-nums text-ash-text">
-        {item.scoreLine}
-      </p>
-      <p className="mt-1 text-sm text-ash-text">{item.explanation}</p>
+      <p className="mt-1 text-xs leading-snug text-ash-muted">{item.explanation}</p>
       {item.pointsEarned != null ? (
         <p className="mt-1 text-xs font-medium text-emerald-200">
-          You earned +{item.pointsEarned} pts from this update.
+          +{item.pointsEarned} pts from this update
         </p>
       ) : null}
-      {item.rankMovement ? (
-        <p className="mt-1 text-xs text-ash-muted">
-          You moved {item.rankMovement.previousRank}
-          {" → "}
-          {item.rankMovement.newRank}
-        </p>
-      ) : null}
-    </div>
+    </li>
   );
 }
 
@@ -99,52 +68,37 @@ export function LatestRecapCard({
   recap,
   activityHref,
   scheduleHref = "/tournament",
-  initialSlots,
-  teams,
 }: Props) {
-  if (!recap.showCard) return null;
-
-  const pickContext =
-    initialSlots && teams && initialSlots.length > 0 && teams.length > 0
-      ? { slots: initialSlots, teams }
-      : null;
+  if (!recap.showCard || recap.items.length === 0) return null;
 
   return (
     <section className="rounded-xl border border-ash-border bg-ash-surface p-4">
       <div className="flex flex-wrap items-start justify-between gap-2">
         <div>
-          <h2 className="text-base font-bold text-ash-text">Latest recap</h2>
+          <h2 className="text-base font-bold text-ash-text">Latest scores impact</h2>
           <p className="mt-0.5 text-xs text-ash-muted">
-            How the latest result connects to your bracket.
+            {recap.matchDaySubtitle ?? "How recent results affected your bracket."}
           </p>
         </div>
         <Link href={activityHref} className="ash-link shrink-0 text-xs">
-          Pool activity
+          View activity
         </Link>
       </div>
 
-      {recap.variant === "compact_neutral" ? (
-        <div className="mt-3 space-y-3">
-          <p className="text-sm text-ash-text">
-            Latest scores are in, but none directly affect your bracket yet.
-          </p>
-          <div className="flex flex-wrap gap-3 text-sm">
-            <Link href={scheduleHref} className="ash-link">
-              Full schedule
-            </Link>
-            <Link href={activityHref} className="ash-link">
-              Activity feed
-            </Link>
-          </div>
-        </div>
-      ) : recap.items[0] ? (
-        <div className="mt-3">
-          <RecapMatchRow item={recap.items[0]} pickContext={pickContext} />
-          <Link href={activityHref} className="ash-link mt-3 inline-block text-sm">
-            View activity
-          </Link>
-        </div>
-      ) : null}
+      <ul className="mt-3">
+        {recap.items.map((item) => (
+          <RecapMatchRow key={item.matchId} item={item} />
+        ))}
+      </ul>
+
+      <div className="mt-3 flex flex-wrap gap-3 text-xs">
+        <Link href={activityHref} className="ash-link">
+          View activity
+        </Link>
+        <Link href={scheduleHref} className="ash-link text-ash-muted">
+          Full schedule
+        </Link>
+      </div>
     </section>
   );
 }

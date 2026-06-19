@@ -16,6 +16,7 @@ const emptyRecap: LoadParticipantLatestRecapResult = {
   showCard: false,
   variant: "matches",
   items: [],
+  matchDaySubtitle: null,
   tournamentErr: null,
 };
 

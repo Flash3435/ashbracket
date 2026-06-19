@@ -493,8 +493,6 @@ export default async function AccountPage({ searchParams }: PageProps) {
                 <LatestRecapCard
                   recap={latestRecap}
                   activityHref={activityHref}
-                  initialSlots={picksCtx?.initialSlots}
-                  teams={picksCtx?.teams}
                 />
               ) : null}
               {bonusWatchRes?.ok ? (
@@ -506,8 +504,6 @@ export default async function AccountPage({ searchParams }: PageProps) {
               <LatestRecapCard
                 recap={latestRecap}
                 activityHref={activityHref}
-                initialSlots={picksCtx?.initialSlots}
-                teams={picksCtx?.teams}
               />
             </div>
           ) : null}
