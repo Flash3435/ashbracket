@@ -6,6 +6,8 @@ type StandingsNavInput = {
   participantId: string;
   picksLocked: boolean;
   hasAwardedPoints: boolean;
+  /** When false before official points, Outlook nav is hidden. */
+  outlookHasMeaningfulSeparation?: boolean;
 };
 
 export type StandingsNavLabel = "Leaderboard" | "Outlook";
@@ -31,7 +33,11 @@ export function resolveStandingsNav(input: StandingsNavInput): StandingsNavResul
     return { href, label: "Leaderboard" };
   }
 
-  return { href, label: "Outlook" };
+  if (input.outlookHasMeaningfulSeparation) {
+    return { href, label: "Outlook" };
+  }
+
+  return { href: null, label: null };
 }
 
 /** @deprecated Use resolveStandingsNav — kept for existing call sites. */

@@ -4,6 +4,7 @@ import {
   type AccountParticipantProfile,
 } from "./resolveAccountParticipantId";
 import { fetchPoolHasAwardedLeaderboardPoints } from "../leaderboard/poolLeaderboardIsActive";
+import { fetchBracketOutlookForPool } from "../leaderboard/fetchBracketOutlookForPool";
 import { poolLocked } from "../pools/poolLocked";
 import { resolveStandingsNav, type StandingsNavLabel } from "../pool/leaderboardNavHref";
 
@@ -102,12 +103,28 @@ export async function loadSiteHeaderLeaderboardNav(
     };
   }
 
+  let outlookHasMeaningfulSeparation = false;
+  if (!hasAwardedPoints) {
+    try {
+      const outlookRes = await fetchBracketOutlookForPool(
+        selected.pool_id as string,
+        { supabase, viewerUserId: userId },
+      );
+      if (outlookRes.ok) {
+        outlookHasMeaningfulSeparation = outlookRes.visibility.showOutlook;
+      }
+    } catch {
+      outlookHasMeaningfulSeparation = false;
+    }
+  }
+
   const standingsNav = resolveStandingsNav({
     poolId: selected.pool_id as string,
     isPublic: Boolean(pool?.is_public),
     participantId: selected.id as string,
     picksLocked: true,
     hasAwardedPoints,
+    outlookHasMeaningfulSeparation,
   });
 
   if (!standingsNav.href || !standingsNav.label) {

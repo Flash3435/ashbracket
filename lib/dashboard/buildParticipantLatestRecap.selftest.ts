@@ -5,9 +5,14 @@ import type { TournamentMatchPublicRow } from "../../types/tournamentPublic";
 import {
   buildParticipantLatestRecap,
   buildRecapItemForMatch,
+  formatRecapMatchDaySubtitle,
+  formatRecapMatchHeadline,
+  LATEST_RECAP_DASHBOARD_LIMIT,
   pointsByMatchCodeFromScoreImpactActivities,
+  recapBadgeKind,
   recentCompletedOfficialMatches,
   selectBestRecapItem,
+  selectRecentRecapItemsForDashboard,
 } from "./buildParticipantLatestRecap";
 
 const teams = [
@@ -135,11 +140,11 @@ function finishedMatch(
   assert.ok(recap.items[0]!.explanation.includes("helped your bracket"));
 }
 
-// multiple recent completed matches returns only one recap item
+// multiple completed matches on same day returns multiple recap items
 {
   const matches = [
-    finishedMatch({ match_id: "m1", match_code: "M1", kickoff_at: "2026-06-12T20:00:00Z" }),
-    finishedMatch({ match_id: "m2", match_code: "M2", kickoff_at: "2026-06-11T20:00:00Z" }),
+    finishedMatch({ match_id: "m1", match_code: "M1", kickoff_at: "2026-06-12T22:00:00Z" }),
+    finishedMatch({ match_id: "m2", match_code: "M2", kickoff_at: "2026-06-12T20:00:00Z" }),
     finishedMatch({ match_id: "m3", match_code: "M3", kickoff_at: "2026-06-10T20:00:00Z" }),
   ];
   const recap = buildParticipantLatestRecap({
@@ -147,12 +152,77 @@ function finishedMatch(
     slots: [slot({ predictionKind: "group_winner", teamId: "team-mex", groupCode: "A" })],
     teams,
   });
-  assert.equal(recap.items.length, 1);
+  assert.equal(recap.items.length, 2);
+  assert.equal(recap.items[0]!.matchId, "m1");
+  assert.equal(recap.items[1]!.matchId, "m2");
+  assert.equal(recap.items.some((i) => i.matchId === "m3"), false);
 }
 
-// helped/hurt preferred over newer neutral result
+// max 4 items on latest match day
 {
-  const neutralNewer = finishedMatch({
+  const matches = Array.from({ length: 6 }, (_, i) =>
+    finishedMatch({
+      match_id: `m-${i}`,
+      match_code: `M-${i}`,
+      kickoff_at: `2026-06-12T${String(10 + i).padStart(2, "0")}:00:00Z`,
+    }),
+  );
+  const recap = buildParticipantLatestRecap({
+    matches,
+    slots: [slot({ predictionKind: "group_winner", teamId: "team-mex", groupCode: "A" })],
+    teams,
+  });
+  assert.equal(recap.items.length, LATEST_RECAP_DASHBOARD_LIMIT);
+}
+
+// most recent completed match day selected (not older day)
+{
+  const olderDay = finishedMatch({
+    match_id: "m-old",
+    match_code: "M-OLD",
+    kickoff_at: "2026-06-10T20:00:00Z",
+  });
+  const newerDayA = finishedMatch({
+    match_id: "m-new-a",
+    match_code: "M-NEW-A",
+    kickoff_at: "2026-06-12T20:00:00Z",
+  });
+  const newerDayB = finishedMatch({
+    match_id: "m-new-b",
+    match_code: "M-NEW-B",
+    kickoff_at: "2026-06-12T22:00:00Z",
+  });
+  const { items, matchDayYmd } = selectRecentRecapItemsForDashboard(
+    [olderDay, newerDayA, newerDayB],
+    (m) =>
+      buildRecapItemForMatch(
+        m,
+        [slot({ predictionKind: "group_winner", teamId: "team-mex", groupCode: "A" })],
+        teams,
+      ),
+  );
+  assert.equal(items.length, 2);
+  assert.equal(matchDayYmd, "2026-06-12");
+  assert.equal(items.some((i) => i.matchId === "m-old"), false);
+}
+
+// does not pull older matches when latest day has fewer than 4
+{
+  const recap = buildParticipantLatestRecap({
+    matches: [
+      finishedMatch({ match_id: "m-latest", match_code: "M-L", kickoff_at: "2026-06-12T20:00:00Z" }),
+      finishedMatch({ match_id: "m-older", match_code: "M-O", kickoff_at: "2026-06-10T20:00:00Z" }),
+    ],
+    slots: [slot({ predictionKind: "group_winner", teamId: "team-mex", groupCode: "A" })],
+    teams,
+  });
+  assert.equal(recap.items.length, 1);
+  assert.equal(recap.items[0]!.matchId, "m-latest");
+}
+
+// includes neutral/no-strong-angle rows
+{
+  const neutralMatch = finishedMatch({
     match_id: "m-neutral",
     match_code: "M-NEU",
     kickoff_at: "2026-06-12T22:00:00Z",
@@ -165,81 +235,52 @@ function finishedMatch(
     winner_team_name: "France",
     winner_country_code: "FRA",
   });
-  const helpedOlder = finishedMatch({
+  const helpedMatch = finishedMatch({
     match_id: "m-helped",
     match_code: "M-HELP",
-    kickoff_at: "2026-06-11T20:00:00Z",
+    kickoff_at: "2026-06-12T20:00:00Z",
   });
   const recap = buildParticipantLatestRecap({
-    matches: [neutralNewer, helpedOlder],
+    matches: [neutralMatch, helpedMatch],
     slots: [slot({ predictionKind: "group_winner", teamId: "team-mex", groupCode: "A" })],
     teams,
   });
-  assert.equal(recap.items.length, 1);
-  assert.equal(recap.items[0]!.matchId, "m-helped");
-  assert.equal(recap.items[0]!.impact, "helped");
+  assert.equal(recap.items.length, 2);
+  const neutralItem = recap.items.find((i) => i.matchId === "m-neutral");
+  assert.equal(neutralItem?.impact, "neutral");
+  assert.equal(recapBadgeKind(neutralItem!), "no_strong_angle");
+  assert.ok(neutralItem?.explanation.includes("No strong angle"));
 }
 
-// most recent helped/hurt wins among multiple non-neutral results
+// helped/hurt/mixed copy still works
 {
-  const olderHelped = finishedMatch({
-    match_id: "m-old-help",
-    match_code: "M-OLD-H",
-    kickoff_at: "2026-06-10T20:00:00Z",
-  });
-  const newerHurt = finishedMatch({
-    match_id: "m-new-hurt",
-    match_code: "M-NEW-H",
+  const hurtMatch = finishedMatch({
+    match_id: "m-hurt",
+    match_code: "M-HURT",
     kickoff_at: "2026-06-12T20:00:00Z",
     home_goals: 0,
     away_goals: 2,
     winner_team_name: "Korea Republic",
     winner_country_code: "KOR",
   });
+  const item = buildRecapItemForMatch(
+    hurtMatch,
+    [slot({ predictionKind: "group_winner", teamId: "team-mex", groupCode: "A" })],
+    teams,
+  );
+  assert.equal(item.impact, "hurt");
+  assert.ok(item.explanation.includes("hurt your bracket"));
+}
+
+// single-match case still works
+{
   const recap = buildParticipantLatestRecap({
-    matches: [newerHurt, olderHelped],
+    matches: [finishedMatch({ match_id: "m1", match_code: "M1" })],
     slots: [slot({ predictionKind: "group_winner", teamId: "team-mex", groupCode: "A" })],
     teams,
   });
   assert.equal(recap.items.length, 1);
-  assert.equal(recap.items[0]!.matchId, "m-new-hurt");
-  assert.equal(recap.items[0]!.impact, "hurt");
-}
-
-// neutral result shown only when no helped/hurt result exists
-{
-  const newerNeutral = finishedMatch({
-    match_id: "m-new-neutral",
-    match_code: "M-NEW-N",
-    kickoff_at: "2026-06-12T22:00:00Z",
-    home_goals: 1,
-    away_goals: 1,
-    winner_team_name: null,
-    winner_country_code: null,
-  });
-  const olderNeutral = finishedMatch({
-    match_id: "m-old-neutral",
-    match_code: "M-OLD-N",
-    kickoff_at: "2026-06-10T20:00:00Z",
-    home_goals: 1,
-    away_goals: 1,
-    winner_team_name: null,
-    winner_country_code: null,
-  });
-  const recap = buildParticipantLatestRecap({
-    matches: [newerNeutral, olderNeutral],
-    slots: [
-      slot({
-        predictionKind: "third_place_qualifier",
-        teamId: "team-mex",
-        groupCode: null,
-      }),
-    ],
-    teams,
-  });
-  assert.equal(recap.items.length, 1);
-  assert.equal(recap.items[0]!.matchId, "m-new-neutral");
-  assert.equal(recap.items[0]!.impact, "neutral");
+  assert.equal(recap.items[0]!.impact, "helped");
 }
 
 // completed match with third-place pick still alive/helped
@@ -271,7 +312,7 @@ function finishedMatch(
   assert.ok(recap.items[0]!.explanation.includes("keeps that path alive"));
 }
 
-// completed match with no relevant pick -> compact state
+// completed match with no relevant pick still shows neutral row
 {
   const recap = buildParticipantLatestRecap({
     matches: [finishedMatch({ match_id: "m1", match_code: "M1" })],
@@ -279,11 +320,33 @@ function finishedMatch(
     teams,
   });
   assert.equal(recap.showCard, true);
-  assert.equal(recap.variant, "compact_neutral");
-  assert.equal(recap.items.length, 0);
+  assert.equal(recap.variant, "matches");
+  assert.equal(recap.items.length, 1);
+  assert.equal(recap.items[0]!.impact, "neutral");
+  assert.equal(recapBadgeKind(recap.items[0]!), "no_strong_angle");
 }
 
-// selectBestRecapItem tie-breaks by match code
+// no scoring yet badge for group pick with neutral sentiment
+{
+  const draw = finishedMatch({
+    match_id: "m-draw",
+    match_code: "M-DRAW",
+    home_goals: 1,
+    away_goals: 1,
+    winner_team_name: null,
+    winner_country_code: null,
+  });
+  const item = buildRecapItemForMatch(
+    draw,
+    [slot({ predictionKind: "group_winner", teamId: "team-mex", groupCode: "A" })],
+    teams,
+  );
+  assert.equal(item.impact, "neutral");
+  assert.equal(recapBadgeKind(item), "no_scoring_yet");
+  assert.ok(item.explanation.includes("No pool points yet"));
+}
+
+// selectBestRecapItem tie-breaks by match code (legacy single-pick helper)
 {
   const a = buildRecapItemForMatch(
     finishedMatch({ match_id: "m-a", match_code: "M-A", kickoff_at: "2026-06-12T20:00:00Z" }),
@@ -345,7 +408,24 @@ function finishedMatch(
   assert.equal(recap.showCard, false);
 }
 
-// score-impact activity maps points by match code
+// match day subtitle formatting
+{
+  assert.ok(formatRecapMatchDaySubtitle("2026-06-12", Date.parse("2026-06-12T18:00:00Z")).includes("Today"));
+  assert.ok(
+    formatRecapMatchDaySubtitle("2026-06-11", Date.parse("2026-06-12T18:00:00Z")).includes("Yesterday"),
+  );
+}
+
+// compact headline uses team names and score
+{
+  const headline = formatRecapMatchHeadline(
+    finishedMatch({ match_id: "m1", match_code: "M1" }),
+  );
+  assert.ok(headline.includes("Mexico"));
+  assert.ok(headline.includes("Korea Republic"));
+}
+
+// score-impact activity maps points by match code (participant-specific)
 {
   const map = pointsByMatchCodeFromScoreImpactActivities(
     [
@@ -363,6 +443,7 @@ function finishedMatch(
     "p1",
   );
   assert.equal(map.get("M-NEW"), 3);
+  assert.equal(map.get("M-OTHER"), undefined);
 }
 
 console.log("buildParticipantLatestRecap.selftest.ts: ok");

@@ -10,8 +10,7 @@ import { createClient } from "@/lib/supabase/server";
 import { createServiceRoleClient } from "@/lib/supabase/service";
 import { poolLocked } from "@/lib/pools/poolLocked";
 import { fetchBracketOutlookForPool } from "@/lib/leaderboard/fetchBracketOutlookForPool";
-import { shouldShowBracketOutlook } from "@/lib/leaderboard/bracketOutlookVisibility";
-import { toClientSafeBracketOutlookEntries } from "@/lib/leaderboard/buildBracketOutlook";
+import { computeBracketOutlookSummary } from "@/lib/leaderboard/bracketOutlookSeparation";
 import { TournamentStatLeadersPanel } from "@/components/tournament/TournamentStatLeadersPanel";
 import { loadTournamentTeamStatLeaders } from "@/lib/tournament/matchTeamStats/loadTournamentTeamStatLeaders";
 import type { LeaderboardPublicRowDb } from "../../../../types/leaderboard";
@@ -79,17 +78,24 @@ export default async function PublicPoolLeaderboardPage({ params }: PageProps) {
         })
       : null;
   const showBracketOutlook =
-    outlookRes?.ok === true &&
-    shouldShowBracketOutlook({
-      picksLocked: outlookRes.picksLocked,
-      hasAwardedPoints: outlookRes.hasAwardedPoints,
-      outlook: outlookRes.outlook,
-      completedMatchCount: outlookRes.completedMatchCount,
-    });
-  const bracketOutlookEntries =
+    outlookRes?.ok === true && outlookRes.visibility.showOutlook;
+  const bracketOutlookSummary =
     showBracketOutlook && outlookRes?.ok && outlookRes.outlook
-      ? toClientSafeBracketOutlookEntries(outlookRes.outlook)
+      ? computeBracketOutlookSummary(
+          outlookRes.outlook,
+          outlookRes.totalParticipantCount,
+          viewerParticipantId
+            ? {
+                participantId: viewerParticipantId,
+                displayName:
+                  rows.find((row) => row.participantId === viewerParticipantId)
+                    ?.displayName ?? "",
+              }
+            : null,
+        )
       : null;
+  const decisiveResultCount =
+    outlookRes?.ok ? outlookRes.completedMatchCount : 0;
 
   return (
     <PageContainer>
@@ -114,8 +120,9 @@ export default async function PublicPoolLeaderboardPage({ params }: PageProps) {
         picksLocked={picksLocked}
         revealHref={revealHref}
         bonusWatchView={bonusWatchRes?.ok ? bonusWatchRes.view : null}
-        bracketOutlookEntries={bracketOutlookEntries}
+        bracketOutlookSummary={bracketOutlookSummary}
         showBracketOutlook={showBracketOutlook}
+        decisiveResultCount={decisiveResultCount}
       />
     </PageContainer>
   );

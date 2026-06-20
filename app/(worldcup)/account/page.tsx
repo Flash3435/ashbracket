@@ -41,8 +41,8 @@ import { isGlobalAdmin } from "@/lib/auth/permissions";
 import { resolveStandingsNav } from "../../../lib/pool/leaderboardNavHref";
 import { fetchPoolHasAwardedLeaderboardPoints, LEADERBOARD_PENDING_NAV_NOTE } from "../../../lib/leaderboard/poolLeaderboardIsActive";
 import { fetchBracketOutlookForPool } from "../../../lib/leaderboard/fetchBracketOutlookForPool";
-import { shouldShowBracketOutlook } from "../../../lib/leaderboard/bracketOutlookVisibility";
-import { toClientSafeBracketOutlookEntries } from "../../../lib/leaderboard/buildBracketOutlook";
+import { shouldShowStandingsWarmingNote } from "../../../lib/leaderboard/bracketOutlookVisibility";
+import { STANDINGS_WARMING_UP_DASHBOARD_NOTE, STANDINGS_WARMING_UP_HEADLINE, computeBracketOutlookSummary, type BracketOutlookSummary } from "../../../lib/leaderboard/bracketOutlookSeparation";
 import { BracketOutlookDashboardCard } from "@/components/leaderboard/BracketOutlookDashboardCard";
 import { fetchPublicTournamentProgress } from "../../../lib/tournament/fetchPublicTournamentProgress";
 import type { TournamentMatchPublicRow } from "../../../types/tournamentPublic";
@@ -255,6 +255,21 @@ export default async function AccountPage({ searchParams }: PageProps) {
     }
   }
 
+  let outlookFetch: Awaited<ReturnType<typeof fetchBracketOutlookForPool>> | null = null;
+  if (locked && picksCtx?.selectedPoolId && !hasAwardedLeaderboardPoints) {
+    try {
+      outlookFetch = await fetchBracketOutlookForPool(picksCtx.selectedPoolId, {
+        supabase,
+        viewerUserId: user.id,
+      });
+    } catch {
+      outlookFetch = null;
+    }
+  }
+
+  const outlookHasMeaningfulSeparation =
+    outlookFetch?.ok === true && outlookFetch.visibility.showOutlook;
+
   const standingsNav =
     selectedListEntry && picksCtx?.selectedParticipant?.id
       ? resolveStandingsNav({
@@ -263,6 +278,7 @@ export default async function AccountPage({ searchParams }: PageProps) {
           participantId: picksCtx.selectedParticipant.id,
           picksLocked: locked,
           hasAwardedPoints: hasAwardedLeaderboardPoints,
+          outlookHasMeaningfulSeparation,
         })
       : { href: null, label: null };
 
@@ -322,9 +338,7 @@ export default async function AccountPage({ searchParams }: PageProps) {
     completeBrackets: number;
     mostPopularChampion: string | null;
   } | null = null;
-  let bracketOutlookDashboardEntries: ReturnType<
-    typeof toClientSafeBracketOutlookEntries
-  > = [];
+  let bracketOutlookDashboardSummary: BracketOutlookSummary | null = null;
   let showBracketOutlookDashboard = false;
 
   if (postLockEngagement && picksCtx?.selectedPoolId && !picksCtx.loadError) {
@@ -344,30 +358,26 @@ export default async function AccountPage({ searchParams }: PageProps) {
     }
   }
 
-  if (locked && picksCtx?.selectedPoolId && !hasAwardedLeaderboardPoints) {
-    try {
-      const outlookRes = await fetchBracketOutlookForPool(
-        picksCtx.selectedPoolId,
-        { supabase, viewerUserId: user.id },
-      );
-      if (outlookRes.ok) {
-        showBracketOutlookDashboard = shouldShowBracketOutlook({
-          picksLocked: outlookRes.picksLocked,
-          hasAwardedPoints: outlookRes.hasAwardedPoints,
-          outlook: outlookRes.outlook,
-          completedMatchCount: outlookRes.completedMatchCount,
-        });
-        if (showBracketOutlookDashboard && outlookRes.outlook) {
-          bracketOutlookDashboardEntries = toClientSafeBracketOutlookEntries(
-            outlookRes.outlook,
-          );
-        }
-      }
-    } catch {
-      showBracketOutlookDashboard = false;
-      bracketOutlookDashboardEntries = [];
-    }
+  if (outlookFetch?.ok && outlookFetch.visibility.showOutlook && outlookFetch.outlook) {
+    showBracketOutlookDashboard = true;
+    bracketOutlookDashboardSummary = computeBracketOutlookSummary(
+      outlookFetch.outlook,
+      outlookFetch.totalParticipantCount,
+      picksCtx?.selectedParticipant?.id
+        ? {
+            participantId: picksCtx.selectedParticipant.id,
+            displayName: picksCtx.selectedParticipant.displayName ?? "",
+          }
+        : null,
+    );
   }
+
+  const showStandingsWarmingNote = shouldShowStandingsWarmingNote({
+    picksLocked: locked,
+    hasAwardedPoints: hasAwardedLeaderboardPoints,
+    completedMatchCount: outlookFetch?.ok ? outlookFetch.completedMatchCount : 0,
+    showOutlook: outlookHasMeaningfulSeparation,
+  });
 
   return (
     <PageContainer>
@@ -483,8 +493,6 @@ export default async function AccountPage({ searchParams }: PageProps) {
                 <LatestRecapCard
                   recap={latestRecap}
                   activityHref={activityHref}
-                  initialSlots={picksCtx?.initialSlots}
-                  teams={picksCtx?.teams}
                 />
               ) : null}
               {bonusWatchRes?.ok ? (
@@ -496,8 +504,6 @@ export default async function AccountPage({ searchParams }: PageProps) {
               <LatestRecapCard
                 recap={latestRecap}
                 activityHref={activityHref}
-                initialSlots={picksCtx?.initialSlots}
-                teams={picksCtx?.teams}
               />
             </div>
           ) : null}
@@ -578,15 +584,21 @@ export default async function AccountPage({ searchParams }: PageProps) {
                   leaderboardHref={leaderboardHref}
                   outlookHref={outlookHref}
                   leaderboardPendingNote={leaderboardPendingNote}
+                  standingsWarmingHeadline={
+                    showStandingsWarmingNote ? STANDINGS_WARMING_UP_HEADLINE : null
+                  }
+                  standingsWarmingNote={
+                    showStandingsWarmingNote ? STANDINGS_WARMING_UP_DASHBOARD_NOTE : null
+                  }
                   recentScoreImpact={recentScoreImpact}
                   initialSlots={picksCtx.initialSlots}
                   teams={picksCtx.teams}
                 />
               ) : null}
 
-              {showBracketOutlookDashboard && bracketOutlookDashboardEntries.length > 0 ? (
+              {showBracketOutlookDashboard && bracketOutlookDashboardSummary ? (
                 <BracketOutlookDashboardCard
-                  entries={bracketOutlookDashboardEntries}
+                  summary={bracketOutlookDashboardSummary}
                   outlookHref={outlookHref}
                   activityHref={activityHref}
                   revealHref={revealHref}

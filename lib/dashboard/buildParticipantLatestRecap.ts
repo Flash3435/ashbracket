@@ -5,6 +5,7 @@ import {
   reasonForTeamPick,
 } from "../account/buildWhoToCheerFor";
 import { countryCodesFromKnockoutSlots } from "../participant/nextMatchesForPickedTeams";
+import { recapCalendarDateYmdEdmonton } from "../poolActivity/recapCalendarDate";
 import {
   formatTournamentMatchScoreLine,
   isFinishedMatchWithScores,
@@ -16,7 +17,16 @@ import type { TournamentMatchPublicRow } from "../../types/tournamentPublic";
 /** Legacy display limit; recap selection scans all completed matches by default. */
 export const RECAP_MATCH_LIMIT = 3;
 
+export const LATEST_RECAP_DASHBOARD_LIMIT = 4;
+
 export type RecapImpact = "helped" | "mixed" | "hurt" | "neutral";
+
+export type RecapBadgeKind =
+  | "helped"
+  | "hurt"
+  | "mixed"
+  | "no_scoring_yet"
+  | "no_strong_angle";
 
 export type ParticipantRecapRankMovement = {
   previousRank: number;
@@ -49,6 +59,8 @@ export type ParticipantLatestRecap = {
   showCard: boolean;
   variant: ParticipantLatestRecapVariant;
   items: ParticipantRecapMatchItem[];
+  /** e.g. "Yesterday's results and your bracket" */
+  matchDaySubtitle: string | null;
 };
 
 export type BuildParticipantLatestRecapInput = {
@@ -80,6 +92,49 @@ function kickoffSortKey(iso: string | null | undefined): number {
   if (iso == null || iso === "") return Number.NEGATIVE_INFINITY;
   const t = new Date(iso).getTime();
   return Number.isNaN(t) ? Number.NEGATIVE_INFINITY : t;
+}
+
+function kickoffEdmontonYmd(iso: string | null | undefined): string | null {
+  if (iso == null || iso === "") return null;
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return null;
+  return recapCalendarDateYmdEdmonton(d);
+}
+
+/** User-facing subtitle for the selected recap match day. */
+export function formatRecapMatchDaySubtitle(
+  matchDayYmd: string,
+  nowMs = Date.now(),
+): string {
+  const todayYmd = recapCalendarDateYmdEdmonton(new Date(nowMs));
+  if (matchDayYmd === todayYmd) {
+    return "Today's results and your bracket";
+  }
+  const yesterdayYmd = recapCalendarDateYmdEdmonton(
+    new Date(nowMs - 24 * 3600_000),
+  );
+  if (matchDayYmd === yesterdayYmd) {
+    return "Yesterday's results and your bracket";
+  }
+  return "Recent results and your bracket";
+}
+
+export function recapBadgeKind(item: ParticipantRecapMatchItem): RecapBadgeKind {
+  if (item.impact === "helped") return "helped";
+  if (item.impact === "hurt") return "hurt";
+  if (item.impact === "mixed") return "mixed";
+  if (item.hasRelevantPick && item.match.stage_code === "group") {
+    return "no_scoring_yet";
+  }
+  return "no_strong_angle";
+}
+
+export function formatRecapMatchHeadline(m: TournamentMatchPublicRow): string {
+  const home = m.home_team_name?.trim() || "TBD";
+  const away = m.away_team_name?.trim() || "TBD";
+  const score = formatTournamentMatchScoreLine(m);
+  if (score === "—") return `${home} vs ${away}`;
+  return `${home} ${score} ${away}`;
 }
 
 export function recentCompletedOfficialMatches(
@@ -115,6 +170,42 @@ export function selectBestRecapItem(
 
     return a.matchId.localeCompare(b.matchId);
   })[0]!;
+}
+
+/**
+ * Dashboard recap: all completed matches on the most recent Edmonton calendar day
+ * with results, newest kickoff first, capped at {@link LATEST_RECAP_DASHBOARD_LIMIT}.
+ */
+export function selectRecentRecapItemsForDashboard(
+  matches: TournamentMatchPublicRow[],
+  buildItem: (m: TournamentMatchPublicRow) => ParticipantRecapMatchItem,
+  options?: { limit?: number; nowMs?: number },
+): { items: ParticipantRecapMatchItem[]; matchDayYmd: string | null } {
+  const limit = options?.limit ?? LATEST_RECAP_DASHBOARD_LIMIT;
+  const completed = matches.filter(isFinishedMatchWithScores);
+  if (completed.length === 0) {
+    return { items: [], matchDayYmd: null };
+  }
+
+  const daySet = new Set<string>();
+  for (const m of completed) {
+    const ymd = kickoffEdmontonYmd(m.kickoff_at);
+    if (ymd) daySet.add(ymd);
+  }
+  const latestDay = [...daySet].sort().reverse()[0] ?? null;
+  if (!latestDay) {
+    return { items: [], matchDayYmd: null };
+  }
+
+  const dayMatches = completed
+    .filter((m) => kickoffEdmontonYmd(m.kickoff_at) === latestDay)
+    .sort((a, b) => kickoffSortKey(b.kickoff_at) - kickoffSortKey(a.kickoff_at))
+    .slice(0, limit);
+
+  return {
+    items: dayMatches.map(buildItem),
+    matchDayYmd: latestDay,
+  };
 }
 
 function teamNameForId(teamId: string, teamById: Map<string, Team>): string {
@@ -196,11 +287,14 @@ function explanationForPrimaryPick(
     if (kind === "third_place_qualifier") {
       return `You picked ${teamName} as a third-place qualifier. This result keeps that path alive.`;
     }
-    return "No direct impact on your bracket.";
+    if (m.stage_code === "group" && group) {
+      return `No pool points yet — Group ${group} points settle after the group finishes.`;
+    }
+    return "No strong angle for your bracket.";
   }
 
   if (impact === "mixed") {
-    return "Mixed result: one of your picked teams gained points, but this may hurt your group order.";
+    return "Both teams connect to your bracket path.";
   }
 
   if (kind === "group_winner" && group) {
@@ -313,9 +407,13 @@ export function buildRecapItemForMatch(
   const impact = aggregateImpact(assessments.map((a) => a.sentiment));
   const primary = pickPrimaryAssessment(assessments, importanceByTeamId);
 
-  const explanation = primary
+  let explanation = primary
     ? explanationForPrimaryPick(primary, m, impact)
-    : "No direct impact on your bracket.";
+    : "No strong angle for your bracket.";
+
+  if (impact === "mixed" && pointsByMatchCode?.get(m.match_code) == null) {
+    explanation = `${explanation} No pool points yet.`;
+  }
 
   const rawPoints = pointsByMatchCode?.get(m.match_code);
   const pointsEarned =
@@ -340,30 +438,34 @@ export function buildRecapItemForMatch(
 export function buildParticipantLatestRecap(
   input: BuildParticipantLatestRecapInput,
 ): ParticipantLatestRecap {
+  const empty: ParticipantLatestRecap = {
+    showCard: false,
+    variant: "matches",
+    items: [],
+    matchDaySubtitle: null,
+  };
+
   if (!participantHasAnyPick(input.slots)) {
-    return { showCard: false, variant: "matches", items: [] };
+    return empty;
   }
 
-  const recent = recentCompletedOfficialMatches(input.matches, input.limit);
-
-  if (recent.length === 0) {
-    return { showCard: false, variant: "matches", items: [] };
-  }
-
-  const candidates = recent.map((m) =>
-    buildRecapItemForMatch(m, input.slots, input.teams, input.pointsByMatchCode),
+  const { items, matchDayYmd } = selectRecentRecapItemsForDashboard(
+    input.matches,
+    (m) => buildRecapItemForMatch(m, input.slots, input.teams, input.pointsByMatchCode),
+    { limit: input.limit ?? LATEST_RECAP_DASHBOARD_LIMIT },
   );
 
-  const anyRelevant = candidates.some((i) => i.hasRelevantPick);
-  if (!anyRelevant) {
-    return { showCard: true, variant: "compact_neutral", items: [] };
+  if (items.length === 0) {
+    return empty;
   }
 
-  const selected = selectBestRecapItem(candidates);
   return {
-    showCard: selected != null,
+    showCard: true,
     variant: "matches",
-    items: selected ? [selected] : [],
+    items,
+    matchDaySubtitle: matchDayYmd
+      ? formatRecapMatchDaySubtitle(matchDayYmd)
+      : null,
   };
 }
 

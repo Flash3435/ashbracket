@@ -30,19 +30,16 @@ export type ClientSafeBracketOutlookEntry = {
 export const BRACKET_OUTLOOK_HEADLINE = "Bracket Outlook";
 
 export const BRACKET_OUTLOOK_INTRO =
-  "No official points have landed yet, but some brackets are looking stronger based on completed group results.";
+  "Unofficial early read before points are awarded.";
 
 export const BRACKET_OUTLOOK_OFFICIAL_NOTE =
   "Official points are still 0. Group-stage advancement points land after each group is complete.";
 
-export const BRACKET_OUTLOOK_DISCLAIMER =
-  "This is an unofficial outlook based on completed group results and bracket-path picks. Official standings will appear once pool points are awarded.";
+export const BRACKET_OUTLOOK_STANDINGS_BEGIN_NOTE =
+  "Official standings begin once pool points are awarded.";
 
 export const BRACKET_OUTLOOK_DASHBOARD_BLURB =
   "Unofficial early read before points are awarded.";
-
-export const BRACKET_OUTLOOK_DASHBOARD_FOOTNOTE =
-  "Official leaderboard appears once pool points are awarded.";
 
 /**
  * Counts completed group-stage wins that helped each participant's path picks.

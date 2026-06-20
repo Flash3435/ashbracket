@@ -7,11 +7,13 @@ import { PageTitle } from "@/components/ui/PageTitle";
 import { loadAccountKnockoutSelection, poolLocked } from "@/lib/account/loadAccountKnockoutSelection";
 import { fetchMemberPoolStandings } from "@/lib/leaderboard/fetchMemberPoolStandings";
 import { fetchBracketOutlookForPool } from "@/lib/leaderboard/fetchBracketOutlookForPool";
-import { shouldShowBracketOutlook } from "@/lib/leaderboard/bracketOutlookVisibility";
 import {
   BRACKET_OUTLOOK_HEADLINE,
-  toClientSafeBracketOutlookEntries,
 } from "@/lib/leaderboard/buildBracketOutlook";
+import {
+  STANDINGS_WARMING_UP_HEADLINE,
+  computeBracketOutlookSummary,
+} from "@/lib/leaderboard/bracketOutlookSeparation";
 import { LEADERBOARD_AWARDED_POINTS_NOTE } from "@/lib/leaderboard/buildPoolStandingsFromLedger";
 import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
@@ -98,22 +100,33 @@ export default async function AccountLeaderboardPage({ searchParams }: PageProps
     viewerUserId: user.id,
   });
   const showBracketOutlook =
-    outlookRes.ok &&
-    shouldShowBracketOutlook({
-      picksLocked: outlookRes.picksLocked,
-      hasAwardedPoints: outlookRes.hasAwardedPoints,
-      outlook: outlookRes.outlook,
-      completedMatchCount: outlookRes.completedMatchCount,
-    });
-  const bracketOutlookEntries =
+    outlookRes.ok && outlookRes.visibility.showOutlook;
+  const bracketOutlookSummary =
     showBracketOutlook && outlookRes.ok && outlookRes.outlook
-      ? toClientSafeBracketOutlookEntries(outlookRes.outlook)
+      ? computeBracketOutlookSummary(
+          outlookRes.outlook,
+          outlookRes.totalParticipantCount,
+          ctx.selectedId
+            ? {
+                participantId: ctx.selectedId,
+                displayName:
+                  standings.ok
+                    ? (standings.rows.find((row) => row.participantId === ctx.selectedId)
+                        ?.displayName ?? "")
+                    : "",
+              }
+            : null,
+        )
       : null;
+  const decisiveResultCount =
+    outlookRes.ok ? outlookRes.completedMatchCount : 0;
 
-  const pageTitle = showBracketOutlook ? BRACKET_OUTLOOK_HEADLINE : "Leaderboard";
+  const pageTitle = showBracketOutlook
+    ? BRACKET_OUTLOOK_HEADLINE
+    : STANDINGS_WARMING_UP_HEADLINE;
   const pageDescription = showBracketOutlook
     ? "Unofficial early read before official pool points are awarded."
-    : LEADERBOARD_AWARDED_POINTS_NOTE;
+    : "Official points have not landed yet. Standings will open up once there is a meaningful race.";
 
   const revealHref = `/account/reveal?participant=${ctx.selectedId}`;
   const activityHref = `/account/activity?participant=${ctx.selectedId}`;
@@ -177,8 +190,9 @@ export default async function AccountLeaderboardPage({ searchParams }: PageProps
           picksLocked={locked}
           revealHref={revealHref}
           audience="member"
-          bracketOutlookEntries={bracketOutlookEntries}
+          bracketOutlookSummary={bracketOutlookSummary}
           showBracketOutlook={showBracketOutlook}
+          decisiveResultCount={decisiveResultCount}
         />
       )}
     </PageContainer>

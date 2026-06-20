@@ -2,6 +2,7 @@ import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { resolveStandingsNav } from "@/lib/pool/leaderboardNavHref";
 import { fetchPoolHasAwardedLeaderboardPoints } from "@/lib/leaderboard/poolLeaderboardIsActive";
+import { fetchBracketOutlookForPool } from "@/lib/leaderboard/fetchBracketOutlookForPool";
 import { poolLocked } from "../../lib/pools/poolLocked";
 import { loadPoolActivityForViewer } from "../../lib/poolActivity/loadPoolActivityForViewer";
 import { PoolActivityFeedPanel } from "./PoolActivityFeedPanel";
@@ -55,11 +56,28 @@ export async function PoolRecentActivitySection({
         : null;
     if (poolRow && viewerParticipantId) {
       let hasAwardedPoints = false;
+      let outlookHasMeaningfulSeparation = false;
       if (locked) {
         try {
           hasAwardedPoints = await fetchPoolHasAwardedLeaderboardPoints(poolId);
         } catch {
           hasAwardedPoints = false;
+        }
+        if (!hasAwardedPoints) {
+          try {
+            const {
+              data: { user },
+            } = await supabase.auth.getUser();
+            const outlookRes = await fetchBracketOutlookForPool(poolId, {
+              supabase,
+              viewerUserId: user?.id ?? null,
+              skipMembershipCheck: Boolean(poolRow.is_public),
+            });
+            outlookHasMeaningfulSeparation =
+              outlookRes.ok && outlookRes.visibility.showOutlook;
+          } catch {
+            outlookHasMeaningfulSeparation = false;
+          }
         }
       }
       const standingsNav = resolveStandingsNav({
@@ -68,6 +86,7 @@ export async function PoolRecentActivitySection({
         participantId: viewerParticipantId,
         picksLocked: locked,
         hasAwardedPoints,
+        outlookHasMeaningfulSeparation,
       });
       leaderboardHref =
         standingsNav.label === "Leaderboard" ? standingsNav.href : null;
