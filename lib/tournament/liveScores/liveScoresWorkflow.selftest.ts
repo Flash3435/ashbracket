@@ -228,6 +228,57 @@ const afterRow = afterApplyPreview.rows.find((r) => r.matchCode === "WC2026-G-A-
 assert.equal(afterRow.reason, "unchanged", "rerunning preview after apply should be unchanged");
 assert(!afterRow.willUpdate);
 
+// Group H opener: provider lists Cabo Verde as home — scores must orient to AshBracket Spain home.
+const groupHSpainHome = matchRow({
+  id: "esp-cpv",
+  matchCode: "WC2026-G-H-01",
+  kickoffAt: "2026-06-15T16:00:00.000Z",
+  homeTeamId: "team-esp",
+  awayTeamId: "team-cpv",
+  homeTeamName: "Spain",
+  awayTeamName: "Cabo Verde",
+  homeFifaCode: "ESP",
+  awayFifaCode: "CPV",
+  homeGoals: null,
+  awayGoals: null,
+  status: "scheduled",
+});
+const groupHProviderFixture = {
+  providerFixtureId: "1489378",
+  kickoffAt: "2026-06-15T16:00:00.000Z",
+  homeTeamName: "Cape Verde",
+  awayTeamName: "Spain",
+  homeFifaCode: "CPV" as const,
+  awayFifaCode: "ESP" as const,
+  homeGoals: 0,
+  awayGoals: 0,
+  homePenalties: null,
+  awayPenalties: null,
+  status: "finished" as const,
+};
+const groupHPreview = buildScoreChangePreview({
+  provider: "api-football",
+  providerConfigured: true,
+  configWarning: null,
+  fetchedAt: "2026-06-16T12:00:00.000Z",
+  matches: [groupHSpainHome],
+  fixtures: [groupHProviderFixture],
+});
+const groupHRow = groupHPreview.rows.find((r) => r.matchCode === "WC2026-G-H-01")!;
+assert(groupHRow.willUpdate, "reversed provider sides should still plan score update");
+assert.equal(groupHRow.fetchedHomeGoals, 0);
+assert.equal(groupHRow.fetchedAwayGoals, 0);
+assert(
+  groupHRow.warnings.some((w) => w.includes("reversed relative to AshBracket")),
+  "reversed provider mapping should warn admin",
+);
+const groupHPatches = patchesFromPreviewRows(groupHPreview.rows);
+assert.equal(groupHPatches.length, 1);
+assert.equal(groupHPatches[0]!.homeGoals, 0);
+assert.equal(groupHPatches[0]!.awayGoals, 0);
+
+assert.equal(fifaCodeFromTeamName("Cape Verde Islands"), "CPV");
+
 // Tournament grouping: finished status moves match out of upcoming bucket
 const upcoming = afterApplyMatches.filter((m) => m.status === "scheduled" || m.status === "postponed");
 const completed = afterApplyMatches.filter((m) => m.status === "finished");

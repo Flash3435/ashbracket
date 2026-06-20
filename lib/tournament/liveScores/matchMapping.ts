@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import type { NormalizedFixtureEvents } from "./apiFootballEvents";
 import { effectiveDbCardTotals } from "./loadMatchCardStatsForLiveScores";
-import { teamNamesMatch } from "./normalizeTeamName";
+import { fifaCodeFromTeamName, teamNamesMatch } from "./normalizeTeamName";
 import type {
   CardChangeRowReason,
   MatchCardStatsSnapshot,
@@ -15,6 +15,92 @@ import type {
 
 function kickoffDateKey(iso: string): string {
   return iso.slice(0, 10);
+}
+
+/** Allow adjacent UTC dates — US venue kickoffs often cross midnight UTC. */
+function kickoffDatesCompatible(matchIso: string, fixtureIso: string): boolean {
+  if (kickoffDateKey(matchIso) === kickoffDateKey(fixtureIso)) return true;
+  const matchMs = Date.parse(matchIso);
+  const fixtureMs = Date.parse(fixtureIso);
+  if (!Number.isFinite(matchMs) || !Number.isFinite(fixtureMs)) return false;
+  return Math.abs(matchMs - fixtureMs) <= 36 * 60 * 60 * 1000;
+}
+
+function fifaCodeForSide(
+  code: string | null | undefined,
+  name: string,
+): string | null {
+  return code ?? fifaCodeFromTeamName(name);
+}
+
+function sortedFifaPairKey(
+  homeCode: string | null | undefined,
+  awayCode: string | null | undefined,
+  homeName: string,
+  awayName: string,
+): string | null {
+  const home = fifaCodeForSide(homeCode, homeName);
+  const away = fifaCodeForSide(awayCode, awayName);
+  if (!home || !away) return null;
+  return [home, away].sort().join("\0");
+}
+
+/** Map provider scores/penalties onto AshBracket home/away when sides match or are reversed. */
+export function orientProviderScoresToMatch(
+  match: TournamentMatchForLiveScores,
+  fixture: ProviderFixtureScore,
+): {
+  homeGoals: number;
+  awayGoals: number;
+  homePenalties: number | null;
+  awayPenalties: number | null;
+  providerHomeSwapped: boolean;
+} | null {
+  const dbHome = fifaCodeForSide(match.homeFifaCode, match.homeTeamName);
+  const dbAway = fifaCodeForSide(match.awayFifaCode, match.awayTeamName);
+  const fxHome = fifaCodeForSide(fixture.homeFifaCode, fixture.homeTeamName);
+  const fxAway = fifaCodeForSide(fixture.awayFifaCode, fixture.awayTeamName);
+  if (!dbHome || !dbAway || !fxHome || !fxAway) return null;
+  if (fixture.homeGoals == null || fixture.awayGoals == null) return null;
+
+  if (fxHome === dbHome && fxAway === dbAway) {
+    return {
+      homeGoals: fixture.homeGoals,
+      awayGoals: fixture.awayGoals,
+      homePenalties: fixture.homePenalties,
+      awayPenalties: fixture.awayPenalties,
+      providerHomeSwapped: false,
+    };
+  }
+  if (fxHome === dbAway && fxAway === dbHome) {
+    return {
+      homeGoals: fixture.awayGoals,
+      awayGoals: fixture.homeGoals,
+      homePenalties: fixture.awayPenalties,
+      awayPenalties: fixture.homePenalties,
+      providerHomeSwapped: true,
+    };
+  }
+  return null;
+}
+
+function orientFixtureEvents(
+  match: TournamentMatchForLiveScores,
+  fixture: ProviderFixtureScore,
+  events: NormalizedFixtureEvents,
+): NormalizedFixtureEvents {
+  const oriented = orientProviderScoresToMatch(match, fixture);
+  if (!oriented?.providerHomeSwapped) return events;
+  return {
+    ...events,
+    homeYellowCards: events.awayYellowCards,
+    awayYellowCards: events.homeYellowCards,
+    homeRedCards: events.awayRedCards,
+    awayRedCards: events.homeRedCards,
+    homeGoalEvents: events.awayGoalEvents,
+    awayGoalEvents: events.homeGoalEvents,
+    warnings: events.warnings,
+  };
 }
 
 function scoresEqual(
@@ -36,7 +122,10 @@ type MatchCandidate = {
   method: "provider_id" | "date_teams";
 };
 
-function teamsMatchFixture(match: TournamentMatchForLiveScores, fixture: ProviderFixtureScore): boolean {
+function teamsMatchFixtureDirect(
+  match: TournamentMatchForLiveScores,
+  fixture: ProviderFixtureScore,
+): boolean {
   const homeOk =
     teamNamesMatch(match.homeTeamName, fixture.homeTeamName) ||
     (match.homeFifaCode != null &&
@@ -48,6 +137,26 @@ function teamsMatchFixture(match: TournamentMatchForLiveScores, fixture: Provide
       fixture.awayFifaCode != null &&
       match.awayFifaCode === fixture.awayFifaCode);
   return homeOk && awayOk;
+}
+
+function teamsMatchFixture(
+  match: TournamentMatchForLiveScores,
+  fixture: ProviderFixtureScore,
+): boolean {
+  if (teamsMatchFixtureDirect(match, fixture)) return true;
+  const dbPair = sortedFifaPairKey(
+    match.homeFifaCode,
+    match.awayFifaCode,
+    match.homeTeamName,
+    match.awayTeamName,
+  );
+  const fxPair = sortedFifaPairKey(
+    fixture.homeFifaCode,
+    fixture.awayFifaCode,
+    fixture.homeTeamName,
+    fixture.awayTeamName,
+  );
+  return dbPair != null && dbPair === fxPair;
 }
 
 function findCandidates(
@@ -81,9 +190,8 @@ function findCandidates(
   for (const match of matches) {
     if (candidates.some((c) => c.match.id === match.id)) continue;
 
-    const dateKey = kickoffDateKey(match.kickoffAt);
     for (const fixture of fixtures) {
-      if (kickoffDateKey(fixture.kickoffAt) !== dateKey) continue;
+      if (!kickoffDatesCompatible(match.kickoffAt, fixture.kickoffAt)) continue;
       if (!teamsMatchFixture(match, fixture)) continue;
       const key = `${match.id}\0${fixture.providerFixtureId}`;
       const list = matchedByDateTeams.get(key) ?? [];
@@ -152,17 +260,18 @@ function reasonForFixture(
   if (fixture.status === "live") return "in_progress";
   if (fixture.status === "scheduled") return "not_finished";
   if (fixture.status !== "finished") return "not_finished";
-  if (fixture.homeGoals == null || fixture.awayGoals == null) return "no_score";
+  const oriented = orientProviderScoresToMatch(match, fixture);
+  if (!oriented) return "no_score";
 
   const unchanged = scoresEqual(
     match.homeGoals,
     match.awayGoals,
     match.homePenalties,
     match.awayPenalties,
-    fixture.homeGoals,
-    fixture.awayGoals,
-    fixture.homePenalties,
-    fixture.awayPenalties,
+    oriented.homeGoals,
+    oriented.awayGoals,
+    oriented.homePenalties,
+    oriented.awayPenalties,
   );
   if (unchanged && match.status === "finished") return "unchanged";
   return "will_update";
@@ -297,20 +406,21 @@ function cardPlanForMappedRow(input: {
     };
   }
 
-  const fetched = input.events;
+  const fetchedRaw = input.events;
+  const fetched = orientFixtureEvents(input.match, input.fixture, fetchedRaw);
+  const orientedScores = orientProviderScoresToMatch(input.match, input.fixture);
   const fetchedHomeYellowCards = fetched.homeYellowCards;
   const fetchedAwayYellowCards = fetched.awayYellowCards;
   const fetchedHomeRedCards = fetched.homeRedCards;
   const fetchedAwayRedCards = fetched.awayRedCards;
 
   if (
-    input.fixture.homeGoals != null &&
-    input.fixture.awayGoals != null &&
-    (fetched.homeGoalEvents !== input.fixture.homeGoals ||
-      fetched.awayGoalEvents !== input.fixture.awayGoals)
+    orientedScores &&
+    (fetched.homeGoalEvents !== orientedScores.homeGoals ||
+      fetched.awayGoalEvents !== orientedScores.awayGoals)
   ) {
     cardWarnings.push(
-      `Event goal count (${fetched.homeGoalEvents}–${fetched.awayGoalEvents}) differs from final score (${input.fixture.homeGoals}–${input.fixture.awayGoals}).`,
+      `Event goal count (${fetched.homeGoalEvents}–${fetched.awayGoalEvents}) differs from final score (${orientedScores.homeGoals}–${orientedScores.awayGoals}).`,
     );
   }
 
@@ -510,9 +620,15 @@ export function buildScoreChangePreview(input: {
 
     const { fixture } = candidate;
     const reason = reasonForFixture(fixture, match, ambiguousFixtureIds);
+    const oriented = orientProviderScoresToMatch(match, fixture);
     const warnings: string[] = [];
     if (candidate.method === "date_teams") {
       warnings.push("Matched by kickoff date and team names — consider storing provider_fixture_id.");
+    }
+    if (oriented?.providerHomeSwapped) {
+      warnings.push(
+        "Provider home/away are reversed relative to AshBracket — scores oriented by FIFA code.",
+      );
     }
     if (fixture.homeFifaCode == null || fixture.awayFifaCode == null) {
       warnings.push("Provider team name could not be mapped to a FIFA code.");
@@ -547,10 +663,10 @@ export function buildScoreChangePreview(input: {
       currentAwayGoals: match.awayGoals,
       currentHomePenalties: match.homePenalties,
       currentAwayPenalties: match.awayPenalties,
-      fetchedHomeGoals: fixture.homeGoals,
-      fetchedAwayGoals: fixture.awayGoals,
-      fetchedHomePenalties: fixture.homePenalties,
-      fetchedAwayPenalties: fixture.awayPenalties,
+      fetchedHomeGoals: oriented?.homeGoals ?? null,
+      fetchedAwayGoals: oriented?.awayGoals ?? null,
+      fetchedHomePenalties: oriented?.homePenalties ?? null,
+      fetchedAwayPenalties: oriented?.awayPenalties ?? null,
       currentStatus: match.status,
       fetchedStatus: fixture.status,
       willUpdate: reason === "will_update",

@@ -38,6 +38,7 @@ const ALIASES: Record<string, string> = {
   "south africa": "south africa",
   "cabo verde": "cabo verde",
   "cape verde": "cabo verde",
+  "cape verde islands": "cabo verde",
 };
 
 export function canonicalTeamName(name: string): string {
