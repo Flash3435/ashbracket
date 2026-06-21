@@ -400,6 +400,24 @@ export function LiveScoresFetchPanel({
             {preview.message ? (
               <p className="mt-2 text-amber-100">{preview.message}</p>
             ) : null}
+            {preview.fixtureIdentityWarnings.length > 0 ? (
+              <div className="mt-2 rounded-md border border-amber-800/50 bg-amber-950/30 p-3 text-xs text-amber-100">
+                <p className="font-medium text-amber-50">
+                  {preview.summary.fixturesMissingIdentity} provider fixture
+                  {preview.summary.fixturesMissingIdentity === 1 ? "" : "s"} skipped (incomplete team/kickoff data):
+                </p>
+                <ul className="mt-1 list-disc space-y-1 pl-4">
+                  {preview.fixtureIdentityWarnings.slice(0, 8).map((warning) => (
+                    <li key={warning}>{warning}</li>
+                  ))}
+                </ul>
+                {preview.fixtureIdentityWarnings.length > 8 ? (
+                  <p className="mt-1 text-amber-200/80">
+                    …and {preview.fixtureIdentityWarnings.length - 8} more.
+                  </p>
+                ) : null}
+              </div>
+            ) : null}
           </div>
 
           <PreviewTable rows={preview.rows} />

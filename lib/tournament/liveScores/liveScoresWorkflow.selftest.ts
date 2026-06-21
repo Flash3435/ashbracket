@@ -3,7 +3,7 @@
  * Run: npx tsx lib/tournament/liveScores/liveScoresWorkflow.selftest.ts
  */
 import assert from "node:assert/strict";
-import { mapApiFootballStatus } from "./apiFootballProvider";
+import { mapApiFootballStatus, normalizeApiFootballFixtureRow } from "./apiFootballProvider";
 import { readLiveScoresProviderConfig } from "./config";
 import { applyLiveScoresAndSync, persistProviderFixtureIds } from "./applyLiveScores";
 import { buildProviderCardUpsertRows } from "./applyProviderCardStats";
@@ -11,6 +11,7 @@ import {
   buildScoreChangePreview,
   cardPatchesFromPreviewRows,
   computePreviewId,
+  describeProviderFixtureIdentityGap,
   patchesFromPreviewRows,
 } from "./matchMapping";
 import { MOCK_PROVIDER_FIXTURES } from "./mockProvider";
@@ -279,7 +280,73 @@ assert.equal(groupHPatches[0]!.awayGoals, 0);
 
 assert.equal(fifaCodeFromTeamName("Cape Verde Islands"), "CPV");
 
-// Tournament grouping: finished status moves match out of upcoming bucket
+// Null-safe normalization (API-Football may omit team names).
+assert.equal(normalizeTeamName(null), "");
+assert.equal(normalizeTeamName(undefined), "");
+assert.equal(fifaCodeFromTeamName(null), null);
+assert(!teamNamesMatch(null, "Spain"));
+
+const nullNameFixture = {
+  providerFixtureId: "provider-null-home",
+  kickoffAt: "2026-06-15T16:00:00.000Z",
+  homeTeamName: null as unknown as string,
+  awayTeamName: "Spain",
+  homeFifaCode: null,
+  awayFifaCode: "ESP" as const,
+  homeGoals: 0,
+  awayGoals: 0,
+  homePenalties: null,
+  awayPenalties: null,
+  status: "finished" as const,
+};
+assert.doesNotThrow(() => {
+  buildScoreChangePreview({
+    provider: "api-football",
+    providerConfigured: true,
+    configWarning: null,
+    fetchedAt: "2026-06-16T12:00:00.000Z",
+    matches: [groupHSpainHome],
+    fixtures: [nullNameFixture],
+  });
+});
+const identityGap = describeProviderFixtureIdentityGap(nullNameFixture);
+assert(identityGap?.includes("provider-null-home"), "missing identity should describe fixture id");
+assert(identityGap?.includes("home team"), identityGap ?? "expected home identity gap");
+
+const insufficientFixture = {
+  providerFixtureId: "provider-no-identity",
+  kickoffAt: "",
+  homeTeamName: null as unknown as string,
+  awayTeamName: null as unknown as string,
+  homeFifaCode: null,
+  awayFifaCode: null,
+  homeGoals: 1,
+  awayGoals: 0,
+  homePenalties: null,
+  awayPenalties: null,
+  status: "finished" as const,
+};
+const insufficientPreview = buildScoreChangePreview({
+  provider: "api-football",
+  providerConfigured: true,
+  configWarning: null,
+  fetchedAt: "2026-06-16T12:00:00.000Z",
+  matches: [groupHSpainHome],
+  fixtures: [insufficientFixture],
+});
+assert.equal(insufficientPreview.summary.fixturesMissingIdentity, 1);
+assert.equal(insufficientPreview.rows[0]!.reason, "unmapped");
+assert(!insufficientPreview.rows[0]!.willUpdate);
+
+const nullProviderRow = normalizeApiFootballFixtureRow({
+  fixture: { id: 999001, date: "2026-06-15T16:00:00+00:00", status: { short: "FT" } },
+  teams: { home: { name: null }, away: { name: "Spain" } },
+  goals: { home: 0, away: 0 },
+  score: {},
+});
+assert.equal(nullProviderRow.homeTeamName, "");
+assert.equal(nullProviderRow.awayFifaCode, "ESP");
+
 const upcoming = afterApplyMatches.filter((m) => m.status === "scheduled" || m.status === "postponed");
 const completed = afterApplyMatches.filter((m) => m.status === "finished");
 assert.equal(upcoming.length, 0);

@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import type { NormalizedFixtureEvents } from "./apiFootballEvents";
 import { effectiveDbCardTotals } from "./loadMatchCardStatsForLiveScores";
-import { fifaCodeFromTeamName, teamNamesMatch } from "./normalizeTeamName";
+import { fifaCodeFromTeamName, normalizeNullableText, teamNamesMatch } from "./normalizeTeamName";
 import type {
   CardChangeRowReason,
   MatchCardStatsSnapshot,
@@ -13,31 +13,73 @@ import type {
   TournamentMatchForLiveScores,
 } from "./types";
 
-function kickoffDateKey(iso: string): string {
-  return iso.slice(0, 10);
+function kickoffDateKey(iso: unknown): string | null {
+  const text = normalizeNullableText(iso);
+  return text.length >= 10 ? text.slice(0, 10) : null;
 }
 
 /** Allow adjacent UTC dates — US venue kickoffs often cross midnight UTC. */
-function kickoffDatesCompatible(matchIso: string, fixtureIso: string): boolean {
-  if (kickoffDateKey(matchIso) === kickoffDateKey(fixtureIso)) return true;
-  const matchMs = Date.parse(matchIso);
-  const fixtureMs = Date.parse(fixtureIso);
+function kickoffDatesCompatible(matchIso: unknown, fixtureIso: unknown): boolean {
+  const matchKey = kickoffDateKey(matchIso);
+  const fixtureKey = kickoffDateKey(fixtureIso);
+  if (!matchKey || !fixtureKey) return false;
+  if (matchKey === fixtureKey) return true;
+  const matchMs = Date.parse(normalizeNullableText(matchIso));
+  const fixtureMs = Date.parse(normalizeNullableText(fixtureIso));
   if (!Number.isFinite(matchMs) || !Number.isFinite(fixtureMs)) return false;
   return Math.abs(matchMs - fixtureMs) <= 36 * 60 * 60 * 1000;
 }
 
 function fifaCodeForSide(
   code: string | null | undefined,
-  name: string,
+  name: unknown,
 ): string | null {
-  return code ?? fifaCodeFromTeamName(name);
+  const fromCode = normalizeNullableText(code);
+  if (fromCode) return fromCode.toUpperCase();
+  return fifaCodeFromTeamName(name);
+}
+
+function sideHasIdentity(
+  code: string | null | undefined,
+  name: unknown,
+): boolean {
+  return fifaCodeForSide(code, name) != null || normalizeNullableText(name).length > 0;
+}
+
+/** Human-readable reason when a provider fixture cannot participate in team mapping. */
+export function describeProviderFixtureIdentityGap(
+  fixture: Pick<
+    ProviderFixtureScore,
+    "providerFixtureId" | "kickoffAt" | "homeTeamName" | "awayTeamName" | "homeFifaCode" | "awayFifaCode"
+  >,
+): string | null {
+  const gaps: string[] = [];
+  if (!kickoffDateKey(fixture.kickoffAt)) gaps.push("missing kickoff_at");
+  if (!sideHasIdentity(fixture.homeFifaCode, fixture.homeTeamName)) {
+    gaps.push("missing home team name/FIFA code");
+  }
+  if (!sideHasIdentity(fixture.awayFifaCode, fixture.awayTeamName)) {
+    gaps.push("missing away team name/FIFA code");
+  }
+  const pair = sortedFifaPairKey(
+    fixture.homeFifaCode,
+    fixture.awayFifaCode,
+    fixture.homeTeamName,
+    fixture.awayTeamName,
+  );
+  if (!pair && gaps.length === 0) {
+    gaps.push("could not resolve FIFA code pair from provider labels");
+  }
+  if (gaps.length === 0) return null;
+  const label = `${fixture.homeTeamName || "?"} vs ${fixture.awayTeamName || "?"}`;
+  return `Provider fixture ${fixture.providerFixtureId} (${label}): ${gaps.join("; ")}`;
 }
 
 function sortedFifaPairKey(
   homeCode: string | null | undefined,
   awayCode: string | null | undefined,
-  homeName: string,
-  awayName: string,
+  homeName: unknown,
+  awayName: unknown,
 ): string | null {
   const home = fifaCodeForSide(homeCode, homeName);
   const away = fifaCodeForSide(awayCode, awayName);
@@ -189,8 +231,10 @@ function findCandidates(
 
   for (const match of matches) {
     if (candidates.some((c) => c.match.id === match.id)) continue;
+    if (!kickoffDateKey(match.kickoffAt)) continue;
 
     for (const fixture of fixtures) {
+      if (describeProviderFixtureIdentityGap(fixture)) continue;
       if (!kickoffDatesCompatible(match.kickoffAt, fixture.kickoffAt)) continue;
       if (!teamsMatchFixture(match, fixture)) continue;
       const key = `${match.id}\0${fixture.providerFixtureId}`;
@@ -572,6 +616,11 @@ export function buildScoreChangePreview(input: {
     input.fixtures,
   );
 
+  const fixtureIdentityWarnings = input.fixtures.flatMap((fixture) => {
+    const gap = describeProviderFixtureIdentityGap(fixture);
+    return gap ? [gap] : [];
+  });
+
   const candidateByMatchId = new Map(candidates.map((c) => [c.match.id, c]));
   const mappedFixtureIds = new Set(candidates.map((c) => c.fixture.providerFixtureId));
 
@@ -716,6 +765,7 @@ export function buildScoreChangePreview(input: {
     configWarning: input.configWarning,
     fetchedAt: input.fetchedAt,
     rows,
+    fixtureIdentityWarnings,
     summary: {
       matchesChecked: rows.length,
       willUpdate,
@@ -723,6 +773,7 @@ export function buildScoreChangePreview(input: {
       skipped,
       warnings,
       unmappedProviderFixtures,
+      fixturesMissingIdentity: fixtureIdentityWarnings.length,
       cardsWillUpdate,
       cardsUnchanged,
       cardsManualConflict,

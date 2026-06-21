@@ -1,8 +1,15 @@
 import wc2026Data from "../wc2026Data.json";
 
+/** Coerce unknown provider/DB values before string operations. */
+export function normalizeNullableText(value: unknown): string {
+  return typeof value === "string" ? value.trim() : "";
+}
+
 /** Strip accents and punctuation for fuzzy team-name comparison. */
-export function normalizeTeamName(name: string): string {
-  return name
+export function normalizeTeamName(name: unknown): string {
+  const text = normalizeNullableText(name);
+  if (!text) return "";
+  return text
     .normalize("NFD")
     .replace(/\p{M}/gu, "")
     .toLowerCase()
@@ -41,8 +48,9 @@ const ALIASES: Record<string, string> = {
   "cape verde islands": "cabo verde",
 };
 
-export function canonicalTeamName(name: string): string {
+export function canonicalTeamName(name: unknown): string {
   const normalized = normalizeTeamName(name);
+  if (!normalized) return "";
   return ALIASES[normalized] ?? normalized;
 }
 
@@ -60,14 +68,16 @@ function buildNameToFifaCodeMap(): Map<string, string> {
 
 const NAME_TO_FIFA = buildNameToFifaCodeMap();
 
-export function fifaCodeFromTeamName(name: string): string | null {
-  return NAME_TO_FIFA.get(canonicalTeamName(name)) ?? null;
+export function fifaCodeFromTeamName(name: unknown): string | null {
+  const canonical = canonicalTeamName(name);
+  if (!canonical) return null;
+  return NAME_TO_FIFA.get(canonical) ?? null;
 }
 
-export function teamNamesMatch(a: string, b: string): boolean {
+export function teamNamesMatch(a: unknown, b: unknown): boolean {
   const ca = canonicalTeamName(a);
   const cb = canonicalTeamName(b);
-  if (ca === cb) return true;
+  if (ca && cb && ca === cb) return true;
   const fa = fifaCodeFromTeamName(a);
   const fb = fifaCodeFromTeamName(b);
   return fa != null && fa === fb;

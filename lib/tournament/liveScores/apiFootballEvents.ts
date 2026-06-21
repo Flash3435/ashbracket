@@ -1,10 +1,10 @@
-import { teamNamesMatch } from "./normalizeTeamName";
+import { normalizeNullableText, teamNamesMatch } from "./normalizeTeamName";
 import type { LiveScoresProviderConfig } from "./types";
 
 type ApiFootballEventRow = {
-  team: { name: string };
-  type: string;
-  detail: string;
+  team: { name: string | null };
+  type: string | null;
+  detail: string | null;
 };
 
 type ApiFootballEventsResponse = {
@@ -61,20 +61,26 @@ export function normalizeApiFootballFixtureEvents(
   const warnings: string[] = [];
 
   for (const event of events) {
+    const teamName = normalizeNullableText(event.team?.name);
+    if (!teamName) {
+      skippedEventTypes.add("unknown team (missing name)");
+      continue;
+    }
     const side = sideForEventTeam(
-      event.team.name,
+      teamName,
       input.homeTeamName,
       input.awayTeamName,
       input.homeFifaCode,
       input.awayFifaCode,
     );
     if (!side) {
-      skippedEventTypes.add(`${event.type}:${event.detail} (unknown team)`);
+      skippedEventTypes.add(`${normalizeNullableText(event.type)}:${normalizeNullableText(event.detail)} (unknown team)`);
       continue;
     }
 
-    const type = event.type.trim();
-    const detail = event.detail.trim();
+    const type = normalizeNullableText(event.type);
+    const detail = normalizeNullableText(event.detail);
+    if (!type) continue;
 
     if (type === "Goal") {
       if (side === "home") homeGoalEvents += 1;

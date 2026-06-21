@@ -1,4 +1,4 @@
-import { fifaCodeFromTeamName } from "./normalizeTeamName";
+import { fifaCodeFromTeamName, normalizeNullableText } from "./normalizeTeamName";
 import type {
   LiveScoresFetchResult,
   LiveScoresProviderConfig,
@@ -14,8 +14,8 @@ type ApiFootballFixtureResponse = {
       status: { short: string };
     };
     teams: {
-      home: { name: string };
-      away: { name: string };
+      home: { name: string | null };
+      away: { name: string | null };
     };
     goals: { home: number | null; away: number | null };
     score: {
@@ -25,8 +25,9 @@ type ApiFootballFixtureResponse = {
   errors?: Record<string, string>;
 };
 
-export function mapApiFootballStatus(short: string): LiveScoreProviderStatus {
-  const s = short.toUpperCase();
+export function mapApiFootballStatus(short: string | null | undefined): LiveScoreProviderStatus {
+  const s = normalizeNullableText(short).toUpperCase();
+  if (!s) return "scheduled";
   if (["NS", "TBD", "SUSP"].includes(s)) return "scheduled";
   if (["1H", "HT", "2H", "ET", "BT", "P", "LIVE", "INT"].includes(s)) return "live";
   if (["FT", "AET", "PEN"].includes(s)) return "finished";
@@ -35,15 +36,18 @@ export function mapApiFootballStatus(short: string): LiveScoreProviderStatus {
   return "scheduled";
 }
 
-function normalizeFixture(row: NonNullable<ApiFootballFixtureResponse["response"]>[number]): ProviderFixtureScore {
-  const homeName = row.teams.home.name;
-  const awayName = row.teams.away.name;
-  const status = mapApiFootballStatus(row.fixture.status.short);
-  const pen = row.score.penalty;
+/** Normalizes one API-Football fixture row (exported for selftests). */
+export function normalizeApiFootballFixtureRow(
+  row: NonNullable<ApiFootballFixtureResponse["response"]>[number],
+): ProviderFixtureScore {
+  const homeName = normalizeNullableText(row.teams?.home?.name);
+  const awayName = normalizeNullableText(row.teams?.away?.name);
+  const status = mapApiFootballStatus(row.fixture.status?.short);
+  const pen = row.score?.penalty;
 
   return {
     providerFixtureId: String(row.fixture.id),
-    kickoffAt: row.fixture.date,
+    kickoffAt: normalizeNullableText(row.fixture.date),
     homeTeamName: homeName,
     awayTeamName: awayName,
     homeFifaCode: fifaCodeFromTeamName(homeName),
@@ -103,6 +107,6 @@ export async function fetchApiFootballWorldCupScores(
     return { ok: false, provider: config.provider, error: msg };
   }
 
-  const fixtures = (body.response ?? []).map(normalizeFixture);
+  const fixtures = (body.response ?? []).map(normalizeApiFootballFixtureRow);
   return { ok: true, provider: config.provider, fixtures };
 }

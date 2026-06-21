@@ -126,11 +126,14 @@ export type ScoreChangePreview = {
     skipped: number;
     warnings: number;
     unmappedProviderFixtures: number;
+    fixturesMissingIdentity: number;
     cardsWillUpdate: number;
     cardsUnchanged: number;
     cardsManualConflict: number;
     cardsNoEventData: number;
   };
+  /** Provider fixtures excluded from mapping because team/kickoff identity was incomplete. */
+  fixtureIdentityWarnings: string[];
   message: string | null;
 };
 

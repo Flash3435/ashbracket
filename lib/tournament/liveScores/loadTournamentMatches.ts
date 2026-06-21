@@ -1,4 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { normalizeNullableText } from "./normalizeTeamName";
 import type { TournamentMatchForLiveScores } from "./types";
 
 type MatchRow = {
@@ -67,10 +68,10 @@ export async function loadTournamentMatchesForLiveScores(
         providerFixtureId: row.provider_fixture_id,
         homeTeamId: row.home_team_id,
         awayTeamId: row.away_team_id,
-        homeTeamName: home?.name ?? "TBD",
-        awayTeamName: away?.name ?? "TBD",
-        homeFifaCode: home?.fifa_code ?? home?.country_code ?? null,
-        awayFifaCode: away?.fifa_code ?? away?.country_code ?? null,
+        homeTeamName: normalizeNullableText(home?.name) || "TBD",
+        awayTeamName: normalizeNullableText(away?.name) || "TBD",
+        homeFifaCode: normalizeNullableText(home?.fifa_code) || normalizeNullableText(home?.country_code) || null,
+        awayFifaCode: normalizeNullableText(away?.fifa_code) || normalizeNullableText(away?.country_code) || null,
         homeGoals: row.home_goals,
         awayGoals: row.away_goals,
         homePenalties: row.home_penalties,
