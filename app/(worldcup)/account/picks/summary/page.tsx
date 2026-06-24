@@ -1,6 +1,8 @@
 import { WhoToCheerForCard } from "@/components/account/WhoToCheerForCard";
 import { AccountPicksProfileLinks } from "@/components/account/AccountPicksProfileLinks";
+import { KnockoutSelectionInstructionCard } from "@/components/picks/KnockoutSelectionInstructionCard";
 import { PicksDeadlineBannerFromPool } from "@/components/pool/PicksDeadlineBannerFromPool";
+import { buildKnockoutSelectionInstructionCard } from "@/lib/picks/knockoutSelectionWindow";
 import { whoToCheerForFromSchedule } from "@/lib/account/loadWhoToCheerFor";
 import { ParticipantBracketView } from "@/components/bracket/ParticipantBracketView";
 import { MyKnockoutPicksSummary } from "@/components/picks/MyKnockoutPicksSummary";
@@ -70,6 +72,12 @@ export default async function AccountPicksSummaryPage({ searchParams }: PageProp
   const listHref = `/account/picks/summary${listQs.toString() ? `?${listQs}` : ""}`;
   const bracketHref = `/account/picks/summary?${bracketQs}`;
   const editPicksHref = pid ? `/account/picks?participant=${pid}` : "/account/picks";
+
+  const knockoutSelectionCard = buildKnockoutSelectionInstructionCard({
+    knockoutBracketPicksUnlocked: ctx.knockoutBracketPicksUnlocked,
+    matches: tournamentPayload?.matches ?? null,
+    picksHref: editPicksHref,
+  });
 
   return (
     <PageContainer>
@@ -175,6 +183,11 @@ export default async function AccountPicksSummaryPage({ searchParams }: PageProp
                   knockoutBracketPicksUnlocked={ctx.knockoutBracketPicksUnlocked}
                 />
               </div>
+
+              <KnockoutSelectionInstructionCard
+                model={knockoutSelectionCard}
+                className="mb-6"
+              />
 
               {view === "list" ? (
                 <MyKnockoutPicksSummary

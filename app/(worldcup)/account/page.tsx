@@ -18,7 +18,9 @@ import type { PoolPotParticipantSummary } from "@/lib/pools/computePoolPotSummar
 import { fetchPoolPotForMember } from "@/lib/pools/fetchPoolPotForMember";
 import { mapPoolPaymentFromPool, poolIsPaid } from "@/lib/pools/poolPayment";
 import { ParticipantBracketView } from "@/components/bracket/ParticipantBracketView";
+import { KnockoutSelectionInstructionCard } from "@/components/picks/KnockoutSelectionInstructionCard";
 import { MyKnockoutPicksSummary } from "@/components/picks/MyKnockoutPicksSummary";
+import { buildKnockoutSelectionInstructionCard } from "@/lib/picks/knockoutSelectionWindow";
 import { PicksViewToggle } from "@/components/picks/PicksViewToggle";
 import { PageContainer } from "@/components/ui/PageContainer";
 import { PageTitle } from "@/components/ui/PageTitle";
@@ -228,6 +230,14 @@ export default async function AccountPage({ searchParams }: PageProps) {
   const editPicksFromDashboardHref = picksCtx?.selectedParticipant?.id
     ? `/account/picks?participant=${picksCtx.selectedParticipant.id}`
     : picksHref;
+  const knockoutSelectionCard =
+    picksCtx?.selectedParticipant?.id && !picksCtx.loadError
+      ? buildKnockoutSelectionInstructionCard({
+          knockoutBracketPicksUnlocked: picksCtx.knockoutBracketPicksUnlocked,
+          matches: tournamentMatches,
+          picksHref: editPicksFromDashboardHref,
+        })
+      : null;
   const revealHref = picksCtx?.selectedParticipant?.id
     ? `/account/reveal?participant=${picksCtx.selectedParticipant.id}`
     : "/account/reveal";
@@ -615,6 +625,10 @@ export default async function AccountPage({ searchParams }: PageProps) {
                   }
                 />
               </div>
+
+              {knockoutSelectionCard ? (
+                <KnockoutSelectionInstructionCard model={knockoutSelectionCard} />
+              ) : null}
 
               {view === "list" ? (
                 <MyKnockoutPicksSummary

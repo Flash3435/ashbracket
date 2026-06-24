@@ -1,6 +1,9 @@
 import { AccountPicksProfileLinks } from "@/components/account/AccountPicksProfileLinks";
 import { ParticipantKnockoutPicksForm } from "@/components/admin/ParticipantKnockoutPicksForm";
+import { KnockoutSelectionInstructionCard } from "@/components/picks/KnockoutSelectionInstructionCard";
 import { PicksDeadlineBannerFromPool } from "@/components/pool/PicksDeadlineBannerFromPool";
+import { buildKnockoutSelectionInstructionCard } from "@/lib/picks/knockoutSelectionWindow";
+import { fetchPublicTournamentProgress } from "@/lib/tournament/fetchPublicTournamentProgress";
 import {
   ParticipantPoolPaymentPanel,
   UnpaidPaymentReminderBanner,
@@ -61,6 +64,24 @@ export default async function AccountPicksPage({ searchParams }: PageProps) {
     ? `/account/picks/summary?participant=${ctx.selectedId}&saved=1`
     : undefined;
 
+  const editPicksHref = ctx.selectedId
+    ? `/account/picks?participant=${ctx.selectedId}`
+    : "/account/picks";
+
+  const { data: tournamentPayload } =
+    ctx.selectedId && !ctx.loadError
+      ? await fetchPublicTournamentProgress()
+      : { data: null };
+
+  const knockoutSelectionCard =
+    ctx.selectedId && !ctx.loadError
+      ? buildKnockoutSelectionInstructionCard({
+          knockoutBracketPicksUnlocked: ctx.knockoutBracketPicksUnlocked,
+          matches: tournamentPayload?.matches ?? null,
+          picksHref: editPicksHref,
+        })
+      : null;
+
   return (
     <PageContainer>
       {ctx.selectedPoolId ? (
@@ -110,8 +131,8 @@ export default async function AccountPicksPage({ searchParams }: PageProps) {
           className="mb-6 rounded-md border border-amber-700/50 bg-amber-950/30 px-3 py-2 text-sm text-amber-100"
           role="status"
         >
-          Picks are locked — this is a read-only view. Knockout bracket picks
-          will open when the official Round of 32 is published.
+          Picks are locked — this is a read-only view for group stage, third-place,
+          and bonus picks.
         </p>
       ) : null}
 
@@ -201,6 +222,13 @@ export default async function AccountPicksPage({ searchParams }: PageProps) {
                 <UnpaidPaymentReminderBanner
                   poolPayment={ctx.selectedPoolPayment}
                   isPaid={ctx.selectedParticipant.paid}
+                />
+              ) : null}
+
+              {knockoutSelectionCard ? (
+                <KnockoutSelectionInstructionCard
+                  model={knockoutSelectionCard}
+                  className="mb-6"
                 />
               ) : null}
 
