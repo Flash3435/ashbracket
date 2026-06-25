@@ -99,8 +99,25 @@ import { ASHBRACKET_2026_POOL_LOCK_AT_ISO } from "../datetime/poolLockDeadline";
   });
   assert.strictEqual(status.preKnockoutLocked, true);
   assert.strictEqual(status.chipLabel, "locked");
-  assert.ok(status.headline.includes("locked"));
+  assert.strictEqual(status.headline, "Group & bonus picks locked");
+  assert.ok(status.detail?.includes("You can review them, but they can no longer be edited"));
   assert.ok(status.detail?.includes("Knockout bracket picks are still editable"));
+  assert.ok(!status.detail?.includes("Round of 32"));
+}
+
+// Locked — pre-knockout frozen, knockout still waiting
+{
+  const status = buildPoolPickDeadlineStatus({
+    lockAtIso: ASHBRACKET_2026_POOL_LOCK_AT_ISO,
+    knockoutBracketPicksUnlocked: false,
+    nowMs: new Date("2026-06-11T17:00:00Z").getTime(),
+  });
+  assert.strictEqual(status.preKnockoutLocked, true);
+  assert.strictEqual(status.headline, "Group & bonus picks locked");
+  assert.ok(status.detail?.includes("These picks locked on"));
+  assert.ok(status.detail?.includes("You can review them, but they can no longer be edited"));
+  assert.ok(!status.detail?.includes("Round of 32"));
+  assert.ok(status.deadlineLabel?.includes("ET"), status.deadlineLabel ?? "");
 }
 
 // Read-only viewer copy

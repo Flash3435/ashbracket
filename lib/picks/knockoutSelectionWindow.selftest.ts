@@ -5,8 +5,10 @@ import {
   formatKnockoutSelectionCountdown,
   GROUP_STAGE_MATCH_DURATION_BUFFER_MS,
   isMatchStarted,
+  KNOCKOUT_EXPECTED_UNLOCK_LINE,
   selectionCountdownExpired,
 } from "./knockoutSelectionWindow";
+import { formatKickoffLocalSingleLine } from "../datetime/scheduleDisplay";
 import type { TournamentMatchPublicRow } from "../../types/tournamentPublic";
 
 function match(
@@ -72,7 +74,10 @@ function match(
   assert.strictEqual(model!.phase, "upcoming");
   assert.strictEqual(model!.title, "Knockout picks open after the group stage");
   assert.ok(model!.body.includes("third-place"));
-  assert.ok(model!.expectedUnlockLine.includes("final group-stage match"));
+  assert.strictEqual(model!.expectedUnlockLine, KNOCKOUT_EXPECTED_UNLOCK_LINE);
+  assert.strictEqual(model!.expectedUnlockKickoffIso, "2026-06-27T20:00:00Z");
+  assert.ok(!model!.expectedUnlockLine.includes("UTC"));
+  assert.ok(!model!.expectedUnlockLine.includes("Jun"));
   assert.ok(model!.countdown);
   assert.strictEqual(model!.countdown!.label, "Selections open in");
   assert.strictEqual(model!.upcomingFallbackLine, null);
@@ -217,6 +222,31 @@ function match(
     isMatchStarted(m, new Date("2026-06-28T19:01:00Z").getTime()),
     true,
   );
+}
+
+// Participant-facing metadata uses ISO for client-local display, not server UTC strings
+{
+  const kickoffIso = "2026-06-27T20:00:00Z";
+  const model = buildKnockoutSelectionInstructionCard({
+    knockoutBracketPicksUnlocked: false,
+    matches: [
+      match({
+        match_code: "M72",
+        stage_code: "group",
+        group_code: "L",
+        kickoff_at: kickoffIso,
+      }),
+    ],
+    picksHref: "/account/picks",
+    nowMs: new Date("2026-06-20T12:00:00Z").getTime(),
+  });
+  assert.strictEqual(model.expectedUnlockKickoffIso, kickoffIso);
+  assert.ok(!JSON.stringify(model).includes("UTC"));
+  const localLabel = formatKickoffLocalSingleLine(kickoffIso, {
+    timeZone: "America/Edmonton",
+  });
+  assert.ok(/MDT|MST/i.test(localLabel), localLabel);
+  assert.ok(!/UTC/i.test(localLabel), localLabel);
 }
 
 console.log("knockoutSelectionWindow.selftest.ts: ok");

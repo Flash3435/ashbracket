@@ -1,4 +1,3 @@
-import { formatKickoffLocalSingleLine } from "../datetime/scheduleDisplay";
 import type { TournamentMatchPublicRow } from "../../types/tournamentPublic";
 import { kickoffSortMs } from "../tournament/sortTournamentMatches";
 
@@ -23,12 +22,20 @@ export type KnockoutSelectionCountdownLine = {
   targetIso: string;
 };
 
+export const KNOCKOUT_EXPECTED_UNLOCK_LINE =
+  "Expected unlock: after the final group-stage match";
+
 export type KnockoutSelectionInstructionCardModel = {
   phase: KnockoutSelectionPhase;
   title: string;
   body: string;
-  /** Static metadata (e.g. expected unlock context). */
+  /** Static expected-unlock context (upcoming phase only). */
   expectedUnlockLine: string;
+  /**
+   * Final group-stage kickoff ISO for client-local time display.
+   * Omit server-side formatting — Vercel renders in UTC.
+   */
+  expectedUnlockKickoffIso: string | null;
   /** Live countdown row; omitted when the target is unknown or expired in upcoming phase. */
   countdown: KnockoutSelectionCountdownLine | null;
   /** Shown when upcoming phase has no reliable countdown target. */
@@ -167,17 +174,6 @@ export function formatKnockoutSelectionCountdown(
   return "less than 1 minute";
 }
 
-function expectedUnlockMetadataLine(schedule: KnockoutSelectionSchedule): string {
-  const kickoffLabel =
-    schedule.finalGroupKickoffIso != null
-      ? formatKickoffLocalSingleLine(schedule.finalGroupKickoffIso)
-      : null;
-  if (kickoffLabel && kickoffLabel !== "Time TBD") {
-    return `Expected unlock: after the final group-stage match (${kickoffLabel})`;
-  }
-  return "Expected unlock: after the final group-stage match";
-}
-
 export function buildKnockoutSelectionInstructionCard(input: {
   knockoutBracketPicksUnlocked: boolean;
   matches: TournamentMatchPublicRow[] | null | undefined;
@@ -189,7 +185,6 @@ export function buildKnockoutSelectionInstructionCard(input: {
   const picksHref = input.picksHref.trim() || "/account/picks";
 
   if (!input.knockoutBracketPicksUnlocked) {
-    const expectedUnlockLine = expectedUnlockMetadataLine(schedule);
     const hasCountdownTarget = schedule.expectedUnlockAtIso != null;
     const countdownExpired =
       hasCountdownTarget &&
@@ -199,7 +194,8 @@ export function buildKnockoutSelectionInstructionCard(input: {
       phase: "upcoming",
       title: "Knockout picks open after the group stage",
       body: "The Round of 32 depends on final group standings, including the best third-place teams. Once the official matchups are known, this page will unlock.",
-      expectedUnlockLine,
+      expectedUnlockLine: KNOCKOUT_EXPECTED_UNLOCK_LINE,
+      expectedUnlockKickoffIso: schedule.finalGroupKickoffIso,
       countdown:
         hasCountdownTarget && !countdownExpired
           ? {
@@ -223,6 +219,7 @@ export function buildKnockoutSelectionInstructionCard(input: {
       title: "Knockout picks are now locking",
       body: "Matches lock at kickoff. You can still make or update picks for future matches that have not started yet.",
       expectedUnlockLine: "",
+      expectedUnlockKickoffIso: null,
       countdown: null,
       upcomingFallbackLine: null,
       cta: { label: "Review picks", href: picksHref },
@@ -239,6 +236,7 @@ export function buildKnockoutSelectionInstructionCard(input: {
     title: "Knockout picks are open",
     body: "The official Round of 32 is set. Pick the winners through the bracket before matches begin.",
     expectedUnlockLine: "",
+    expectedUnlockKickoffIso: null,
     countdown:
       closeIso && !closeExpired
         ? { label: "Selection window closes in", targetIso: closeIso }

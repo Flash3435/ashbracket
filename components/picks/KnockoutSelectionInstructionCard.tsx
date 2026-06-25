@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { KickoffTimeDisplay } from "@/components/datetime/KickoffTimeDisplay";
 import type { KnockoutSelectionInstructionCardModel } from "@/lib/picks/knockoutSelectionWindow";
 import { KnockoutSelectionCountdown } from "./KnockoutSelectionCountdown";
 
@@ -61,6 +62,7 @@ export function KnockoutSelectionInstructionCard({ model, className = "" }: Prop
       <p className={`mt-2 text-sm leading-relaxed ${styles.body}`}>{model.body}</p>
 
       {(model.expectedUnlockLine ||
+        model.expectedUnlockKickoffIso ||
         model.countdown ||
         model.upcomingFallbackLine) && (
         <dl className={`mt-3 space-y-1.5 text-xs ${styles.meta}`}>
@@ -68,6 +70,17 @@ export function KnockoutSelectionInstructionCard({ model, className = "" }: Prop
             <div>
               <dt className="sr-only">Expected unlock</dt>
               <dd>{model.expectedUnlockLine}</dd>
+            </div>
+          ) : null}
+          {model.expectedUnlockKickoffIso ? (
+            <div className="flex flex-wrap items-baseline gap-x-1.5">
+              <dt className="font-medium">Estimated time:</dt>
+              <dd className="font-medium text-ash-text">
+                <KickoffTimeDisplay
+                  iso={model.expectedUnlockKickoffIso}
+                  layout="singleLine"
+                />
+              </dd>
             </div>
           ) : null}
           {model.countdown ? (

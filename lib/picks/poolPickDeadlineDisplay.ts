@@ -132,16 +132,19 @@ function buildLockedCopy(args: {
 }): Pick<PoolPickDeadlineStatus, "headline" | "detail" | "chipLabel" | "tone"> {
   const { deadlineLabel, knockoutBracketPicksUnlocked, readOnly } = args;
   const headline = "Group & bonus picks locked";
-  const lockedWhen = deadlineLabel
-    ? `Locked on ${deadlineLabel}.`
-    : "The pick deadline has passed.";
-  const detail = readOnly
-    ? `${lockedWhen} ${
-        knockoutBracketPicksUnlocked
-          ? "Knockout bracket picks may still change."
-          : "Knockout bracket picks open when the official Round of 32 is published."
-      }`
-    : `${lockedWhen} ${knockoutEditDetail(knockoutBracketPicksUnlocked)}`;
+  let detail: string;
+  if (deadlineLabel) {
+    detail = readOnly
+      ? `These picks locked on ${deadlineLabel}.`
+      : `These picks locked on ${deadlineLabel}. You can review them, but they can no longer be edited.`;
+  } else {
+    detail = readOnly
+      ? "The pick deadline has passed."
+      : "The pick deadline has passed. You can review these picks, but they can no longer be edited.";
+  }
+  if (!readOnly && knockoutBracketPicksUnlocked) {
+    detail += " Knockout bracket picks are still editable.";
+  }
   return {
     headline,
     detail,
