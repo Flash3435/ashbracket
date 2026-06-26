@@ -57,6 +57,7 @@ const teams: Team[] = [
 ];
 
 const stageR32 = "stage-r32";
+const stageR16 = "stage-r16";
 
 const existing: Prediction[] = [
   {
@@ -75,22 +76,22 @@ const existing: Prediction[] = [
   },
 ];
 
-// Can save one confirmed slot; unconfirmed slot change rejected
+// Can save one confirmed matchup; unconfirmed matchup change rejected
 {
   const result = applyGradualKnockoutPickSaveGuards({
     incoming: [
       {
-        predictionKind: "round_of_32",
-        tournamentStageId: stageR32,
+        predictionKind: "round_of_16",
+        tournamentStageId: stageR16,
         slotKey: "1",
         groupCode: null,
         bonusKey: null,
         teamId: "team-mex",
       },
       {
-        predictionKind: "round_of_32",
-        tournamentStageId: stageR32,
-        slotKey: "3",
+        predictionKind: "round_of_16",
+        tournamentStageId: stageR16,
+        slotKey: "2",
         groupCode: null,
         bonusKey: null,
         teamId: "team-usa",
@@ -113,17 +114,25 @@ const existing: Prediction[] = [
   assert.strictEqual(result.error, "Matchup not confirmed yet.");
 }
 
-// Partial save for confirmed match preserves other existing picks
+// Partial save for confirmed M73 winner via round_of_16 slot 1
 {
   const result = applyGradualKnockoutPickSaveGuards({
     incoming: [
+      {
+        predictionKind: "round_of_16",
+        tournamentStageId: stageR16,
+        slotKey: "1",
+        groupCode: null,
+        bonusKey: null,
+        teamId: "team-mex",
+      },
       {
         predictionKind: "round_of_32",
         tournamentStageId: stageR32,
         slotKey: "1",
         groupCode: null,
         bonusKey: null,
-        teamId: "team-mex",
+        teamId: "",
       },
       {
         predictionKind: "round_of_32",
@@ -149,8 +158,44 @@ const existing: Prediction[] = [
     nowMs: new Date("2026-06-28T12:00:00Z").getTime(),
   });
   assert.strictEqual(result.error, null);
-  const slot1 = result.slots.find((s) => s.slotKey === "1");
-  assert.strictEqual(slot1?.teamId, "team-mex");
+  const r16 = result.slots.find(
+    (s) => s.predictionKind === "round_of_16" && s.slotKey === "1",
+  );
+  assert.strictEqual(r16?.teamId, "team-mex");
+  const legacyTop = result.slots.find(
+    (s) => s.predictionKind === "round_of_32" && s.slotKey === "1",
+  );
+  assert.strictEqual(legacyTop?.teamId, "");
+}
+
+// Reject direct legacy round_of_32 slot edits during gradual unlock
+{
+  const result = applyGradualKnockoutPickSaveGuards({
+    incoming: [
+      {
+        predictionKind: "round_of_32",
+        tournamentStageId: stageR32,
+        slotKey: "1",
+        groupCode: null,
+        bonusKey: null,
+        teamId: "team-mex",
+      },
+    ],
+    existing,
+    teams,
+    matches: [
+      match({
+        match_code: "M73",
+        stage_code: "round_of_32",
+        kickoff_at: "2026-06-28T19:00:00Z",
+        home_country_code: "USA",
+        away_country_code: "MEX",
+      }),
+    ],
+    fullRoundOf32Official: false,
+    nowMs: new Date("2026-06-28T12:00:00Z").getTime(),
+  });
+  assert.ok(result.error?.includes("matchup row"), result.error ?? "");
 }
 
 // After kickoff — cannot change
@@ -158,8 +203,8 @@ const existing: Prediction[] = [
   const result = applyGradualKnockoutPickSaveGuards({
     incoming: [
       {
-        predictionKind: "round_of_32",
-        tournamentStageId: stageR32,
+        predictionKind: "round_of_16",
+        tournamentStageId: stageR16,
         slotKey: "1",
         groupCode: null,
         bonusKey: null,

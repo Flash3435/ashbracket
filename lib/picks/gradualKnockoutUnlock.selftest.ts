@@ -2,13 +2,17 @@ import assert from "node:assert";
 import type { Team } from "../../src/types/domain";
 import type { TournamentMatchPublicRow } from "../../types/tournamentPublic";
 import {
+  buildGradualR32MatchPickRows,
   getGradualKnockoutSelectionState,
   isKnockoutMatchConfirmed,
   isMatchPickable,
+  r16SlotKeyForR32MatchIndex,
+  readGradualR32MatchWinner,
   r32SlotLockMessage,
   r32SlotRowDisplay,
   validateKnockoutMatchPick,
 } from "./gradualKnockoutUnlock";
+import type { KnockoutPickSlotDraft } from "../../types/adminKnockoutPicks";
 
 function match(
   partial: Partial<TournamentMatchPublicRow> &
@@ -230,7 +234,217 @@ const teams: Team[] = [
     "Round of 32 · pick 3",
   );
   assert.ok(unconfirmed);
+  assert.strictEqual(unconfirmed!.heading, "M74 · Round of 32");
   assert.strictEqual(unconfirmed!.emptyPrimaryLine, "Matchup not confirmed yet");
+}
+
+function r16SlotDraft(slotKey: string, teamId = ""): KnockoutPickSlotDraft {
+  return {
+    rowKey: `round_of_16|${slotKey}`,
+    sectionLabel: "Round of 16",
+    slotLabel: `Round of 16 · pick ${slotKey}`,
+    predictionKind: "round_of_16",
+    tournamentStageId: "stage-r16",
+    slotKey,
+    groupCode: null,
+    bonusKey: null,
+    teamId,
+  };
+}
+
+function r32SlotDraft(slotKey: string, teamId = ""): KnockoutPickSlotDraft {
+  return {
+    rowKey: `round_of_32|${slotKey}`,
+    sectionLabel: "Round of 32",
+    slotLabel: `Round of 32 · pick ${slotKey}`,
+    predictionKind: "round_of_32",
+    tournamentStageId: "stage-r32",
+    slotKey,
+    groupCode: null,
+    bonusKey: null,
+    teamId,
+  };
+}
+
+// Gradual UI model: 16 match rows, confirmed matchups appear once
+{
+  const r32Teams: Team[] = [
+    {
+      id: "team-rsa",
+      name: "South Africa",
+      countryCode: "RSA",
+      fifaCode: "RSA",
+      fifaRank: 30,
+      fifaRankAsOf: null,
+      createdAt: "",
+      updatedAt: "",
+    },
+    {
+      id: "team-can",
+      name: "Canada",
+      countryCode: "CAN",
+      fifaCode: "CAN",
+      fifaRank: 40,
+      fifaRankAsOf: null,
+      createdAt: "",
+      updatedAt: "",
+    },
+    {
+      id: "team-ned",
+      name: "Netherlands",
+      countryCode: "NED",
+      fifaCode: "NED",
+      fifaRank: 8,
+      fifaRankAsOf: null,
+      createdAt: "",
+      updatedAt: "",
+    },
+    {
+      id: "team-mar",
+      name: "Morocco",
+      countryCode: "MAR",
+      fifaCode: "MAR",
+      fifaRank: 14,
+      fifaRankAsOf: null,
+      createdAt: "",
+      updatedAt: "",
+    },
+    {
+      id: "team-bra",
+      name: "Brazil",
+      countryCode: "BRA",
+      fifaCode: "BRA",
+      fifaRank: 3,
+      fifaRankAsOf: null,
+      createdAt: "",
+      updatedAt: "",
+    },
+    {
+      id: "team-jpn",
+      name: "Japan",
+      countryCode: "JPN",
+      fifaCode: "JPN",
+      fifaRank: 18,
+      fifaRankAsOf: null,
+      createdAt: "",
+      updatedAt: "",
+    },
+  ];
+  const matches = [
+    match({
+      match_code: "M73",
+      stage_code: "round_of_32",
+      kickoff_at: "2026-06-28T19:00:00Z",
+      home_country_code: "RSA",
+      away_country_code: "CAN",
+      home_team_name: "South Africa",
+      away_team_name: "Canada",
+    }),
+    match({
+      match_code: "M75",
+      stage_code: "round_of_32",
+      kickoff_at: "2026-06-29T19:00:00Z",
+      home_country_code: "NED",
+      away_country_code: "MAR",
+      home_team_name: "Netherlands",
+      away_team_name: "Morocco",
+    }),
+    match({
+      match_code: "M76",
+      stage_code: "round_of_32",
+      kickoff_at: "2026-06-29T22:00:00Z",
+      home_country_code: "BRA",
+      away_country_code: "JPN",
+      home_team_name: "Brazil",
+      away_team_name: "Japan",
+    }),
+  ];
+  const state = getGradualKnockoutSelectionState({
+    matches,
+    teams: r32Teams,
+    nowMs: new Date("2026-06-28T12:00:00Z").getTime(),
+    fullRoundOf32Official: false,
+  });
+  assert.strictEqual(state.confirmedCount, 3);
+  assert.strictEqual(state.pickableCount, 3);
+
+  const slots = Array.from({ length: 16 }, (_, i) =>
+    r16SlotDraft(String(i + 1)),
+  );
+  const uiRows = buildGradualR32MatchPickRows({
+    slots,
+    state,
+    teams: r32Teams,
+    fullRoundOf32Official: false,
+  });
+  assert.strictEqual(uiRows.length, 16);
+  const headings = uiRows.map((r) => r.display.heading);
+  assert.strictEqual(headings.filter((h) => h === "M73 · Round of 32").length, 1);
+  assert.strictEqual(headings.filter((h) => h === "M75 · Round of 32").length, 1);
+  assert.strictEqual(headings.filter((h) => h === "M76 · Round of 32").length, 1);
+  assert.strictEqual(headings.filter((h) => h === "M74 · Round of 32").length, 1);
+  const m74 = uiRows.find((r) => r.fifaMatchNo === 74)!;
+  assert.strictEqual(m74.lockReason, "unconfirmed");
+  assert.strictEqual(m74.display.emptyPrimaryLine, "Matchup not confirmed yet");
+  assert.strictEqual(r16SlotKeyForR32MatchIndex(0), "1");
+}
+
+// Saving M73 winner maps to one round_of_16 slot; legacy R32 slot still readable
+{
+  const r32Teams: Team[] = [
+    {
+      id: "team-rsa",
+      name: "South Africa",
+      countryCode: "RSA",
+      fifaCode: "RSA",
+      fifaRank: 30,
+      fifaRankAsOf: null,
+      createdAt: "",
+      updatedAt: "",
+    },
+    {
+      id: "team-can",
+      name: "Canada",
+      countryCode: "CAN",
+      fifaCode: "CAN",
+      fifaRank: 40,
+      fifaRankAsOf: null,
+      createdAt: "",
+      updatedAt: "",
+    },
+  ];
+  const state = getGradualKnockoutSelectionState({
+    matches: [
+      match({
+        match_code: "M73",
+        stage_code: "round_of_32",
+        kickoff_at: "2026-06-28T19:00:00Z",
+        home_country_code: "RSA",
+        away_country_code: "CAN",
+      }),
+    ],
+    teams: r32Teams,
+    nowMs: new Date("2026-06-28T12:00:00Z").getTime(),
+  });
+  const ms = state.matchStates[0]!;
+  const slots = [
+    r16SlotDraft("1", "team-can"),
+    ...Array.from({ length: 15 }, (_, i) => r16SlotDraft(String(i + 2))),
+  ];
+  assert.strictEqual(
+    readGradualR32MatchWinner(0, slots, r32Teams, ms),
+    "team-can",
+  );
+
+  const legacySlots = [
+    r32SlotDraft("1", "team-rsa"),
+    r32SlotDraft("2"),
+    ...Array.from({ length: 14 }, (_, i) => r16SlotDraft(String(i + 1))),
+  ];
+  assert.strictEqual(
+    readGradualR32MatchWinner(0, legacySlots, r32Teams, ms),
+    "team-rsa",
+  );
 }
 
 console.log("gradualKnockoutUnlock.selftest.ts: ok");

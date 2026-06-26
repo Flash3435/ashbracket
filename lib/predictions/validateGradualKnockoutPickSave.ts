@@ -4,11 +4,16 @@ import type { ParticipantPickSlotPayload } from "../../types/knockoutPicksSave";
 import type { Prediction } from "../../src/types/domain";
 import {
   getGradualKnockoutSelectionState,
+  matchStateForR16GradualWinnerSlot,
   matchStateForR32Slot,
+  r16SlotKeyForR32MatchIndex,
   validateKnockoutMatchPick,
 } from "../picks/gradualKnockoutUnlock";
 import { isKnockoutProgressionKind } from "./knockoutProgressionKinds";
 import { mergeKnockoutProgressionSlotsFromPredictions } from "./mergeKnockoutProgressionFromExistingPredictions";
+
+const GRADUAL_R32_SLOT_EDIT_ERROR =
+  "Use the matchup row to pick the winner while Round of 32 unlocks gradually.";
 
 function progressionKey(parts: {
   predictionKind: string;
@@ -38,9 +43,21 @@ function existingTeamIdByKey(
   return byKey;
 }
 
+function gradualR32MatchPickError(
+  match: ReturnType<typeof matchStateForR16GradualWinnerSlot>,
+): string | null {
+  if (!match?.confirmed) {
+    return "Matchup not confirmed yet.";
+  }
+  if (match.started) {
+    return "This match has already kicked off and can no longer be edited.";
+  }
+  return "This Round of 32 matchup is not open for picks yet.";
+}
+
 /**
  * When knockout picks are only partially unlocked, freeze non-pickable progression
- * rows and validate pickable Round of 32 changes against confirmed matchups.
+ * rows and validate pickable Round of 32 match winners against confirmed matchups.
  */
 export function applyGradualKnockoutPickSaveGuards(input: {
   incoming: ParticipantPickSlotPayload[];
@@ -76,37 +93,40 @@ export function applyGradualKnockoutPickSaveGuards(input: {
     const keep = priorByKey.get(k) ?? "";
     if (incomingId === keep) continue;
 
-    if (slot.predictionKind !== "round_of_32") {
-      return {
-        slots: input.incoming,
-        error: "Later knockout rounds unlock once the full Round of 32 is official.",
-      };
-    }
-
-    const match = matchStateForR32Slot(slot.slotKey, gradual);
-    if (!match?.publicMatch || !match.pickable) {
-      if (!match?.confirmed) {
-        return { slots: input.incoming, error: "Matchup not confirmed yet." };
-      }
-      if (match?.started) {
+    if (slot.predictionKind === "round_of_16") {
+      const match = matchStateForR16GradualWinnerSlot(slot.slotKey, gradual);
+      if (!match) {
         return {
           slots: input.incoming,
-          error: "This match has already kicked off and can no longer be edited.",
+          error: "Later knockout rounds unlock once the full Round of 32 is official.",
         };
       }
-      return {
-        slots: input.incoming,
-        error: "This Round of 32 matchup is not open for picks yet.",
-      };
+      if (!match.pickable) {
+        const err = gradualR32MatchPickError(match);
+        return { slots: input.incoming, error: err ?? GRADUAL_R32_SLOT_EDIT_ERROR };
+      }
+      const err = validateKnockoutMatchPick({
+        slotKey: match.topSlotKey,
+        selectedTeamId: incomingId,
+        match,
+        teams: input.teams,
+        nowMs,
+      });
+      if (err) return { slots: input.incoming, error: err };
+      continue;
     }
-    const err = validateKnockoutMatchPick({
-      slotKey: slot.slotKey ?? "",
-      selectedTeamId: incomingId,
-      match,
-      teams: input.teams,
-      nowMs,
-    });
-    if (err) return { slots: input.incoming, error: err };
+
+    if (slot.predictionKind === "round_of_32") {
+      if (incomingId !== keep) {
+        return { slots: input.incoming, error: GRADUAL_R32_SLOT_EDIT_ERROR };
+      }
+      continue;
+    }
+
+    return {
+      slots: input.incoming,
+      error: "Later knockout rounds unlock once the full Round of 32 is official.",
+    };
   }
 
   let slots = mergeKnockoutProgressionSlotsFromPredictions(
@@ -114,15 +134,17 @@ export function applyGradualKnockoutPickSaveGuards(input: {
     input.existing,
   );
 
-  const pickableR32Keys = new Set(
+  const pickableR16Keys = new Set(
     gradual.matchStates
       .filter((m) => m.pickable)
-      .flatMap((m) => [m.topSlotKey, m.bottomSlotKey]),
+      .map((m) => r16SlotKeyForR32MatchIndex(m.matchIndex)),
   );
 
   slots = slots.map((slot) => {
-    if (slot.predictionKind !== "round_of_32") return slot;
-    if (pickableR32Keys.has(slot.slotKey ?? "")) {
+    if (
+      slot.predictionKind === "round_of_16" &&
+      pickableR16Keys.has(slot.slotKey ?? "")
+    ) {
       const incoming = input.incoming.find(
         (s) =>
           s.predictionKind === slot.predictionKind &&
@@ -134,8 +156,74 @@ export function applyGradualKnockoutPickSaveGuards(input: {
     return slot;
   });
 
+  for (const match of gradual.matchStates) {
+    if (!match.pickable) continue;
+    const r16Key = r16SlotKeyForR32MatchIndex(match.matchIndex);
+    const winner = slots.find(
+      (s) => s.predictionKind === "round_of_16" && s.slotKey === r16Key,
+    );
+    if (!winner?.teamId.trim()) continue;
+    slots = slots.map((slot) => {
+      if (
+        slot.predictionKind === "round_of_32" &&
+        (slot.slotKey === match.topSlotKey || slot.slotKey === match.bottomSlotKey)
+      ) {
+        return { ...slot, teamId: "" };
+      }
+      return slot;
+    });
+  }
+
   for (const slot of slots) {
     if (!isKnockoutProgressionKind(slot.predictionKind)) continue;
+
+    if (slot.predictionKind === "round_of_16") {
+      const match = matchStateForR16GradualWinnerSlot(slot.slotKey, gradual);
+      if (match) {
+        if (!match.pickable) {
+          const k = progressionKey({
+            predictionKind: slot.predictionKind,
+            tournamentStageId: slot.tournamentStageId,
+            slotKey: slot.slotKey,
+          });
+          const keep = priorByKey.get(k) ?? "";
+          const incomingId = slot.teamId.trim();
+          if (incomingId && incomingId !== keep) {
+            const err = gradualR32MatchPickError(match);
+            return { slots, error: err ?? GRADUAL_R32_SLOT_EDIT_ERROR };
+          }
+          slots = slots.map((s) =>
+            s === slot ? { ...s, teamId: keep } : s,
+          );
+          continue;
+        }
+        const err = validateKnockoutMatchPick({
+          slotKey: match.topSlotKey,
+          selectedTeamId: slot.teamId,
+          match,
+          teams: input.teams,
+          nowMs,
+        });
+        if (err) return { slots, error: err };
+        continue;
+      }
+
+      const k = progressionKey({
+        predictionKind: slot.predictionKind,
+        tournamentStageId: slot.tournamentStageId,
+        slotKey: slot.slotKey,
+      });
+      const keep = priorByKey.get(k);
+      if (keep != null) {
+        slots = slots.map((s) => (s === slot ? { ...s, teamId: keep } : s));
+      } else if (slot.teamId.trim()) {
+        return {
+          slots,
+          error: "Later knockout rounds unlock once the full Round of 32 is official.",
+        };
+      }
+      continue;
+    }
 
     if (slot.predictionKind !== "round_of_32") {
       const k = progressionKey({
@@ -156,54 +244,29 @@ export function applyGradualKnockoutPickSaveGuards(input: {
     }
 
     const match = matchStateForR32Slot(slot.slotKey, gradual);
-    if (!match) {
-      if (slot.teamId.trim()) {
+    const k = progressionKey({
+      predictionKind: slot.predictionKind,
+      tournamentStageId: slot.tournamentStageId,
+      slotKey: slot.slotKey,
+    });
+    const keep = priorByKey.get(k) ?? "";
+    const incomingRow = input.incoming.find(
+      (s) =>
+        s.predictionKind === slot.predictionKind &&
+        s.tournamentStageId === slot.tournamentStageId &&
+        s.slotKey === slot.slotKey,
+    );
+    const requestedId =
+      incomingRow != null ? incomingRow.teamId.trim() : keep;
+    if (requestedId && requestedId !== keep) {
+      if (!match) {
         return { slots, error: "Round of 32 slot is not an official matchup yet." };
       }
-      continue;
+      return { slots, error: GRADUAL_R32_SLOT_EDIT_ERROR };
     }
-
-    if (!match.publicMatch) {
-      if (slot.teamId.trim()) {
-        return { slots, error: "Matchup not confirmed yet." };
-      }
-      continue;
-    }
-
-    if (!match.pickable) {
-      const k = progressionKey({
-        predictionKind: slot.predictionKind,
-        tournamentStageId: slot.tournamentStageId,
-        slotKey: slot.slotKey,
-      });
-      const keep = priorByKey.get(k) ?? "";
-      const incomingId = slot.teamId.trim();
-      if (incomingId && incomingId !== keep) {
-        if (!match.confirmed) {
-          return { slots, error: "Matchup not confirmed yet." };
-        }
-        if (match.started) {
-          return {
-            slots,
-            error: "This match has already kicked off and can no longer be edited.",
-          };
-        }
-        return { slots, error: "This Round of 32 matchup is not open for picks yet." };
-      }
-      slots = slots.map((s) =>
-        s === slot ? { ...s, teamId: keep } : s,
-      );
-      continue;
-    }
-
-    const err = validateKnockoutMatchPick({
-      slotKey: slot.slotKey ?? "",
-      selectedTeamId: slot.teamId,
-      match,
-      teams: input.teams,
-      nowMs,
-    });
-    if (err) return { slots, error: err };
+    slots = slots.map((s) =>
+      s === slot ? { ...s, teamId: requestedId } : s,
+    );
   }
 
   return { slots, error: null };

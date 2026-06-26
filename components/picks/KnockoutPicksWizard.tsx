@@ -55,8 +55,15 @@ import {
 } from "../../lib/picks/picksProgressSummary";
 import type { TournamentMatchPublicRow } from "../../types/tournamentPublic";
 import {
+  allowedTeamsForGradualR32Match,
   allowedTeamsForGradualR32Slot,
+  applyGradualR32MatchWinnerToSlots,
+  buildGradualR32MatchPickRows,
+  countGradualR32MatchupsFilled,
   getGradualKnockoutSelectionState,
+  isGradualR32WinnerPickRow,
+  readGradualR32MatchWinner,
+  r32MatchIndexForR16SlotKey,
   r32SlotLockMessage,
   r32SlotLockReason,
   r32SlotRowDisplay,
@@ -280,12 +287,25 @@ function stepRowsFor(
   slots: KnockoutPickSlotDraft[],
   stepIdx: number,
   steps: WizardStepDef[],
+  options?: { gradualR32MatchRows?: boolean },
 ): KnockoutPickSlotDraft[] {
   const def = steps[stepIdx];
   if (!def) return [];
   if (def.mode === "group") return groupPickRows(slots);
   if (def.mode === "bonus")
     return slots.filter((s) => s.predictionKind === "bonus_pick");
+  if (
+    options?.gradualR32MatchRows &&
+    def.mode === "bracket" &&
+    def.bracketKind === "round_of_32"
+  ) {
+    return slots
+      .filter((s) => s.predictionKind === "round_of_16")
+      .sort(
+        (a, b) =>
+          parseInt(a.slotKey ?? "0", 10) - parseInt(b.slotKey ?? "0", 10),
+      );
+  }
   return slots.filter((s) => s.predictionKind === def.bracketKind);
 }
 
@@ -293,6 +313,11 @@ function stepComplete(
   slots: KnockoutPickSlotDraft[],
   stepIdx: number,
   steps: WizardStepDef[],
+  options?: {
+    gradualR32MatchRows?: boolean;
+    gradualKnockout?: ReturnType<typeof getGradualKnockoutSelectionState>;
+    teams?: Team[];
+  },
 ): boolean {
   const def = steps[stepIdx];
   if (
@@ -308,7 +333,27 @@ function stepComplete(
       thirdRows.every((row) => thirdPlaceSlotInvalidReason(row, slots) == null)
     );
   }
-  const rows = stepRowsFor(slots, stepIdx, steps);
+  if (
+    options?.gradualR32MatchRows &&
+    def?.mode === "bracket" &&
+    def.bracketKind === "round_of_32" &&
+    options.gradualKnockout &&
+    options.teams
+  ) {
+    const pickable = options.gradualKnockout.matchStates.filter((m) => m.pickable);
+    if (pickable.length === 0) return true;
+    return pickable.every((m) =>
+      Boolean(
+        readGradualR32MatchWinner(
+          m.matchIndex,
+          slots,
+          options.teams!,
+          m,
+        ),
+      ),
+    );
+  }
+  const rows = stepRowsFor(slots, stepIdx, steps, options);
   return rows.length > 0 && rows.every((s) => s.teamId.trim() !== "");
 }
 
@@ -408,6 +453,10 @@ function allowedTeamsForPickRow(
   }
 
   if (row.predictionKind === "round_of_16") {
+    if (gradualR32Teams != null) {
+      if (gradualR32Teams.length === 0) return [];
+      return gradualR32Teams;
+    }
     const r32 = new Set(
       slots
         .filter((s) => s.predictionKind === "round_of_32" && s.teamId.trim())
@@ -604,8 +653,18 @@ export function KnockoutPicksWizard({
     [tournamentMatches, teams, knockoutBracketPicksUnlocked],
   );
   const gradualR32Pickable = gradualKnockout.pickableCount > 0;
+  const gradualR32MatchRows =
+    !knockoutBracketPicksUnlocked && gradualR32Pickable;
   const knockoutPicksAccessible =
     knockoutBracketPicksUnlocked || gradualR32Pickable;
+  const stepRowOptions = useMemo(
+    () => ({
+      gradualR32MatchRows,
+      gradualKnockout,
+      teams,
+    }),
+    [gradualR32MatchRows, gradualKnockout, teams],
+  );
   const normalizedInitialSlots = useMemo(
     () =>
       pruneParticipantPicks(initialSlots, {
@@ -620,6 +679,22 @@ export function KnockoutPicksWizard({
   const [slots, setSlots] = useState<KnockoutPickSlotDraft[]>(
     () => normalizedInitialSlots,
   );
+  const gradualR32MatchRowsByKey = useMemo(() => {
+    if (!gradualR32MatchRows) return null;
+    const rows = buildGradualR32MatchPickRows({
+      slots,
+      state: gradualKnockout,
+      teams,
+      fullRoundOf32Official: knockoutBracketPicksUnlocked,
+    });
+    return new Map(rows.map((r) => [r.rowKey, r]));
+  }, [
+    gradualR32MatchRows,
+    slots,
+    gradualKnockout,
+    teams,
+    knockoutBracketPicksUnlocked,
+  ]);
   const [step, setStep] = useState(0);
 
   const bonusQuestionCount = useMemo(
@@ -745,6 +820,10 @@ export function KnockoutPicksWizard({
     if (coreDisabled || (preBracketActive && isPreBracketPickSlot(row))) {
       return true;
     }
+    if (isGradualR32WinnerPickRow(row, knockoutBracketPicksUnlocked)) {
+      const gradualRow = gradualR32MatchRowsByKey?.get(row.rowKey);
+      return gradualRow?.lockReason !== "pickable";
+    }
     if (row.predictionKind === "round_of_32" && !knockoutBracketPicksUnlocked) {
       const reason = r32SlotLockReason(
         row.slotKey,
@@ -774,6 +853,16 @@ export function KnockoutPicksWizard({
   }
 
   function gradualTeamsForRow(row: KnockoutPickSlotDraft): Team[] | null {
+    if (isGradualR32WinnerPickRow(row, knockoutBracketPicksUnlocked)) {
+      const matchIndex = r32MatchIndexForR16SlotKey(row.slotKey);
+      if (matchIndex < 0) return [];
+      return allowedTeamsForGradualR32Match(
+        matchIndex,
+        gradualKnockout,
+        teams,
+        knockoutBracketPicksUnlocked,
+      );
+    }
     if (row.predictionKind !== "round_of_32" || knockoutBracketPicksUnlocked) {
       return null;
     }
@@ -788,8 +877,8 @@ export function KnockoutPicksWizard({
 
   const currentStepDef = wizardSteps[step];
   const stepRows = useMemo(
-    () => stepRowsFor(slots, step, wizardSteps),
-    [slots, step, wizardSteps],
+    () => stepRowsFor(slots, step, wizardSteps, stepRowOptions),
+    [slots, step, wizardSteps, stepRowOptions],
   );
 
   function setTeamForRow(rowKey: string, teamId: string) {
@@ -803,6 +892,19 @@ export function KnockoutPicksWizard({
         isPreBracketPickSlot(row)
       ) {
         return prev;
+      }
+      if (
+        row &&
+        isGradualR32WinnerPickRow(row, knockoutBracketPicksUnlocked)
+      ) {
+        const matchIndex = r32MatchIndexForR16SlotKey(row.slotKey);
+        if (matchIndex < 0) return prev;
+        return applyGradualR32MatchWinnerToSlots(
+          prev,
+          matchIndex,
+          teamId,
+          gradualKnockout,
+        );
       }
       const next = assignParticipantPickDeduped(prev, rowKey, teamId, {
         freezeKnockoutProgressionPicks: !knockoutPicksAccessible,
@@ -933,7 +1035,7 @@ export function KnockoutPicksWizard({
 
   function goNext() {
     if (step >= wizardSteps.length - 1) return;
-    if (!stepComplete(slots, step, wizardSteps)) return;
+    if (!stepComplete(slots, step, wizardSteps, stepRowOptions)) return;
     setStep((s) => s + 1);
     setOpenRowKey(null);
     setSearch("");
@@ -980,7 +1082,8 @@ export function KnockoutPicksWizard({
   }
 
   const canGoNext =
-    stepComplete(slots, step, wizardSteps) && step < wizardSteps.length - 1;
+    stepComplete(slots, step, wizardSteps, stepRowOptions) &&
+    step < wizardSteps.length - 1;
 
   const groupStepIdx = wizardSteps.findIndex((s) => s.mode === "group");
   const groupFilled =
@@ -993,9 +1096,18 @@ export function KnockoutPicksWizard({
   const thirdFilled = slots.filter(
     (s) => s.predictionKind === "third_place_qualifier" && s.teamId.trim(),
   ).length;
-  const r32Filled = slots.filter(
-    (s) => s.predictionKind === "round_of_32" && s.teamId.trim(),
-  ).length;
+  const r32Filled = gradualR32MatchRows
+    ? countGradualR32MatchupsFilled({
+        slots,
+        state: gradualKnockout,
+        teams,
+        matchIndices: gradualKnockout.matchStates
+          .filter((m) => m.pickable)
+          .map((m) => m.matchIndex),
+      })
+    : slots.filter(
+        (s) => s.predictionKind === "round_of_32" && s.teamId.trim(),
+      ).length;
   const r16Filled = slots.filter(
     (s) => s.predictionKind === "round_of_16" && s.teamId.trim(),
   ).length;
@@ -1171,11 +1283,28 @@ export function KnockoutPicksWizard({
         <>
       <nav aria-label="Tournament pick steps" className="flex flex-wrap gap-2">
         {wizardSteps.map((s, i) => {
-          const done = stepComplete(slots, i, wizardSteps);
+          const done = stepComplete(slots, i, wizardSteps, stepRowOptions);
           const active = i === step;
-          const rows = stepRowsFor(slots, i, wizardSteps);
+          const rows = stepRowsFor(slots, i, wizardSteps, stepRowOptions);
           const missingInStep =
-            s.mode === "bracket" && s.bracketKind === "third_place_qualifier"
+            stepRowOptions.gradualR32MatchRows &&
+            s.mode === "bracket" &&
+            s.bracketKind === "round_of_32" &&
+            stepRowOptions.gradualKnockout &&
+            stepRowOptions.teams
+              ? Math.max(
+                  0,
+                  stepRowOptions.gradualKnockout.pickableCount -
+                    countGradualR32MatchupsFilled({
+                      slots,
+                      state: stepRowOptions.gradualKnockout,
+                      teams: stepRowOptions.teams,
+                      matchIndices: stepRowOptions.gradualKnockout.matchStates
+                        .filter((m) => m.pickable)
+                        .map((m) => m.matchIndex),
+                    }),
+                )
+              : s.mode === "bracket" && s.bracketKind === "third_place_qualifier"
               ? Math.max(
                   0,
                   8 -
@@ -1333,11 +1462,13 @@ export function KnockoutPicksWizard({
           ) : null}
           {currentStepDef.mode === "bracket" &&
           currentStepDef.bracketKind === "round_of_32" &&
-          r32Filled < 32 ? (
+          (gradualR32MatchRows
+            ? r32Filled < gradualKnockout.pickableCount
+            : r32Filled < 32) ? (
             <p className="mt-4 rounded-md border border-amber-700/40 bg-amber-950/25 px-3 py-2 text-sm text-amber-100">
               {knockoutBracketPicksUnlocked
                 ? `Pick all 32 Round of 32 teams in their official slots. ${r32Filled} of 32 so far.`
-                : `Pick confirmed matchups as they unlock. ${gradualKnockout.pickableCount} matchups available now · ${r32Filled} slots filled.`}
+                : `Pick confirmed matchups as they unlock. ${gradualKnockout.pickableCount} matchups available now · ${r32Filled} of ${gradualKnockout.pickableCount} filled.`}
             </p>
           ) : null}
           {currentStepDef.mode === "bracket" &&
@@ -1373,7 +1504,12 @@ export function KnockoutPicksWizard({
 
           <ul className="mt-4 space-y-3">
             {stepRows.map((row) => {
-              const team = row.teamId ? teamById.get(row.teamId) : undefined;
+              const gradualMatchRow = gradualR32MatchRowsByKey?.get(row.rowKey);
+              const effectiveTeamId =
+                gradualMatchRow?.winnerTeamId ?? row.teamId.trim();
+              const team = effectiveTeamId
+                ? teamById.get(effectiveTeamId)
+                : undefined;
               const strength = team
                 ? teamStrengthLabel(team.countryCode)
                 : null;
@@ -1411,6 +1547,7 @@ export function KnockoutPicksWizard({
                       gradualTeamsForRow(row),
                     );
               const r32LockMessage =
+                gradualMatchRow == null &&
                 row.predictionKind === "round_of_32"
                   ? r32SlotLockMessage(
                       row.slotKey,
@@ -1419,7 +1556,8 @@ export function KnockoutPicksWizard({
                     )
                   : null;
               const r32RowDisplay =
-                row.predictionKind === "round_of_32"
+                gradualMatchRow?.display ??
+                (row.predictionKind === "round_of_32"
                   ? r32SlotRowDisplay(
                       row.slotKey,
                       gradualKnockout,
@@ -1427,15 +1565,16 @@ export function KnockoutPicksWizard({
                       knockoutBracketPicksUnlocked,
                       row.slotLabel,
                     )
-                  : null;
+                  : null);
               const r32LockReason =
-                row.predictionKind === "round_of_32"
+                gradualMatchRow?.lockReason ??
+                (row.predictionKind === "round_of_32"
                   ? r32SlotLockReason(
                       row.slotKey,
                       gradualKnockout,
                       knockoutBracketPicksUnlocked,
                     )
-                  : null;
+                  : null);
               const thirdInvalidReason = isThirdPlaceRow
                 ? thirdPlaceSlotInvalidReason(row, slots, {
                     teamIdToGroupLetter: thirdPlaceTeamGroupById,
@@ -1484,7 +1623,7 @@ export function KnockoutPicksWizard({
                     ? row.slotLabel
                     : row.slotLabel);
 
-              const isEmptyPick = !row.teamId.trim();
+              const isEmptyPick = !effectiveTeamId;
 
               return (
                 <li

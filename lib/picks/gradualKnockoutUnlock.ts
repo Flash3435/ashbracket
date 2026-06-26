@@ -1,4 +1,5 @@
 import type { Team } from "../../src/types/domain";
+import type { KnockoutPickSlotDraft } from "../../types/adminKnockoutPicks";
 import type { TournamentMatchPublicRow } from "../../types/tournamentPublic";
 import {
   r32SlotKeysForMatchIndex,
@@ -136,6 +137,193 @@ export function r32SlotMatchIndex(slotKey: string | null | undefined): number {
   return Math.floor((n - 1) / 2);
 }
 
+/** R32 match index (0–15) → `round_of_16` slot key storing that match's winner during gradual unlock. */
+export function r16SlotKeyForR32MatchIndex(matchIndex: number): string {
+  return String(matchIndex + 1);
+}
+
+/** `round_of_16` slot key (1–16) → R32 match index (0–15), or -1 when not a gradual winner slot. */
+export function r32MatchIndexForR16SlotKey(
+  slotKey: string | null | undefined,
+): number {
+  const n = slotKey != null ? parseInt(slotKey, 10) : NaN;
+  if (!Number.isFinite(n) || n < 1 || n > WC2026_R32_MATCH_DEFS.length) return -1;
+  return n - 1;
+}
+
+export function matchStateForR32MatchIndex(
+  matchIndex: number,
+  state: GradualKnockoutSelectionState,
+): R32MatchUnlockState | null {
+  if (matchIndex < 0) return null;
+  return state.matchStates[matchIndex] ?? null;
+}
+
+export function matchStateForR16GradualWinnerSlot(
+  slotKey: string | null | undefined,
+  state: GradualKnockoutSelectionState,
+): R32MatchUnlockState | null {
+  return matchStateForR32MatchIndex(r32MatchIndexForR16SlotKey(slotKey), state);
+}
+
+/** Gradual R32 UI uses one `round_of_16` row per FIFA matchup (M73–M88). */
+export function isGradualR32WinnerPickRow(
+  row: Pick<KnockoutPickSlotDraft, "predictionKind" | "slotKey">,
+  fullRoundOf32Official: boolean,
+): boolean {
+  if (fullRoundOf32Official) return false;
+  if (row.predictionKind !== "round_of_16") return false;
+  return r32MatchIndexForR16SlotKey(row.slotKey) >= 0;
+}
+
+function teamIsInR32Match(
+  teamId: string,
+  match: R32MatchUnlockState,
+  teams: Team[],
+): boolean {
+  const id = teamId.trim();
+  if (!id) return false;
+  if (match.homeTeamId === id || match.awayTeamId === id) return true;
+  const team = teams.find((t) => t.id === id);
+  if (!team) return false;
+  const code = normalizeCountryCode(team.countryCode);
+  const home = normalizeCountryCode(match.homeCountryCode);
+  const away = normalizeCountryCode(match.awayCountryCode);
+  return Boolean(code && home && away && (code === home || code === away));
+}
+
+/**
+ * Winner for a gradual R32 matchup: canonical `round_of_16` slot, with legacy
+ * `round_of_32` top/bottom slots read for older saves.
+ */
+export function readGradualR32MatchWinner(
+  matchIndex: number,
+  slots: KnockoutPickSlotDraft[],
+  teams: Team[],
+  match: R32MatchUnlockState,
+): string {
+  const r16Key = r16SlotKeyForR32MatchIndex(matchIndex);
+  const r16Row = slots.find(
+    (s) => s.predictionKind === "round_of_16" && s.slotKey === r16Key,
+  );
+  const r16Id = r16Row?.teamId.trim() ?? "";
+  if (r16Id && teamIsInR32Match(r16Id, match, teams)) return r16Id;
+
+  for (const sk of [match.topSlotKey, match.bottomSlotKey]) {
+    const row = slots.find(
+      (s) => s.predictionKind === "round_of_32" && s.slotKey === sk,
+    );
+    const id = row?.teamId.trim() ?? "";
+    if (id && teamIsInR32Match(id, match, teams)) return id;
+  }
+  return "";
+}
+
+export function countGradualR32MatchupsFilled(input: {
+  slots: KnockoutPickSlotDraft[];
+  state: GradualKnockoutSelectionState;
+  teams: Team[];
+  /** When set, only count among these match indices (e.g. pickable matchups). */
+  matchIndices?: number[];
+}): number {
+  const indices =
+    input.matchIndices ??
+    input.state.matchStates.map((m) => m.matchIndex);
+  let n = 0;
+  for (const matchIndex of indices) {
+    const match = input.state.matchStates[matchIndex];
+    if (!match) continue;
+    if (
+      readGradualR32MatchWinner(
+        matchIndex,
+        input.slots,
+        input.teams,
+        match,
+      )
+    ) {
+      n += 1;
+    }
+  }
+  return n;
+}
+
+export function applyGradualR32MatchWinnerToSlots(
+  slots: KnockoutPickSlotDraft[],
+  matchIndex: number,
+  teamId: string,
+  state: GradualKnockoutSelectionState,
+): KnockoutPickSlotDraft[] {
+  const ms = state.matchStates[matchIndex];
+  if (!ms) return slots;
+  const r16Key = r16SlotKeyForR32MatchIndex(matchIndex);
+  return slots.map((s) => {
+    if (s.predictionKind === "round_of_16" && s.slotKey === r16Key) {
+      return { ...s, teamId };
+    }
+    if (
+      s.predictionKind === "round_of_32" &&
+      (s.slotKey === ms.topSlotKey || s.slotKey === ms.bottomSlotKey)
+    ) {
+      return { ...s, teamId: "" };
+    }
+    return s;
+  });
+}
+
+export type GradualR32MatchPickRow = {
+  matchIndex: number;
+  fifaMatchNo: number;
+  rowKey: string;
+  saveSlotKey: string;
+  winnerTeamId: string;
+  lockReason: R32SlotLockReason;
+  display: R32SlotRowDisplay;
+};
+
+/** One UI row per R32 matchup (16 total) during gradual unlock. */
+export function buildGradualR32MatchPickRows(input: {
+  slots: KnockoutPickSlotDraft[];
+  state: GradualKnockoutSelectionState;
+  teams: Team[];
+  fullRoundOf32Official: boolean;
+}): GradualR32MatchPickRow[] {
+  const r16Rows = input.slots
+    .filter((s) => s.predictionKind === "round_of_16")
+    .sort(
+      (a, b) =>
+        parseInt(a.slotKey ?? "0", 10) - parseInt(b.slotKey ?? "0", 10),
+    );
+
+  return input.state.matchStates.map((ms, matchIndex) => {
+    const slotRow = r16Rows.find(
+      (s) => s.slotKey === r16SlotKeyForR32MatchIndex(matchIndex),
+    );
+    const lockReason = gradualR32MatchLockReason(
+      ms,
+      input.fullRoundOf32Official,
+    );
+    return {
+      matchIndex,
+      fifaMatchNo: ms.fifaMatchNo,
+      rowKey: slotRow?.rowKey ?? `round_of_16|${matchIndex + 1}`,
+      saveSlotKey: r16SlotKeyForR32MatchIndex(matchIndex),
+      winnerTeamId: readGradualR32MatchWinner(
+        matchIndex,
+        input.slots,
+        input.teams,
+        ms,
+      ),
+      lockReason,
+      display: r32MatchRowDisplay(
+        ms,
+        input.teams,
+        input.fullRoundOf32Official,
+        lockReason,
+      ),
+    };
+  });
+}
+
 export function getR32MatchUnlockState(
   matchIndex: number,
   publicMatch: TournamentMatchPublicRow | null,
@@ -255,7 +443,17 @@ export function r32SlotLockReason(
     return "pickable";
   }
   const ms = matchStateForR32Slot(slotKey, state);
-  if (!ms) return "unconfirmed";
+  return ms ? gradualR32MatchLockReason(ms, fullRoundOf32Official) : "unconfirmed";
+}
+
+export function gradualR32MatchLockReason(
+  ms: R32MatchUnlockState,
+  fullRoundOf32Official: boolean,
+): R32SlotLockReason {
+  if (fullRoundOf32Official) {
+    if (ms.started) return "started";
+    return "pickable";
+  }
   if (!ms.confirmed) return "unconfirmed";
   if (ms.started) return "started";
   if (ms.pickable) return "pickable";
@@ -297,28 +495,26 @@ function r32MatchSideName(
   return isRealTeamLabel(name) ? name!.trim() : null;
 }
 
-/** Participant row copy for Round of 32 slots during gradual or full unlock. */
-export function r32SlotRowDisplay(
-  slotKey: string | null | undefined,
-  state: GradualKnockoutSelectionState,
+/** Participant row copy for one R32 matchup during gradual or full unlock. */
+export function r32MatchRowDisplay(
+  ms: R32MatchUnlockState,
   teams: Team[],
   fullRoundOf32Official: boolean,
-  slotLabelFallback: string,
-): R32SlotRowDisplay | null {
-  const ms = matchStateForR32Slot(slotKey, state);
-  if (!ms) return null;
-
-  const reason = r32SlotLockReason(slotKey, state, fullRoundOf32Official);
+  reason?: R32SlotLockReason,
+): R32SlotRowDisplay {
+  const lockReason = reason ?? gradualR32MatchLockReason(ms, fullRoundOf32Official);
   const homeName = r32MatchSideName(ms, "home", teams);
   const awayName = r32MatchSideName(ms, "away", teams);
   const matchupLine =
     homeName && awayName ? `${homeName} vs ${awayName}` : null;
   const matchHeading =
-    ms.fifaMatchNo > 0 ? `M${ms.fifaMatchNo} · Round of 32` : slotLabelFallback;
+    ms.fifaMatchNo > 0
+      ? `M${ms.fifaMatchNo} · Round of 32`
+      : "Round of 32";
 
-  if (reason === "unconfirmed") {
+  if (lockReason === "unconfirmed") {
     return {
-      heading: slotLabelFallback,
+      heading: matchHeading,
       emptyPrimaryLine: R32_MATCHUP_NOT_CONFIRMED,
       kickoffIso: null,
       statusLine: null,
@@ -326,7 +522,7 @@ export function r32SlotRowDisplay(
     };
   }
 
-  if (reason === "started") {
+  if (lockReason === "started") {
     return {
       heading: matchHeading,
       emptyPrimaryLine: matchupLine ?? R32_LOCKED_AT_KICKOFF,
@@ -345,15 +541,40 @@ export function r32SlotRowDisplay(
   };
 }
 
-export function allowedTeamsForGradualR32Slot(
+/** Participant row copy for Round of 32 slots during gradual or full unlock. */
+export function r32SlotRowDisplay(
   slotKey: string | null | undefined,
+  state: GradualKnockoutSelectionState,
+  teams: Team[],
+  fullRoundOf32Official: boolean,
+  slotLabelFallback: string,
+): R32SlotRowDisplay | null {
+  const ms = matchStateForR32Slot(slotKey, state);
+  if (!ms) return null;
+  return r32MatchRowDisplay(
+    ms,
+    teams,
+    fullRoundOf32Official,
+    r32SlotLockReason(slotKey, state, fullRoundOf32Official),
+  );
+}
+
+export function allowedTeamsForGradualR32Match(
+  matchIndex: number,
   state: GradualKnockoutSelectionState,
   allTeams: Team[],
   fullRoundOf32Official: boolean,
-): Team[] | null {
-  if (fullRoundOf32Official) return null;
-  const ms = matchStateForR32Slot(slotKey, state);
+): Team[] {
+  if (fullRoundOf32Official) return [];
+  const ms = state.matchStates[matchIndex];
   if (!ms?.pickable) return [];
+  return allowedTeamsForGradualR32MatchState(ms, allTeams);
+}
+
+function allowedTeamsForGradualR32MatchState(
+  ms: R32MatchUnlockState,
+  allTeams: Team[],
+): Team[] {
   const ids = new Set(
     [ms.homeTeamId, ms.awayTeamId].filter((id): id is string => Boolean(id)),
   );
@@ -366,6 +587,18 @@ export function allowedTeamsForGradualR32Slot(
     return allTeams.filter((t) => codes.has(normalizeCountryCode(t.countryCode)));
   }
   return allTeams.filter((t) => ids.has(t.id));
+}
+
+export function allowedTeamsForGradualR32Slot(
+  slotKey: string | null | undefined,
+  state: GradualKnockoutSelectionState,
+  allTeams: Team[],
+  fullRoundOf32Official: boolean,
+): Team[] | null {
+  if (fullRoundOf32Official) return null;
+  const ms = matchStateForR32Slot(slotKey, state);
+  if (!ms?.pickable) return [];
+  return allowedTeamsForGradualR32MatchState(ms, allTeams);
 }
 
 export type ValidateKnockoutMatchPickInput = {
