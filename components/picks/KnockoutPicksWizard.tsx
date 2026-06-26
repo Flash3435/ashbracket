@@ -966,7 +966,11 @@ export function KnockoutPicksWizard({
     if (disabled || readOnly) return;
     const submittedSignature = draftSignature;
     const submittedSlots = gradualR32MatchRows
-      ? buildGradualR32SavePayload({ slots, state: gradualKnockout })
+      ? buildGradualR32SavePayload({
+          slots,
+          state: gradualKnockout,
+          omitFrozenPreBracketPicks: preBracketActive,
+        })
       : slots.map((s) => ({
           predictionKind: s.predictionKind,
           tournamentStageId: s.tournamentStageId,

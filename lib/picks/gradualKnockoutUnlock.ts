@@ -622,10 +622,16 @@ function pickSlotPayload(slot: KnockoutPickSlotDraft): ParticipantPickSlotPayloa
 export function buildGradualR32SavePayload(input: {
   slots: KnockoutPickSlotDraft[];
   state: GradualKnockoutSelectionState;
+  /**
+   * When group/third/bonus picks are locked, omit them so a gradual knockout save
+   * cannot fail frozen-pick validation or rewrite locked rows.
+   */
+  omitFrozenPreBracketPicks?: boolean;
 }): ParticipantPickSlotPayload[] {
   const out: ParticipantPickSlotPayload[] = [];
   for (const slot of input.slots) {
     if (!isKnockoutProgressionKind(slot.predictionKind)) {
+      if (input.omitFrozenPreBracketPicks) continue;
       out.push(pickSlotPayload(slot));
     }
   }

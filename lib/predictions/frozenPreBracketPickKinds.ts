@@ -20,7 +20,8 @@ function slotPayloadKey(s: ParticipantPickSlotPayload): string {
     return `${k}\0${s.tournamentStageId}\0${gc}`;
   }
   if (k === "third_place_qualifier") {
-    return `${k}\0${s.tournamentStageId}\0${s.slotKey ?? ""}`;
+    const gc = (s.groupCode ?? "").trim().toUpperCase();
+    return `${k}\0${s.tournamentStageId}\0${gc || (s.slotKey ?? "")}`;
   }
   if (k === "bonus_pick") {
     return `${k}\0${s.tournamentStageId}\0${(s.bonusKey ?? "").trim()}`;
@@ -34,7 +35,8 @@ function slotPredictionKey(p: Prediction): string {
     return `${k}\0${p.tournamentStageId}\0${(p.groupCode ?? "").toUpperCase()}`;
   }
   if (k === "third_place_qualifier") {
-    return `${k}\0${p.tournamentStageId}\0${p.slotKey ?? ""}`;
+    const gc = (p.groupCode ?? "").trim().toUpperCase();
+    return `${k}\0${p.tournamentStageId}\0${gc || (p.slotKey ?? "")}`;
   }
   if (k === "bonus_pick") {
     return `${k}\0${p.tournamentStageId}\0${p.bonusKey ?? ""}`;

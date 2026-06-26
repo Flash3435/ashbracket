@@ -534,6 +534,20 @@ function r32SlotDraft(slotKey: string, teamId = ""): KnockoutPickSlotDraft {
     payload.some((s) => s.predictionKind === "round_of_16" && s.slotKey === "2"),
     false,
   );
+
+  const lockedPayload = buildGradualR32SavePayload({
+    slots,
+    state,
+    omitFrozenPreBracketPicks: true,
+  });
+  assert.strictEqual(
+    lockedPayload.some((s) => s.predictionKind === "group_winner"),
+    false,
+  );
+  assert.strictEqual(
+    lockedPayload.filter((s) => s.predictionKind === "round_of_16").length,
+    1,
+  );
 }
 
 console.log("gradualKnockoutUnlock.selftest.ts: ok");
