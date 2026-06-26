@@ -18,6 +18,7 @@ import {
 } from "../../lib/predictions/knockoutPickConsistency";
 import { applyQuickPickToSlots } from "../../lib/predictions/knockoutQuickPickStrategies";
 import { CountryFlagIcon } from "../tournament/Flag";
+import { KickoffTimeDisplay } from "../datetime/KickoffTimeDisplay";
 import {
   fifaRankSnapshotTitle,
   teamPickMetaLine,
@@ -58,6 +59,7 @@ import {
   getGradualKnockoutSelectionState,
   r32SlotLockMessage,
   r32SlotLockReason,
+  r32SlotRowDisplay,
 } from "../../lib/picks/gradualKnockoutUnlock";
 import { isKnockoutProgressionKind } from "../../lib/predictions/knockoutProgressionKinds";
 
@@ -1416,6 +1418,24 @@ export function KnockoutPicksWizard({
                       knockoutBracketPicksUnlocked,
                     )
                   : null;
+              const r32RowDisplay =
+                row.predictionKind === "round_of_32"
+                  ? r32SlotRowDisplay(
+                      row.slotKey,
+                      gradualKnockout,
+                      teams,
+                      knockoutBracketPicksUnlocked,
+                      row.slotLabel,
+                    )
+                  : null;
+              const r32LockReason =
+                row.predictionKind === "round_of_32"
+                  ? r32SlotLockReason(
+                      row.slotKey,
+                      gradualKnockout,
+                      knockoutBracketPicksUnlocked,
+                    )
+                  : null;
               const thirdInvalidReason = isThirdPlaceRow
                 ? thirdPlaceSlotInvalidReason(row, slots, {
                     teamIdToGroupLetter: thirdPlaceTeamGroupById,
@@ -1454,14 +1474,15 @@ export function KnockoutPicksWizard({
                     : flatOptions;
 
               const heading =
-                row.predictionKind === "group_winner" ||
+                r32RowDisplay?.heading ??
+                (row.predictionKind === "group_winner" ||
                 row.predictionKind === "group_runner_up"
                   ? `${row.sectionLabel} — ${row.slotLabel}`
                   : row.predictionKind === "third_place_qualifier" && row.groupCode
                     ? `Group ${row.groupCode} — 3rd-place team`
                   : row.predictionKind === "bonus_pick"
                     ? row.slotLabel
-                    : row.slotLabel;
+                    : row.slotLabel);
 
               const isEmptyPick = !row.teamId.trim();
 
@@ -1494,7 +1515,10 @@ export function KnockoutPicksWizard({
                               isEmptyPick ? "text-amber-100/90" : "text-ash-text"
                             }`}
                           >
-                            {team?.name ?? (r32LockMessage ?? "Pick needed")}
+                            {team?.name ??
+                              r32RowDisplay?.emptyPrimaryLine ??
+                              r32LockMessage ??
+                              "Pick needed"}
                           </p>
                           {team && strength ? (
                             <p
@@ -1545,17 +1569,36 @@ export function KnockoutPicksWizard({
                           ? "Change"
                           : thirdRowChooseDisabled
                             ? THIRD_PLACE_DISABLED_MAX_SELECTED
-                            : "Choose team"}
+                            : (r32RowDisplay?.chooseButtonLabel ?? "Choose team")}
                       </button>
                     </div>
                   </div>
 
-                  {r32LockMessage ? (
+                  {r32LockMessage && !r32RowDisplay ? (
                     <p
                       className="mt-2 rounded-md border border-sky-800/40 bg-sky-950/20 px-3 py-2 text-xs text-sky-100"
                       role="status"
                     >
                       {r32LockMessage}
+                    </p>
+                  ) : null}
+                  {r32RowDisplay?.statusLine && isEmptyPick ? (
+                    <p
+                      className="mt-2 rounded-md border border-sky-800/40 bg-sky-950/20 px-3 py-2 text-xs text-sky-100"
+                      role="status"
+                    >
+                      {r32RowDisplay.statusLine}
+                    </p>
+                  ) : null}
+                  {r32RowDisplay?.kickoffIso &&
+                  isEmptyPick &&
+                  r32LockReason === "pickable" ? (
+                    <p className="mt-2 text-xs text-ash-muted">
+                      Locks:{" "}
+                      <KickoffTimeDisplay
+                        iso={r32RowDisplay.kickoffIso}
+                        emptyLabel="Time TBD"
+                      />
                     </p>
                   ) : null}
                   {thirdInvalidReason ? (

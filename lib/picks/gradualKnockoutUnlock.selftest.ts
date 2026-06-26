@@ -6,6 +6,7 @@ import {
   isKnockoutMatchConfirmed,
   isMatchPickable,
   r32SlotLockMessage,
+  r32SlotRowDisplay,
   validateKnockoutMatchPick,
 } from "./gradualKnockoutUnlock";
 
@@ -165,6 +166,71 @@ const teams: Team[] = [
     ],
   });
   assert.ok(err?.includes("not in this confirmed matchup"), err ?? "");
+}
+
+// R32 row display — confirmed matchup shows teams and match code
+{
+  const r32Teams: Team[] = [
+    ...teams,
+    {
+      id: "team-rsa",
+      name: "South Africa",
+      countryCode: "RSA",
+      fifaCode: "RSA",
+      fifaRank: 30,
+      fifaRankAsOf: null,
+      createdAt: "",
+      updatedAt: "",
+    },
+    {
+      id: "team-can",
+      name: "Canada",
+      countryCode: "CAN",
+      fifaCode: "CAN",
+      fifaRank: 40,
+      fifaRankAsOf: null,
+      createdAt: "",
+      updatedAt: "",
+    },
+  ];
+  const state = getGradualKnockoutSelectionState({
+    matches: [
+      match({
+        match_code: "M73",
+        stage_code: "round_of_32",
+        kickoff_at: "2026-06-28T19:00:00Z",
+        home_country_code: "RSA",
+        away_country_code: "CAN",
+        home_team_name: "South Africa",
+        away_team_name: "Canada",
+      }),
+    ],
+    teams: r32Teams,
+    nowMs: new Date("2026-06-28T12:00:00Z").getTime(),
+    fullRoundOf32Official: false,
+  });
+  const pickable = r32SlotRowDisplay(
+    "1",
+    state,
+    r32Teams,
+    false,
+    "Round of 32 · pick 1",
+  );
+  assert.ok(pickable);
+  assert.strictEqual(pickable!.heading, "M73 · Round of 32");
+  assert.strictEqual(pickable!.emptyPrimaryLine, "South Africa vs Canada");
+  assert.strictEqual(pickable!.chooseButtonLabel, "Pick winner");
+  assert.strictEqual(pickable!.kickoffIso, "2026-06-28T19:00:00Z");
+
+  const unconfirmed = r32SlotRowDisplay(
+    "3",
+    state,
+    r32Teams,
+    false,
+    "Round of 32 · pick 3",
+  );
+  assert.ok(unconfirmed);
+  assert.strictEqual(unconfirmed!.emptyPrimaryLine, "Matchup not confirmed yet");
 }
 
 console.log("gradualKnockoutUnlock.selftest.ts: ok");

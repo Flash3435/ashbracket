@@ -273,6 +273,78 @@ export function r32SlotLockMessage(
   return R32_MATCHUP_NOT_CONFIRMED;
 }
 
+export type R32SlotRowDisplay = {
+  heading: string;
+  emptyPrimaryLine: string;
+  kickoffIso: string | null;
+  statusLine: string | null;
+  chooseButtonLabel: string;
+};
+
+function r32MatchSideName(
+  ms: R32MatchUnlockState,
+  side: "home" | "away",
+  teams: Team[],
+): string | null {
+  const id = side === "home" ? ms.homeTeamId : ms.awayTeamId;
+  if (id) {
+    const t = teams.find((x) => x.id === id);
+    if (t?.name?.trim()) return t.name.trim();
+  }
+  const pub = ms.publicMatch;
+  if (!pub) return null;
+  const name = side === "home" ? pub.home_team_name : pub.away_team_name;
+  return isRealTeamLabel(name) ? name!.trim() : null;
+}
+
+/** Participant row copy for Round of 32 slots during gradual or full unlock. */
+export function r32SlotRowDisplay(
+  slotKey: string | null | undefined,
+  state: GradualKnockoutSelectionState,
+  teams: Team[],
+  fullRoundOf32Official: boolean,
+  slotLabelFallback: string,
+): R32SlotRowDisplay | null {
+  const ms = matchStateForR32Slot(slotKey, state);
+  if (!ms) return null;
+
+  const reason = r32SlotLockReason(slotKey, state, fullRoundOf32Official);
+  const homeName = r32MatchSideName(ms, "home", teams);
+  const awayName = r32MatchSideName(ms, "away", teams);
+  const matchupLine =
+    homeName && awayName ? `${homeName} vs ${awayName}` : null;
+  const matchHeading =
+    ms.fifaMatchNo > 0 ? `M${ms.fifaMatchNo} · Round of 32` : slotLabelFallback;
+
+  if (reason === "unconfirmed") {
+    return {
+      heading: slotLabelFallback,
+      emptyPrimaryLine: R32_MATCHUP_NOT_CONFIRMED,
+      kickoffIso: null,
+      statusLine: null,
+      chooseButtonLabel: "Choose team",
+    };
+  }
+
+  if (reason === "started") {
+    return {
+      heading: matchHeading,
+      emptyPrimaryLine: matchupLine ?? R32_LOCKED_AT_KICKOFF,
+      kickoffIso: ms.kickoffAtIso,
+      statusLine: R32_LOCKED_AT_KICKOFF,
+      chooseButtonLabel: "Pick winner",
+    };
+  }
+
+  return {
+    heading: matchHeading,
+    emptyPrimaryLine: matchupLine ?? "Pick needed",
+    kickoffIso: ms.kickoffAtIso,
+    statusLine: null,
+    chooseButtonLabel: "Pick winner",
+  };
+}
+
 export function allowedTeamsForGradualR32Slot(
   slotKey: string | null | undefined,
   state: GradualKnockoutSelectionState,
