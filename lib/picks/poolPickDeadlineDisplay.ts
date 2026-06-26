@@ -3,6 +3,12 @@ import {
   formatPoolLockDeadlineTimeOnly,
   poolLockDeadlineCalendarKey,
 } from "../datetime/poolLockDeadline";
+import type { TournamentMatchPublicRow } from "../../types/tournamentPublic";
+import {
+  formatGradualKnockoutStatusLine,
+  getGradualKnockoutSelectionState,
+  hasEditableKnockoutPicks,
+} from "./gradualKnockoutUnlock";
 
 export type PoolPickDeadlineTone = "open" | "soon" | "locked" | "neutral";
 
@@ -53,11 +59,42 @@ export function formatRelativeTimeUntilEn(
   return "";
 }
 
-function knockoutEditDetail(knockoutBracketPicksUnlocked: boolean): string {
-  if (knockoutBracketPicksUnlocked) {
+function resolveKnockoutEditContext(input: {
+  knockoutBracketPicksUnlocked: boolean;
+  tournamentMatches?: TournamentMatchPublicRow[] | null;
+  nowMs: number;
+}): {
+  knockoutEditable: boolean;
+  gradualStatusLine: string | null;
+} {
+  const gradual = getGradualKnockoutSelectionState({
+    matches: input.tournamentMatches,
+    nowMs: input.nowMs,
+    fullRoundOf32Official: input.knockoutBracketPicksUnlocked,
+  });
+  const knockoutEditable = hasEditableKnockoutPicks({
+    gradual,
+    fullRoundOf32Official: input.knockoutBracketPicksUnlocked,
+  });
+  const gradualStatusLine = formatGradualKnockoutStatusLine(gradual);
+  return { knockoutEditable, gradualStatusLine };
+}
+
+function knockoutEditDetail(args: {
+  knockoutEditable: boolean;
+  fullRoundOf32Official: boolean;
+  gradualStatusLine: string | null;
+}): string {
+  if (args.fullRoundOf32Official && args.knockoutEditable) {
     return "Knockout bracket picks are still editable.";
   }
-  return "Knockout bracket picks open when the official Round of 32 is published.";
+  if (args.gradualStatusLine) {
+    return `${args.gradualStatusLine}. Each match locks at kickoff.`;
+  }
+  if (args.knockoutEditable) {
+    return "Confirmed knockout matchups can be picked as they become available.";
+  }
+  return "Knockout bracket picks open as official Round of 32 matchups are confirmed.";
 }
 
 function buildOpenCopy(args: {
@@ -65,6 +102,8 @@ function buildOpenCopy(args: {
   deadlineLabel: string;
   relative: string;
   knockoutBracketPicksUnlocked: boolean;
+  knockoutEditable: boolean;
+  gradualStatusLine: string | null;
   nowMs: number;
   readOnly: boolean;
 }): Pick<PoolPickDeadlineStatus, "headline" | "detail" | "chipLabel" | "tone"> {
@@ -73,6 +112,8 @@ function buildOpenCopy(args: {
     deadlineLabel,
     relative,
     knockoutBracketPicksUnlocked,
+    knockoutEditable,
+    gradualStatusLine,
     nowMs,
     readOnly,
   } = args;
@@ -104,16 +145,21 @@ function buildOpenCopy(args: {
     ? [`This pool’s pick deadline is ${deadlineLabel}.`]
     : ["You can edit group stage, third-place, and bonus picks until then."];
   if (!readOnly) {
-    if (knockoutBracketPicksUnlocked) {
+    if (knockoutBracketPicksUnlocked && knockoutEditable) {
       detailParts.push("Knockout bracket picks are open too.");
+    } else if (knockoutEditable) {
+      detailParts.push(
+        "Knockout bracket picks are separate — confirmed Round of 32 matchups unlock gradually as the official bracket is published.",
+      );
+      if (gradualStatusLine) detailParts.push(gradualStatusLine);
     } else {
       detailParts.push(
-        "Knockout bracket picks are separate — they open when the official Round of 32 is published.",
+        "Knockout bracket picks are separate — they open as official Round of 32 matchups are confirmed.",
       );
     }
-  } else if (!knockoutBracketPicksUnlocked) {
+  } else if (!knockoutEditable) {
     detailParts.push(
-      "Knockout bracket picks open when the official Round of 32 is published.",
+      "Knockout bracket picks open as official Round of 32 matchups are confirmed.",
     );
   }
 
@@ -127,10 +173,10 @@ function buildOpenCopy(args: {
 
 function buildLockedCopy(args: {
   deadlineLabel: string | null;
-  knockoutBracketPicksUnlocked: boolean;
+  knockoutEditable: boolean;
   readOnly: boolean;
 }): Pick<PoolPickDeadlineStatus, "headline" | "detail" | "chipLabel" | "tone"> {
-  const { deadlineLabel, knockoutBracketPicksUnlocked, readOnly } = args;
+  const { deadlineLabel, knockoutEditable, readOnly } = args;
   const headline = "Group & bonus picks locked";
   let detail: string;
   if (deadlineLabel) {
@@ -142,7 +188,7 @@ function buildLockedCopy(args: {
       ? "The pick deadline has passed."
       : "The pick deadline has passed. You can review these picks, but they can no longer be edited.";
   }
-  if (!readOnly && knockoutBracketPicksUnlocked) {
+  if (!readOnly && knockoutEditable) {
     detail += " Knockout bracket picks are still editable.";
   }
   return {
@@ -171,6 +217,7 @@ export function isPreKnockoutLockedAt(
 export function buildPoolPickDeadlineStatus(input: {
   lockAtIso: string | null | undefined;
   knockoutBracketPicksUnlocked?: boolean;
+  tournamentMatches?: TournamentMatchPublicRow[] | null;
   /** Another participant’s read-only view — neutral copy. */
   readOnly?: boolean;
   nowMs?: number;
@@ -181,6 +228,11 @@ export function buildPoolPickDeadlineStatus(input: {
   const nowMs = input.nowMs ?? Date.now();
   const lockAtIso = input.lockAtIso?.trim() || null;
   const preKnockoutLocked = isPreKnockoutLockedAt(lockAtIso, nowMs);
+  const { knockoutEditable, gradualStatusLine } = resolveKnockoutEditContext({
+    knockoutBracketPicksUnlocked,
+    tournamentMatches: input.tournamentMatches,
+    nowMs,
+  });
 
   if (!lockAtIso) {
     return {
@@ -190,7 +242,9 @@ export function buildPoolPickDeadlineStatus(input: {
         ? "The organizer has not set a pick deadline for this pool yet."
         : knockoutBracketPicksUnlocked
           ? "You can edit your picks until your organizer sets a deadline."
-          : "You can edit group, third-place, and bonus picks until a deadline is set. Knockout bracket picks open when the official Round of 32 is published.",
+          : knockoutEditable
+            ? `You can edit group, third-place, and bonus picks until a deadline is set. ${knockoutEditDetail({ knockoutEditable, fullRoundOf32Official: knockoutBracketPicksUnlocked, gradualStatusLine })}`
+            : "You can edit group, third-place, and bonus picks until a deadline is set. Knockout bracket picks open as official Round of 32 matchups are confirmed.",
       chipLabel: "open",
       deadlineLabel: null,
       tone: "neutral",
@@ -206,7 +260,7 @@ export function buildPoolPickDeadlineStatus(input: {
       deadlineLabel: hasValidDeadline ? deadlineLabel : null,
       ...buildLockedCopy({
         deadlineLabel: hasValidDeadline ? deadlineLabel : null,
-        knockoutBracketPicksUnlocked,
+        knockoutEditable,
         readOnly,
       }),
     };
@@ -221,6 +275,8 @@ export function buildPoolPickDeadlineStatus(input: {
       deadlineLabel: hasValidDeadline ? deadlineLabel : lockAtIso,
       relative,
       knockoutBracketPicksUnlocked,
+      knockoutEditable,
+      gradualStatusLine,
       nowMs,
       readOnly,
     }),

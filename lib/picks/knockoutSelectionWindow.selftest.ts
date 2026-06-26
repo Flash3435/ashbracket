@@ -31,10 +31,10 @@ function match(
     away_goals: null,
     home_penalties: null,
     away_penalties: null,
-    home_team_name: null,
-    home_country_code: null,
-    away_team_name: null,
-    away_country_code: null,
+    home_team_name: partial.home_team_name ?? null,
+    home_country_code: partial.home_country_code ?? null,
+    away_team_name: partial.away_team_name ?? null,
+    away_country_code: partial.away_country_code ?? null,
     winner_team_name: null,
     winner_country_code: null,
   };
@@ -81,6 +81,7 @@ function match(
   assert.ok(model!.countdown);
   assert.strictEqual(model!.countdown!.label, "Selections open in");
   assert.strictEqual(model!.upcomingFallbackLine, null);
+  assert.strictEqual(model!.gradualStatusLine, null);
 
   const schedule = deriveKnockoutSelectionSchedule(matches, nowMs);
   assert.strictEqual(schedule.finalGroupKickoffIso, "2026-06-27T20:00:00Z");
@@ -93,25 +94,54 @@ function match(
   );
 }
 
-// Open state between unlock and first knockout kickoff
+// Partial gradual unlock — some R32 confirmed
 {
-  const nowMs = new Date("2026-06-27T22:00:00Z").getTime();
+  const nowMs = new Date("2026-06-28T10:00:00Z").getTime();
   const matches = [
     match({
       match_code: "M73",
       stage_code: "round_of_32",
       kickoff_at: "2026-06-28T19:00:00Z",
-    }),
-    match({
-      match_code: "M74",
-      stage_code: "round_of_32",
-      kickoff_at: "2026-06-28T22:00:00Z",
+      home_country_code: "USA",
+      away_country_code: "MEX",
+      home_team_name: "United States",
+      away_team_name: "Mexico",
     }),
   ];
 
   const model = buildKnockoutSelectionInstructionCard({
-    knockoutBracketPicksUnlocked: true,
+    knockoutBracketPicksUnlocked: false,
     matches,
+    picksHref: "/account/picks",
+    nowMs,
+  });
+
+  assert.strictEqual(model.phase, "upcoming");
+  assert.strictEqual(model.title, "Knockout picks are opening gradually");
+  assert.strictEqual(model.countdown?.label, "First available match locks in");
+  assert.strictEqual(model.countdown?.targetIso, "2026-06-28T19:00:00Z");
+  assert.ok(model.gradualStatusLine?.includes("1 confirmed"));
+  assert.ok(model.gradualStatusLine?.includes("15 waiting"));
+}
+
+// Open state — full R32 before first kickoff
+{
+  const nowMs = new Date("2026-06-27T22:00:00Z").getTime();
+  const r32 = Array.from({ length: 16 }, (_, i) =>
+    match({
+      match_code: `M${73 + i}`,
+      stage_code: "round_of_32",
+      kickoff_at: i === 0 ? "2026-06-28T19:00:00Z" : `2026-06-29T${10 + i}:00:00Z`,
+      home_country_code: "USA",
+      away_country_code: "MEX",
+      home_team_name: "United States",
+      away_team_name: "Mexico",
+    }),
+  );
+
+  const model = buildKnockoutSelectionInstructionCard({
+    knockoutBracketPicksUnlocked: true,
+    matches: r32,
     picksHref: "/account/picks",
     nowMs,
   });
@@ -120,7 +150,7 @@ function match(
   assert.strictEqual(model!.phase, "open");
   assert.strictEqual(model!.title, "Knockout picks are open");
   assert.ok(model!.countdown);
-  assert.strictEqual(model!.countdown!.label, "Selection window closes in");
+  assert.strictEqual(model!.countdown!.label, "First match locks in");
   assert.strictEqual(model!.countdown!.targetIso, "2026-06-28T19:00:00Z");
   assert.strictEqual(model!.cta?.label, "Make knockout picks");
   assert.ok(model!.helperText?.includes("kickoff"));
@@ -135,11 +165,15 @@ function match(
       stage_code: "round_of_32",
       kickoff_at: "2026-06-28T19:00:00Z",
       status: "live",
+      home_country_code: "USA",
+      away_country_code: "MEX",
     }),
     match({
       match_code: "M74",
       stage_code: "round_of_32",
       kickoff_at: "2026-06-28T22:00:00Z",
+      home_country_code: "BRA",
+      away_country_code: "ARG",
     }),
   ];
 

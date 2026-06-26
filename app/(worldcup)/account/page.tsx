@@ -21,6 +21,10 @@ import { ParticipantBracketView } from "@/components/bracket/ParticipantBracketV
 import { KnockoutSelectionInstructionCard } from "@/components/picks/KnockoutSelectionInstructionCard";
 import { MyKnockoutPicksSummary } from "@/components/picks/MyKnockoutPicksSummary";
 import { buildKnockoutSelectionInstructionCard } from "@/lib/picks/knockoutSelectionWindow";
+import {
+  getGradualKnockoutSelectionState,
+  hasEditableKnockoutPicks,
+} from "@/lib/picks/gradualKnockoutUnlock";
 import { PicksViewToggle } from "@/components/picks/PicksViewToggle";
 import { PageContainer } from "@/components/ui/PageContainer";
 import { PageTitle } from "@/components/ui/PageTitle";
@@ -303,9 +307,19 @@ export default async function AccountPage({ searchParams }: PageProps) {
   const activityHref = picksCtx?.selectedParticipant?.id
     ? `/account/activity?participant=${picksCtx.selectedParticipant.id}`
     : "/account/activity";
+  const knockoutPicksEditable = picksCtx
+    ? hasEditableKnockoutPicks({
+        gradual: getGradualKnockoutSelectionState({
+          matches: tournamentMatches,
+          fullRoundOf32Official: picksCtx.knockoutBracketPicksUnlocked,
+        }),
+        fullRoundOf32Official: picksCtx.knockoutBracketPicksUnlocked,
+      })
+    : true;
   const accountNav = buildAccountPageNavState({
     picksLocked: locked,
     knockoutBracketPicksUnlocked: picksCtx?.knockoutBracketPicksUnlocked ?? true,
+    knockoutPicksEditable,
     revealHref,
     leaderboardHref,
     outlookHref,

@@ -11,6 +11,8 @@ export type PostLockNavCta = {
 export type PostLockNavInput = {
   picksLocked: boolean;
   knockoutBracketPicksUnlocked: boolean;
+  /** When set, overrides `knockoutBracketPicksUnlocked` for post-lock engagement mode. */
+  knockoutPicksEditable?: boolean;
   revealHref: string | null;
   leaderboardHref: string | null;
   outlookHref?: string | null;
@@ -29,14 +31,17 @@ export type PostLockNavPlan = {
 export function isPostLockEngagementMode(
   picksLocked: boolean,
   knockoutBracketPicksUnlocked: boolean,
+  knockoutPicksEditable?: boolean,
 ): boolean {
-  return picksLocked && !knockoutBracketPicksUnlocked;
+  const editable = knockoutPicksEditable ?? knockoutBracketPicksUnlocked;
+  return picksLocked && !editable;
 }
 
 export function buildPostLockNavPlan(input: PostLockNavInput): PostLockNavPlan {
   const postLockEngagement = isPostLockEngagementMode(
     input.picksLocked,
     input.knockoutBracketPicksUnlocked,
+    input.knockoutPicksEditable,
   );
   const activityHref = input.activityHref ?? "/account/activity";
 

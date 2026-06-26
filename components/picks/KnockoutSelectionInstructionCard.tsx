@@ -118,6 +118,12 @@ export function KnockoutSelectionInstructionCard({ model, className = "" }: Prop
       {model.helperText ? (
         <p className={`mt-2 text-xs ${styles.meta}`}>{model.helperText}</p>
       ) : null}
+
+      {model.gradualStatusLine ? (
+        <p className={`mt-2 text-xs font-medium ${styles.meta}`}>
+          {model.gradualStatusLine}
+        </p>
+      ) : null}
     </div>
   );
 }

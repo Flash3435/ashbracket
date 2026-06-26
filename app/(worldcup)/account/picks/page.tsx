@@ -3,6 +3,10 @@ import { ParticipantKnockoutPicksForm } from "@/components/admin/ParticipantKnoc
 import { KnockoutSelectionInstructionCard } from "@/components/picks/KnockoutSelectionInstructionCard";
 import { PicksDeadlineBannerFromPool } from "@/components/pool/PicksDeadlineBannerFromPool";
 import { buildKnockoutSelectionInstructionCard } from "@/lib/picks/knockoutSelectionWindow";
+import {
+  getGradualKnockoutSelectionState,
+  hasEditableKnockoutPicks,
+} from "@/lib/picks/gradualKnockoutUnlock";
 import { fetchPublicTournamentProgress } from "@/lib/tournament/fetchPublicTournamentProgress";
 import {
   ParticipantPoolPaymentPanel,
@@ -54,7 +58,6 @@ export default async function AccountPicksPage({ searchParams }: PageProps) {
   }
 
   const locked = poolLocked(ctx.selectedLockAt);
-  const picksReadOnly = locked && !ctx.knockoutBracketPicksUnlocked;
 
   const summaryHref = ctx.selectedId
     ? `/account/picks/summary?participant=${ctx.selectedId}`
@@ -72,6 +75,16 @@ export default async function AccountPicksPage({ searchParams }: PageProps) {
     ctx.selectedId && !ctx.loadError
       ? await fetchPublicTournamentProgress()
       : { data: null };
+
+  const gradualKnockout = getGradualKnockoutSelectionState({
+    matches: tournamentPayload?.matches ?? null,
+    fullRoundOf32Official: ctx.knockoutBracketPicksUnlocked,
+  });
+  const knockoutPicksEditable = hasEditableKnockoutPicks({
+    gradual: gradualKnockout,
+    fullRoundOf32Official: ctx.knockoutBracketPicksUnlocked,
+  });
+  const picksReadOnly = locked && !knockoutPicksEditable;
 
   const knockoutSelectionCard =
     ctx.selectedId && !ctx.loadError
@@ -246,6 +259,7 @@ export default async function AccountPicksPage({ searchParams }: PageProps) {
                 participantDisplayName={ctx.selectedParticipant.displayName}
                 initialSlots={ctx.initialSlots}
                 knockoutBracketPicksUnlocked={ctx.knockoutBracketPicksUnlocked}
+                tournamentMatches={tournamentPayload?.matches ?? null}
                 teams={ctx.teams}
                 groupTeamCountryCodesByLetter={ctx.groupTeamCountryCodesByLetter}
                 disabled={ctx.teams.length === 0}

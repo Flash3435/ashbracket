@@ -52,6 +52,14 @@ import {
   buildPicksProgressSummary,
   wizardStepIndexForNextSection,
 } from "../../lib/picks/picksProgressSummary";
+import type { TournamentMatchPublicRow } from "../../types/tournamentPublic";
+import {
+  allowedTeamsForGradualR32Slot,
+  getGradualKnockoutSelectionState,
+  r32SlotLockMessage,
+  r32SlotLockReason,
+} from "../../lib/picks/gradualKnockoutUnlock";
+import { isKnockoutProgressionKind } from "../../lib/predictions/knockoutProgressionKinds";
 
 export type SaveKnockoutPicksFn = (input: {
   participantId: string;
@@ -80,6 +88,8 @@ export type KnockoutPicksWizardProps = {
    * all 32 official Round of 32 results. Defaults to true (e.g. admin pick editor).
    */
   knockoutBracketPicksUnlocked?: boolean;
+  /** Official tournament schedule rows for gradual Round of 32 unlock. */
+  tournamentMatches?: TournamentMatchPublicRow[] | null;
   teams: Team[];
   /**
    * Group letter (e.g. "A") → FIFA country codes in that group from official
@@ -145,6 +155,7 @@ type WizardStepDef =
 
 function participantWizardSteps(
   knockoutBracketPicksUnlocked: boolean,
+  gradualR32Pickable: boolean,
   bonusQuestionCount: number,
 ): WizardStepDef[] {
   const core: WizardStepDef[] = [
@@ -167,60 +178,67 @@ function participantWizardSteps(
     },
   ];
 
+  const fullKnockoutChain: WizardStepDef[] = [
+    {
+      id: 0,
+      mode: "bracket",
+      bracketKind: "round_of_32",
+      title: "Round of 32",
+      intro: knockoutBracketPicksUnlocked
+        ? "This step only appears after organizers publish the official Round of 32 (all 32 teams in their real FIFA slots). Pick the nation in each slot using the real pairings — your Stage 2 list only predicted which third-place teams qualify, not where FIFA placed them."
+        : "Confirmed Round of 32 matchups can be picked as they become official. Unconfirmed slots stay locked until the bracket is published.",
+      hint: knockoutBracketPicksUnlocked
+        ? "Eligible teams usually match your group top-two and third-place advancers; we highlight that pool when earlier steps are filled. Knockout points count once per team by furthest round reached (see pool rules)."
+        : "Pick only from the two teams in each confirmed matchup. Each match locks at kickoff. Later rounds unlock once the full Round of 32 is official.",
+    },
+    {
+      id: 0,
+      mode: "bracket",
+      bracketKind: "round_of_16",
+      title: "Round of 16",
+      intro:
+        "Narrow to sixteen teams. Each should be one of your Round of 32 teams when those picks are filled in.",
+      hint: "Changing Round of 32 can clear picks here that no longer fit.",
+    },
+    {
+      id: 0,
+      mode: "bracket",
+      bracketKind: "quarterfinalist",
+      title: "Quarter-finals",
+      intro: "Pick eight teams for the last eight.",
+      hint: "Each must come from your Round of 16 when that step is complete.",
+    },
+    {
+      id: 0,
+      mode: "bracket",
+      bracketKind: "semifinalist",
+      title: "Semi-finals",
+      intro: "Pick four teams to reach the semi-finals.",
+      hint: "They must be teams you already picked for the quarters.",
+    },
+    {
+      id: 0,
+      mode: "bracket",
+      bracketKind: "finalist",
+      title: "The final",
+      intro: "Pick the two finalists.",
+      hint: "Both must come from your semi-finalists.",
+    },
+    {
+      id: 0,
+      mode: "bracket",
+      bracketKind: "champion",
+      title: "Champion",
+      intro: "Pick one tournament winner from your two finalists.",
+      hint: "Save whenever you’re ready — you can edit until the pool locks.",
+    },
+  ];
+
   const knockoutChain: WizardStepDef[] = knockoutBracketPicksUnlocked
-    ? [
-        {
-          id: 0,
-          mode: "bracket",
-          bracketKind: "round_of_32",
-          title: "Round of 32",
-          intro:
-            "This step only appears after organizers publish the official Round of 32 (all 32 teams in their real FIFA slots). Pick the nation in each slot using the real pairings — your Stage 2 list only predicted which third-place teams qualify, not where FIFA placed them.",
-          hint: "Eligible teams usually match your group top-two and third-place advancers; we highlight that pool when earlier steps are filled. Knockout points count once per team by furthest round reached (see pool rules).",
-        },
-        {
-          id: 0,
-          mode: "bracket",
-          bracketKind: "round_of_16",
-          title: "Round of 16",
-          intro:
-            "Narrow to sixteen teams. Each should be one of your Round of 32 teams when those picks are filled in.",
-          hint: "Changing Round of 32 can clear picks here that no longer fit.",
-        },
-        {
-          id: 0,
-          mode: "bracket",
-          bracketKind: "quarterfinalist",
-          title: "Quarter-finals",
-          intro: "Pick eight teams for the last eight.",
-          hint: "Each must come from your Round of 16 when that step is complete.",
-        },
-        {
-          id: 0,
-          mode: "bracket",
-          bracketKind: "semifinalist",
-          title: "Semi-finals",
-          intro: "Pick four teams to reach the semi-finals.",
-          hint: "They must be teams you already picked for the quarters.",
-        },
-        {
-          id: 0,
-          mode: "bracket",
-          bracketKind: "finalist",
-          title: "The final",
-          intro: "Pick the two finalists.",
-          hint: "Both must come from your semi-finalists.",
-        },
-        {
-          id: 0,
-          mode: "bracket",
-          bracketKind: "champion",
-          title: "Champion",
-          intro: "Pick one tournament winner from your two finalists.",
-          hint: "Save whenever you’re ready — you can edit until the pool locks.",
-        },
-      ]
-    : [];
+    ? fullKnockoutChain
+    : gradualR32Pickable
+      ? [fullKnockoutChain[0]!]
+      : [];
 
   const bonusIntro =
     bonusQuestionCount > 0
@@ -345,8 +363,25 @@ function allowedTeamsForPickRow(
   row: KnockoutPickSlotDraft,
   slots: KnockoutPickSlotDraft[],
   allTeams: Team[],
+  gradualR32Teams: Team[] | null | undefined,
 ): Team[] {
   if (row.predictionKind === "round_of_32") {
+    if (gradualR32Teams != null) {
+      if (gradualR32Teams.length === 0) return [];
+      const taken = new Set(
+        slots
+          .filter(
+            (s) =>
+              s.predictionKind === "round_of_32" &&
+              s.rowKey !== row.rowKey &&
+              s.teamId.trim(),
+          )
+          .map((s) => s.teamId.trim()),
+      );
+      return gradualR32Teams.filter(
+        (t) => !taken.has(t.id) || t.id === row.teamId.trim(),
+      );
+    }
     const eligible = eligibleRoundOf32Pool(slots);
     const taken = new Set(
       slots
@@ -539,6 +574,7 @@ export function KnockoutPicksWizard({
   participantDisplayName,
   initialSlots,
   knockoutBracketPicksUnlocked = true,
+  tournamentMatches = null,
   teams,
   groupTeamCountryCodesByLetter,
   disabled = false,
@@ -556,12 +592,24 @@ export function KnockoutPicksWizard({
 }: KnockoutPicksWizardProps) {
   const router = useRouter();
   const [isSaving, startSaveTransition] = useTransition();
+  const gradualKnockout = useMemo(
+    () =>
+      getGradualKnockoutSelectionState({
+        matches: tournamentMatches,
+        teams,
+        fullRoundOf32Official: knockoutBracketPicksUnlocked,
+      }),
+    [tournamentMatches, teams, knockoutBracketPicksUnlocked],
+  );
+  const gradualR32Pickable = gradualKnockout.pickableCount > 0;
+  const knockoutPicksAccessible =
+    knockoutBracketPicksUnlocked || gradualR32Pickable;
   const normalizedInitialSlots = useMemo(
     () =>
       pruneParticipantPicks(initialSlots, {
-        freezeKnockoutProgressionPicks: !knockoutBracketPicksUnlocked,
+        freezeKnockoutProgressionPicks: !knockoutPicksAccessible,
       }),
-    [initialSlots, knockoutBracketPicksUnlocked],
+    [initialSlots, knockoutPicksAccessible],
   );
   const initialSignature = useMemo(
     () => picksDraftSignature(normalizedInitialSlots),
@@ -581,17 +629,18 @@ export function KnockoutPicksWizard({
     () =>
       participantWizardSteps(
         knockoutBracketPicksUnlocked,
+        gradualR32Pickable,
         bonusQuestionCount,
       ),
-    [knockoutBracketPicksUnlocked, bonusQuestionCount],
+    [knockoutBracketPicksUnlocked, gradualR32Pickable, bonusQuestionCount],
   );
   const picksProgress = useMemo(
     () =>
       buildPicksProgressSummary(slots, {
-        knockoutBracketPicksUnlocked,
+        knockoutBracketPicksUnlocked: knockoutPicksAccessible,
         preKnockoutLocked: preBracketSelectionsLocked,
       }),
-    [slots, knockoutBracketPicksUnlocked, preBracketSelectionsLocked],
+    [slots, knockoutPicksAccessible, preBracketSelectionsLocked],
   );
   const deadlineStatus = useMemo(
     () =>
@@ -599,9 +648,10 @@ export function KnockoutPicksWizard({
         ? buildPoolPickDeadlineStatus({
             lockAtIso: poolLockAtIso,
             knockoutBracketPicksUnlocked,
+            tournamentMatches,
           })
         : null,
-    [poolLockAtIso, knockoutBracketPicksUnlocked],
+    [poolLockAtIso, knockoutBracketPicksUnlocked, tournamentMatches],
   );
   const [savedSignature, setSavedSignature] = useState(() => initialSignature);
   const [saveUiState, setSaveUiState] = useState<PicksSaveUiState>({
@@ -690,7 +740,48 @@ export function KnockoutPicksWizard({
   const preBracketActive = preBracketSelectionsLocked && !readOnly;
 
   function pickRowDisabled(row: KnockoutPickSlotDraft): boolean {
-    return coreDisabled || (preBracketActive && isPreBracketPickSlot(row));
+    if (coreDisabled || (preBracketActive && isPreBracketPickSlot(row))) {
+      return true;
+    }
+    if (row.predictionKind === "round_of_32" && !knockoutBracketPicksUnlocked) {
+      const reason = r32SlotLockReason(
+        row.slotKey,
+        gradualKnockout,
+        knockoutBracketPicksUnlocked,
+      );
+      return reason !== "pickable";
+    }
+    if (
+      isKnockoutProgressionKind(row.predictionKind) &&
+      !knockoutBracketPicksUnlocked
+    ) {
+      return true;
+    }
+    if (
+      row.predictionKind === "round_of_32" &&
+      knockoutBracketPicksUnlocked
+    ) {
+      const reason = r32SlotLockReason(
+        row.slotKey,
+        gradualKnockout,
+        knockoutBracketPicksUnlocked,
+      );
+      return reason === "started";
+    }
+    return false;
+  }
+
+  function gradualTeamsForRow(row: KnockoutPickSlotDraft): Team[] | null {
+    if (row.predictionKind !== "round_of_32" || knockoutBracketPicksUnlocked) {
+      return null;
+    }
+    const restricted = allowedTeamsForGradualR32Slot(
+      row.slotKey,
+      gradualKnockout,
+      teams,
+      knockoutBracketPicksUnlocked,
+    );
+    return restricted;
   }
 
   const currentStepDef = wizardSteps[step];
@@ -712,7 +803,7 @@ export function KnockoutPicksWizard({
         return prev;
       }
       const next = assignParticipantPickDeduped(prev, rowKey, teamId, {
-        freezeKnockoutProgressionPicks: !knockoutBracketPicksUnlocked,
+        freezeKnockoutProgressionPicks: !knockoutPicksAccessible,
       });
       if (
         row &&
@@ -975,14 +1066,22 @@ export function KnockoutPicksWizard({
         </p>
       ) : null}
 
-      {!knockoutBracketPicksUnlocked && !readOnly ? (
+      {!knockoutPicksAccessible && !readOnly ? (
         <p
           className="rounded-md border border-sky-800/50 bg-sky-950/25 px-3 py-2 text-sm text-sky-100"
           role="status"
         >
-          Stage 3 (Round of 32 through champion) opens after organizers publish the
-          official Round of 32. Use List view to edit group stage, third-place
-          qualification, and bonus picks.
+          Stage 3 (Round of 32 through champion) opens as official matchups are
+          confirmed. Use List view to edit group stage, third-place qualification,
+          and bonus picks.
+        </p>
+      ) : !knockoutBracketPicksUnlocked && gradualR32Pickable && !readOnly ? (
+        <p
+          className="rounded-md border border-sky-800/50 bg-sky-950/25 px-3 py-2 text-sm text-sky-100"
+          role="status"
+        >
+          Confirmed Round of 32 matchups are open for picks. Unconfirmed slots stay
+          locked. Later knockout rounds unlock once the full bracket is official.
         </p>
       ) : null}
 
@@ -1033,7 +1132,7 @@ export function KnockoutPicksWizard({
         </button>
       </div>
       <p className="-mt-2 text-xs leading-relaxed text-ash-muted">
-        {knockoutBracketPicksUnlocked
+        {knockoutPicksAccessible
           ? "Bracket view is the default — it shows your full path and empty slots at a glance. List view is best when you want to work through picks one step at a time."
           : "Bracket view shows a preview of your future knockout path. Switch to List view to edit group stage, third-place qualification, and bonus picks."}
       </p>
@@ -1232,8 +1331,9 @@ export function KnockoutPicksWizard({
           currentStepDef.bracketKind === "round_of_32" &&
           r32Filled < 32 ? (
             <p className="mt-4 rounded-md border border-amber-700/40 bg-amber-950/25 px-3 py-2 text-sm text-amber-100">
-              Pick all 32 Round of 32 teams in their official slots.{" "}
-              {r32Filled} of 32 so far.
+              {knockoutBracketPicksUnlocked
+                ? `Pick all 32 Round of 32 teams in their official slots. ${r32Filled} of 32 so far.`
+                : `Pick confirmed matchups as they unlock. ${gradualKnockout.pickableCount} matchups available now · ${r32Filled} slots filled.`}
             </p>
           ) : null}
           {currentStepDef.mode === "bracket" &&
@@ -1300,7 +1400,20 @@ export function KnockoutPicksWizard({
               const flatOptions =
                 isGroupRow || isThirdPlaceRow
                   ? null
-                  : allowedTeamsForPickRow(row, slots, teams);
+                  : allowedTeamsForPickRow(
+                      row,
+                      slots,
+                      teams,
+                      gradualTeamsForRow(row),
+                    );
+              const r32LockMessage =
+                row.predictionKind === "round_of_32"
+                  ? r32SlotLockMessage(
+                      row.slotKey,
+                      gradualKnockout,
+                      knockoutBracketPicksUnlocked,
+                    )
+                  : null;
               const thirdInvalidReason = isThirdPlaceRow
                 ? thirdPlaceSlotInvalidReason(row, slots, {
                     teamIdToGroupLetter: thirdPlaceTeamGroupById,
@@ -1379,7 +1492,7 @@ export function KnockoutPicksWizard({
                               isEmptyPick ? "text-amber-100/90" : "text-ash-text"
                             }`}
                           >
-                            {team?.name ?? "Pick needed"}
+                            {team?.name ?? (r32LockMessage ?? "Pick needed")}
                           </p>
                           {team && strength ? (
                             <p
@@ -1435,6 +1548,14 @@ export function KnockoutPicksWizard({
                     </div>
                   </div>
 
+                  {r32LockMessage ? (
+                    <p
+                      className="mt-2 rounded-md border border-sky-800/40 bg-sky-950/20 px-3 py-2 text-xs text-sky-100"
+                      role="status"
+                    >
+                      {r32LockMessage}
+                    </p>
+                  ) : null}
                   {thirdInvalidReason ? (
                     <p
                       className="mt-2 rounded-md border border-amber-700/50 bg-amber-950/30 px-3 py-2 text-xs text-amber-100"

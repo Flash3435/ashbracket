@@ -61,6 +61,7 @@ export function buildAccountPageNavState(input: PostLockNavInput) {
   const postLockEngagement = isPostLockEngagementMode(
     input.picksLocked,
     input.knockoutBracketPicksUnlocked,
+    input.knockoutPicksEditable,
   );
   const navPlan = buildPostLockNavPlan(input);
   return {
