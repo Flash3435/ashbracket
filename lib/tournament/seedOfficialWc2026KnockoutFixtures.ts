@@ -90,9 +90,6 @@ export async function seedOfficialWc2026KnockoutFixtures(
       home_team_id: null,
       away_team_id: null,
       status: "scheduled",
-      scoring_result_kind: "round_of_16",
-      scoring_slot_key: String(i + 1),
-      scoring_stage_code: "round_of_16",
     });
   }
 
