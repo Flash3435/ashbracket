@@ -87,6 +87,8 @@ export function picksSaveStatusLine(state: PicksSaveUiState): string {
       }
       return state.lastSavedAt == null ? "All changes saved" : "Last saved just now";
     case "error":
-      return "Save failed. Review the error and try again.";
+      return state.message?.trim()
+        ? state.message.trim()
+        : "Save failed. Review the error and try again.";
   }
 }

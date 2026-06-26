@@ -59,6 +59,7 @@ import {
   allowedTeamsForGradualR32Slot,
   applyGradualR32MatchWinnerToSlots,
   buildGradualR32MatchPickRows,
+  buildGradualR32SavePayload,
   countGradualR32MatchupsFilled,
   getGradualKnockoutSelectionState,
   isGradualR32WinnerPickRow,
@@ -964,14 +965,16 @@ export function KnockoutPicksWizard({
     e.preventDefault();
     if (disabled || readOnly) return;
     const submittedSignature = draftSignature;
-    const submittedSlots = slots.map((s) => ({
-      predictionKind: s.predictionKind,
-      tournamentStageId: s.tournamentStageId,
-      slotKey: s.slotKey,
-      groupCode: s.groupCode,
-      bonusKey: s.bonusKey,
-      teamId: s.teamId,
-    }));
+    const submittedSlots = gradualR32MatchRows
+      ? buildGradualR32SavePayload({ slots, state: gradualKnockout })
+      : slots.map((s) => ({
+          predictionKind: s.predictionKind,
+          tournamentStageId: s.tournamentStageId,
+          slotKey: s.slotKey,
+          groupCode: s.groupCode,
+          bonusKey: s.bonusKey,
+          teamId: s.teamId,
+        }));
     setSaveUiState((prev) => ({
       kind: "saving",
       lastSavedAt: prev.lastSavedAt,
@@ -1108,6 +1111,9 @@ export function KnockoutPicksWizard({
     : slots.filter(
         (s) => s.predictionKind === "round_of_32" && s.teamId.trim(),
       ).length;
+  const effectiveSaveHelpText = gradualR32MatchRows
+    ? "Save confirmed matchup winners as they unlock. Locked matchups are not changed when you save."
+    : saveHelpText;
   const r16Filled = slots.filter(
     (s) => s.predictionKind === "round_of_16" && s.teamId.trim(),
   ).length;
@@ -2058,7 +2064,7 @@ export function KnockoutPicksWizard({
           >
             {picksSaveStatusLine(saveUiState)}
           </p>
-          <p className="mt-1 text-xs text-ash-muted">{saveHelpText}</p>
+          <p className="mt-1 text-xs text-ash-muted">{effectiveSaveHelpText}</p>
         </div>
       ) : null}
     </form>

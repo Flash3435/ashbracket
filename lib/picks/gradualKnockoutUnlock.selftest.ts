@@ -3,6 +3,7 @@ import type { Team } from "../../src/types/domain";
 import type { TournamentMatchPublicRow } from "../../types/tournamentPublic";
 import {
   buildGradualR32MatchPickRows,
+  buildGradualR32SavePayload,
   getGradualKnockoutSelectionState,
   isKnockoutMatchConfirmed,
   isMatchPickable,
@@ -444,6 +445,94 @@ function r32SlotDraft(slotKey: string, teamId = ""): KnockoutPickSlotDraft {
   assert.strictEqual(
     readGradualR32MatchWinner(0, legacySlots, r32Teams, ms),
     "team-rsa",
+  );
+}
+
+// Gradual save payload only includes group/third/bonus + pickable matchup rows
+{
+  const r32Teams: Team[] = [
+    {
+      id: "team-rsa",
+      name: "South Africa",
+      countryCode: "RSA",
+      fifaCode: "RSA",
+      fifaRank: 30,
+      fifaRankAsOf: null,
+      createdAt: "",
+      updatedAt: "",
+    },
+    {
+      id: "team-can",
+      name: "Canada",
+      countryCode: "CAN",
+      fifaCode: "CAN",
+      fifaRank: 40,
+      fifaRankAsOf: null,
+      createdAt: "",
+      updatedAt: "",
+    },
+  ];
+  const state = getGradualKnockoutSelectionState({
+    matches: [
+      match({
+        match_code: "M73",
+        stage_code: "round_of_32",
+        kickoff_at: "2026-06-28T19:00:00Z",
+        home_country_code: "RSA",
+        away_country_code: "CAN",
+      }),
+    ],
+    teams: r32Teams,
+    nowMs: new Date("2026-06-28T12:00:00Z").getTime(),
+  });
+  const slots: KnockoutPickSlotDraft[] = [
+    {
+      rowKey: "group_winner|A",
+      sectionLabel: "Group",
+      slotLabel: "Group A winner",
+      predictionKind: "group_winner",
+      tournamentStageId: "stage-group",
+      slotKey: null,
+      groupCode: "A",
+      bonusKey: null,
+      teamId: "team-rsa",
+    },
+    ...Array.from({ length: 32 }, (_, i) => ({
+      rowKey: `round_of_32|${i + 1}`,
+      sectionLabel: "Round of 32",
+      slotLabel: `Round of 32 · pick ${i + 1}`,
+      predictionKind: "round_of_32" as const,
+      tournamentStageId: "stage-r32",
+      slotKey: String(i + 1),
+      groupCode: null,
+      bonusKey: null,
+      teamId: "",
+    })),
+    ...Array.from({ length: 16 }, (_, i) => ({
+      rowKey: `round_of_16|${i + 1}`,
+      sectionLabel: "Round of 16",
+      slotLabel: `Round of 16 · pick ${i + 1}`,
+      predictionKind: "round_of_16" as const,
+      tournamentStageId: "stage-r16",
+      slotKey: String(i + 1),
+      groupCode: null,
+      bonusKey: null,
+      teamId: i === 0 ? "team-rsa" : "",
+    })),
+  ];
+  const payload = buildGradualR32SavePayload({ slots, state });
+  assert.strictEqual(payload.filter((s) => s.predictionKind === "group_winner").length, 1);
+  assert.strictEqual(
+    payload.filter((s) => s.predictionKind === "round_of_16").length,
+    1,
+  );
+  assert.strictEqual(
+    payload.filter((s) => s.predictionKind === "round_of_32").length,
+    2,
+  );
+  assert.strictEqual(
+    payload.some((s) => s.predictionKind === "round_of_16" && s.slotKey === "2"),
+    false,
   );
 }
 

@@ -42,6 +42,6 @@ export function mergeKnockoutProgressionSlotsFromPredictions(
       slotKey: s.slotKey,
     });
     const keep = byKey.get(k);
-    return keep != null ? { ...s, teamId: keep } : { ...s, teamId: "" };
+    return keep != null ? { ...s, teamId: keep } : s;
   });
 }

@@ -1,10 +1,12 @@
 import type { Team } from "../../src/types/domain";
 import type { KnockoutPickSlotDraft } from "../../types/adminKnockoutPicks";
+import type { ParticipantPickSlotPayload } from "../../types/knockoutPicksSave";
 import type { TournamentMatchPublicRow } from "../../types/tournamentPublic";
 import {
   r32SlotKeysForMatchIndex,
   WC2026_R32_MATCH_DEFS,
 } from "../bracket/wc2026RoundOf32";
+import { isKnockoutProgressionKind } from "../predictions/knockoutProgressionKinds";
 import { kickoffSortMs } from "../tournament/sortTournamentMatches";
 import { isMatchStarted } from "./knockoutSelectionWindow";
 
@@ -599,6 +601,49 @@ export function allowedTeamsForGradualR32Slot(
   const ms = matchStateForR32Slot(slotKey, state);
   if (!ms?.pickable) return [];
   return allowedTeamsForGradualR32MatchState(ms, allTeams);
+}
+
+function pickSlotPayload(slot: KnockoutPickSlotDraft): ParticipantPickSlotPayload {
+  return {
+    predictionKind: slot.predictionKind,
+    tournamentStageId: slot.tournamentStageId,
+    slotKey: slot.slotKey,
+    groupCode: slot.groupCode,
+    bonusKey: slot.bonusKey,
+    teamId: slot.teamId,
+  };
+}
+
+/**
+ * Minimal save payload for gradual Round of 32: group/third/bonus rows plus only
+ * pickable matchup winner slots (and their legacy R32 pair rows for clearing).
+ * Omits locked unconfirmed progression rows so empty values are not treated as clears.
+ */
+export function buildGradualR32SavePayload(input: {
+  slots: KnockoutPickSlotDraft[];
+  state: GradualKnockoutSelectionState;
+}): ParticipantPickSlotPayload[] {
+  const out: ParticipantPickSlotPayload[] = [];
+  for (const slot of input.slots) {
+    if (!isKnockoutProgressionKind(slot.predictionKind)) {
+      out.push(pickSlotPayload(slot));
+    }
+  }
+  for (const ms of input.state.matchStates) {
+    if (!ms.pickable) continue;
+    const r16Key = r16SlotKeyForR32MatchIndex(ms.matchIndex);
+    const r16Row = input.slots.find(
+      (s) => s.predictionKind === "round_of_16" && s.slotKey === r16Key,
+    );
+    if (r16Row) out.push(pickSlotPayload(r16Row));
+    for (const sk of [ms.topSlotKey, ms.bottomSlotKey]) {
+      const r32Row = input.slots.find(
+        (s) => s.predictionKind === "round_of_32" && s.slotKey === sk,
+      );
+      if (r32Row) out.push(pickSlotPayload(r32Row));
+    }
+  }
+  return out;
 }
 
 export type ValidateKnockoutMatchPickInput = {

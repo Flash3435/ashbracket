@@ -83,7 +83,7 @@ assert.strictEqual(picksSaveButtonLabel(failedState), "Retry save");
 assert.strictEqual(picksSaveButtonDisabled(failedState), false);
 assert.strictEqual(
   picksSaveStatusLine(failedState),
-  "Save failed. Review the error and try again.",
+  "boom",
 );
 
 const failedSameDraft = reconcilePicksSaveUiState({
