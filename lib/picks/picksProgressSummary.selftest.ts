@@ -87,7 +87,7 @@ function eightThirdPlace(): KnockoutPickSlotDraft[] {
   });
   assert.strictEqual(summary.waitingForR32, true);
   assert.strictEqual(summary.picksComplete, true);
-  assert.strictEqual(summary.overallHeadline, "Waiting for official Round of 32");
+  assert.strictEqual(summary.overallHeadline, "Pre-knockout picks complete");
   assert.strictEqual(summary.nextSection, null);
   assert.strictEqual(
     summary.sections.find((s) => s.id === "knockout")?.status,

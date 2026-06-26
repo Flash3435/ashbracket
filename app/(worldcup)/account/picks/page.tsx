@@ -132,10 +132,10 @@ export default async function AccountPicksPage({ searchParams }: PageProps) {
         title={picksReadOnly ? "Your picks (read-only)" : "Your picks"}
         description={
           picksReadOnly
-            ? "Picks are locked — this is a read-only view. Knockout bracket picks will open when the official Round of 32 is published."
+            ? "Picks are locked — this is a read-only view. Confirmed knockout matchups may still be editable until each match kicks off."
             : locked
-              ? "Group stage, third-place, and bonus picks are locked. You can still update knockout bracket picks when the official Round of 32 is published."
-              : "Your picks open in bracket view so you can see what’s done and what’s still missing. Stage 1: 1st and 2nd in every group. Stage 2: one third-place advancer per group row (eight total). Stage 3: Round of 32 through champion once the official bracket is published, plus bonus picks. Use list view anytime for step-by-step editing."
+              ? "Group stage, third-place, and bonus picks are locked. You can still update confirmed knockout matchups in list view until each match kicks off."
+              : "Your picks open in bracket view so you can see what’s done and what’s still missing. Stage 1: 1st and 2nd in every group. Stage 2: one third-place advancer per group row (eight total). Stage 3: confirmed Round of 32 matchups unlock gradually, then the full knockout path once the bracket is official, plus bonus picks. Use list view anytime for step-by-step editing."
         }
       />
 
@@ -249,8 +249,8 @@ export default async function AccountPicksPage({ searchParams }: PageProps) {
                 <p className="mb-6 rounded-md border border-ash-border bg-ash-surface px-3 py-2 text-sm text-ash-muted">
                   No saved picks yet — the bracket starts empty. Fill groups and
                   third-place advancers first (switch to list view for guided
-                  steps), then save. Knockout rounds unlock after the official
-                  Round of 32 is published.
+                  steps), then save. Confirmed Round of 32 matchups will become
+                  pickable in list view as they are official.
                 </p>
               ) : null}
 

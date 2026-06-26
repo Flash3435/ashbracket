@@ -140,11 +140,12 @@ export function ParticipantBracketView({
         />
         <div>
           <p className="text-xs font-semibold uppercase tracking-wide text-ash-muted">
-            Knockout bracket — opens later
+            Knockout bracket — preview
           </p>
           <p className="mt-1 text-[11px] leading-relaxed text-ash-muted">
             Round of 32 sides from your group picks appear below. Third-route slots show
-            FIFA-style labels (e.g. 3 ABCDF) until the official bracket is published.
+            FIFA-style labels (e.g. 3 ABCDF) until those matchups are confirmed. Confirmed
+            matchups can be picked in list view; unconfirmed slots stay locked.
           </p>
         </div>
         <div

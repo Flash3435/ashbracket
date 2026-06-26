@@ -210,10 +210,10 @@ function buildOverallCopy(args: {
 
   if (waitingForR32) {
     return {
-      headline: "Waiting for official Round of 32",
+      headline: "Pre-knockout picks complete",
       detail: preKnockoutLocked
-        ? "Your group, third-place, and bonus picks are locked in. Knockout picks unlock after the official bracket is published — nothing else to do right now."
-        : "Your group, third-place, and bonus picks are complete. Knockout picks unlock after the official bracket is published — nothing else to do right now.",
+        ? "Your group, third-place, and bonus picks are locked in. Confirmed Round of 32 matchups will open for picks as they become official — each match locks at kickoff."
+        : "Your group, third-place, and bonus picks are complete. Confirmed Round of 32 matchups will open for picks as they become official — each match locks at kickoff.",
     };
   }
 
@@ -223,10 +223,10 @@ function buildOverallCopy(args: {
       detail: preKnockoutLocked
         ? knockoutBracketPicksUnlocked
           ? "Group & bonus picks are locked. You can still edit knockout bracket picks."
-          : "Group & bonus picks are locked. Knockout bracket picks open when organizers publish the official Round of 32."
+          : "Group & bonus picks are locked. Knockout matchups open gradually as they are confirmed."
         : knockoutBracketPicksUnlocked
           ? "You can still edit until the pick deadline."
-          : "Knockout bracket picks open when organizers publish the official Round of 32.",
+          : "Confirmed Round of 32 matchups open for picks as they become official.",
     };
   }
 
@@ -377,7 +377,7 @@ export function buildPicksProgressSummary(
       total: knockout.length,
       missing: knockout.length - knockoutFilled,
       detailLine: !knockoutBracketPicksUnlocked
-        ? "Opens when Round of 32 is set"
+        ? "Confirmed matchups unlock gradually"
         : knockoutComplete
           ? "Complete"
           : knockoutFilled === 0

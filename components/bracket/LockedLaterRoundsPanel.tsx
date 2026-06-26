@@ -13,8 +13,8 @@ export function LockedLaterRoundsPanel() {
       <div className="flex flex-1 flex-col justify-center rounded-lg border border-dashed border-ash-border/45 bg-ash-body/10 px-3 py-4 text-center">
         <p className="text-xs font-medium text-ash-muted">Unlocks in Stage 3</p>
         <p className="mt-1.5 text-[10px] leading-snug text-ash-border-hover">
-          Pick winners through each knockout round after the official Round of 32 is
-          published.
+          Round of 16 through champion unlock once the full official Round of 32 bracket
+          is confirmed. Confirmed R32 matchups can be picked gradually before then.
         </p>
         <div
           className="mt-3 flex flex-wrap items-center justify-center gap-1"

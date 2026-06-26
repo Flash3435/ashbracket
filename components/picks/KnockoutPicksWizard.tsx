@@ -847,10 +847,10 @@ export function KnockoutPicksWizard({
             ? "We leaned on popular picks through the whole path — tweak as you wish."
             : "We spread teams across regions for groups, then narrowed down — edit freely."
         : mode === "random"
-          ? "We filled group finishes and your eight third-place advancers — knockout steps will open once the official Round of 32 is published."
+          ? "We filled group finishes and your eight third-place advancers — confirmed Round of 32 matchups will open for picks as they become official."
           : mode === "favorites"
-            ? "We leaned on popular picks for groups and third-place advancers. Knockout rounds stay empty until the real bracket is set."
-            : "We spread teams for groups and third-place advancers. You’ll finish the knockout path after the official Round of 32 unlocks.",
+            ? "We leaned on popular picks for groups and third-place advancers. Pick confirmed knockout matchups in list view as they unlock."
+            : "We spread teams for groups and third-place advancers. Pick confirmed Round of 32 matchups in list view as they become available.",
     );
     setOpenRowKey(null);
     setStep(0);
@@ -1134,7 +1134,7 @@ export function KnockoutPicksWizard({
       <p className="-mt-2 text-xs leading-relaxed text-ash-muted">
         {knockoutPicksAccessible
           ? "Bracket view is the default — it shows your full path and empty slots at a glance. List view is best when you want to work through picks one step at a time."
-          : "Bracket view shows a preview of your future knockout path. Switch to List view to edit group stage, third-place qualification, and bonus picks."}
+          : "Bracket view shows a preview of your future knockout path from group-stage picks. Switch to List view to edit group stage, third-place qualification, bonus picks, and confirmed knockout matchups."}
       </p>
 
       {picksMainView === "bracket" ? (
@@ -1145,7 +1145,9 @@ export function KnockoutPicksWizard({
           <p className="mt-1 text-xs text-ash-muted">
             {knockoutBracketPicksUnlocked
               ? "How your Round of 32 through champion picks line up. This mirrors your list selections (including unsaved changes until you save)."
-              : "Your qualification picks and a preview of Round of 32 from group results. Full knockout picks unlock after the official Round of 32 is published."}
+              : knockoutPicksAccessible
+                ? "Your qualification picks plus a preview of Round of 32 from group results. Confirmed matchups are pickable in list view; unconfirmed slots stay locked until official."
+                : "Your qualification picks and a preview of Round of 32 from group results. Confirmed matchups will become pickable as they are available; unconfirmed slots stay locked until confirmed."}
           </p>
           <div className="mt-4">
             <KnockoutBracketPreview
@@ -1270,7 +1272,7 @@ export function KnockoutPicksWizard({
               <p className="mt-1 text-xs text-ash-muted">
                 {knockoutBracketPicksUnlocked
                   ? "We’ll fill group finishes, your eight third-place advancers, every knockout round, and the champion in one coherent pass. Bonus questions stay for you to choose."
-                  : "We’ll fill group finishes and your eight third-place advancers. Knockout rounds open after the official Round of 32 is published. Bonus questions stay for you to choose."}
+                  : "We’ll fill group finishes and your eight third-place advancers. Confirmed Round of 32 matchups can be picked in list view as they become official; later rounds unlock once the full bracket is confirmed. Bonus questions stay for you to choose."}
               </p>
               <div className="mt-3 flex flex-wrap gap-2">
                 <button

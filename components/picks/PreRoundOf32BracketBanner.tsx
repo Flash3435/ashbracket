@@ -12,8 +12,8 @@ type Props = {
 };
 
 /**
- * Explains the pre-official-R32 bracket state: preview only, what is editable now,
- * and how to reach list view for Stage 1 / 2 / bonus picks.
+ * Explains the pre-full-R32 bracket state: projected preview, gradual unlock for
+ * confirmed matchups, and how to reach list view for Stage 1 / 2 / bonus picks.
  */
 export function PreRoundOf32BracketBanner({
   onSwitchToListView,
@@ -33,12 +33,14 @@ export function PreRoundOf32BracketBanner({
           Preview
         </span>
         <p className="text-sm font-semibold text-sky-50">
-          Official Round of 32 not published yet
+          Official Round of 32 not fully confirmed yet
         </p>
       </div>
       <p className="mt-2 text-sm leading-relaxed text-sky-100/95">
         This bracket shows a preview of your future knockout path from group-stage picks.
-        Full knockout picks open later, after organizers publish the official Round of 32.
+        Confirmed Round of 32 matchups will become pickable as they are available.
+        Matchups that are not official yet will stay locked until confirmed. Each match
+        locks at kickoff.
       </p>
       <div className="mt-3 rounded-md border border-sky-900/40 bg-ash-body/20 px-3 py-2.5">
         <p className="text-xs font-semibold uppercase tracking-wide text-sky-200/90">

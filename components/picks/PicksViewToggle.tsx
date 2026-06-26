@@ -58,17 +58,18 @@ export function PicksViewToggle({
           </>
         ) : current === "bracket" ? (
           <>
-            Bracket View is a preview until the official Round of 32 is published. Use{" "}
+            Bracket view shows a projected knockout path from your group-stage picks.
+            Confirmed Round of 32 matchups become pickable in{" "}
             <Link href={listHref} className="font-medium text-ash-text underline-offset-2 hover:underline">
               List view
-            </Link>{" "}
-            to edit group stage, third-place qualification, and bonus picks.
+            </Link>
+            ; unconfirmed matchups stay locked until confirmed.
           </>
         ) : (
           <>
-            List view is the best way to edit group stage, third-place qualification, and
-            bonus picks before the official Round of 32 exists. Bracket View shows a
-            preview of your future knockout path.
+            List view is the best way to edit group stage, third-place qualification,
+            bonus picks, and confirmed knockout matchups. Bracket view shows a preview
+            of your projected knockout path.
           </>
         )}
       </p>

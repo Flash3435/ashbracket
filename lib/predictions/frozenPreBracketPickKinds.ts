@@ -51,7 +51,7 @@ export function validateFrozenPicksUnchangedWhenPoolLocked(
   incoming: ParticipantPickSlotPayload[],
 ): string | null {
   const err =
-    "Group stage, third-place, and bonus picks are locked. You can still update knockout bracket picks after the official Round of 32 is published.";
+    "Group stage, third-place, and bonus picks are locked. You can still update confirmed knockout matchups until each match kicks off.";
 
   for (const s of incoming) {
     if (!isFrozenAtPoolLockKind(s.predictionKind)) continue;
