@@ -25,6 +25,7 @@ import {
   type TournamentEditionRow,
 } from "@/lib/tournament/editionScope";
 import { fetchGroupTeamCountryCodesForEdition } from "@/lib/tournament/fetchGroupTeamCountryCodesForEdition";
+import { publishConfirmedRoundOf32Fixtures } from "@/lib/tournament/publishRoundOf32Fixtures";
 import { recomputePoolsForEdition } from "@/lib/tournament/recomputePoolsForEdition";
 import { recomputePoolLedgersWithScoreImpact } from "@/lib/poolActivity/scoreImpact/recomputeWithScoreImpact";
 import { fetchPoolEditionScope } from "@/lib/tournament/editionScope";
@@ -572,6 +573,16 @@ export async function applyOfficialRoundOf32FromEnteredResultsAction(input: {
     });
     if (upErr) return { ok: false, error: upErr.message };
 
+    const publish = await publishConfirmedRoundOf32Fixtures(supabase, gate.edition.id, {
+      slotTeamIdByKey: parsed.data.slotTeamIdByKey,
+    });
+    if (!publish.ok) {
+      return {
+        ok: false,
+        error: `Round of 32 saved, but fixture publish failed: ${publish.error}`,
+      };
+    }
+
     const recompute = await recomputeAfterEditionResultEdit(
       supabase,
       gate.edition.id,
@@ -586,10 +597,12 @@ export async function applyOfficialRoundOf32FromEnteredResultsAction(input: {
 
     revalidatePath("/admin/results");
     revalidatePath(`/admin/simulation/editions/${gate.edition.id}/results`);
+    revalidatePath("/admin/tournament/status");
     return {
       ok: true,
       message:
-        "Applied FIFA Annex C: all 32 Round of 32 slots were saved. Pool scores were refreshed.",
+        `Applied FIFA Annex C: all 32 Round of 32 slots were saved. ` +
+        `Published ${publish.summary.confirmedFixturesPublished}/16 confirmed fixtures to tournament_matches. Pool scores were refreshed.`,
     };
   } catch (e) {
     return { ok: false, error: messageFromUnknown(e) };

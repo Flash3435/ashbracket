@@ -19,6 +19,7 @@ function summary(
     syncLockedMatchCount: 0,
     patchesApplied: 0,
     patchesSkipped: 0,
+    roundOf32Publish: null,
     ...overrides,
   };
 }

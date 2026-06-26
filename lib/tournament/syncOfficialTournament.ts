@@ -6,6 +6,10 @@ import {
 import { loadTeamNameMapForEdition } from "@/lib/poolActivity/scoreImpact/loadScoreImpactContext";
 import { recomputePoolLedgersWithScoreImpact } from "@/lib/poolActivity/scoreImpact/recomputeWithScoreImpact";
 import {
+  publishConfirmedRoundOf32Fixtures,
+  type PublishRoundOf32FixturesSummary,
+} from "./publishRoundOf32Fixtures";
+import {
   computeGroupStandings,
   type FinishedGroupMatch,
 } from "./groupStandings";
@@ -22,6 +26,7 @@ export type SyncOfficialTournamentSummary = {
   syncLockedMatchCount: number;
   patchesApplied: number;
   patchesSkipped: number;
+  roundOf32Publish: PublishRoundOf32FixturesSummary | null;
 };
 
 export type OfficialMatchScorePatch = {
@@ -400,6 +405,21 @@ export async function syncOfficialTournament(
 
   console.info("[ashbracket:sync] ledger recompute finished for all pools");
 
+  let roundOf32Publish: PublishRoundOf32FixturesSummary | null = null;
+  if (!editionIsSimulation) {
+    const publishOut = await publishConfirmedRoundOf32Fixtures(supabase, editionId);
+    if (!publishOut.ok) {
+      return { ok: false, error: publishOut.error };
+    }
+    roundOf32Publish = publishOut.summary;
+    if (
+      publishOut.summary.conflicts.length > 0 ||
+      publishOut.summary.confirmedFixturesPublished > 0
+    ) {
+      console.info("[ashbracket:sync] round of 32 fixture publish", publishOut.summary);
+    }
+  }
+
   const matchesWithScoresCount = matches.filter(
     (m) => m.home_goals != null && m.away_goals != null,
   ).length;
@@ -422,6 +442,7 @@ export async function syncOfficialTournament(
       syncLockedMatchCount,
       patchesApplied: patchOutcome.applied.length,
       patchesSkipped: patchOutcome.skipped.length,
+      roundOf32Publish,
     },
     patchOutcome,
   };

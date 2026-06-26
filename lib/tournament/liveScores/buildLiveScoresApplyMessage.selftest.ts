@@ -19,6 +19,7 @@ const emptySyncSummary: SyncOfficialTournamentSummary = {
   syncLockedMatchCount: 0,
   patchesApplied: 0,
   patchesSkipped: 0,
+  roundOf32Publish: null,
 };
 
 const fullSyncSummary: SyncOfficialTournamentSummary = {
@@ -30,6 +31,7 @@ const fullSyncSummary: SyncOfficialTournamentSummary = {
   syncLockedMatchCount: 0,
   patchesApplied: 1,
   patchesSkipped: 0,
+  roundOf32Publish: null,
 };
 
 function applySummary(overrides: Partial<LiveScoresApplySummary> = {}): LiveScoresApplySummary {

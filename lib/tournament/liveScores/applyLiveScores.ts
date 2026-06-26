@@ -162,6 +162,7 @@ export async function applyLiveScoresAndSync(
     syncLockedMatchCount: 0,
     patchesApplied: 0,
     patchesSkipped: 0,
+    roundOf32Publish: null,
   };
 
   if (options.patches.length > 0) {

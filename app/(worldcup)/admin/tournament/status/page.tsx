@@ -8,6 +8,8 @@ import {
   formatPublicLiveScoresLastUpdated,
 } from "@/lib/tournament/liveDailyUpdateStatus";
 import { createClient } from "@/lib/supabase/server";
+import { buildR32GradualUnlockDiagnosticLine } from "@/lib/tournament/r32GradualUnlockDiagnostic";
+import type { TournamentMatchPublicRow } from "../../../../../types/tournamentPublic";
 import { OFFICIAL_EDITION_CODE } from "../../../../../lib/config/officialTournament";
 import { computeStandingsFreshness } from "../../../../../lib/tournament/standingsFreshness";
 import Link from "next/link";
@@ -105,10 +107,12 @@ export default async function AdminTournamentStatusPage({ searchParams }: PagePr
   let matchesTotal: number | null = null;
   let matchesFinished: number | null = null;
   let matchesSyncLocked: number | null = null;
+  let r32MatchCount: number | null = null;
+  let r32GradualUnlockLine: string | null = null;
   let lastMatchSyncAt: string | null = null;
 
   if (editionId) {
-    const [mt, mf, ms, ls] = await Promise.all([
+    const [mt, mf, ms, ls, r32Res] = await Promise.all([
       supabase
         .from("tournament_matches")
         .select("id", { count: "exact", head: true })
@@ -131,17 +135,30 @@ export default async function AdminTournamentStatusPage({ searchParams }: PagePr
         .order("last_sync_at", { ascending: false })
         .limit(1)
         .maybeSingle(),
+      supabase
+        .from("tournament_public_matches")
+        .select(
+          "match_code, stage_code, kickoff_at, status, home_country_code, away_country_code, home_team_name, away_team_name",
+        )
+        .eq("edition_id", editionId)
+        .eq("stage_code", "round_of_32")
+        .order("match_code", { ascending: true }),
     ]);
 
     if (mt.error && !loadError) loadError = mt.error.message;
     if (mf.error && !loadError) loadError = mf.error.message;
     if (ms.error && !loadError) loadError = ms.error.message;
     if (ls.error && !loadError) loadError = ls.error.message;
+    if (r32Res.error && !loadError) loadError = r32Res.error.message;
 
     matchesTotal = mt.count ?? 0;
     matchesFinished = mf.count ?? 0;
     matchesSyncLocked = ms.count ?? 0;
     lastMatchSyncAt = ls.data?.last_sync_at ?? null;
+    r32MatchCount = r32Res.data?.length ?? 0;
+    r32GradualUnlockLine = buildR32GradualUnlockDiagnosticLine(
+      (r32Res.data ?? []) as unknown as TournamentMatchPublicRow[],
+    );
   }
 
   const aggErr =
@@ -266,11 +283,21 @@ export default async function AdminTournamentStatusPage({ searchParams }: PagePr
             <dt className="font-medium text-ash-text">Locked results (won’t auto-update)</dt>
             <dd>{resultsLockedRes.count ?? "—"}</dd>
           </div>
+          <div className="flex justify-between gap-4 border-b border-ash-border py-2 sm:block sm:border-0 sm:py-0">
+            <dt className="font-medium text-ash-text">Round of 32 fixture rows</dt>
+            <dd>{editionId ? r32MatchCount : "—"}</dd>
+          </div>
           <div className="flex justify-between gap-4 py-2 sm:block sm:py-0">
             <dt className="font-medium text-ash-text">Matches frozen for sync</dt>
             <dd>{editionId ? matchesSyncLocked : "—"}</dd>
           </div>
         </dl>
+        {r32GradualUnlockLine ? (
+          <p className="mt-3 rounded-md border border-ash-border bg-ash-body/40 px-3 py-2 text-sm">
+            <span className="font-medium text-ash-text">Gradual unlock: </span>
+            {r32GradualUnlockLine.replace(/^R32 gradual unlock: /, "")}
+          </p>
+        ) : null}
       </section>
 
       <section className="ash-surface mb-6 space-y-3 p-4 text-sm text-ash-muted">

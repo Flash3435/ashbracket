@@ -1,0 +1,98 @@
+[
+  {
+    "fifa_match_no": 73,
+    "kickoff_at": "2026-06-28T19:00:00Z",
+    "stadium": "Los Angeles Stadium",
+    "city": "Los Angeles"
+  },
+  {
+    "fifa_match_no": 74,
+    "kickoff_at": "2026-06-29T20:30:00Z",
+    "stadium": "Boston Stadium",
+    "city": "Boston"
+  },
+  {
+    "fifa_match_no": 75,
+    "kickoff_at": "2026-06-30T01:00:00Z",
+    "stadium": "Estadio Monterrey",
+    "city": "Monterrey"
+  },
+  {
+    "fifa_match_no": 76,
+    "kickoff_at": "2026-06-29T17:00:00Z",
+    "stadium": "Houston Stadium",
+    "city": "Houston"
+  },
+  {
+    "fifa_match_no": 77,
+    "kickoff_at": "2026-06-30T21:00:00Z",
+    "stadium": "New York New Jersey Stadium",
+    "city": "East Rutherford"
+  },
+  {
+    "fifa_match_no": 78,
+    "kickoff_at": "2026-06-30T17:00:00Z",
+    "stadium": "Dallas Stadium",
+    "city": "Arlington"
+  },
+  {
+    "fifa_match_no": 79,
+    "kickoff_at": "2026-07-01T02:00:00Z",
+    "stadium": "Mexico City Stadium",
+    "city": "Mexico City"
+  },
+  {
+    "fifa_match_no": 80,
+    "kickoff_at": "2026-07-01T16:00:00Z",
+    "stadium": "Atlanta Stadium",
+    "city": "Atlanta"
+  },
+  {
+    "fifa_match_no": 81,
+    "kickoff_at": "2026-07-02T00:00:00Z",
+    "stadium": "San Francisco Bay Area Stadium",
+    "city": "Santa Clara"
+  },
+  {
+    "fifa_match_no": 82,
+    "kickoff_at": "2026-07-01T20:00:00Z",
+    "stadium": "Seattle Stadium",
+    "city": "Seattle"
+  },
+  {
+    "fifa_match_no": 83,
+    "kickoff_at": "2026-07-02T23:00:00Z",
+    "stadium": "Toronto Stadium",
+    "city": "Toronto"
+  },
+  {
+    "fifa_match_no": 84,
+    "kickoff_at": "2026-07-02T19:00:00Z",
+    "stadium": "Los Angeles Stadium",
+    "city": "Los Angeles"
+  },
+  {
+    "fifa_match_no": 85,
+    "kickoff_at": "2026-07-03T03:00:00Z",
+    "stadium": "BC Place Vancouver",
+    "city": "Vancouver"
+  },
+  {
+    "fifa_match_no": 86,
+    "kickoff_at": "2026-07-03T22:00:00Z",
+    "stadium": "Miami Stadium",
+    "city": "Miami"
+  },
+  {
+    "fifa_match_no": 87,
+    "kickoff_at": "2026-07-04T01:30:00Z",
+    "stadium": "Kansas City Stadium",
+    "city": "Kansas City"
+  },
+  {
+    "fifa_match_no": 88,
+    "kickoff_at": "2026-07-03T18:00:00Z",
+    "stadium": "Dallas Stadium",
+    "city": "Dallas"
+  }
+]

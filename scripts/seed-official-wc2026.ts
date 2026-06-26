@@ -73,7 +73,7 @@ async function main() {
     process.exit(1);
   }
   console.log(
-    `OK: edition_id=${out.editionId} matches_upserted=${out.matchCount}`,
+    `OK: edition_id=${out.editionId} matches_upserted=${out.matchCount} (includes M73–M88 knockout shells)`,
   );
 }
 
