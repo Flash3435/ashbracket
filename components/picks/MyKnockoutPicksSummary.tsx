@@ -19,6 +19,7 @@ import {
   type PickSectionStatus,
 } from "../../lib/picks/picksProgressSummary";
 import { buildPoolPickDeadlineStatus } from "../../lib/picks/poolPickDeadlineDisplay";
+import { buildKnockoutBracketGradualSectionNote } from "../../lib/picks/knockoutSelectionWindow";
 import { PicksProgressSummaryPanel } from "./PicksProgressSummaryPanel";
 import { PoolPickDeadlineBanner } from "./PoolPickDeadlineBanner";
 
@@ -373,11 +374,7 @@ export function MyKnockoutPicksSummary({
                   Knockout bracket (Round of 32 → champion)
                 </h2>
                 <p className="mt-1 text-xs text-ash-muted">
-                  This section opens after organizers enter the full official Round of
-                  32 lineup.{" "}
-                  {readOnly
-                    ? "The pool intentionally waits for real FIFA bracket slots before knockout picks and scoring."
-                    : "You are not missing a step — the pool intentionally waits for real FIFA bracket slots before knockout picks and scoring."}
+                  {buildKnockoutBracketGradualSectionNote(readOnly)}
                 </p>
               </div>
               <span className="shrink-0 rounded-full border border-sky-800/45 bg-sky-950/25 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-sky-100">

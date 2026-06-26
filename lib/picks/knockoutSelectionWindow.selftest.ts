@@ -1,10 +1,13 @@
 import assert from "node:assert";
 import {
+  buildGradualR32PickableCardBody,
+  buildKnockoutBracketGradualSectionNote,
   buildKnockoutSelectionInstructionCard,
   deriveKnockoutSelectionSchedule,
   formatKnockoutSelectionCountdown,
   GROUP_STAGE_MATCH_DURATION_BUFFER_MS,
   isMatchStarted,
+  KNOCKOUT_BRACKET_GRADUAL_SECTION_COPY,
   KNOCKOUT_EXPECTED_UNLOCK_LINE,
   selectionCountdownExpired,
 } from "./knockoutSelectionWindow";
@@ -113,15 +116,35 @@ function match(
     knockoutBracketPicksUnlocked: false,
     matches,
     picksHref: "/account/picks",
+    picksLocked: true,
     nowMs,
   });
 
-  assert.strictEqual(model.phase, "upcoming");
-  assert.strictEqual(model.title, "Knockout picks are opening gradually");
+  assert.strictEqual(model.phase, "open");
+  assert.strictEqual(model.title, "Round of 32 picks are opening gradually");
+  assert.ok(model.body.includes("1 confirmed matchup is available now"));
   assert.strictEqual(model.countdown?.label, "First available match locks in");
   assert.strictEqual(model.countdown?.targetIso, "2026-06-28T19:00:00Z");
+  assert.strictEqual(model.cta?.label, "Make Round of 32 picks");
+  assert.ok(
+    model.helperText?.includes("Group and bonus picks are locked"),
+    model.helperText ?? "",
+  );
   assert.ok(model.gradualStatusLine?.includes("1 confirmed"));
   assert.ok(model.gradualStatusLine?.includes("15 waiting"));
+}
+
+// Gradual section copy — no full-R32-only wording
+{
+  const note = buildKnockoutBracketGradualSectionNote(false);
+  assert.ok(note.includes(KNOCKOUT_BRACKET_GRADUAL_SECTION_COPY));
+  assert.ok(!note.includes("full official Round of 32 lineup"));
+}
+
+// Gradual card body uses dynamic counts
+{
+  assert.ok(buildGradualR32PickableCardBody(3).includes("3 confirmed matchups are"));
+  assert.ok(buildGradualR32PickableCardBody(1).includes("1 confirmed matchup is"));
 }
 
 // Open state — full R32 before first kickoff

@@ -141,6 +141,26 @@ assert.ok(
   "locked participant pool uses post-lock header copy",
 );
 
+const gradualLockedCopy = buildAccountPageTitleDescription({
+  isOrganizerOnly: false,
+  hasSelectedParticipant: true,
+  picksLocked: true,
+  gradualR32PickableCount: 3,
+  userEmail: "user@example.com",
+});
+assert.ok(
+  !gradualLockedCopy.includes("read-only"),
+  "gradual R32 pickable avoids read-only headline",
+);
+assert.ok(
+  gradualLockedCopy.includes("Group and bonus picks are locked"),
+  "gradual R32 pickable explains locked group/bonus picks",
+);
+assert.ok(
+  gradualLockedCopy.includes("Round of 32"),
+  "gradual R32 pickable mentions Round of 32",
+);
+
 const editCopy = buildAccountPageTitleDescription({
   isOrganizerOnly: false,
   hasSelectedParticipant: true,

@@ -234,14 +234,28 @@ export default async function AccountPage({ searchParams }: PageProps) {
   const editPicksFromDashboardHref = picksCtx?.selectedParticipant?.id
     ? `/account/picks?participant=${picksCtx.selectedParticipant.id}`
     : picksHref;
+  const gradualKnockoutState =
+    picksCtx && !picksCtx.loadError
+      ? getGradualKnockoutSelectionState({
+          matches: tournamentMatches,
+          fullRoundOf32Official: picksCtx.knockoutBracketPicksUnlocked,
+        })
+      : null;
+  const gradualR32PickableCount = gradualKnockoutState?.pickableCount ?? 0;
   const knockoutSelectionCard =
     picksCtx?.selectedParticipant?.id && !picksCtx.loadError
       ? buildKnockoutSelectionInstructionCard({
           knockoutBracketPicksUnlocked: picksCtx.knockoutBracketPicksUnlocked,
           matches: tournamentMatches,
           picksHref: editPicksFromDashboardHref,
+          picksLocked: locked,
         })
       : null;
+  const showProminentGradualR32Card =
+    locked &&
+    gradualR32PickableCount > 0 &&
+    Boolean(picksCtx?.selectedParticipant) &&
+    Boolean(knockoutSelectionCard);
   const revealHref = picksCtx?.selectedParticipant?.id
     ? `/account/reveal?participant=${picksCtx.selectedParticipant.id}`
     : "/account/reveal";
@@ -309,10 +323,12 @@ export default async function AccountPage({ searchParams }: PageProps) {
     : "/account/activity";
   const knockoutPicksEditable = picksCtx
     ? hasEditableKnockoutPicks({
-        gradual: getGradualKnockoutSelectionState({
-          matches: tournamentMatches,
-          fullRoundOf32Official: picksCtx.knockoutBracketPicksUnlocked,
-        }),
+        gradual:
+          gradualKnockoutState ??
+          getGradualKnockoutSelectionState({
+            matches: tournamentMatches,
+            fullRoundOf32Official: picksCtx.knockoutBracketPicksUnlocked,
+          }),
         fullRoundOf32Official: picksCtx.knockoutBracketPicksUnlocked,
       })
     : true;
@@ -331,6 +347,7 @@ export default async function AccountPage({ searchParams }: PageProps) {
     isOrganizerOnly: organizerOnly,
     hasSelectedParticipant: Boolean(picksCtx?.selectedParticipant),
     picksLocked: locked,
+    gradualR32PickableCount,
     userEmail: user.email ?? null,
   });
 
@@ -554,6 +571,13 @@ export default async function AccountPage({ searchParams }: PageProps) {
             </div>
           ) : null}
 
+          {showProminentGradualR32Card && knockoutSelectionCard ? (
+            <KnockoutSelectionInstructionCard
+              model={knockoutSelectionCard}
+              className="mb-6"
+            />
+          ) : null}
+
           {picksCtx && picksCtx.profileLinkItems.length > 1 ? (
             <AccountPicksProfileLinks
               profiles={picksCtx.profileLinkItems}
@@ -640,7 +664,7 @@ export default async function AccountPage({ searchParams }: PageProps) {
                 />
               </div>
 
-              {knockoutSelectionCard ? (
+              {knockoutSelectionCard && !showProminentGradualR32Card ? (
                 <KnockoutSelectionInstructionCard model={knockoutSelectionCard} />
               ) : null}
 

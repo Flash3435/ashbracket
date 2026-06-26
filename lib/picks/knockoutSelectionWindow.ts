@@ -187,10 +187,28 @@ function formatGradualStatusLine(gradual: GradualKnockoutSelectionState): string
   return `${gradual.pickableCount} confirmed matchups available · ${gradual.pendingCount} waiting for confirmation`;
 }
 
+export function buildGradualR32PickableCardBody(
+  pickableCount: number,
+): string {
+  const matchupWord = pickableCount === 1 ? "matchup is" : "matchups are";
+  return `${pickableCount} confirmed ${matchupWord} available now. More matchups will unlock as the official bracket fills in. Each match locks at kickoff.`;
+}
+
+export const KNOCKOUT_BRACKET_GRADUAL_SECTION_COPY =
+  "Confirmed Round of 32 matchups are opening gradually. Later knockout rounds unlock once the full official bracket is set.";
+
+export function buildKnockoutBracketGradualSectionNote(readOnly: boolean): string {
+  if (readOnly) {
+    return `${KNOCKOUT_BRACKET_GRADUAL_SECTION_COPY} Knockout picks and scoring follow confirmed FIFA bracket slots.`;
+  }
+  return `${KNOCKOUT_BRACKET_GRADUAL_SECTION_COPY} Pick confirmed matchups now and check back as more unlock.`;
+}
+
 export function buildKnockoutSelectionInstructionCard(input: {
   knockoutBracketPicksUnlocked: boolean;
   matches: TournamentMatchPublicRow[] | null | undefined;
   picksHref: string;
+  picksLocked?: boolean;
   nowMs?: number;
 }): KnockoutSelectionInstructionCardModel {
   const nowMs = input.nowMs ?? Date.now();
@@ -258,6 +276,31 @@ export function buildKnockoutSelectionInstructionCard(input: {
     const countdownExpired =
       hasCountdownTarget && selectionCountdownExpired(countdownTarget, nowMs);
 
+    if (gradual.pickableCount > 0) {
+      return {
+        phase: "open",
+        title: "Round of 32 picks are opening gradually",
+        body: buildGradualR32PickableCardBody(gradual.pickableCount),
+        expectedUnlockLine: "",
+        expectedUnlockKickoffIso: null,
+        countdown:
+          gradual.earliestPickableKickoffIso && !countdownExpired
+            ? {
+                label: "First available match locks in",
+                targetIso: gradual.earliestPickableKickoffIso,
+              }
+            : null,
+        upcomingFallbackLine: null,
+        cta: { label: "Make Round of 32 picks", href: picksHref },
+        helperText: input.picksLocked
+          ? "Group and bonus picks are locked, but confirmed knockout matchups can still be picked."
+          : "Each match locks at kickoff. Submit confirmed picks now and check back as more matchups unlock.",
+        tone: "open",
+        gradualStatusLine,
+        gradual,
+      };
+    }
+
     return {
       phase: "upcoming",
       title: "Knockout picks are opening gradually",
@@ -265,14 +308,9 @@ export function buildKnockoutSelectionInstructionCard(input: {
       expectedUnlockLine: "",
       expectedUnlockKickoffIso: null,
       countdown:
-        gradual.pickableCount > 0 && gradual.earliestPickableKickoffIso && !countdownExpired
-          ? {
-              label: "First available match locks in",
-              targetIso: gradual.earliestPickableKickoffIso,
-            }
-          : hasCountdownTarget && !countdownExpired
-            ? { label: "Selections open in", targetIso: countdownTarget! }
-            : null,
+        hasCountdownTarget && !countdownExpired
+          ? { label: "Selections open in", targetIso: countdownTarget! }
+          : null,
       upcomingFallbackLine:
         !hasCountdownTarget || countdownExpired
           ? "Confirmed matchups unlock as the official bracket is published"

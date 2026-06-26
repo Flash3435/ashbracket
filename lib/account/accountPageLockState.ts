@@ -15,6 +15,8 @@ export function buildAccountPageTitleDescription(input: {
   isOrganizerOnly: boolean;
   hasSelectedParticipant: boolean;
   picksLocked: boolean;
+  /** Confirmed Round of 32 matchups currently open for picks (gradual unlock). */
+  gradualR32PickableCount?: number;
   userEmail: string | null;
 }): string {
   if (input.isOrganizerOnly) {
@@ -24,6 +26,11 @@ export function buildAccountPageTitleDescription(input: {
     return input.userEmail
       ? `Signed in as ${input.userEmail}.`
       : "Your AshBracket account.";
+  }
+  if (input.picksLocked && (input.gradualR32PickableCount ?? 0) > 0) {
+    return input.userEmail
+      ? `Signed in as ${input.userEmail}. Group and bonus picks are locked. Confirmed Round of 32 matchups are now opening for picks.`
+      : "Group and bonus picks are locked. Confirmed Round of 32 matchups are now opening for picks.";
   }
   if (input.picksLocked) {
     return input.userEmail

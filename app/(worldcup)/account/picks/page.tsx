@@ -92,6 +92,7 @@ export default async function AccountPicksPage({ searchParams }: PageProps) {
           knockoutBracketPicksUnlocked: ctx.knockoutBracketPicksUnlocked,
           matches: tournamentPayload?.matches ?? null,
           picksHref: editPicksHref,
+          picksLocked: locked,
         })
       : null;
 
