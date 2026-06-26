@@ -26,6 +26,9 @@ export type SeedOfficialWc2026KnockoutFixturesSummary = {
 /**
  * Idempotent upsert of official Round of 32 shell rows (M73–M88) for WC 2026.
  * Teams start null; kickoffs come from canonical JSON.
+ *
+ * scoring_* columns are omitted (NULL), matching official group-stage rows and
+ * tournament_matches_scoring_result_kind_check (round_of_16 is not allowed).
  */
 export async function seedOfficialWc2026KnockoutFixtures(
   supabase: SupabaseClient,

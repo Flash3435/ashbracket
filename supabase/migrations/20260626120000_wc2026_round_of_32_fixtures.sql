@@ -1,6 +1,13 @@
 -- Official WC 2026 Round of 32 shell fixtures (M73–M88).
 -- Canonical kickoffs from lib/tournament/wc2026KnockoutFixtures.json.
 -- Teams are published progressively via publishConfirmedRoundOf32Fixtures.
+--
+-- scoring_result_kind / scoring_slot_key / scoring_stage_code are omitted (NULL).
+-- tournament_matches_scoring_result_kind_check (20260406100000) allows only:
+--   NULL, group_winner, group_runner_up, quarterfinalist, semifinalist,
+--   finalist, champion, bonus_pick
+-- NOT round_of_16 (that is a predictions/results kind; see 20260411160000 comment).
+-- Official group-stage rows also leave all three columns NULL.
 
 INSERT INTO public.tournament_matches (
   edition_id,
