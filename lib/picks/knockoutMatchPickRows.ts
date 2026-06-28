@@ -245,21 +245,35 @@ export function readR32MatchWinnerForBracket(
     if (w) return w;
   }
 
+  if (options.knockoutBracketPicksUnlocked) {
+    return readConfirmedR32MatchWinner(matchIndex, slots);
+  }
+
   const { top, bottom } = r32SlotKeysForMatchIndex(matchIndex);
   const topId = slotTeamId(slots, "round_of_32", top) || null;
   const botId = slotTeamId(slots, "round_of_32", bottom) || null;
-
-  if (options.knockoutBracketPicksUnlocked) {
-    const r16Participants = idsForKind(slots, "round_of_16");
-    const inferred = pickWinnerAmongParticipants(topId, botId, r16Participants);
-    if (inferred) return inferred;
-  }
-
   const r16Key = r16SlotKeyForR32MatchIndex(matchIndex);
   const stored = slotTeamId(slots, "round_of_16", r16Key);
   if (stored) return stored;
-
   return topId || botId || "";
+}
+
+/**
+ * Confirmed R32 match winner for later-round bracket rows: `round_of_16` slot
+ * 1–16 and inference from that participant set — never raw `round_of_32` side picks.
+ */
+export function readConfirmedR32MatchWinner(
+  matchIndex: number,
+  slots: KnockoutPickSlotDraft[],
+): string {
+  const { top, bottom } = r32SlotKeysForMatchIndex(matchIndex);
+  const topId = slotTeamId(slots, "round_of_32", top) || null;
+  const botId = slotTeamId(slots, "round_of_32", bottom) || null;
+  const r16Participants = idsForKind(slots, "round_of_16");
+  const inferred = pickWinnerAmongParticipants(topId, botId, r16Participants);
+  if (inferred) return inferred;
+  const r16Key = r16SlotKeyForR32MatchIndex(matchIndex);
+  return slotTeamId(slots, "round_of_16", r16Key);
 }
 
 function readParticipantSlotSide(

@@ -4,6 +4,7 @@ import {
   WC2026_R16_R32_PARTICIPANT_PAIRS,
 } from "../bracket/wc2026KnockoutPairings";
 import { r32SlotKeysForMatchIndex } from "../bracket/wc2026RoundOf32";
+import { readConfirmedR32MatchWinner } from "../picks/knockoutMatchPickRows";
 import { r16SlotKeyForR32MatchIndex } from "../picks/gradualKnockoutUnlock";
 import type { KnockoutPickSlotDraft } from "../../types/adminKnockoutPicks";
 import type { KnockoutProgressionPredictionKind } from "./knockoutProgressionKinds";
@@ -55,8 +56,8 @@ function r32WinnerTeamId(
   slots: KnockoutPickSlotDraft[],
   matchIndex: number,
 ): string | null {
-  const key = r16SlotKeyForR32MatchIndex(matchIndex);
-  return slotTeamId(slots, "round_of_16", key) || null;
+  const winner = readConfirmedR32MatchWinner(matchIndex, slots);
+  return winner || null;
 }
 
 /** Pick survives only when both sides are known and the team is in that official matchup. */

@@ -9,6 +9,7 @@ import {
   readR32MatchWinnerForBracket,
   validateKnockoutLaterMatchPick,
 } from "./knockoutMatchPickRows";
+import { pruneParticipantPicks } from "../predictions/knockoutPickConsistency";
 import type { GradualKnockoutSelectionState } from "./gradualKnockoutUnlock";
 
 const teams: Team[] = [
@@ -154,6 +155,52 @@ const emptyGradual = {
   earliestPickableKickoffIso: null,
   matchStates: [],
 } satisfies GradualKnockoutSelectionState;
+
+function r32Side(slotKey: string, teamId = ""): KnockoutPickSlotDraft {
+  return {
+    rowKey: `round_of_32|${slotKey}`,
+    sectionLabel: "R32",
+    slotLabel: slotKey,
+    predictionKind: "round_of_32",
+    tournamentStageId: "r32",
+    slotKey,
+    groupCode: null,
+    bonusKey: null,
+    teamId,
+  };
+}
+
+// R16 row stays incomplete when only round_of_32 side picks exist (no confirmed winners)
+{
+  const slots: KnockoutPickSlotDraft[] = [
+    r32Side("3", "team-ger"),
+    r32Side("4", "team-fra"),
+    r32Side("9", "team-ned"),
+    r32Side("10", "team-can"),
+    r16Slot("1", "team-can"),
+    r16Slot("3", "team-ned"),
+    ...Array.from({ length: 8 }, (_, i) => qfSlot(String(i + 1))),
+  ];
+  const rows = buildKnockoutMatchPickRows({
+    bracketKind: "round_of_16",
+    slots,
+    teams,
+    gradual: emptyGradual,
+    knockoutBracketPicksUnlocked: true,
+  });
+  const m89 = rows.find((r) => r.fifaMatchNo === 89)!;
+  assert.strictEqual(m89.lockReason, "incomplete");
+  const m90 = rows.find((r) => r.fifaMatchNo === 90)!;
+  assert.strictEqual(m90.lockReason, "pickable");
+  const afterPick = pruneParticipantPicks(
+    applyKnockoutMatchWinnerToSlots(slots, m90, "team-can"),
+  );
+  assert.strictEqual(
+    afterPick.find((s) => s.predictionKind === "quarterfinalist" && s.slotKey === "2")
+      ?.teamId,
+    "team-can",
+  );
+}
 
 // Official R16 pairings (not adjacent R32 winners)
 {
