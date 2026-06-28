@@ -202,6 +202,27 @@ function r32Side(slotKey: string, teamId = ""): KnockoutPickSlotDraft {
   );
 }
 
+// Gradual side picks must not populate R16 rows once the full bracket is official
+{
+  const slots: KnockoutPickSlotDraft[] = [
+    r32Side("3", "team-ger"),
+    r32Side("4", "team-ned"),
+    r32Side("9", "team-fra"),
+    r32Side("10", "team-rsa"),
+  ];
+  const rows = buildKnockoutMatchPickRows({
+    bracketKind: "round_of_16",
+    slots,
+    teams,
+    gradual: emptyGradual,
+    knockoutBracketPicksUnlocked: true,
+  });
+  const m89 = rows.find((r) => r.fifaMatchNo === 89)!;
+  assert.strictEqual(m89.lockReason, "incomplete");
+  assert.strictEqual(m89.homeTeamId, null);
+  assert.strictEqual(m89.awayTeamId, null);
+}
+
 // Official R16 pairings (not adjacent R32 winners)
 {
   const slots: KnockoutPickSlotDraft[] = [

@@ -239,14 +239,14 @@ export function readR32MatchWinnerForBracket(
     knockoutBracketPicksUnlocked?: boolean;
   },
 ): string {
+  if (options.knockoutBracketPicksUnlocked) {
+    return readConfirmedR32MatchWinner(matchIndex, slots);
+  }
+
   const ms = options.gradual?.matchStates[matchIndex];
   if (ms) {
     const w = readGradualR32MatchWinner(matchIndex, slots, teams, ms);
     if (w) return w;
-  }
-
-  if (options.knockoutBracketPicksUnlocked) {
-    return readConfirmedR32MatchWinner(matchIndex, slots);
   }
 
   const { top, bottom } = r32SlotKeysForMatchIndex(matchIndex);
