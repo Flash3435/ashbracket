@@ -7,6 +7,7 @@ import {
   FINAL_MATCH_INCOMPLETE_MSG,
   incompleteR16MatchMessage,
   knockoutMatchStepComplete,
+  readConfirmedR32MatchWinner,
   readR32MatchWinnerForBracket,
   validateKnockoutLaterMatchPick,
 } from "./knockoutMatchPickRows";
@@ -228,6 +229,29 @@ function r32Side(slotKey: string, teamId = ""): KnockoutPickSlotDraft {
     incompleteR16MatchMessage(0, slots),
     "Complete Round of 32 first — pick winners for M74 and M77.",
   );
+}
+
+// Both R32 sides filled without a canonical winner does not unlock R16 rows.
+{
+  const slots: KnockoutPickSlotDraft[] = [
+    r32Side("3", "team-ger"),
+    r32Side("4", "team-ned"),
+    r32Side("9", "team-fra"),
+    r32Side("10", "team-ned"),
+    ...Array.from({ length: 16 }, (_, i) => {
+      const key = String(i + 1);
+      return r16Slot(key, key === "2" ? "team-ger" : "");
+    }),
+  ];
+  assert.strictEqual(readConfirmedR32MatchWinner(4, slots), "");
+  const rows = buildKnockoutMatchPickRows({
+    bracketKind: "round_of_16",
+    slots,
+    teams,
+    gradual: emptyGradual,
+  });
+  const m89 = rows.find((r) => r.fifaMatchNo === 89)!;
+  assert.ok(m89.display.statusLine?.includes("M77"));
 }
 
 // Official R16 pairings (not adjacent R32 winners)

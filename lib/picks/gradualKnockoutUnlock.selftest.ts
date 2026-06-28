@@ -449,6 +449,17 @@ function r32SlotDraft(slotKey: string, teamId = ""): KnockoutPickSlotDraft {
     readGradualR32MatchWinner(0, legacySlots, r32Teams, ms),
     "team-rsa",
   );
+
+  // Official two-team assignment must not count as a winner without `round_of_16` storage.
+  const bothSidesOfficial = [
+    r32SlotDraft("1", "team-rsa"),
+    r32SlotDraft("2", "team-can"),
+    ...Array.from({ length: 16 }, (_, i) => r16SlotDraft(String(i + 1))),
+  ];
+  assert.strictEqual(
+    readGradualR32MatchWinner(0, bothSidesOfficial, r32Teams, ms),
+    "",
+  );
 }
 
 // Gradual save payload only includes group/third/bonus + pickable matchup rows

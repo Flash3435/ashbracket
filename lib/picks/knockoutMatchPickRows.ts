@@ -269,14 +269,20 @@ export function readConfirmedR32MatchWinner(
   matchIndex: number,
   slots: KnockoutPickSlotDraft[],
 ): string {
+  const r16Key = r16SlotKeyForR32MatchIndex(matchIndex);
+  const stored = slotTeamId(slots, "round_of_16", r16Key);
+  if (stored) return stored;
+
   const { top, bottom } = r32SlotKeysForMatchIndex(matchIndex);
   const topId = slotTeamId(slots, "round_of_32", top) || null;
   const botId = slotTeamId(slots, "round_of_32", bottom) || null;
+
+  // Legacy single-side winner before canonical `round_of_16` storage.
+  if (topId && !botId) return topId;
+  if (botId && !topId) return botId;
+
   const r16Participants = idsForKind(slots, "round_of_16");
-  const inferred = pickWinnerAmongParticipants(topId, botId, r16Participants);
-  if (inferred) return inferred;
-  const r16Key = r16SlotKeyForR32MatchIndex(matchIndex);
-  return slotTeamId(slots, "round_of_16", r16Key);
+  return pickWinnerAmongParticipants(topId, botId, r16Participants);
 }
 
 /** Which upstream R32 fixtures still need a confirmed winner for this R16 row. */

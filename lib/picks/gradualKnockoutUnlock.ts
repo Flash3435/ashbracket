@@ -196,7 +196,8 @@ function teamIsInR32Match(
 
 /**
  * Winner for a gradual R32 matchup: canonical `round_of_16` slot, with legacy
- * `round_of_32` top/bottom slots read for older saves.
+ * `round_of_32` top/bottom slots only when a single side was used as the winner
+ * (not when both sides are filled as an official two-team assignment).
  */
 export function readGradualR32MatchWinner(
   matchIndex: number,
@@ -211,13 +212,20 @@ export function readGradualR32MatchWinner(
   const r16Id = r16Row?.teamId.trim() ?? "";
   if (r16Id && teamIsInR32Match(r16Id, match, teams)) return r16Id;
 
-  for (const sk of [match.topSlotKey, match.bottomSlotKey]) {
-    const row = slots.find(
-      (s) => s.predictionKind === "round_of_32" && s.slotKey === sk,
-    );
-    const id = row?.teamId.trim() ?? "";
-    if (id && teamIsInR32Match(id, match, teams)) return id;
-  }
+  const { top, bottom } = r32SlotKeysForMatchIndex(matchIndex);
+  const topId =
+    slots
+      .find((s) => s.predictionKind === "round_of_32" && s.slotKey === top)
+      ?.teamId.trim() ?? "";
+  const botId =
+    slots
+      .find((s) => s.predictionKind === "round_of_32" && s.slotKey === bottom)
+      ?.teamId.trim() ?? "";
+
+  // Legacy saves: winner on exactly one R32 side before canonical `round_of_16` storage.
+  if (topId && !botId && teamIsInR32Match(topId, match, teams)) return topId;
+  if (botId && !topId && teamIsInR32Match(botId, match, teams)) return botId;
+
   return "";
 }
 
