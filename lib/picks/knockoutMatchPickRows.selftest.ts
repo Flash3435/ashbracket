@@ -287,4 +287,28 @@ const emptyGradual = {
   );
 }
 
+// Creates champion row when missing so final picks still persist
+{
+  const slots: KnockoutPickSlotDraft[] = [
+    finSlot("1", "team-ger"),
+    finSlot("2", "team-bra"),
+  ];
+  const rows = buildKnockoutMatchPickRows({
+    bracketKind: "finalist",
+    slots,
+    teams,
+    gradual: emptyGradual,
+  });
+  const finalRow = rows[0]!;
+  const next = applyKnockoutMatchWinnerToSlots(slots, finalRow, "team-bra");
+  assert.strictEqual(
+    next.find((s) => s.predictionKind === "champion")?.teamId,
+    "team-bra",
+  );
+  assert.strictEqual(
+    next.find((s) => s.predictionKind === "champion")?.rowKey,
+    "champion|",
+  );
+}
+
 console.log("knockoutMatchPickRows.selftest.ts: ok");

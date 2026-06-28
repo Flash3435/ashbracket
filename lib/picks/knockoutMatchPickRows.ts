@@ -405,6 +405,32 @@ export function buildKnockoutMatchPickRows(input: {
   });
 }
 
+/** Ensures a champion draft row exists before writing a final-match winner. */
+export function ensureChampionPickSlot(
+  slots: KnockoutPickSlotDraft[],
+): KnockoutPickSlotDraft[] {
+  if (slots.some((s) => s.predictionKind === "champion")) return slots;
+  const tournamentStageId =
+    slots.find((s) => s.predictionKind === "finalist")?.tournamentStageId ??
+    slots.find((s) => s.predictionKind === "semifinalist")?.tournamentStageId ??
+    null;
+  if (!tournamentStageId) return slots;
+  return [
+    ...slots,
+    {
+      rowKey: "champion|",
+      sectionLabel: "Champion",
+      slotLabel: "Champion",
+      predictionKind: "champion",
+      tournamentStageId,
+      slotKey: null,
+      groupCode: null,
+      bonusKey: null,
+      teamId: "",
+    },
+  ];
+}
+
 export function allowedTeamsForKnockoutMatchRow(
   row: KnockoutMatchPickRow,
   teams: Team[],
@@ -432,20 +458,25 @@ export function applyKnockoutMatchWinnerToSlots(
     if (!allowed.has(id)) return slots;
   }
 
-  const saveRow = slots.find((s) => s.rowKey === row.saveRowKey);
+  const baseSlots =
+    row.savePredictionKind === "champion"
+      ? ensureChampionPickSlot(slots)
+      : slots;
+
+  const saveRow = baseSlots.find((s) => s.rowKey === row.saveRowKey);
   if (saveRow) {
-    return slots.map((s) =>
+    return baseSlots.map((s) =>
       s.rowKey === row.saveRowKey ? { ...s, teamId: id } : s,
     );
   }
 
-  const fallback = slots.find((s) => {
+  const fallback = baseSlots.find((s) => {
     if (s.predictionKind !== row.savePredictionKind) return false;
     if (row.savePredictionKind === "champion") return true;
     return s.slotKey === row.saveSlotKey;
   });
-  if (!fallback) return slots;
-  return slots.map((s) =>
+  if (!fallback) return baseSlots;
+  return baseSlots.map((s) =>
     s.rowKey === fallback.rowKey ? { ...s, teamId: id } : s,
   );
 }

@@ -74,6 +74,7 @@ import {
 } from "../../lib/picks/gradualKnockoutUnlock";
 import {
   allowedTeamsForKnockoutMatchRow,
+  applyKnockoutMatchWinnerToSlots,
   buildKnockoutMatchPickRows,
   countKnockoutMatchupsFilled,
   FINAL_MATCH_INCOMPLETE_MSG,
@@ -346,6 +347,22 @@ function stepComplete(
   ) {
     const rows = buildKnockoutMatchPickRows({
       bracketKind: def.bracketKind as KnockoutWizardBracketKind,
+      slots,
+      teams: options.teams,
+      tournamentMatches: options.tournamentMatches,
+      gradual: options.gradualKnockout,
+      knockoutBracketPicksUnlocked: options.knockoutBracketPicksUnlocked,
+    });
+    return knockoutMatchStepComplete(rows);
+  }
+  if (
+    def?.mode === "bracket" &&
+    def.bracketKind === "champion" &&
+    options?.fullBracketPicksUnlocked &&
+    options.teams
+  ) {
+    const rows = buildKnockoutMatchPickRows({
+      bracketKind: "finalist",
       slots,
       teams: options.teams,
       tournamentMatches: options.tournamentMatches,
@@ -1121,14 +1138,6 @@ export function KnockoutPicksWizard({
     teamId: string,
   ) {
     setSlots((prev) => {
-      const saveRow =
-        prev.find((s) => s.rowKey === matchRow.saveRowKey) ??
-        prev.find(
-          (s) =>
-            s.predictionKind === matchRow.savePredictionKind &&
-            s.slotKey === matchRow.saveSlotKey,
-        );
-      if (!saveRow) return prev;
       const id = teamId.trim();
       if (
         id &&
@@ -1137,12 +1146,10 @@ export function KnockoutPicksWizard({
       ) {
         return prev;
       }
-      return pruneParticipantPicks(
-        assignParticipantPickDeduped(prev, saveRow.rowKey, id, {
-          freezeKnockoutProgressionPicks: !knockoutPicksAccessible,
-        }),
-        { freezeKnockoutProgressionPicks: !knockoutPicksAccessible },
-      );
+      const next = applyKnockoutMatchWinnerToSlots(prev, matchRow, id);
+      return pruneParticipantPicks(next, {
+        freezeKnockoutProgressionPicks: !knockoutPicksAccessible,
+      });
     });
   }
 
@@ -1894,8 +1901,9 @@ export function KnockoutPicksWizard({
                     matchRow.savePredictionKind === "champion";
                   const directPickEligible =
                     matchRow.lockReason === "pickable" && matchupPair != null;
-                  const useDirectEmptyLayout =
-                    directPickEligible && isEmptyPick && !isChampionPickRow;
+                  const useDirectEmptyLayout = directPickEligible && isEmptyPick;
+                  const championDirectPick =
+                    isChampionPickRow && directPickEligible && isEmptyPick;
                   const rowPickDisabled =
                     coreDisabled ||
                     !fullBracketPicksUnlocked ||
@@ -1926,9 +1934,20 @@ export function KnockoutPicksWizard({
                           <p className="text-xs font-medium uppercase tracking-wide text-ash-muted">
                             {heading}
                           </p>
+                          {championDirectPick && matchupLine ? (
+                            <p className="mt-1 text-sm font-medium text-ash-text">
+                              {matchupLine}
+                            </p>
+                          ) : null}
+                          {championDirectPick ? (
+                            <p className="mt-1 text-xs text-ash-muted">
+                              Tap a finalist to set your champion pick.
+                            </p>
+                          ) : null}
                           <R32MatchDirectTeamPick
                             teams={matchupPair}
                             disabled={rowPickDisabled}
+                            pickKind={isChampionPickRow ? "champion" : "winner"}
                             onPick={(teamId) => {
                               setKnockoutMatchWinner(matchRow, teamId);
                               setOpenRowKey(null);
