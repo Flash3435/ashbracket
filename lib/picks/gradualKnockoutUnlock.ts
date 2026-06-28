@@ -414,6 +414,85 @@ export function formatGradualKnockoutStatusLine(
   return `${state.pickableCount} confirmed matchups available · ${state.pendingCount} waiting for confirmation`;
 }
 
+/**
+ * True when participants may fill Round of 16 through champion — either organizers
+ * published all 32 official `results` rows, or every R32 fixture has both teams set.
+ */
+export function isFullKnockoutBracketPicksUnlocked(input: {
+  officialRoundOf32Complete: boolean;
+  gradual: GradualKnockoutSelectionState;
+}): boolean {
+  if (input.officialRoundOf32Complete) return true;
+  return (
+    input.gradual.r32MatchCount > 0 &&
+    input.gradual.matchStates.every((m) => m.confirmed)
+  );
+}
+
+/** Whether any gradual R32 winner is still stored on canonical `round_of_16` slots. */
+export function hasGradualR32WinnerStorage(
+  slots: KnockoutPickSlotDraft[],
+  state: GradualKnockoutSelectionState,
+  teams: Team[],
+): boolean {
+  return state.matchStates.some((ms) =>
+    Boolean(
+      readGradualR32MatchWinner(ms.matchIndex, slots, teams, ms) &&
+        slots.some(
+          (s) =>
+            s.predictionKind === "round_of_16" &&
+            s.slotKey === r16SlotKeyForR32MatchIndex(ms.matchIndex) &&
+            s.teamId.trim(),
+        ),
+    ),
+  );
+}
+
+/**
+ * Before Round of 16 picks, copy official matchup teams into `round_of_32` slots and
+ * clear temporary gradual R32 winners from `round_of_16` slots (1–16).
+ */
+export function promoteGradualR32WinnersToRoundOf32Slots(
+  slots: KnockoutPickSlotDraft[],
+  state: GradualKnockoutSelectionState,
+  teams: Team[],
+): KnockoutPickSlotDraft[] {
+  let next = slots;
+  for (const ms of state.matchStates) {
+    const r16Key = r16SlotKeyForR32MatchIndex(ms.matchIndex);
+    const gradualWinner = readGradualR32MatchWinner(ms.matchIndex, next, teams, ms);
+    const gradualStoredOnR16 = next.some(
+      (s) =>
+        s.predictionKind === "round_of_16" &&
+        s.slotKey === r16Key &&
+        s.teamId.trim(),
+    );
+    if (!gradualStoredOnR16) continue;
+
+    if (ms.homeTeamId) {
+      next = next.map((s) =>
+        s.predictionKind === "round_of_32" && s.slotKey === ms.topSlotKey
+          ? { ...s, teamId: ms.homeTeamId! }
+          : s,
+      );
+    }
+    if (ms.awayTeamId) {
+      next = next.map((s) =>
+        s.predictionKind === "round_of_32" && s.slotKey === ms.bottomSlotKey
+          ? { ...s, teamId: ms.awayTeamId! }
+          : s,
+      );
+    }
+    next = next.map((s) =>
+      s.predictionKind === "round_of_16" && s.slotKey === r16Key
+        ? { ...s, teamId: "" }
+        : s,
+    );
+    if (!gradualWinner) continue;
+  }
+  return next;
+}
+
 export function hasEditableKnockoutPicks(input: {
   gradual: GradualKnockoutSelectionState;
   fullRoundOf32Official: boolean;

@@ -2,6 +2,7 @@ import type { TournamentMatchPublicRow } from "../../types/tournamentPublic";
 import { kickoffSortMs } from "../tournament/sortTournamentMatches";
 import {
   getGradualKnockoutSelectionState,
+  isFullKnockoutBracketPicksUnlocked,
   type GradualKnockoutSelectionState,
 } from "./gradualKnockoutUnlock";
 
@@ -240,7 +241,12 @@ export function buildKnockoutSelectionInstructionCard(input: {
     };
   }
 
-  if (gradual.allR32Confirmed) {
+  const fullBracketPicksUnlocked = isFullKnockoutBracketPicksUnlocked({
+    officialRoundOf32Complete: input.knockoutBracketPicksUnlocked,
+    gradual,
+  });
+
+  if (fullBracketPicksUnlocked) {
     const closeIso =
       gradual.earliestPickableKickoffIso ?? schedule.earliestRoundOf32KickoffIso;
     const closeExpired =

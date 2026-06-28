@@ -17,6 +17,10 @@ import { logPicksSaveStep } from "../../../../lib/predictions/picksSaveLogging";
 import { safeRevalidateParticipantPickPaths } from "../../../../lib/predictions/revalidateParticipantPickPaths";
 import { validateKnockoutPickSaveInput } from "../../../../lib/predictions/validateKnockoutPickPayload";
 import { applyGradualKnockoutPickSaveGuards } from "../../../../lib/predictions/validateGradualKnockoutPickSave";
+import {
+  getGradualKnockoutSelectionState,
+  isFullKnockoutBracketPicksUnlocked,
+} from "../../../../lib/picks/gradualKnockoutUnlock";
 import { fetchOfficialRoundOf32Complete } from "../../../../lib/tournament/fetchOfficialRoundOf32Complete";
 import { fetchPublicTournamentProgress } from "../../../../lib/tournament/fetchPublicTournamentProgress";
 import { mapTeamRow } from "../../../../lib/results/mapRows";
@@ -139,9 +143,9 @@ export async function saveMyKnockoutPicksAction(input: {
       return savePicksUnexpectedError(r32StageErr.message);
     }
 
-    let fullRoundOf32Official = true;
+    let officialRoundOf32Complete = true;
     if (r32StageRow?.id && poolRow?.tournament_edition_id) {
-      fullRoundOf32Official = await fetchOfficialRoundOf32Complete(
+      officialRoundOf32Complete = await fetchOfficialRoundOf32Complete(
         supabase,
         r32StageRow.id as string,
         poolRow.tournament_edition_id as string,
@@ -149,6 +153,33 @@ export async function saveMyKnockoutPicksAction(input: {
     } else if (r32StageRow?.id) {
       return savePicksUnexpectedError("Pool tournament edition is missing.");
     }
+
+    const [{ data: teamRows, error: teamErr }, tournamentFetch] =
+      await Promise.all([
+        supabase.from("teams").select(TEAM_TABLE_SELECT),
+        fetchPublicTournamentProgress(),
+      ]);
+    if (teamErr) {
+      logPicksSaveStep("teams_fetch_failed", { ...fullCtx, error: teamErr });
+      return savePicksUnexpectedError(teamErr.message);
+    }
+    if (tournamentFetch.error) {
+      logPicksSaveStep("tournament_matches_fetch_failed", {
+        ...fullCtx,
+        error: tournamentFetch.error,
+      });
+      return savePicksUnexpectedError(tournamentFetch.error);
+    }
+    const teams = (teamRows ?? []).map(mapTeamRow);
+    const gradual = getGradualKnockoutSelectionState({
+      matches: tournamentFetch.data?.matches ?? [],
+      teams,
+      fullRoundOf32Official: officialRoundOf32Complete,
+    });
+    const fullRoundOf32Official = isFullKnockoutBracketPicksUnlocked({
+      officialRoundOf32Complete,
+      gradual,
+    });
 
     const { data: predBeforeRows, error: predBeforeErr } = await supabase
       .from("predictions")
@@ -170,23 +201,6 @@ export async function saveMyKnockoutPicksAction(input: {
     );
 
     if (!fullRoundOf32Official) {
-      const [{ data: teamRows, error: teamErr }, tournamentFetch] =
-        await Promise.all([
-          supabase.from("teams").select(TEAM_TABLE_SELECT),
-          fetchPublicTournamentProgress(),
-        ]);
-      if (teamErr) {
-        logPicksSaveStep("teams_fetch_failed", { ...fullCtx, error: teamErr });
-        return savePicksUnexpectedError(teamErr.message);
-      }
-      if (tournamentFetch.error) {
-        logPicksSaveStep("tournament_matches_fetch_failed", {
-          ...fullCtx,
-          error: tournamentFetch.error,
-        });
-        return savePicksUnexpectedError(tournamentFetch.error);
-      }
-      const teams = (teamRows ?? []).map(mapTeamRow);
       const guarded = applyGradualKnockoutPickSaveGuards({
         incoming: slots,
         existing: predsBefore,

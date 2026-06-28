@@ -8,6 +8,7 @@ import {
   formatGradualKnockoutStatusLine,
   getGradualKnockoutSelectionState,
   hasEditableKnockoutPicks,
+  isFullKnockoutBracketPicksUnlocked,
 } from "./gradualKnockoutUnlock";
 
 export type PoolPickDeadlineTone = "open" | "soon" | "locked" | "neutral";
@@ -65,6 +66,7 @@ function resolveKnockoutEditContext(input: {
   nowMs: number;
 }): {
   knockoutEditable: boolean;
+  fullBracketPicksUnlocked: boolean;
   gradualStatusLine: string | null;
 } {
   const gradual = getGradualKnockoutSelectionState({
@@ -72,20 +74,24 @@ function resolveKnockoutEditContext(input: {
     nowMs: input.nowMs,
     fullRoundOf32Official: input.knockoutBracketPicksUnlocked,
   });
+  const fullBracketPicksUnlocked = isFullKnockoutBracketPicksUnlocked({
+    officialRoundOf32Complete: input.knockoutBracketPicksUnlocked,
+    gradual,
+  });
   const knockoutEditable = hasEditableKnockoutPicks({
     gradual,
     fullRoundOf32Official: input.knockoutBracketPicksUnlocked,
   });
   const gradualStatusLine = formatGradualKnockoutStatusLine(gradual);
-  return { knockoutEditable, gradualStatusLine };
+  return { knockoutEditable, fullBracketPicksUnlocked, gradualStatusLine };
 }
 
 function knockoutEditDetail(args: {
   knockoutEditable: boolean;
-  fullRoundOf32Official: boolean;
+  fullBracketPicksUnlocked: boolean;
   gradualStatusLine: string | null;
 }): string {
-  if (args.fullRoundOf32Official && args.knockoutEditable) {
+  if (args.fullBracketPicksUnlocked && args.knockoutEditable) {
     return "Knockout bracket picks are still editable.";
   }
   if (args.gradualStatusLine) {
@@ -101,7 +107,7 @@ function buildOpenCopy(args: {
   lockAtIso: string;
   deadlineLabel: string;
   relative: string;
-  knockoutBracketPicksUnlocked: boolean;
+  fullBracketPicksUnlocked: boolean;
   knockoutEditable: boolean;
   gradualStatusLine: string | null;
   nowMs: number;
@@ -111,7 +117,7 @@ function buildOpenCopy(args: {
     lockAtIso,
     deadlineLabel,
     relative,
-    knockoutBracketPicksUnlocked,
+    fullBracketPicksUnlocked,
     knockoutEditable,
     gradualStatusLine,
     nowMs,
@@ -145,7 +151,7 @@ function buildOpenCopy(args: {
     ? [`This pool’s pick deadline is ${deadlineLabel}.`]
     : ["You can edit group stage, third-place, and bonus picks until then."];
   if (!readOnly) {
-    if (knockoutBracketPicksUnlocked && knockoutEditable) {
+    if (fullBracketPicksUnlocked && knockoutEditable) {
       detailParts.push("Knockout bracket picks are open too.");
     } else if (knockoutEditable) {
       detailParts.push(
@@ -228,7 +234,8 @@ export function buildPoolPickDeadlineStatus(input: {
   const nowMs = input.nowMs ?? Date.now();
   const lockAtIso = input.lockAtIso?.trim() || null;
   const preKnockoutLocked = isPreKnockoutLockedAt(lockAtIso, nowMs);
-  const { knockoutEditable, gradualStatusLine } = resolveKnockoutEditContext({
+  const { knockoutEditable, fullBracketPicksUnlocked, gradualStatusLine } =
+    resolveKnockoutEditContext({
     knockoutBracketPicksUnlocked,
     tournamentMatches: input.tournamentMatches,
     nowMs,
@@ -240,10 +247,10 @@ export function buildPoolPickDeadlineStatus(input: {
       headline: "No pick deadline has been set by the organizer yet.",
       detail: readOnly
         ? "The organizer has not set a pick deadline for this pool yet."
-        : knockoutBracketPicksUnlocked
+        : fullBracketPicksUnlocked
           ? "You can edit your picks until your organizer sets a deadline."
           : knockoutEditable
-            ? `You can edit group, third-place, and bonus picks until a deadline is set. ${knockoutEditDetail({ knockoutEditable, fullRoundOf32Official: knockoutBracketPicksUnlocked, gradualStatusLine })}`
+            ? `You can edit group, third-place, and bonus picks until a deadline is set. ${knockoutEditDetail({ knockoutEditable, fullBracketPicksUnlocked, gradualStatusLine })}`
             : "You can edit group, third-place, and bonus picks until a deadline is set. Knockout bracket picks open as official Round of 32 matchups are confirmed.",
       chipLabel: "open",
       deadlineLabel: null,
@@ -274,7 +281,7 @@ export function buildPoolPickDeadlineStatus(input: {
       lockAtIso,
       deadlineLabel: hasValidDeadline ? deadlineLabel : lockAtIso,
       relative,
-      knockoutBracketPicksUnlocked,
+      fullBracketPicksUnlocked,
       knockoutEditable,
       gradualStatusLine,
       nowMs,

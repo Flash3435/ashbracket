@@ -5,8 +5,11 @@ import {
   buildGradualR32MatchPickRows,
   buildGradualR32SavePayload,
   getGradualKnockoutSelectionState,
+  hasGradualR32WinnerStorage,
+  isFullKnockoutBracketPicksUnlocked,
   isKnockoutMatchConfirmed,
   isMatchPickable,
+  promoteGradualR32WinnersToRoundOf32Slots,
   r16SlotKeyForR32MatchIndex,
   readGradualR32MatchWinner,
   r32SlotLockMessage,
@@ -547,6 +550,112 @@ function r32SlotDraft(slotKey: string, teamId = ""): KnockoutPickSlotDraft {
   assert.strictEqual(
     lockedPayload.filter((s) => s.predictionKind === "round_of_16").length,
     1,
+  );
+}
+
+// Full bracket unlock from confirmed fixtures without organizer results rows
+{
+  const r32 = Array.from({ length: 16 }, (_, i) =>
+    match({
+      match_code: `M${73 + i}`,
+      stage_code: "round_of_32",
+      kickoff_at: `2026-06-29T${10 + i}:00:00Z`,
+      home_country_code: "USA",
+      away_country_code: "MEX",
+      home_team_name: "United States",
+      away_team_name: "Mexico",
+    }),
+  );
+  const state = getGradualKnockoutSelectionState({
+    matches: r32,
+    teams,
+    fullRoundOf32Official: false,
+  });
+  assert.strictEqual(
+    isFullKnockoutBracketPicksUnlocked({
+      officialRoundOf32Complete: false,
+      gradual: state,
+    }),
+    true,
+  );
+  assert.strictEqual(
+    isFullKnockoutBracketPicksUnlocked({
+      officialRoundOf32Complete: true,
+      gradual: state,
+    }),
+    true,
+  );
+}
+
+// Promote gradual R32 winners into round_of_32 slots before Round of 16
+{
+  const r32Matches = [
+    match({
+      match_code: "M73",
+      stage_code: "round_of_32",
+      kickoff_at: "2026-06-28T19:00:00Z",
+      home_country_code: "USA",
+      away_country_code: "MEX",
+      home_team_name: "United States",
+      away_team_name: "Mexico",
+    }),
+  ];
+  const state = getGradualKnockoutSelectionState({
+    matches: r32Matches,
+    teams,
+    fullRoundOf32Official: false,
+  });
+  const slots: KnockoutPickSlotDraft[] = [
+    {
+      rowKey: "round_of_16|1",
+      sectionLabel: "Round of 16",
+      slotLabel: "Round of 16 · pick 1",
+      predictionKind: "round_of_16",
+      tournamentStageId: "r16",
+      slotKey: "1",
+      groupCode: null,
+      bonusKey: null,
+      teamId: "team-usa",
+    },
+    {
+      rowKey: "round_of_32|1",
+      sectionLabel: "Round of 32",
+      slotLabel: "Round of 32 · pick 1",
+      predictionKind: "round_of_32",
+      tournamentStageId: "r32",
+      slotKey: "1",
+      groupCode: null,
+      bonusKey: null,
+      teamId: "",
+    },
+    {
+      rowKey: "round_of_32|2",
+      sectionLabel: "Round of 32",
+      slotLabel: "Round of 32 · pick 2",
+      predictionKind: "round_of_32",
+      tournamentStageId: "r32",
+      slotKey: "2",
+      groupCode: null,
+      bonusKey: null,
+      teamId: "",
+    },
+  ];
+  assert.ok(hasGradualR32WinnerStorage(slots, state, teams));
+  const promoted = promoteGradualR32WinnersToRoundOf32Slots(slots, state, teams);
+  assert.strictEqual(
+    promoted.find((s) => s.predictionKind === "round_of_16" && s.slotKey === "1")
+      ?.teamId,
+    "",
+  );
+  assert.strictEqual(
+    promoted.find((s) => s.predictionKind === "round_of_32" && s.slotKey === "1")
+      ?.teamId,
+    "team-usa",
+  );
+  assert.strictEqual(
+    promoted.find((s) => s.predictionKind === "round_of_32" && s.slotKey === "2")
+      ?.teamId,
+    "team-mex",
   );
 }
 

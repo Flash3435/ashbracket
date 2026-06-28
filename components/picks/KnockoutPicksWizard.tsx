@@ -62,7 +62,10 @@ import {
   buildGradualR32SavePayload,
   countGradualR32MatchupsFilled,
   getGradualKnockoutSelectionState,
+  hasGradualR32WinnerStorage,
+  isFullKnockoutBracketPicksUnlocked,
   isGradualR32WinnerPickRow,
+  promoteGradualR32WinnersToRoundOf32Slots,
   readGradualR32MatchWinner,
   r32MatchIndexForR16SlotKey,
   r32SlotLockMessage,
@@ -165,6 +168,7 @@ type WizardStepDef =
 
 function participantWizardSteps(
   knockoutBracketPicksUnlocked: boolean,
+  fullBracketPicksUnlocked: boolean,
   gradualR32Pickable: boolean,
   bonusQuestionCount: number,
 ): WizardStepDef[] {
@@ -244,7 +248,7 @@ function participantWizardSteps(
     },
   ];
 
-  const knockoutChain: WizardStepDef[] = knockoutBracketPicksUnlocked
+  const knockoutChain: WizardStepDef[] = fullBracketPicksUnlocked
     ? fullKnockoutChain
     : gradualR32Pickable
       ? [fullKnockoutChain[0]!]
@@ -740,6 +744,10 @@ export function KnockoutPicksWizard({
     [tournamentMatches, teams, knockoutBracketPicksUnlocked],
   );
   const gradualR32Pickable = gradualKnockout.pickableCount > 0;
+  const fullBracketPicksUnlocked = isFullKnockoutBracketPicksUnlocked({
+    officialRoundOf32Complete: knockoutBracketPicksUnlocked,
+    gradual: gradualKnockout,
+  });
   const gradualR32MatchRows =
     !knockoutBracketPicksUnlocked && gradualR32Pickable;
   const knockoutPicksAccessible =
@@ -793,18 +801,24 @@ export function KnockoutPicksWizard({
     () =>
       participantWizardSteps(
         knockoutBracketPicksUnlocked,
+        fullBracketPicksUnlocked,
         gradualR32Pickable,
         bonusQuestionCount,
       ),
-    [knockoutBracketPicksUnlocked, gradualR32Pickable, bonusQuestionCount],
+    [
+      knockoutBracketPicksUnlocked,
+      fullBracketPicksUnlocked,
+      gradualR32Pickable,
+      bonusQuestionCount,
+    ],
   );
   const picksProgress = useMemo(
     () =>
       buildPicksProgressSummary(slots, {
-        knockoutBracketPicksUnlocked: knockoutPicksAccessible,
+        knockoutBracketPicksUnlocked: fullBracketPicksUnlocked,
         preKnockoutLocked: preBracketSelectionsLocked,
       }),
-    [slots, knockoutPicksAccessible, preBracketSelectionsLocked],
+    [slots, fullBracketPicksUnlocked, preBracketSelectionsLocked],
   );
   const deadlineStatus = useMemo(
     () =>
@@ -842,12 +856,41 @@ export function KnockoutPicksWizard({
     setSearch("");
   }
 
+  function promoteGradualR32BeforeLaterKnockoutStep(nextStepIdx: number) {
+    const target = wizardSteps[nextStepIdx];
+    if (!target || target.mode !== "bracket") return;
+    if (
+      target.bracketKind === "round_of_32" ||
+      target.bracketKind === "third_place_qualifier"
+    ) {
+      return;
+    }
+    if (
+      !fullBracketPicksUnlocked ||
+      knockoutBracketPicksUnlocked ||
+      !gradualR32MatchRows
+    ) {
+      return;
+    }
+    setSlots((prev) => {
+      if (!hasGradualR32WinnerStorage(prev, gradualKnockout, teams)) {
+        return prev;
+      }
+      return promoteGradualR32WinnersToRoundOf32Slots(
+        prev,
+        gradualKnockout,
+        teams,
+      );
+    });
+  }
+
   function continueToNextSection() {
     const next = picksProgress.nextSection;
     if (!next) return;
     const stepIdx = wizardStepIndexForNextSection(next, wizardSteps);
     selectPicksMainView("list");
     if (stepIdx != null) {
+      promoteGradualR32BeforeLaterKnockoutStep(stepIdx);
       setStep(stepIdx);
       setOpenRowKey(null);
       setSearch("");
@@ -921,7 +964,7 @@ export function KnockoutPicksWizard({
     }
     if (
       isKnockoutProgressionKind(row.predictionKind) &&
-      !knockoutBracketPicksUnlocked
+      !fullBracketPicksUnlocked
     ) {
       return true;
     }
@@ -1051,13 +1094,26 @@ export function KnockoutPicksWizard({
     e.preventDefault();
     if (disabled || readOnly) return;
     const submittedSignature = draftSignature;
-    const submittedSlots = gradualR32MatchRows
+    let saveSlots = slots;
+    if (
+      fullBracketPicksUnlocked &&
+      gradualR32MatchRows &&
+      hasGradualR32WinnerStorage(saveSlots, gradualKnockout, teams)
+    ) {
+      saveSlots = promoteGradualR32WinnersToRoundOf32Slots(
+        saveSlots,
+        gradualKnockout,
+        teams,
+      );
+    }
+    const submittedSlots =
+      gradualR32MatchRows && !fullBracketPicksUnlocked
       ? buildGradualR32SavePayload({
-          slots,
+          slots: saveSlots,
           state: gradualKnockout,
           omitFrozenPreBracketPicks: preBracketActive,
         })
-      : slots.map((s) => ({
+      : saveSlots.map((s) => ({
           predictionKind: s.predictionKind,
           tournamentStageId: s.tournamentStageId,
           slotKey: s.slotKey,
@@ -1129,7 +1185,9 @@ export function KnockoutPicksWizard({
   function goNext() {
     if (step >= wizardSteps.length - 1) return;
     if (!stepComplete(slots, step, wizardSteps, stepRowOptions)) return;
-    setStep((s) => s + 1);
+    const nextStep = step + 1;
+    promoteGradualR32BeforeLaterKnockoutStep(nextStep);
+    setStep(nextStep);
     setOpenRowKey(null);
     setSearch("");
   }
@@ -1285,13 +1343,27 @@ export function KnockoutPicksWizard({
           confirmed. Use List view to edit group stage, third-place qualification,
           and bonus picks.
         </p>
-      ) : !knockoutBracketPicksUnlocked && gradualR32Pickable && !readOnly ? (
+      ) : !knockoutBracketPicksUnlocked &&
+          gradualR32Pickable &&
+          !fullBracketPicksUnlocked &&
+          !readOnly ? (
         <p
           className="rounded-md border border-sky-800/50 bg-sky-950/25 px-3 py-2 text-sm text-sky-100"
           role="status"
         >
           Confirmed Round of 32 matchups are open for picks. Unconfirmed slots stay
           locked. Later knockout rounds unlock once the full bracket is official.
+        </p>
+      ) : !knockoutBracketPicksUnlocked &&
+          fullBracketPicksUnlocked &&
+          gradualR32MatchRows &&
+          !readOnly ? (
+        <p
+          className="rounded-md border border-sky-800/50 bg-sky-950/25 px-3 py-2 text-sm text-sky-100"
+          role="status"
+        >
+          The official Round of 32 is set. Pick match winners, then continue through
+          Round of 16, the quarters, semis, final, and champion.
         </p>
       ) : null}
 
@@ -1363,7 +1435,7 @@ export function KnockoutPicksWizard({
             <KnockoutBracketPreview
               slots={slots}
               teams={teams}
-              knockoutBracketPicksUnlocked={knockoutBracketPicksUnlocked}
+              knockoutBracketPicksUnlocked={fullBracketPicksUnlocked}
               onSwitchToListView={
                 !readOnly && !knockoutBracketPicksUnlocked
                   ? () => selectPicksMainView("list")
@@ -1420,6 +1492,7 @@ export function KnockoutPicksWizard({
                     : s.title
               }
               onClick={() => {
+                promoteGradualR32BeforeLaterKnockoutStep(i);
                 setStep(i);
                 setOpenRowKey(null);
                 setSearch("");
