@@ -307,23 +307,50 @@ export function incompleteR16MatchMessage(
   return `Complete Round of 32 first — pick winners for ${list}.`;
 }
 
-function readParticipantSlotSide(
-  slots: KnockoutPickSlotDraft[],
-  participantKind: KnockoutProgressionPredictionKind,
-  slotKey: string,
-): string {
-  return slotTeamId(slots, participantKind, slotKey);
+/** Winner pick counts as a side only when it matches that row's official matchup. */
+function validatedMatchWinner(
+  row: KnockoutMatchPickRow | undefined,
+): string | null {
+  if (!row) return null;
+  const w = row.winnerTeamId.trim();
+  if (!w || !row.homeTeamId || !row.awayTeamId) return null;
+  if (w === row.homeTeamId || w === row.awayTeamId) return w;
+  return null;
 }
+
+function upstreamWizardKindForMatchSides(
+  wizardKind: KnockoutWizardBracketKind,
+): KnockoutWizardBracketKind | null {
+  if (wizardKind === "quarterfinalist") return "round_of_16";
+  if (wizardKind === "semifinalist") return "quarterfinalist";
+  if (wizardKind === "finalist") return "semifinalist";
+  return null;
+}
+
+function slotStageForWizardKind(
+  wizardKind: KnockoutWizardBracketKind,
+): "quarterfinal" | "semifinal" | "final" | null {
+  if (wizardKind === "quarterfinalist") return "quarterfinal";
+  if (wizardKind === "semifinalist") return "semifinal";
+  if (wizardKind === "finalist") return "final";
+  return null;
+}
+
+type BuildKnockoutMatchPickRowsInput = {
+  bracketKind: KnockoutWizardBracketKind;
+  slots: KnockoutPickSlotDraft[];
+  teams: Team[];
+  tournamentMatches?: TournamentMatchPublicRow[] | null;
+  gradual?: GradualKnockoutSelectionState;
+  knockoutBracketPicksUnlocked?: boolean;
+  nowMs?: number;
+};
 
 function readMatchSides(
   def: KnockoutMatchStepDef,
   matchIndex: number,
-  slots: KnockoutPickSlotDraft[],
-  teams: Team[],
-  options: {
-    gradual?: GradualKnockoutSelectionState;
-    knockoutBracketPicksUnlocked?: boolean;
-  },
+  input: BuildKnockoutMatchPickRowsInput,
+  upstreamRows: (kind: KnockoutWizardBracketKind) => KnockoutMatchPickRow[],
 ): { homeTeamId: string | null; awayTeamId: string | null } {
   if (def.wizardBracketKind === "round_of_16") {
     const pair = r16R32ParticipantPair(matchIndex);
@@ -331,29 +358,31 @@ function readMatchSides(
       return { homeTeamId: null, awayTeamId: null };
     }
     const [homeR32Index, awayR32Index] = pair;
-    const home = readConfirmedR32MatchWinner(homeR32Index, slots);
-    const away = readConfirmedR32MatchWinner(awayR32Index, slots);
+    const home = readConfirmedR32MatchWinner(homeR32Index, input.slots);
+    const away = readConfirmedR32MatchWinner(awayR32Index, input.slots);
     return {
       homeTeamId: home || null,
       awayTeamId: away || null,
     };
   }
 
-  const participantKind = def.participantKind!;
-  const slotStage =
-    def.wizardBracketKind === "quarterfinalist"
-      ? ("quarterfinal" as const)
-      : def.wizardBracketKind === "semifinalist"
-        ? ("semifinal" as const)
-        : ("final" as const);
+  const upstreamKind = upstreamWizardKindForMatchSides(def.wizardBracketKind);
+  const slotStage = slotStageForWizardKind(def.wizardBracketKind);
+  if (!upstreamKind || !slotStage) {
+    return { homeTeamId: null, awayTeamId: null };
+  }
+
   const slotPair = knockoutParticipantSlotPair(slotStage, matchIndex);
-  const homeKey = slotPair?.[0] ?? "";
-  const awayKey = slotPair?.[1] ?? "";
-  const home = readParticipantSlotSide(slots, participantKind, homeKey);
-  const away = readParticipantSlotSide(slots, participantKind, awayKey);
+  if (!slotPair) {
+    return { homeTeamId: null, awayTeamId: null };
+  }
+
+  const rows = upstreamRows(upstreamKind);
+  const homeIdx = parseInt(slotPair[0], 10) - 1;
+  const awayIdx = parseInt(slotPair[1], 10) - 1;
   return {
-    homeTeamId: home || null,
-    awayTeamId: away || null,
+    homeTeamId: validatedMatchWinner(rows[homeIdx]),
+    awayTeamId: validatedMatchWinner(rows[awayIdx]),
   };
 }
 
@@ -376,15 +405,9 @@ function findSaveRow(
   return slots.find((s) => s.predictionKind === kind && s.slotKey === slotKey);
 }
 
-export function buildKnockoutMatchPickRows(input: {
-  bracketKind: KnockoutWizardBracketKind;
-  slots: KnockoutPickSlotDraft[];
-  teams: Team[];
-  tournamentMatches?: TournamentMatchPublicRow[] | null;
-  gradual?: GradualKnockoutSelectionState;
-  knockoutBracketPicksUnlocked?: boolean;
-  nowMs?: number;
-}): KnockoutMatchPickRow[] {
+export function buildKnockoutMatchPickRows(
+  input: BuildKnockoutMatchPickRowsInput,
+): KnockoutMatchPickRow[] {
   const def = knockoutMatchStepDef(input.bracketKind);
   if (!def) return [];
 
@@ -392,6 +415,19 @@ export function buildKnockoutMatchPickRows(input: {
   const stageMatches = (input.tournamentMatches ?? []).filter(
     (m) => m.stage_code === def.stageCode,
   );
+
+  const upstreamCache = new Map<
+    KnockoutWizardBracketKind,
+    KnockoutMatchPickRow[]
+  >();
+  const upstreamRows = (kind: KnockoutWizardBracketKind): KnockoutMatchPickRow[] => {
+    let cached = upstreamCache.get(kind);
+    if (!cached) {
+      cached = buildKnockoutMatchPickRows({ ...input, bracketKind: kind });
+      upstreamCache.set(kind, cached);
+    }
+    return cached;
+  };
 
   return Array.from({ length: def.matchCount }, (_, matchIndex) => {
     const fifaMatchNo = def.firstFifaMatchNo + matchIndex;
@@ -403,12 +439,8 @@ export function buildKnockoutMatchPickRows(input: {
     const { homeTeamId, awayTeamId } = readMatchSides(
       def,
       matchIndex,
-      input.slots,
-      input.teams,
-      {
-        gradual: input.gradual,
-        knockoutBracketPicksUnlocked: input.knockoutBracketPicksUnlocked,
-      },
+      input,
+      upstreamRows,
     );
     const saveSlotKey = resultSlotKeyForMatch(def, matchIndex);
     const saveRow = findSaveRow(input.slots, def.resultKind, saveSlotKey);
@@ -424,9 +456,13 @@ export function buildKnockoutMatchPickRows(input: {
     const incompleteMsg =
       def.wizardBracketKind === "round_of_16" && lockReason === "incomplete"
         ? incompleteR16MatchMessage(matchIndex, input.slots)
-        : def.wizardBracketKind === "finalist" && lockReason === "incomplete"
-          ? FINAL_MATCH_INCOMPLETE_MSG
-          : INCOMPLETE_UPSTREAM_MSG;
+        : def.wizardBracketKind === "quarterfinalist" && lockReason === "incomplete"
+          ? "Complete Round of 16 picks first."
+          : def.wizardBracketKind === "semifinalist" && lockReason === "incomplete"
+            ? "Complete quarter-final picks first."
+            : def.wizardBracketKind === "finalist" && lockReason === "incomplete"
+              ? FINAL_MATCH_INCOMPLETE_MSG
+              : INCOMPLETE_UPSTREAM_MSG;
 
     const homeName = teamName(homeTeamId, input.teams);
     const awayName = teamName(awayTeamId, input.teams);
