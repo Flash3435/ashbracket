@@ -1,9 +1,16 @@
+import type { Team } from "../../src/types/domain";
 import type { KnockoutPickSlotDraft } from "../../types/adminKnockoutPicks";
+import type { TournamentMatchPublicRow } from "../../types/tournamentPublic";
 import {
   participantPicksCompleteFromDrafts,
 } from "../predictions/participantPicksCompletenessRules";
 import { isKnockoutProgressionKind } from "../predictions/knockoutProgressionKinds";
 import { thirdPlaceSlotInvalidReason } from "../predictions/knockoutPickConsistency";
+import {
+  buildKnockoutMatchProgress,
+  firstIncompleteKnockoutWizardStep,
+  type KnockoutProgressContext,
+} from "./knockoutMatchProgress";
 
 export type PickSectionStatus = "complete" | "partial" | "not_started" | "locked";
 
@@ -94,6 +101,7 @@ function actionableMissingCount(
   slots: KnockoutPickSlotDraft[],
   knockoutBracketPicksUnlocked: boolean,
   preKnockoutLocked: boolean,
+  knockoutProgress?: ReturnType<typeof buildKnockoutMatchProgress> | null,
 ): number {
   const group = groupRows(slots);
   const third = slots.filter((s) => s.predictionKind === "third_place_qualifier");
@@ -110,14 +118,27 @@ function actionableMissingCount(
     missing += bonus.filter((s) => !s.teamId.trim()).length;
   }
   if (knockoutBracketPicksUnlocked) {
-    missing += knockout.filter((s) => !s.teamId.trim()).length;
+    if (knockoutProgress?.useMatchBased) {
+      missing += knockoutProgress.missing;
+    } else {
+      missing += knockout.filter((s) => !s.teamId.trim()).length;
+    }
+  } else if (knockoutProgress && knockoutProgress.steps.length > 0) {
+    missing += knockoutProgress.missing;
   }
   return missing;
 }
 
 function firstIncompleteKnockoutRound(
   slots: KnockoutPickSlotDraft[],
+  knockoutProgress?: ReturnType<typeof buildKnockoutMatchProgress> | null,
+  knockoutContext?: KnockoutProgressContext | null,
 ): (typeof KNOCKOUT_ROUND_ORDER)[number] | null {
+  if (knockoutProgress?.useMatchBased && knockoutContext) {
+    const step = firstIncompleteKnockoutWizardStep(knockoutContext);
+    if (!step) return null;
+    return step === "champion" ? "champion" : step;
+  }
   for (const kind of KNOCKOUT_ROUND_ORDER) {
     const rows = slots.filter((s) => s.predictionKind === kind);
     if (rows.length === 0) continue;
@@ -142,6 +163,8 @@ function findNextSection(
   slots: KnockoutPickSlotDraft[],
   sections: PickSectionProgress[],
   knockoutBracketPicksUnlocked: boolean,
+  knockoutProgress?: ReturnType<typeof buildKnockoutMatchProgress> | null,
+  knockoutContext?: KnockoutProgressContext | null,
 ): NextPickSection | null {
   const group = sections.find((s) => s.id === "group");
   if (group && group.status !== "complete" && group.status !== "locked") {
@@ -165,7 +188,11 @@ function findNextSection(
   }
 
   if (knockoutBracketPicksUnlocked) {
-    const round = firstIncompleteKnockoutRound(slots);
+    const round = firstIncompleteKnockoutRound(
+      slots,
+      knockoutProgress,
+      knockoutContext,
+    );
     if (round) {
       const label = KNOCKOUT_ROUND_LABELS[round];
       return {
@@ -283,11 +310,30 @@ export function buildPicksProgressSummary(
     knockoutBracketPicksUnlocked?: boolean;
     /** When true, group / third-place / bonus sections show as locked if incomplete. */
     preKnockoutLocked?: boolean;
+    /** When set with `teams`, knockout progress uses match-row wizard logic. */
+    teams?: Team[];
+    tournamentMatches?: TournamentMatchPublicRow[] | null;
+    /** Official Round of 32 published (defaults to `knockoutBracketPicksUnlocked`). */
+    officialRoundOf32Complete?: boolean;
   },
 ): PicksProgressSummary {
   const knockoutBracketPicksUnlocked =
     options?.knockoutBracketPicksUnlocked !== false;
   const preKnockoutLocked = options?.preKnockoutLocked === true;
+  const officialRoundOf32Complete =
+    options?.officialRoundOf32Complete ?? knockoutBracketPicksUnlocked;
+  const knockoutContext: KnockoutProgressContext | null =
+    options?.teams && options.teams.length > 0
+      ? {
+          slots,
+          teams: options.teams,
+          tournamentMatches: options.tournamentMatches,
+          officialRoundOf32Complete,
+        }
+      : null;
+  const knockoutProgress = knockoutContext
+    ? buildKnockoutMatchProgress(knockoutContext)
+    : null;
 
   const group = groupRows(slots);
   const third = slots.filter((s) => s.predictionKind === "third_place_qualifier");
@@ -297,7 +343,19 @@ export function buildPicksProgressSummary(
   const groupFilled = group.filter((s) => s.teamId.trim()).length;
   const thirdFilled = third.filter((s) => s.teamId.trim()).length;
   const bonusFilled = bonus.filter((s) => s.teamId.trim()).length;
-  const knockoutFilled = knockout.filter((s) => s.teamId.trim()).length;
+  const useKnockoutProgressCounts =
+    knockoutProgress != null &&
+    (knockoutProgress.useMatchBased || knockoutProgress.steps.length > 0);
+  const knockoutFilled = useKnockoutProgressCounts
+    ? knockoutProgress!.filled
+    : knockout.filter((s) => s.teamId.trim()).length;
+  const knockoutTotal = useKnockoutProgressCounts
+    ? knockoutProgress!.total
+    : knockout.length;
+  const gradualKnockoutInProgress =
+    knockoutProgress != null &&
+    !knockoutBracketPicksUnlocked &&
+    knockoutProgress.steps.length > 0;
 
   const groupComplete =
     group.length > 0 && group.every((s) => s.teamId.trim() !== "");
@@ -305,9 +363,12 @@ export function buildPicksProgressSummary(
   const bonusComplete =
     bonus.length === 0 || bonus.every((s) => s.teamId.trim() !== "");
   const knockoutComplete =
-    !knockoutBracketPicksUnlocked ||
-    (knockout.length > 0 &&
-      knockout.every((s) => s.teamId.trim() !== ""));
+    !knockoutBracketPicksUnlocked && !gradualKnockoutInProgress
+      ? true
+      : useKnockoutProgressCounts
+        ? knockoutProgress!.complete
+        : knockout.length > 0 &&
+          knockout.every((s) => s.teamId.trim() !== "");
 
   const rawSections: PickSectionProgress[] = [
     {
@@ -366,23 +427,25 @@ export function buildPicksProgressSummary(
       id: "knockout",
       label: "Knockout bracket",
       shortLabel: "Knockout",
-      status: !knockoutBracketPicksUnlocked
-        ? "locked"
-        : sectionStatusFromCounts(
-            knockoutFilled,
-            knockout.length,
-            knockoutComplete,
-          ),
+      status:
+        gradualKnockoutInProgress || knockoutBracketPicksUnlocked
+          ? sectionStatusFromCounts(
+              knockoutFilled,
+              knockoutTotal,
+              knockoutComplete,
+            )
+          : "locked",
       filled: knockoutFilled,
-      total: knockout.length,
-      missing: knockout.length - knockoutFilled,
-      detailLine: !knockoutBracketPicksUnlocked
-        ? "Confirmed matchups unlock gradually"
-        : knockoutComplete
-          ? "Complete"
-          : knockoutFilled === 0
-            ? "Not started"
-            : `${knockoutFilled} of ${knockout.length} filled`,
+      total: knockoutTotal,
+      missing: Math.max(0, knockoutTotal - knockoutFilled),
+      detailLine:
+        gradualKnockoutInProgress || knockoutBracketPicksUnlocked
+          ? knockoutComplete
+            ? "Complete"
+            : knockoutFilled === 0
+              ? "Not started"
+              : `${knockoutFilled} of ${knockoutTotal} filled`
+          : "Confirmed matchups unlock gradually",
     },
   ];
 
@@ -390,13 +453,19 @@ export function buildPicksProgressSummary(
     applyPreKnockoutLockToSection(section, preKnockoutLocked),
   );
 
-  const picksComplete = participantPicksCompleteFromDrafts(slots, {
-    knockoutBracketPicksUnlocked,
-  });
+  const picksComplete =
+    participantPicksCompleteFromDrafts(slots, {
+      knockoutBracketPicksUnlocked,
+      teams: options?.teams,
+      tournamentMatches: options?.tournamentMatches,
+      officialRoundOf32Complete,
+    }) &&
+    (!gradualKnockoutInProgress || knockoutComplete);
   const missing = actionableMissingCount(
     slots,
     knockoutBracketPicksUnlocked,
     preKnockoutLocked,
+    knockoutProgress,
   );
   const preKnockoutPhaseComplete =
     !knockoutBracketPicksUnlocked &&
@@ -417,7 +486,13 @@ export function buildPicksProgressSummary(
   const nextSection =
     picksComplete && !waitingForR32
       ? null
-      : findNextSection(slots, sections, knockoutBracketPicksUnlocked);
+      : findNextSection(
+          slots,
+          sections,
+          knockoutBracketPicksUnlocked,
+          knockoutProgress,
+          knockoutContext,
+        );
 
   return {
     sections,

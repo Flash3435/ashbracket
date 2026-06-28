@@ -1,4 +1,6 @@
+import type { Team } from "../../src/types/domain";
 import type { KnockoutPickSlotDraft } from "../../types/adminKnockoutPicks";
+import type { TournamentMatchPublicRow } from "../../types/tournamentPublic";
 import {
   buildAllParticipantPickDrafts,
 } from "../predictions/buildParticipantPickDrafts";
@@ -6,6 +8,10 @@ import { thirdPlaceSlotInvalidReason } from "../predictions/knockoutPickConsiste
 import { labelParticipantBonusPick } from "../predictions/participantBonusLabels";
 import { isKnockoutProgressionKind } from "../predictions/knockoutProgressionKinds";
 import type { Prediction, TournamentStage } from "../../src/types/domain";
+import {
+  buildKnockoutMatchProgress,
+  type KnockoutProgressContext,
+} from "./knockoutMatchProgress";
 
 /** Eight distinct third-place advancers — not all twelve group rows must be filled. */
 export const THIRD_PLACE_ADVANCERS_REQUIRED = 8;
@@ -99,10 +105,19 @@ function sectionComplete(
   rows: KnockoutPickSlotDraft[],
   allSlots: KnockoutPickSlotDraft[],
   knockoutBracketPicksUnlocked: boolean,
+  knockoutProgress?: ReturnType<typeof buildKnockoutMatchProgress> | null,
 ): boolean {
   const { filled, total } = filledOfTotal(rows);
   if (id === "knockout") {
-    if (!knockoutBracketPicksUnlocked || total === 0) return true;
+    if (!knockoutBracketPicksUnlocked || total === 0) {
+      if (knockoutProgress?.useMatchBased) {
+        return knockoutProgress.complete;
+      }
+      return true;
+    }
+    if (knockoutProgress?.useMatchBased) {
+      return knockoutProgress.complete;
+    }
     return filled === total;
   }
   if (id === "third_place") {
@@ -119,10 +134,29 @@ function sectionComplete(
  */
 export function buildPoolMembershipCompletionStatus(
   slots: KnockoutPickSlotDraft[],
-  options?: { knockoutBracketPicksUnlocked?: boolean },
+  options?: {
+    knockoutBracketPicksUnlocked?: boolean;
+    teams?: Team[];
+    tournamentMatches?: TournamentMatchPublicRow[] | null;
+    officialRoundOf32Complete?: boolean;
+  },
 ): PoolMembershipCompletionStatus {
   const knockoutBracketPicksUnlocked =
     options?.knockoutBracketPicksUnlocked !== false;
+  const officialRoundOf32Complete =
+    options?.officialRoundOf32Complete ?? knockoutBracketPicksUnlocked;
+  const knockoutContext: KnockoutProgressContext | null =
+    options?.teams && options.teams.length > 0
+      ? {
+          slots,
+          teams: options.teams,
+          tournamentMatches: options.tournamentMatches,
+          officialRoundOf32Complete,
+        }
+      : null;
+  const knockoutProgress = knockoutContext
+    ? buildKnockoutMatchProgress(knockoutContext)
+    : null;
 
   const bySection = new Map<PickCompletionSectionId, KnockoutPickSlotDraft[]>([
     ["group", []],
@@ -142,19 +176,31 @@ export function buildPoolMembershipCompletionStatus(
     const { filled, total } = filledOfTotal(rows);
     const empty = rows.filter((s) => !s.teamId.trim());
     const required =
-      id === "knockout" ? knockoutBracketPicksUnlocked && total > 0 : total > 0;
+      id === "knockout"
+        ? knockoutBracketPicksUnlocked &&
+          (knockoutProgress?.useMatchBased
+            ? knockoutProgress.total > 0
+            : total > 0)
+        : total > 0;
     const complete = sectionComplete(
       id,
       rows,
       slots,
       knockoutBracketPicksUnlocked,
+      knockoutProgress,
     );
     const displayTotal =
-      id === "third_place" ? THIRD_PLACE_ADVANCERS_REQUIRED : total;
+      id === "third_place"
+        ? THIRD_PLACE_ADVANCERS_REQUIRED
+        : id === "knockout" && knockoutProgress?.useMatchBased
+          ? knockoutProgress.total
+          : total;
     const displayFilled =
       id === "third_place"
         ? Math.min(filled, THIRD_PLACE_ADVANCERS_REQUIRED)
-        : filled;
+        : id === "knockout" && knockoutProgress?.useMatchBased
+          ? knockoutProgress.filled
+          : filled;
     let missingLabels: string[] = [];
     if (required && !complete) {
       if (id === "third_place") {
@@ -198,7 +244,13 @@ export function buildPoolMembershipCompletionStatus(
   const missingPickKeys = slots
     .filter((s) => {
       const sec = sectionForSlot(s);
-      if (sec === "knockout" && !knockoutBracketPicksUnlocked) return false;
+      if (sec === "knockout") {
+        if (!knockoutBracketPicksUnlocked) return false;
+        if (knockoutProgress?.useMatchBased) {
+          if (s.predictionKind === "round_of_32") return false;
+          return !s.teamId.trim();
+        }
+      }
       if (sec === "third_place") {
         const thirdRows = bySection.get("third_place") ?? [];
         const filled = thirdRows.filter((r) => r.teamId.trim()).length;

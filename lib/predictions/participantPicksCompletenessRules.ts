@@ -1,4 +1,6 @@
+import type { Team } from "../../src/types/domain";
 import type { KnockoutPickSlotDraft } from "../../types/adminKnockoutPicks";
+import type { TournamentMatchPublicRow } from "../../types/tournamentPublic";
 import { buildPoolMembershipCompletionStatus } from "../picks/poolMembershipCompletionStatus";
 import { isKnockoutProgressionKind } from "./knockoutProgressionKinds";
 
@@ -9,7 +11,12 @@ import { isKnockoutProgressionKind } from "./knockoutProgressionKinds";
  */
 export function participantPicksCompleteFromDrafts(
   slots: KnockoutPickSlotDraft[],
-  options?: { knockoutBracketPicksUnlocked?: boolean },
+  options?: {
+    knockoutBracketPicksUnlocked?: boolean;
+    teams?: Team[];
+    tournamentMatches?: TournamentMatchPublicRow[] | null;
+    officialRoundOf32Complete?: boolean;
+  },
 ): boolean {
   return buildPoolMembershipCompletionStatus(slots, options).isComplete;
 }

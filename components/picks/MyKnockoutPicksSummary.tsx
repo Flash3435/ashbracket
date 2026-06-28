@@ -157,6 +157,7 @@ type Props = {
   showCompactStageProgress?: boolean;
   /** When true, hide edit CTA and use neutral copy (another participant’s bracket). */
   readOnly?: boolean;
+  tournamentMatches?: import("../../types/tournamentPublic").TournamentMatchPublicRow[] | null;
   /**
    * `toolbar_only` renders the banner (when enabled) and pool / lock / edit header only — used
    * with Bracket View so list grids stay hidden.
@@ -187,6 +188,7 @@ export function MyKnockoutPicksSummary({
   showCompactStageProgress = false,
   readOnly = false,
   sections = "all",
+  tournamentMatches = null,
 }: Props) {
   const teamById = new Map(teams.map((t) => [t.id, t]));
   const group = sortGroupRows(
@@ -217,6 +219,9 @@ export function MyKnockoutPicksSummary({
   const picksProgress = buildPicksProgressSummary(slots, {
     knockoutBracketPicksUnlocked,
     preKnockoutLocked: locked,
+    teams,
+    tournamentMatches,
+    officialRoundOf32Complete: knockoutBracketPicksUnlocked,
   });
   const deadlineStatus =
     lockAtIso !== undefined
@@ -247,6 +252,9 @@ export function MyKnockoutPicksSummary({
               : formatIncompleteSavedBanner(
                   buildPoolMembershipCompletionStatus(slots, {
                     knockoutBracketPicksUnlocked,
+                    teams,
+                    tournamentMatches,
+                    officialRoundOf32Complete: knockoutBracketPicksUnlocked,
                   }),
                 )}
           </p>

@@ -896,8 +896,18 @@ export function KnockoutPicksWizard({
       buildPicksProgressSummary(slots, {
         knockoutBracketPicksUnlocked: fullBracketPicksUnlocked,
         preKnockoutLocked: preBracketSelectionsLocked,
+        teams,
+        tournamentMatches,
+        officialRoundOf32Complete: knockoutBracketPicksUnlocked,
       }),
-    [slots, fullBracketPicksUnlocked, preBracketSelectionsLocked],
+    [
+      slots,
+      fullBracketPicksUnlocked,
+      preBracketSelectionsLocked,
+      teams,
+      tournamentMatches,
+      knockoutBracketPicksUnlocked,
+    ],
   );
   const deadlineStatus = useMemo(
     () =>
