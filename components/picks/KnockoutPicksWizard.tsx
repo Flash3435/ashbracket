@@ -597,6 +597,92 @@ function teamMatchesChooserSearch(
   );
 }
 
+function R32MatchTeamPickButton({
+  team,
+  opponent,
+  selected,
+  disabled,
+  onPick,
+}: {
+  team: Team;
+  opponent: Team;
+  selected: boolean;
+  disabled: boolean;
+  onPick: () => void;
+}) {
+  const strength = teamStrengthLabel(team.countryCode);
+  const meta = teamPickMetaLine(team, strength);
+  return (
+    <button
+      type="button"
+      disabled={disabled}
+      aria-pressed={selected}
+      aria-label={`Pick ${team.name} to beat ${opponent.name}`}
+      onClick={onPick}
+      className={`flex min-h-[3.25rem] w-full flex-col items-center justify-center gap-1.5 rounded-lg border px-3 py-3 text-center transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-ash-accent/60 disabled:cursor-not-allowed disabled:opacity-50 ${
+        selected
+          ? "border-ash-accent/55 bg-ash-accent/15 ring-1 ring-inset ring-ash-accent/50"
+          : "border-ash-border bg-ash-body hover:border-ash-accent/40 hover:bg-ash-accent/10"
+      }`}
+    >
+      <CountryFlagIcon countryCode={team.countryCode} size="lg" />
+      <span className="text-sm font-semibold text-ash-text">{team.name}</span>
+      <span
+        className="text-[11px] text-ash-muted"
+        title={
+          [fifaRankSnapshotTitle(team), strengthLabelHint(strength)]
+            .filter(Boolean)
+            .join(" — ") || undefined
+        }
+      >
+        {meta}
+      </span>
+    </button>
+  );
+}
+
+function R32MatchDirectTeamPick({
+  teams,
+  selectedTeamId,
+  disabled,
+  onPick,
+}: {
+  teams: [Team, Team];
+  selectedTeamId?: string;
+  disabled: boolean;
+  onPick: (teamId: string) => void;
+}) {
+  const [home, away] = teams;
+  return (
+    <div
+      className="mt-2 grid grid-cols-[1fr_auto_1fr] items-stretch gap-2 sm:gap-3"
+      role="group"
+      aria-label={`Pick winner: ${home.name} vs ${away.name}`}
+    >
+      <R32MatchTeamPickButton
+        team={home}
+        opponent={away}
+        selected={selectedTeamId === home.id}
+        disabled={disabled}
+        onPick={() => onPick(home.id)}
+      />
+      <span
+        className="flex items-center justify-center px-0.5 text-xs font-medium uppercase tracking-wide text-ash-muted"
+        aria-hidden="true"
+      >
+        vs
+      </span>
+      <R32MatchTeamPickButton
+        team={away}
+        opponent={home}
+        selected={selectedTeamId === away.id}
+        disabled={disabled}
+        onPick={() => onPick(away.id)}
+      />
+    </div>
+  );
+}
+
 function emptyOptionsHint(row: KnockoutPickSlotDraft): string {
   switch (row.predictionKind) {
     case "group_winner":
@@ -1634,6 +1720,17 @@ export function KnockoutPicksWizard({
                     : row.slotLabel);
 
               const isEmptyPick = !effectiveTeamId;
+              const isGradualR32Row = isGradualR32WinnerPickRow(
+                row,
+                knockoutBracketPicksUnlocked,
+              );
+              const r32MatchTeams: [Team, Team] | null =
+                isGradualR32Row && flatOptions?.length === 2
+                  ? [flatOptions[0]!, flatOptions[1]!]
+                  : null;
+              const r32DirectPickEligible =
+                r32MatchTeams != null && r32LockReason === "pickable";
+              const r32RowPickDisabled = pickRowDisabled(row);
 
               return (
                 <li
@@ -1643,11 +1740,29 @@ export function KnockoutPicksWizard({
                       ? row.teamId.trim()
                         ? "border-ash-accent/45 bg-ash-accent/[0.07]"
                         : "border-dashed border-amber-700/35 bg-amber-950/10"
-                      : isEmptyPick && !thirdRowChooseDisabled
-                        ? "border-dashed border-amber-700/40 bg-amber-950/15"
-                        : "border-ash-border bg-ash-body/40"
+                      : r32DirectPickEligible && !isEmptyPick
+                        ? "border-ash-accent/45 bg-ash-accent/[0.07]"
+                        : isEmptyPick && !thirdRowChooseDisabled
+                          ? "border-dashed border-amber-700/40 bg-amber-950/15"
+                          : "border-ash-border bg-ash-body/40"
                   }`}
                 >
+                  {r32DirectPickEligible && isEmptyPick ? (
+                    <div>
+                      <p className="text-xs font-medium uppercase tracking-wide text-ash-muted">
+                        {heading}
+                      </p>
+                      <R32MatchDirectTeamPick
+                        teams={r32MatchTeams}
+                        disabled={r32RowPickDisabled}
+                        onPick={(teamId) => {
+                          setTeamForRow(row.rowKey, teamId);
+                          setOpenRowKey(null);
+                          setSearch("");
+                        }}
+                      />
+                    </div>
+                  ) : (
                   <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                     <div>
                       <p className="text-xs font-medium uppercase tracking-wide text-ash-muted">
@@ -1691,7 +1806,7 @@ export function KnockoutPicksWizard({
                       {team ? (
                         <button
                           type="button"
-                          disabled={pickRowDisabled(row)}
+                          disabled={r32RowPickDisabled}
                           onClick={() => {
                             setTeamForRow(row.rowKey, "");
                             setOpenRowKey(null);
@@ -1702,26 +1817,29 @@ export function KnockoutPicksWizard({
                           Clear
                         </button>
                       ) : null}
-                      <button
-                        type="button"
-                        disabled={pickRowDisabled(row) || thirdRowChooseDisabled}
-                        onClick={() => {
-                          if (thirdRowChooseDisabled) return;
-                          setOpenRowKey((k) =>
-                            k === row.rowKey ? null : row.rowKey,
-                          );
-                          setSearch("");
-                        }}
-                        className="rounded-lg border border-ash-border bg-ash-body px-3 py-1.5 text-sm font-medium text-ash-text transition-colors hover:bg-ash-surface disabled:cursor-not-allowed disabled:opacity-50"
-                      >
-                        {team
-                          ? "Change"
-                          : thirdRowChooseDisabled
-                            ? THIRD_PLACE_DISABLED_MAX_SELECTED
-                            : (r32RowDisplay?.chooseButtonLabel ?? "Choose team")}
-                      </button>
+                      {!r32DirectPickEligible || team ? (
+                        <button
+                          type="button"
+                          disabled={r32RowPickDisabled || thirdRowChooseDisabled}
+                          onClick={() => {
+                            if (thirdRowChooseDisabled) return;
+                            setOpenRowKey((k) =>
+                              k === row.rowKey ? null : row.rowKey,
+                            );
+                            setSearch("");
+                          }}
+                          className="rounded-lg border border-ash-border bg-ash-body px-3 py-1.5 text-sm font-medium text-ash-text transition-colors hover:bg-ash-surface disabled:cursor-not-allowed disabled:opacity-50"
+                        >
+                          {team
+                            ? "Change"
+                            : thirdRowChooseDisabled
+                              ? THIRD_PLACE_DISABLED_MAX_SELECTED
+                              : (r32RowDisplay?.chooseButtonLabel ?? "Choose team")}
+                        </button>
+                      ) : null}
                     </div>
                   </div>
+                  )}
 
                   {r32LockMessage && !r32RowDisplay ? (
                     <p
@@ -1750,6 +1868,20 @@ export function KnockoutPicksWizard({
                       />
                     </p>
                   ) : null}
+                  {r32DirectPickEligible &&
+                  !isEmptyPick &&
+                  openRowKey === row.rowKey ? (
+                    <R32MatchDirectTeamPick
+                      teams={r32MatchTeams}
+                      selectedTeamId={effectiveTeamId}
+                      disabled={r32RowPickDisabled}
+                      onPick={(teamId) => {
+                        setTeamForRow(row.rowKey, teamId);
+                        setOpenRowKey(null);
+                        setSearch("");
+                      }}
+                    />
+                  ) : null}
                   {thirdInvalidReason ? (
                     <p
                       className="mt-2 rounded-md border border-amber-700/50 bg-amber-950/30 px-3 py-2 text-xs text-amber-100"
@@ -1770,7 +1902,7 @@ export function KnockoutPicksWizard({
                     </p>
                   ) : null}
 
-                  {openRowKey === row.rowKey ? (
+                  {openRowKey === row.rowKey && !r32DirectPickEligible ? (
                     <div className="mt-3 border-t border-ash-border pt-3">
                       {thirdRowChooseDisabled ? (
                         <p className="rounded-md border border-sky-800/40 bg-sky-950/20 px-3 py-2 text-sm text-sky-100">
