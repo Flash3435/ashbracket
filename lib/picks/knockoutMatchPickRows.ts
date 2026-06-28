@@ -2,6 +2,10 @@ import type { Team } from "../../src/types/domain";
 import type { KnockoutPickSlotDraft } from "../../types/adminKnockoutPicks";
 import type { KnockoutProgressionPredictionKind } from "../predictions/knockoutProgressionKinds";
 import type { TournamentMatchPublicRow } from "../../types/tournamentPublic";
+import {
+  knockoutParticipantSlotPair,
+  r16R32ParticipantPair,
+} from "../bracket/wc2026KnockoutPairings";
 import { r32SlotKeysForMatchIndex } from "../bracket/wc2026RoundOf32";
 import {
   type GradualKnockoutSelectionState,
@@ -277,14 +281,19 @@ function readMatchSides(
   },
 ): { homeTeamId: string | null; awayTeamId: string | null } {
   if (def.wizardBracketKind === "round_of_16") {
+    const pair = r16R32ParticipantPair(matchIndex);
+    if (!pair) {
+      return { homeTeamId: null, awayTeamId: null };
+    }
+    const [homeR32Index, awayR32Index] = pair;
     const home = readR32MatchWinnerForBracket(
-      matchIndex * 2,
+      homeR32Index,
       slots,
       teams,
       options,
     );
     const away = readR32MatchWinnerForBracket(
-      matchIndex * 2 + 1,
+      awayR32Index,
       slots,
       teams,
       options,
@@ -296,8 +305,15 @@ function readMatchSides(
   }
 
   const participantKind = def.participantKind!;
-  const homeKey = String(matchIndex * 2 + 1);
-  const awayKey = String(matchIndex * 2 + 2);
+  const slotStage =
+    def.wizardBracketKind === "quarterfinalist"
+      ? ("quarterfinal" as const)
+      : def.wizardBracketKind === "semifinalist"
+        ? ("semifinal" as const)
+        : ("final" as const);
+  const slotPair = knockoutParticipantSlotPair(slotStage, matchIndex);
+  const homeKey = slotPair?.[0] ?? "";
+  const awayKey = slotPair?.[1] ?? "";
   const home = readParticipantSlotSide(slots, participantKind, homeKey);
   const away = readParticipantSlotSide(slots, participantKind, awayKey);
   return {
