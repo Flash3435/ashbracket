@@ -72,6 +72,15 @@ import {
   r32SlotLockReason,
   r32SlotRowDisplay,
 } from "../../lib/picks/gradualKnockoutUnlock";
+import {
+  allowedTeamsForKnockoutMatchRow,
+  buildKnockoutMatchPickRows,
+  countKnockoutMatchupsFilled,
+  knockoutMatchStepComplete,
+  usesKnockoutMatchPickRows,
+  type KnockoutMatchPickRow,
+  type KnockoutWizardBracketKind,
+} from "../../lib/picks/knockoutMatchPickRows";
 import { isKnockoutProgressionKind } from "../../lib/predictions/knockoutProgressionKinds";
 
 export type SaveKnockoutPicksFn = (input: {
@@ -211,32 +220,32 @@ function participantWizardSteps(
       bracketKind: "round_of_16",
       title: "Round of 16",
       intro:
-        "Narrow to sixteen teams. Each should be one of your Round of 32 teams when those picks are filled in.",
-      hint: "Changing Round of 32 can clear picks here that no longer fit.",
+        "Pick the winner of each Round of 16 matchup. Each pairing is built from your Round of 32 winners.",
+      hint: "Changing Round of 32 winners can clear picks here that no longer fit.",
     },
     {
       id: 0,
       mode: "bracket",
       bracketKind: "quarterfinalist",
       title: "Quarter-finals",
-      intro: "Pick eight teams for the last eight.",
-      hint: "Each must come from your Round of 16 when that step is complete.",
+      intro: "Pick the winner of each quarter-final matchup.",
+      hint: "Each pairing comes from your Round of 16 winners.",
     },
     {
       id: 0,
       mode: "bracket",
       bracketKind: "semifinalist",
       title: "Semi-finals",
-      intro: "Pick four teams to reach the semi-finals.",
-      hint: "They must be teams you already picked for the quarters.",
+      intro: "Pick the winner of each semi-final matchup.",
+      hint: "Each pairing comes from your quarter-final winners.",
     },
     {
       id: 0,
       mode: "bracket",
       bracketKind: "finalist",
       title: "The final",
-      intro: "Pick the two finalists.",
-      hint: "Both must come from your semi-finalists.",
+      intro: "Pick the finalist from your semi-final winners.",
+      hint: "The winner becomes your champion pick.",
     },
     {
       id: 0,
@@ -322,9 +331,28 @@ function stepComplete(
     gradualR32MatchRows?: boolean;
     gradualKnockout?: ReturnType<typeof getGradualKnockoutSelectionState>;
     teams?: Team[];
+    fullBracketPicksUnlocked?: boolean;
+    knockoutBracketPicksUnlocked?: boolean;
+    tournamentMatches?: TournamentMatchPublicRow[] | null;
   },
 ): boolean {
   const def = steps[stepIdx];
+  if (
+    def?.mode === "bracket" &&
+    options?.fullBracketPicksUnlocked &&
+    usesKnockoutMatchPickRows(def.bracketKind, true) &&
+    options.teams
+  ) {
+    const rows = buildKnockoutMatchPickRows({
+      bracketKind: def.bracketKind as KnockoutWizardBracketKind,
+      slots,
+      teams: options.teams,
+      tournamentMatches: options.tournamentMatches,
+      gradual: options.gradualKnockout,
+      knockoutBracketPicksUnlocked: options.knockoutBracketPicksUnlocked,
+    });
+    return knockoutMatchStepComplete(rows);
+  }
   if (
     def?.mode === "bracket" &&
     def.bracketKind === "third_place_qualifier"
@@ -752,14 +780,6 @@ export function KnockoutPicksWizard({
     !knockoutBracketPicksUnlocked && gradualR32Pickable;
   const knockoutPicksAccessible =
     knockoutBracketPicksUnlocked || gradualR32Pickable;
-  const stepRowOptions = useMemo(
-    () => ({
-      gradualR32MatchRows,
-      gradualKnockout,
-      teams,
-    }),
-    [gradualR32MatchRows, gradualKnockout, teams],
-  );
   const normalizedInitialSlots = useMemo(
     () =>
       pruneParticipantPicks(initialSlots, {
@@ -1006,10 +1026,83 @@ export function KnockoutPicksWizard({
   }
 
   const currentStepDef = wizardSteps[step];
+  const currentKnockoutMatchRows = useMemo(() => {
+    if (
+      currentStepDef?.mode !== "bracket" ||
+      !fullBracketPicksUnlocked ||
+      !usesKnockoutMatchPickRows(currentStepDef.bracketKind, true)
+    ) {
+      return null;
+    }
+    return buildKnockoutMatchPickRows({
+      bracketKind: currentStepDef.bracketKind as KnockoutWizardBracketKind,
+      slots,
+      teams,
+      tournamentMatches,
+      gradual: gradualKnockout,
+      knockoutBracketPicksUnlocked,
+    });
+  }, [
+    currentStepDef,
+    fullBracketPicksUnlocked,
+    slots,
+    teams,
+    tournamentMatches,
+    gradualKnockout,
+    knockoutBracketPicksUnlocked,
+  ]);
+  const stepRowOptions = useMemo(
+    () => ({
+      gradualR32MatchRows,
+      gradualKnockout,
+      teams,
+      fullBracketPicksUnlocked,
+      knockoutBracketPicksUnlocked,
+      tournamentMatches,
+    }),
+    [
+      gradualR32MatchRows,
+      gradualKnockout,
+      teams,
+      fullBracketPicksUnlocked,
+      knockoutBracketPicksUnlocked,
+      tournamentMatches,
+    ],
+  );
   const stepRows = useMemo(
     () => stepRowsFor(slots, step, wizardSteps, stepRowOptions),
     [slots, step, wizardSteps, stepRowOptions],
   );
+
+  function setKnockoutMatchWinner(
+    matchRow: KnockoutMatchPickRow,
+    teamId: string,
+  ) {
+    setSlots((prev) => {
+      const saveRow =
+        prev.find((s) => s.rowKey === matchRow.saveRowKey) ??
+        prev.find(
+          (s) =>
+            s.predictionKind === matchRow.savePredictionKind &&
+            s.slotKey === matchRow.saveSlotKey,
+        );
+      if (!saveRow) return prev;
+      const id = teamId.trim();
+      if (
+        id &&
+        id !== matchRow.homeTeamId &&
+        id !== matchRow.awayTeamId
+      ) {
+        return prev;
+      }
+      return pruneParticipantPicks(
+        assignParticipantPickDeduped(prev, saveRow.rowKey, id, {
+          freezeKnockoutProgressionPicks: !knockoutPicksAccessible,
+        }),
+        { freezeKnockoutProgressionPicks: !knockoutPicksAccessible },
+      );
+    });
+  }
 
   function setTeamForRow(rowKey: string, teamId: string) {
     let autoClearNotice: string | null = null;
@@ -1262,12 +1355,36 @@ export function KnockoutPicksWizard({
   const effectiveSaveHelpText = gradualR32MatchRows
     ? "Save confirmed matchup winners as they unlock. Locked matchups are not changed when you save."
     : saveHelpText;
-  const r16Filled = slots.filter(
-    (s) => s.predictionKind === "round_of_16" && s.teamId.trim(),
-  ).length;
-  const qfCount = slots.filter(
-    (s) => s.predictionKind === "quarterfinalist" && s.teamId.trim(),
-  ).length;
+  const r16MatchRowsFilled = fullBracketPicksUnlocked
+    ? countKnockoutMatchupsFilled(
+        buildKnockoutMatchPickRows({
+          bracketKind: "round_of_16",
+          slots,
+          teams,
+          tournamentMatches,
+          gradual: gradualKnockout,
+          knockoutBracketPicksUnlocked,
+        }),
+        { onlyPickable: true },
+      )
+    : slots.filter(
+        (s) => s.predictionKind === "round_of_16" && s.teamId.trim(),
+      ).length;
+  const qfMatchRowsFilled = fullBracketPicksUnlocked
+    ? countKnockoutMatchupsFilled(
+        buildKnockoutMatchPickRows({
+          bracketKind: "quarterfinalist",
+          slots,
+          teams,
+          tournamentMatches,
+          gradual: gradualKnockout,
+          knockoutBracketPicksUnlocked,
+        }),
+        { onlyPickable: true },
+      )
+    : slots.filter(
+        (s) => s.predictionKind === "quarterfinalist" && s.teamId.trim(),
+      ).length;
 
   return (
     <form onSubmit={onSubmit} className="space-y-6">
@@ -1472,6 +1589,31 @@ export function KnockoutPicksWizard({
                         .map((m) => m.matchIndex),
                     }),
                 )
+              : s.mode === "bracket" &&
+                  stepRowOptions.fullBracketPicksUnlocked &&
+                  usesKnockoutMatchPickRows(s.bracketKind, true) &&
+                  stepRowOptions.teams
+                ? (() => {
+                    const matchRows = buildKnockoutMatchPickRows({
+                      bracketKind: s.bracketKind as KnockoutWizardBracketKind,
+                      slots,
+                      teams: stepRowOptions.teams,
+                      tournamentMatches: stepRowOptions.tournamentMatches,
+                      gradual: stepRowOptions.gradualKnockout,
+                      knockoutBracketPicksUnlocked:
+                        stepRowOptions.knockoutBracketPicksUnlocked,
+                    });
+                    const pickable = matchRows.filter(
+                      (r) => r.lockReason === "pickable",
+                    );
+                    return Math.max(
+                      0,
+                      pickable.length -
+                        countKnockoutMatchupsFilled(matchRows, {
+                          onlyPickable: true,
+                        }),
+                    );
+                  })()
               : s.mode === "bracket" && s.bracketKind === "third_place_qualifier"
               ? Math.max(
                   0,
@@ -1642,16 +1784,24 @@ export function KnockoutPicksWizard({
           ) : null}
           {currentStepDef.mode === "bracket" &&
           currentStepDef.bracketKind === "round_of_16" &&
-          r16Filled < 16 ? (
+          (fullBracketPicksUnlocked
+            ? r16MatchRowsFilled < 8
+            : r16MatchRowsFilled < 16) ? (
             <p className="mt-4 rounded-md border border-amber-700/40 bg-amber-950/25 px-3 py-2 text-sm text-amber-100">
-              Pick sixteen Round of 16 teams. {r16Filled} of 16 so far.
+              {fullBracketPicksUnlocked
+                ? `Pick all eight Round of 16 matchups. ${r16MatchRowsFilled} of 8 so far.`
+                : `Pick sixteen Round of 16 teams. ${r16MatchRowsFilled} of 16 so far.`}
             </p>
           ) : null}
           {currentStepDef.mode === "bracket" &&
           currentStepDef.bracketKind === "quarterfinalist" &&
-          qfCount < 8 ? (
+          (fullBracketPicksUnlocked
+            ? qfMatchRowsFilled < 4
+            : qfMatchRowsFilled < 8) ? (
             <p className="mt-4 rounded-md border border-amber-700/40 bg-amber-950/25 px-3 py-2 text-sm text-amber-100">
-              Pick all eight quarter-finalists. {qfCount} of 8 so far.
+              {fullBracketPicksUnlocked
+                ? `Pick all four quarter-final matchups. ${qfMatchRowsFilled} of 4 so far.`
+                : `Pick all eight quarter-finalists. ${qfMatchRowsFilled} of 8 so far.`}
             </p>
           ) : null}
           {currentStepDef.mode === "bracket" &&
@@ -1672,8 +1822,202 @@ export function KnockoutPicksWizard({
           ) : null}
 
           <ul className="mt-4 space-y-3">
-            {stepRows.map((row) => {
-              const gradualMatchRow = gradualR32MatchRowsByKey?.get(row.rowKey);
+            {currentKnockoutMatchRows
+              ? currentKnockoutMatchRows.map((matchRow) => {
+                  const matchTeams = allowedTeamsForKnockoutMatchRow(
+                    matchRow,
+                    teams,
+                  );
+                  const matchupPair: [Team, Team] | null =
+                    matchTeams.length === 2
+                      ? [matchTeams[0]!, matchTeams[1]!]
+                      : null;
+                  const effectiveTeamId = matchRow.winnerTeamId;
+                  const team = effectiveTeamId
+                    ? teamById.get(effectiveTeamId)
+                    : undefined;
+                  const strength = team
+                    ? teamStrengthLabel(team.countryCode)
+                    : null;
+                  const isEmptyPick = !effectiveTeamId;
+                  const directPickEligible =
+                    matchRow.lockReason === "pickable" && matchupPair != null;
+                  const rowPickDisabled =
+                    coreDisabled ||
+                    !fullBracketPicksUnlocked ||
+                    matchRow.lockReason !== "pickable";
+                  const heading = matchRow.display.heading;
+
+                  return (
+                    <li
+                      key={matchRow.rowKey}
+                      className={`rounded-lg border p-3 ${
+                        directPickEligible && !isEmptyPick
+                          ? "border-ash-accent/45 bg-ash-accent/[0.07]"
+                          : isEmptyPick && matchRow.lockReason === "pickable"
+                            ? "border-dashed border-amber-700/40 bg-amber-950/15"
+                            : "border-ash-border bg-ash-body/40"
+                      }`}
+                    >
+                      {directPickEligible && isEmptyPick ? (
+                        <div>
+                          <p className="text-xs font-medium uppercase tracking-wide text-ash-muted">
+                            {heading}
+                          </p>
+                          <R32MatchDirectTeamPick
+                            teams={matchupPair}
+                            disabled={rowPickDisabled}
+                            onPick={(teamId) => {
+                              setKnockoutMatchWinner(matchRow, teamId);
+                              setOpenRowKey(null);
+                              setSearch("");
+                            }}
+                          />
+                        </div>
+                      ) : (
+                        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                          <div>
+                            <p className="text-xs font-medium uppercase tracking-wide text-ash-muted">
+                              {heading}
+                            </p>
+                            <div className="mt-1 flex items-center gap-2">
+                              <CountryFlagIcon
+                                countryCode={team?.countryCode ?? ""}
+                                size="lg"
+                              />
+                              <div>
+                                <p
+                                  className={`text-sm font-medium ${
+                                    isEmptyPick
+                                      ? "text-amber-100/90"
+                                      : "text-ash-text"
+                                  }`}
+                                >
+                                  {team?.name ??
+                                    matchRow.display.emptyPrimaryLine ??
+                                    "Pick needed"}
+                                </p>
+                                {team && strength ? (
+                                  <p
+                                    className="text-xs text-ash-muted"
+                                    title={
+                                      [
+                                        fifaRankSnapshotTitle(team),
+                                        strengthLabelHint(strength),
+                                      ]
+                                        .filter(Boolean)
+                                        .join(" ") || undefined
+                                    }
+                                  >
+                                    {teamPickMetaLine(team, strength)}
+                                  </p>
+                                ) : null}
+                              </div>
+                            </div>
+                          </div>
+                          <div className="flex shrink-0 gap-2">
+                            {team ? (
+                              <button
+                                type="button"
+                                disabled={rowPickDisabled}
+                                onClick={() => {
+                                  setKnockoutMatchWinner(matchRow, "");
+                                  setOpenRowKey(null);
+                                  setSearch("");
+                                }}
+                                className="rounded-lg border border-ash-border bg-ash-body px-3 py-1.5 text-sm font-medium text-ash-muted transition-colors hover:bg-ash-surface disabled:cursor-not-allowed disabled:opacity-50"
+                              >
+                                Clear
+                              </button>
+                            ) : null}
+                            {!directPickEligible || team ? (
+                              <button
+                                type="button"
+                                disabled={rowPickDisabled}
+                                onClick={() => {
+                                  setOpenRowKey((k) =>
+                                    k === matchRow.rowKey ? null : matchRow.rowKey,
+                                  );
+                                  setSearch("");
+                                }}
+                                className="rounded-lg border border-ash-border bg-ash-body px-3 py-1.5 text-sm font-medium text-ash-text transition-colors hover:bg-ash-surface disabled:cursor-not-allowed disabled:opacity-50"
+                              >
+                                {team
+                                  ? "Change"
+                                  : (matchRow.display.chooseButtonLabel ??
+                                    "Pick winner")}
+                              </button>
+                            ) : null}
+                          </div>
+                        </div>
+                      )}
+
+                      {matchRow.display.statusLine && isEmptyPick ? (
+                        <p
+                          className="mt-2 rounded-md border border-sky-800/40 bg-sky-950/20 px-3 py-2 text-xs text-sky-100"
+                          role="status"
+                        >
+                          {matchRow.display.statusLine}
+                        </p>
+                      ) : null}
+                      {matchRow.kickoffIso &&
+                      isEmptyPick &&
+                      matchRow.lockReason === "pickable" ? (
+                        <p className="mt-2 text-xs text-ash-muted">
+                          Locks:{" "}
+                          <KickoffTimeDisplay
+                            iso={matchRow.kickoffIso}
+                            emptyLabel="Time TBD"
+                          />
+                        </p>
+                      ) : null}
+                      {directPickEligible &&
+                      !isEmptyPick &&
+                      openRowKey === matchRow.rowKey ? (
+                        <R32MatchDirectTeamPick
+                          teams={matchupPair}
+                          selectedTeamId={effectiveTeamId}
+                          disabled={rowPickDisabled}
+                          onPick={(teamId) => {
+                            setKnockoutMatchWinner(matchRow, teamId);
+                            setOpenRowKey(null);
+                            setSearch("");
+                          }}
+                        />
+                      ) : null}
+                      {openRowKey === matchRow.rowKey && !directPickEligible ? (
+                        <div className="mt-3 border-t border-ash-border pt-3">
+                          {matchupPair ? (
+                            <R32MatchDirectTeamPick
+                              teams={matchupPair}
+                              selectedTeamId={effectiveTeamId || undefined}
+                              disabled={rowPickDisabled}
+                              onPick={(teamId) => {
+                                setKnockoutMatchWinner(matchRow, teamId);
+                                setOpenRowKey(null);
+                                setSearch("");
+                              }}
+                            />
+                          ) : (
+                            <p className="text-sm text-amber-200">
+                              {matchRow.display.statusLine ??
+                                "Complete previous round picks first."}
+                            </p>
+                          )}
+                        </div>
+                      ) : null}
+                    </li>
+                  );
+                })
+              : null}
+            {!currentKnockoutMatchRows
+              ? stepRows.map((row) => {
+              const isR32WizardStep =
+                currentStepDef?.mode === "bracket" &&
+                currentStepDef.bracketKind === "round_of_32";
+              const gradualMatchRow = isR32WizardStep
+                ? gradualR32MatchRowsByKey?.get(row.rowKey)
+                : undefined;
               const effectiveTeamId =
                 gradualMatchRow?.winnerTeamId ?? row.teamId.trim();
               const team = effectiveTeamId
@@ -2224,7 +2568,8 @@ export function KnockoutPicksWizard({
                   ) : null}
                 </li>
               );
-            })}
+            })
+              : null}
           </ul>
 
           <div className="mt-4 flex flex-wrap gap-2 border-t border-ash-border pt-4">

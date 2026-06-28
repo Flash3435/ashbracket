@@ -645,7 +645,7 @@ function r32SlotDraft(slotKey: string, teamId = ""): KnockoutPickSlotDraft {
   assert.strictEqual(
     promoted.find((s) => s.predictionKind === "round_of_16" && s.slotKey === "1")
       ?.teamId,
-    "",
+    "team-usa",
   );
   assert.strictEqual(
     promoted.find((s) => s.predictionKind === "round_of_32" && s.slotKey === "1")

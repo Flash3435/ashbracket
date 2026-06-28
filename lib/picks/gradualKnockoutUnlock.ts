@@ -483,11 +483,7 @@ export function promoteGradualR32WinnersToRoundOf32Slots(
           : s,
       );
     }
-    next = next.map((s) =>
-      s.predictionKind === "round_of_16" && s.slotKey === r16Key
-        ? { ...s, teamId: "" }
-        : s,
-    );
+    // Keep gradual R32 winners on `round_of_16` slots 1–16 — they feed Round of 16 matchup sides.
     if (!gradualWinner) continue;
   }
   return next;
