@@ -5,6 +5,7 @@ import {
   applyKnockoutMatchWinnerToSlots,
   buildKnockoutMatchPickRows,
   FINAL_MATCH_INCOMPLETE_MSG,
+  incompleteR16MatchMessage,
   knockoutMatchStepComplete,
   readR32MatchWinnerForBracket,
   validateKnockoutLaterMatchPick,
@@ -219,8 +220,14 @@ function r32Side(slotKey: string, teamId = ""): KnockoutPickSlotDraft {
   });
   const m89 = rows.find((r) => r.fifaMatchNo === 89)!;
   assert.strictEqual(m89.lockReason, "incomplete");
-  assert.strictEqual(m89.homeTeamId, null);
-  assert.strictEqual(m89.awayTeamId, null);
+  assert.ok(
+    m89.display.statusLine?.includes("M74"),
+    "should name missing upstream R32 fixtures",
+  );
+  assert.strictEqual(
+    incompleteR16MatchMessage(0, slots),
+    "Complete Round of 32 first — pick winners for M74 and M77.",
+  );
 }
 
 // Official R16 pairings (not adjacent R32 winners)
@@ -364,7 +371,9 @@ function r32Side(slotKey: string, teamId = ""): KnockoutPickSlotDraft {
     gradual: emptyGradual,
   });
   assert.strictEqual(rows[0]!.lockReason, "incomplete");
-  assert.ok(rows[0]!.display.statusLine?.includes("Complete previous round"));
+  assert.ok(
+    rows[0]!.display.statusLine?.includes("Complete Round of 32 first"),
+  );
 }
 
 // Saving R16 match winner writes quarterfinalist slot

@@ -185,7 +185,10 @@ function matchRowDisplay(
   homeName: string | null,
   awayName: string | null,
   lockReason: KnockoutMatchLockReason,
-  options?: { championPick?: boolean },
+  options?: {
+    championPick?: boolean;
+    incompleteMsg?: string;
+  },
 ): R32SlotRowDisplay {
   const heading =
     fifaMatchNo > 0 ? `M${fifaMatchNo} · ${stageLabel}` : stageLabel;
@@ -193,9 +196,9 @@ function matchRowDisplay(
     homeName && awayName ? `${homeName} vs ${awayName}` : null;
   const championPick = options?.championPick === true;
   const chooseButtonLabel = championPick ? "Pick champion" : "Pick winner";
-  const incompleteMsg = championPick
-    ? FINAL_MATCH_INCOMPLETE_MSG
-    : INCOMPLETE_UPSTREAM_MSG;
+  const incompleteMsg =
+    options?.incompleteMsg ??
+    (championPick ? FINAL_MATCH_INCOMPLETE_MSG : INCOMPLETE_UPSTREAM_MSG);
 
   if (lockReason === "incomplete") {
     return {
@@ -276,6 +279,28 @@ export function readConfirmedR32MatchWinner(
   return slotTeamId(slots, "round_of_16", r16Key);
 }
 
+/** Which upstream R32 fixtures still need a confirmed winner for this R16 row. */
+export function missingR32FifaMatchNosForR16Row(
+  matchIndex: number,
+  slots: KnockoutPickSlotDraft[],
+): number[] {
+  const pair = r16R32ParticipantPair(matchIndex);
+  if (!pair) return [];
+  return pair
+    .filter((r32Index) => !readConfirmedR32MatchWinner(r32Index, slots))
+    .map((r32Index) => 73 + r32Index);
+}
+
+export function incompleteR16MatchMessage(
+  matchIndex: number,
+  slots: KnockoutPickSlotDraft[],
+): string {
+  const missing = missingR32FifaMatchNosForR16Row(matchIndex, slots);
+  if (missing.length === 0) return INCOMPLETE_UPSTREAM_MSG;
+  const list = missing.map((n) => `M${n}`).join(" and ");
+  return `Complete Round of 32 first — pick winners for ${list}.`;
+}
+
 function readParticipantSlotSide(
   slots: KnockoutPickSlotDraft[],
   participantKind: KnockoutProgressionPredictionKind,
@@ -300,18 +325,8 @@ function readMatchSides(
       return { homeTeamId: null, awayTeamId: null };
     }
     const [homeR32Index, awayR32Index] = pair;
-    const home = readR32MatchWinnerForBracket(
-      homeR32Index,
-      slots,
-      teams,
-      options,
-    );
-    const away = readR32MatchWinnerForBracket(
-      awayR32Index,
-      slots,
-      teams,
-      options,
-    );
+    const home = readConfirmedR32MatchWinner(homeR32Index, slots);
+    const away = readConfirmedR32MatchWinner(awayR32Index, slots);
     return {
       homeTeamId: home || null,
       awayTeamId: away || null,
@@ -400,6 +415,13 @@ export function buildKnockoutMatchPickRows(input: {
       lockReason = "started";
     }
 
+    const incompleteMsg =
+      def.wizardBracketKind === "round_of_16" && lockReason === "incomplete"
+        ? incompleteR16MatchMessage(matchIndex, input.slots)
+        : def.wizardBracketKind === "finalist" && lockReason === "incomplete"
+          ? FINAL_MATCH_INCOMPLETE_MSG
+          : INCOMPLETE_UPSTREAM_MSG;
+
     const homeName = teamName(homeTeamId, input.teams);
     const awayName = teamName(awayTeamId, input.teams);
     const kickoffIso = publicMatch?.kickoff_at?.trim() || null;
@@ -427,7 +449,10 @@ export function buildKnockoutMatchPickRows(input: {
           homeName,
           awayName,
           lockReason,
-          { championPick: def.resultKind === "champion" },
+          {
+            championPick: def.resultKind === "champion",
+            incompleteMsg,
+          },
         ),
         kickoffIso,
       },

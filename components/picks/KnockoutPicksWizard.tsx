@@ -1160,14 +1160,34 @@ export function KnockoutPicksWizard({
   ) {
     setSlots((prev) => {
       const id = teamId.trim();
+      const bracketKind =
+        currentStepDef?.mode === "bracket"
+          ? (currentStepDef.bracketKind as KnockoutWizardBracketKind)
+          : undefined;
+      const freshRow =
+        bracketKind &&
+        usesKnockoutMatchPickRows(bracketKind, true) &&
+        fullBracketPicksUnlocked
+          ? buildKnockoutMatchPickRows({
+              bracketKind,
+              slots: prev,
+              teams,
+              tournamentMatches,
+              gradual: gradualKnockout,
+              knockoutBracketPicksUnlocked,
+            }).find((r) => r.rowKey === matchRow.rowKey) ?? matchRow
+          : matchRow;
       if (
         id &&
-        id !== matchRow.homeTeamId &&
-        id !== matchRow.awayTeamId
+        id !== freshRow.homeTeamId &&
+        id !== freshRow.awayTeamId
       ) {
         return prev;
       }
-      const next = applyKnockoutMatchWinnerToSlots(prev, matchRow, id);
+      if (freshRow.lockReason !== "pickable") {
+        return prev;
+      }
+      const next = applyKnockoutMatchWinnerToSlots(prev, freshRow, id);
       return pruneParticipantPicks(next, {
         freezeKnockoutProgressionPicks: !knockoutPicksAccessible,
       });
