@@ -4,8 +4,10 @@ import type { KnockoutPickSlotDraft } from "../../types/adminKnockoutPicks";
 import {
   applyKnockoutMatchWinnerToSlots,
   buildKnockoutMatchPickRows,
+  FINAL_MATCH_INCOMPLETE_MSG,
   knockoutMatchStepComplete,
   readR32MatchWinnerForBracket,
+  validateKnockoutLaterMatchPick,
 } from "./knockoutMatchPickRows";
 import type { GradualKnockoutSelectionState } from "./gradualKnockoutUnlock";
 
@@ -74,6 +76,34 @@ function qfSlot(slotKey: string, teamId = ""): KnockoutPickSlotDraft {
     predictionKind: "quarterfinalist",
     tournamentStageId: "qf",
     slotKey,
+    groupCode: null,
+    bonusKey: null,
+    teamId,
+  };
+}
+
+function finSlot(slotKey: string, teamId = ""): KnockoutPickSlotDraft {
+  return {
+    rowKey: `finalist|${slotKey}`,
+    sectionLabel: "The final",
+    slotLabel: `Final pick ${slotKey}`,
+    predictionKind: "finalist",
+    tournamentStageId: "fin",
+    slotKey,
+    groupCode: null,
+    bonusKey: null,
+    teamId,
+  };
+}
+
+function champSlot(teamId = ""): KnockoutPickSlotDraft {
+  return {
+    rowKey: "champion|",
+    sectionLabel: "Champion",
+    slotLabel: "Champion",
+    predictionKind: "champion",
+    tournamentStageId: "fin",
+    slotKey: null,
     groupCode: null,
     bonusKey: null,
     teamId,
@@ -183,6 +213,77 @@ const emptyGradual = {
   assert.strictEqual(
     readR32MatchWinnerForBracket(0, slots, teams, {}),
     "team-rsa",
+  );
+}
+
+// Final row shows finalists and writes champion pick
+{
+  const slots: KnockoutPickSlotDraft[] = [
+    finSlot("1", "team-ger"),
+    finSlot("2", "team-bra"),
+    champSlot(),
+  ];
+  const rows = buildKnockoutMatchPickRows({
+    bracketKind: "finalist",
+    slots,
+    teams,
+    gradual: emptyGradual,
+  });
+  assert.strictEqual(rows.length, 1);
+  assert.strictEqual(rows[0]!.display.heading, "M104 · Final");
+  assert.strictEqual(rows[0]!.display.emptyPrimaryLine, "Germany vs Brazil");
+  assert.strictEqual(rows[0]!.display.chooseButtonLabel, "Pick champion");
+  assert.strictEqual(rows[0]!.savePredictionKind, "champion");
+  assert.strictEqual(rows[0]!.lockReason, "pickable");
+}
+
+// Final row incomplete when semi-final picks missing
+{
+  const slots: KnockoutPickSlotDraft[] = [finSlot("1", "team-ger"), champSlot()];
+  const rows = buildKnockoutMatchPickRows({
+    bracketKind: "finalist",
+    slots,
+    teams,
+    gradual: emptyGradual,
+  });
+  assert.strictEqual(rows[0]!.lockReason, "incomplete");
+  assert.strictEqual(rows[0]!.display.statusLine, FINAL_MATCH_INCOMPLETE_MSG);
+}
+
+// Saving final winner writes champion slot only from finalists
+{
+  const slots: KnockoutPickSlotDraft[] = [
+    finSlot("1", "team-ger"),
+    finSlot("2", "team-bra"),
+    champSlot(),
+  ];
+  const rows = buildKnockoutMatchPickRows({
+    bracketKind: "finalist",
+    slots,
+    teams,
+    gradual: emptyGradual,
+  });
+  const finalRow = rows[0]!;
+  assert.strictEqual(
+    validateKnockoutLaterMatchPick(finalRow, "team-ned"),
+    "That team is not in this matchup.",
+  );
+  const next = applyKnockoutMatchWinnerToSlots(slots, finalRow, "team-ger");
+  assert.strictEqual(
+    next.find((s) => s.predictionKind === "champion")?.teamId,
+    "team-ger",
+  );
+  assert.strictEqual(knockoutMatchStepComplete(rows), false);
+  assert.strictEqual(
+    knockoutMatchStepComplete(
+      buildKnockoutMatchPickRows({
+        bracketKind: "finalist",
+        slots: next,
+        teams,
+        gradual: emptyGradual,
+      }),
+    ),
+    true,
   );
 }
 

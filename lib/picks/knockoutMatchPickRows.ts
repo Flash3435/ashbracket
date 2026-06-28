@@ -28,7 +28,7 @@ export type KnockoutMatchPickRow = {
   /** Draft row to update when saving the winner */
   saveRowKey: string;
   savePredictionKind: KnockoutProgressionPredictionKind;
-  saveSlotKey: string;
+  saveSlotKey: string | null;
   homeTeamId: string | null;
   awayTeamId: string | null;
   winnerTeamId: string;
@@ -87,6 +87,7 @@ const KNOCKOUT_MATCH_STEPS: readonly KnockoutMatchStepDef[] = [
 ] as const;
 
 const INCOMPLETE_UPSTREAM_MSG = "Complete previous round picks first.";
+export const FINAL_MATCH_INCOMPLETE_MSG = "Complete semi-final picks first.";
 
 export function knockoutMatchStepDef(
   bracketKind: KnockoutWizardBracketKind,
@@ -180,19 +181,25 @@ function matchRowDisplay(
   homeName: string | null,
   awayName: string | null,
   lockReason: KnockoutMatchLockReason,
+  options?: { championPick?: boolean },
 ): R32SlotRowDisplay {
   const heading =
     fifaMatchNo > 0 ? `M${fifaMatchNo} · ${stageLabel}` : stageLabel;
   const matchupLine =
     homeName && awayName ? `${homeName} vs ${awayName}` : null;
+  const championPick = options?.championPick === true;
+  const chooseButtonLabel = championPick ? "Pick champion" : "Pick winner";
+  const incompleteMsg = championPick
+    ? FINAL_MATCH_INCOMPLETE_MSG
+    : INCOMPLETE_UPSTREAM_MSG;
 
   if (lockReason === "incomplete") {
     return {
       heading,
-      emptyPrimaryLine: INCOMPLETE_UPSTREAM_MSG,
+      emptyPrimaryLine: incompleteMsg,
       kickoffIso: null,
-      statusLine: INCOMPLETE_UPSTREAM_MSG,
-      chooseButtonLabel: "Pick winner",
+      statusLine: incompleteMsg,
+      chooseButtonLabel,
     };
   }
 
@@ -202,7 +209,7 @@ function matchRowDisplay(
       emptyPrimaryLine: matchupLine ?? "Locked at kickoff",
       kickoffIso: null,
       statusLine: "Locked at kickoff",
-      chooseButtonLabel: "Pick winner",
+      chooseButtonLabel,
     };
   }
 
@@ -211,7 +218,7 @@ function matchRowDisplay(
     emptyPrimaryLine: matchupLine ?? "Pick needed",
     kickoffIso: null,
     statusLine: null,
-    chooseButtonLabel: "Pick winner",
+    chooseButtonLabel,
   };
 }
 
@@ -299,15 +306,22 @@ function readMatchSides(
   };
 }
 
-function resultSlotKeyForMatch(def: KnockoutMatchStepDef, matchIndex: number): string {
+function resultSlotKeyForMatch(
+  def: KnockoutMatchStepDef,
+  matchIndex: number,
+): string | null {
+  if (def.resultKind === "champion") return null;
   return String(matchIndex + 1);
 }
 
 function findSaveRow(
   slots: KnockoutPickSlotDraft[],
   kind: KnockoutProgressionPredictionKind,
-  slotKey: string,
+  slotKey: string | null,
 ): KnockoutPickSlotDraft | undefined {
+  if (kind === "champion") {
+    return slots.find((s) => s.predictionKind === "champion");
+  }
   return slots.find((s) => s.predictionKind === kind && s.slotKey === slotKey);
 }
 
@@ -364,7 +378,11 @@ export function buildKnockoutMatchPickRows(input: {
       matchIndex,
       fifaMatchNo,
       rowKey: `${def.wizardBracketKind}|match|${matchIndex + 1}`,
-      saveRowKey: saveRow?.rowKey ?? `${def.resultKind}|${saveSlotKey}`,
+      saveRowKey:
+        saveRow?.rowKey ??
+        (def.resultKind === "champion"
+          ? "champion|"
+          : `${def.resultKind}|${saveSlotKey}`),
       savePredictionKind: def.resultKind,
       saveSlotKey,
       homeTeamId,
@@ -379,6 +397,7 @@ export function buildKnockoutMatchPickRows(input: {
           homeName,
           awayName,
           lockReason,
+          { championPick: def.resultKind === "champion" },
         ),
         kickoffIso,
       },
@@ -420,11 +439,11 @@ export function applyKnockoutMatchWinnerToSlots(
     );
   }
 
-  const fallback = slots.find(
-    (s) =>
-      s.predictionKind === row.savePredictionKind &&
-      s.slotKey === row.saveSlotKey,
-  );
+  const fallback = slots.find((s) => {
+    if (s.predictionKind !== row.savePredictionKind) return false;
+    if (row.savePredictionKind === "champion") return true;
+    return s.slotKey === row.saveSlotKey;
+  });
   if (!fallback) return slots;
   return slots.map((s) =>
     s.rowKey === fallback.rowKey ? { ...s, teamId: id } : s,
@@ -455,7 +474,11 @@ export function validateKnockoutLaterMatchPick(
 ): string | null {
   const teamId = selectedTeamId.trim();
   if (!teamId) return null;
-  if (row.lockReason === "incomplete") return INCOMPLETE_UPSTREAM_MSG;
+  if (row.lockReason === "incomplete") {
+    return row.savePredictionKind === "champion"
+      ? FINAL_MATCH_INCOMPLETE_MSG
+      : INCOMPLETE_UPSTREAM_MSG;
+  }
   if (row.lockReason === "started") {
     return "This match has already kicked off and can no longer be edited.";
   }
