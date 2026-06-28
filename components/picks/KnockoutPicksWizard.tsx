@@ -73,6 +73,7 @@ import {
   r32SlotLockMessage,
   r32SlotLockReason,
   r32SlotRowDisplay,
+  shouldUseR32MatchRowUi,
 } from "../../lib/picks/gradualKnockoutUnlock";
 import {
   allowedTeamsForKnockoutMatchRow,
@@ -810,8 +811,13 @@ export function KnockoutPicksWizard({
     officialRoundOf32Complete: knockoutBracketPicksUnlocked,
     gradual: gradualKnockout,
   });
-  const gradualR32MatchRows =
-    !knockoutBracketPicksUnlocked && gradualR32Pickable;
+  const gradualR32MatchRows = shouldUseR32MatchRowUi({
+    tournamentMatches,
+    knockoutBracketPicksUnlocked,
+    gradualPickableCount: gradualKnockout.pickableCount,
+  });
+  const useLegacyR32SlotUi =
+    knockoutBracketPicksUnlocked && !gradualR32MatchRows;
   const knockoutPicksAccessible =
     knockoutBracketPicksUnlocked || gradualR32Pickable;
   const knockoutPathRepairOnLoad = useMemo(
@@ -1023,7 +1029,7 @@ export function KnockoutPicksWizard({
     if (coreDisabled || (preBracketActive && isPreBracketPickSlot(row))) {
       return true;
     }
-    if (isGradualR32WinnerPickRow(row, knockoutBracketPicksUnlocked)) {
+    if (isGradualR32WinnerPickRow(row, useLegacyR32SlotUi)) {
       const gradualRow = gradualR32MatchRowsByKey?.get(row.rowKey);
       return gradualRow?.lockReason !== "pickable";
     }
@@ -1056,7 +1062,7 @@ export function KnockoutPicksWizard({
   }
 
   function gradualTeamsForRow(row: KnockoutPickSlotDraft): Team[] | null {
-    if (isGradualR32WinnerPickRow(row, knockoutBracketPicksUnlocked)) {
+    if (isGradualR32WinnerPickRow(row, useLegacyR32SlotUi)) {
       const matchIndex = r32MatchIndexForR16SlotKey(row.slotKey);
       if (matchIndex < 0) return [];
       return allowedTeamsForGradualR32Match(
@@ -1208,7 +1214,7 @@ export function KnockoutPicksWizard({
       }
       if (
         row &&
-        isGradualR32WinnerPickRow(row, knockoutBracketPicksUnlocked)
+        isGradualR32WinnerPickRow(row, useLegacyR32SlotUi)
       ) {
         const matchIndex = r32MatchIndexForR16SlotKey(row.slotKey);
         if (matchIndex < 0) return prev;
@@ -1430,13 +1436,20 @@ export function KnockoutPicksWizard({
   const thirdFilled = slots.filter(
     (s) => s.predictionKind === "third_place_qualifier" && s.teamId.trim(),
   ).length;
+  const r32MatchRowTargetCount = gradualR32MatchRows
+    ? gradualKnockout.matchStates.filter((m) =>
+        knockoutBracketPicksUnlocked ? m.confirmed && !m.started : m.pickable,
+      ).length
+    : 32;
   const r32Filled = gradualR32MatchRows
     ? countGradualR32MatchupsFilled({
         slots,
         state: gradualKnockout,
         teams,
         matchIndices: gradualKnockout.matchStates
-          .filter((m) => m.pickable)
+          .filter((m) =>
+            knockoutBracketPicksUnlocked ? m.confirmed && !m.started : m.pickable,
+          )
           .map((m) => m.matchIndex),
       })
     : slots.filter(
@@ -1868,12 +1881,12 @@ export function KnockoutPicksWizard({
           {currentStepDef.mode === "bracket" &&
           currentStepDef.bracketKind === "round_of_32" &&
           (gradualR32MatchRows
-            ? r32Filled < gradualKnockout.pickableCount
+            ? r32Filled < r32MatchRowTargetCount
             : r32Filled < 32) ? (
             <p className="mt-4 rounded-md border border-amber-700/40 bg-amber-950/25 px-3 py-2 text-sm text-amber-100">
-              {knockoutBracketPicksUnlocked
-                ? `Pick all 32 Round of 32 teams in their official slots. ${r32Filled} of 32 so far.`
-                : `Pick confirmed matchups as they unlock. ${gradualKnockout.pickableCount} matchups available now · ${r32Filled} of ${gradualKnockout.pickableCount} filled.`}
+              {gradualR32MatchRows
+                ? `Pick confirmed matchups as they unlock. ${r32MatchRowTargetCount} matchups available now · ${r32Filled} of ${r32MatchRowTargetCount} filled.`
+                : `Pick all 32 Round of 32 teams in their official slots. ${r32Filled} of 32 so far.`}
             </p>
           ) : null}
           {currentStepDef.mode === "bracket" &&
@@ -2268,7 +2281,7 @@ export function KnockoutPicksWizard({
               const isEmptyPick = !effectiveTeamId;
               const isGradualR32Row = isGradualR32WinnerPickRow(
                 row,
-                knockoutBracketPicksUnlocked,
+                useLegacyR32SlotUi,
               );
               const r32MatchTeams: [Team, Team] | null =
                 isGradualR32Row && flatOptions?.length === 2

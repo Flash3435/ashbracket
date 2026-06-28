@@ -371,6 +371,28 @@ export function getR32MatchUnlockState(
   };
 }
 
+/** True when public schedule includes Round of 32 fixture rows (M73–M88). */
+export function hasRoundOf32PublicFixtures(
+  matches: TournamentMatchPublicRow[] | null | undefined,
+): boolean {
+  return Boolean(matches?.some((m) => m.stage_code === "round_of_32"));
+}
+
+/**
+ * Match-row R32 UI (16 rows, one winner per matchup) vs legacy 32 side-slot rows.
+ * Admin and participant flows share this gate whenever fixture data is loaded.
+ */
+export function shouldUseR32MatchRowUi(input: {
+  tournamentMatches: TournamentMatchPublicRow[] | null | undefined;
+  knockoutBracketPicksUnlocked: boolean;
+  gradualPickableCount: number;
+}): boolean {
+  return (
+    hasRoundOf32PublicFixtures(input.tournamentMatches) ||
+    (!input.knockoutBracketPicksUnlocked && input.gradualPickableCount > 0)
+  );
+}
+
 export function getGradualKnockoutSelectionState(input: {
   matches: TournamentMatchPublicRow[] | null | undefined;
   teams?: Team[];
@@ -650,10 +672,17 @@ export function allowedTeamsForGradualR32Match(
   allTeams: Team[],
   fullRoundOf32Official: boolean,
 ): Team[] {
-  if (fullRoundOf32Official) return [];
   const ms = state.matchStates[matchIndex];
-  if (!ms?.pickable) return [];
-  return allowedTeamsForGradualR32MatchState(ms, allTeams);
+  if (!ms || ms.started) return [];
+  const sidesReady =
+    ms.confirmed ||
+    Boolean(ms.homeTeamId && ms.awayTeamId) ||
+    Boolean(ms.homeCountryCode && ms.awayCountryCode);
+  if (!sidesReady) return [];
+  if (fullRoundOf32Official || ms.pickable) {
+    return allowedTeamsForGradualR32MatchState(ms, allTeams);
+  }
+  return [];
 }
 
 function allowedTeamsForGradualR32MatchState(

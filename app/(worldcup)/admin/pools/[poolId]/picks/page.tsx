@@ -27,6 +27,7 @@ import Link from "next/link";
 import { saveParticipantKnockoutPicksForPoolAction } from "../../../picks/actions";
 import type { KnockoutPickSlotDraft } from "../../../../../../types/adminKnockoutPicks";
 import { fetchOfficialRoundOf32Complete } from "../../../../../../lib/tournament/fetchOfficialRoundOf32Complete";
+import { fetchPublicTournamentProgress } from "../../../../../../lib/tournament/fetchPublicTournamentProgress";
 
 export const dynamic = "force-dynamic";
 
@@ -260,6 +261,11 @@ export default async function AdminPoolPicksPage({ params, searchParams }: PageP
     }
   }
 
+  const { data: tournamentPayload } =
+    selectedParticipant && !loadError
+      ? await fetchPublicTournamentProgress()
+      : { data: null };
+
   const invalidQuery =
     Boolean(participantParam) && !UUID_RE.test(participantParam);
 
@@ -362,6 +368,8 @@ export default async function AdminPoolPicksPage({ params, searchParams }: PageP
                     participantId={selectedParticipant.id}
                     participantDisplayName={selectedParticipant.displayName}
                     initialSlots={initialSlots}
+                    knockoutBracketPicksUnlocked={knockoutBracketPicksUnlocked}
+                    tournamentMatches={tournamentPayload?.matches ?? null}
                     teams={teams}
                     groupTeamCountryCodesByLetter={groupTeamCountryCodesByLetter}
                     disabled={teams.length === 0}
