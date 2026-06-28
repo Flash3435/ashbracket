@@ -87,6 +87,17 @@ import {
   type KnockoutWizardBracketKind,
 } from "../../lib/picks/knockoutMatchPickRows";
 import { isKnockoutProgressionKind } from "../../lib/predictions/knockoutProgressionKinds";
+import {
+  applyKnockoutPickCorrection,
+  resolveKnockoutPickCorrectionMatch,
+  type KnockoutPickCorrectionMatch,
+} from "../../lib/admin/knockoutPickCorrection";
+import {
+  AdminKnockoutPickCorrectionDialog,
+  type AdminKnockoutPickCorrectionFn,
+} from "../admin/AdminKnockoutPickCorrectionDialog";
+
+export type { AdminKnockoutPickCorrectionFn };
 
 export type SaveKnockoutPicksFn = (input: {
   participantId: string;
@@ -147,6 +158,8 @@ export type KnockoutPicksWizardProps = {
   defaultPicksMainView?: PicksMainView;
   /** When true, persist list/bracket choice in localStorage (account picks only). */
   rememberPicksMainView?: boolean;
+  /** Admin-only post-kickoff correction path (does not unlock participant rows). */
+  adminKnockoutPickCorrection?: AdminKnockoutPickCorrectionFn;
 };
 
 function isPreBracketPickSlot(slot: KnockoutPickSlotDraft): boolean {
@@ -794,6 +807,7 @@ export function KnockoutPicksWizard({
   postSaveRedirectTo,
   defaultPicksMainView = "bracket",
   rememberPicksMainView = false,
+  adminKnockoutPickCorrection,
 }: KnockoutPicksWizardProps) {
   const router = useRouter();
   const [isSaving, startSaveTransition] = useTransition();
@@ -926,6 +940,7 @@ export function KnockoutPicksWizard({
     lastSavedAt: null,
   });
   const [quickHint, setQuickHint] = useState<string | null>(null);
+  const [correctionNotice, setCorrectionNotice] = useState<string | null>(null);
   const [openRowKey, setOpenRowKey] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [picksMainView, setPicksMainView] = useState<PicksMainView>(
@@ -1208,6 +1223,59 @@ export function KnockoutPicksWizard({
         freezeKnockoutProgressionPicks: !knockoutPicksAccessible,
       });
     });
+  }
+
+  function applyAdminCorrectionLocally(
+    match: KnockoutPickCorrectionMatch,
+    newTeamId: string,
+  ) {
+    const applied = applyKnockoutPickCorrection({
+      slots,
+      match,
+      newTeamId,
+      teams,
+      tournamentMatches: tournamentMatches ?? [],
+      fullRoundOf32Official: knockoutBracketPicksUnlocked,
+    });
+    setSlots(applied.slots);
+    setSavedSignature(picksDraftSignature(applied.slots));
+    setSaveUiState({ kind: "saved", lastSavedAt: Date.now() });
+  }
+
+  function renderAdminKnockoutCorrectionButton(input: {
+    matchCode: string;
+    matchLabel: string;
+    allowedTeamIds: string[];
+    currentTeamId?: string;
+  }) {
+    if (!adminKnockoutPickCorrection) return null;
+    return (
+      <AdminKnockoutPickCorrectionDialog
+        matchCode={input.matchCode}
+        matchLabel={input.matchLabel}
+        teams={teams}
+        allowedTeamIds={input.allowedTeamIds}
+        currentTeamId={input.currentTeamId}
+        participantId={participantId}
+        onCorrect={adminKnockoutPickCorrection}
+        onSuccess={(newTeamId) => {
+          const resolved = resolveKnockoutPickCorrectionMatch({
+            matchCode: input.matchCode,
+            slots,
+            teams,
+            tournamentMatches: tournamentMatches ?? [],
+            fullRoundOf32Official: knockoutBracketPicksUnlocked,
+          });
+          if (!("error" in resolved)) {
+            applyAdminCorrectionLocally(resolved.match, newTeamId);
+          }
+          setCorrectionNotice(
+            `Admin correction saved for ${input.matchCode}. The match stays locked for normal editing.`,
+          );
+          void tryRefreshPicksPage(() => router.refresh());
+        }}
+      />
+    );
   }
 
   function setTeamForRow(rowKey: string, teamId: string) {
@@ -1565,6 +1633,14 @@ export function KnockoutPicksWizard({
           role="status"
         >
           {quickHint}
+        </p>
+      ) : null}
+      {correctionNotice ? (
+        <p
+          className="rounded-md border border-amber-700/50 bg-amber-950/30 px-3 py-2 text-sm text-amber-100"
+          role="status"
+        >
+          {correctionNotice}
         </p>
       ) : null}
 
@@ -2078,7 +2154,7 @@ export function KnockoutPicksWizard({
                               </div>
                             )}
                           </div>
-                          <div className="flex shrink-0 gap-2">
+                          <div className="flex shrink-0 flex-wrap gap-2">
                             {team ? (
                               <button
                                 type="button"
@@ -2112,6 +2188,17 @@ export function KnockoutPicksWizard({
                                 {team ? "Change" : chooseButtonLabel}
                               </button>
                             ) : null}
+                            {matchRow.lockReason === "started"
+                              ? renderAdminKnockoutCorrectionButton({
+                                  matchCode: `M${matchRow.fifaMatchNo}`,
+                                  matchLabel: heading,
+                                  allowedTeamIds: [
+                                    matchRow.homeTeamId,
+                                    matchRow.awayTeamId,
+                                  ].filter((id): id is string => Boolean(id)),
+                                  currentTeamId: effectiveTeamId || undefined,
+                                })
+                              : null}
                           </div>
                         </div>
                       )}
@@ -2371,7 +2458,7 @@ export function KnockoutPicksWizard({
                         </div>
                       </div>
                     </div>
-                    <div className="flex shrink-0 gap-2">
+                    <div className="flex shrink-0 flex-wrap gap-2">
                       {team ? (
                         <button
                           type="button"
@@ -2406,6 +2493,20 @@ export function KnockoutPicksWizard({
                               : (r32RowDisplay?.chooseButtonLabel ?? "Choose team")}
                         </button>
                       ) : null}
+                      {r32LockReason === "started" && gradualMatchRow
+                        ? renderAdminKnockoutCorrectionButton({
+                            matchCode: `M${gradualMatchRow.fifaMatchNo}`,
+                            matchLabel:
+                              gradualMatchRow.display.heading ?? heading,
+                            allowedTeamIds: [
+                              gradualKnockout.matchStates[gradualMatchRow.matchIndex]
+                                ?.homeTeamId,
+                              gradualKnockout.matchStates[gradualMatchRow.matchIndex]
+                                ?.awayTeamId,
+                            ].filter((id): id is string => Boolean(id)),
+                            currentTeamId: effectiveTeamId || undefined,
+                          })
+                        : null}
                     </div>
                   </div>
                   )}

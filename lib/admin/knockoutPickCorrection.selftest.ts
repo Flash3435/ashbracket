@@ -1,0 +1,307 @@
+import assert from "node:assert";
+import type { Team } from "../../src/types/domain";
+import type { KnockoutPickSlotDraft } from "../../types/adminKnockoutPicks";
+import type { TournamentMatchPublicRow } from "../../types/tournamentPublic";
+import {
+  applyKnockoutPickCorrection,
+  resolveKnockoutPickCorrectionMatch,
+  resolveKnockoutPickCorrectionTeamId,
+  validateKnockoutPickCorrectionReason,
+} from "./knockoutPickCorrection";
+import { applyGradualKnockoutPickSaveGuards } from "../predictions/validateGradualKnockoutPickSave";
+import { validateKnockoutMatchPick } from "../picks/gradualKnockoutUnlock";
+import {
+  getGradualKnockoutSelectionState,
+  matchStateForR16GradualWinnerSlot,
+  r16SlotKeyForR32MatchIndex,
+} from "../picks/gradualKnockoutUnlock";
+
+function match(
+  partial: Partial<TournamentMatchPublicRow> &
+    Pick<TournamentMatchPublicRow, "match_code" | "stage_code">,
+): TournamentMatchPublicRow {
+  return {
+    match_id: partial.match_id ?? partial.match_code,
+    edition_id: "ed",
+    edition_code: "wc2026",
+    match_code: partial.match_code,
+    stage_code: partial.stage_code,
+    stage_label: partial.stage_code,
+    stage_sort_order: partial.stage_sort_order ?? 2,
+    group_code: partial.group_code ?? null,
+    round_index: partial.round_index ?? 0,
+    kickoff_at: partial.kickoff_at ?? "2026-06-28T19:00:00Z",
+    status: partial.status ?? "live",
+    home_goals: null,
+    away_goals: null,
+    home_penalties: null,
+    away_penalties: null,
+    home_team_name: partial.home_team_name ?? "Canada",
+    home_country_code: partial.home_country_code ?? "CAN",
+    away_team_name: partial.away_team_name ?? "Mexico",
+    away_country_code: partial.away_country_code ?? "MEX",
+    winner_team_name: null,
+    winner_country_code: null,
+  };
+}
+
+const teams: Team[] = [
+  {
+    id: "team-can",
+    name: "Canada",
+    countryCode: "CAN",
+    fifaCode: "CAN",
+    fifaRank: 40,
+    fifaRankAsOf: null,
+    createdAt: "",
+    updatedAt: "",
+  },
+  {
+    id: "team-mex",
+    name: "Mexico",
+    countryCode: "MEX",
+    fifaCode: "MEX",
+    fifaRank: 15,
+    fifaRankAsOf: null,
+    createdAt: "",
+    updatedAt: "",
+  },
+  {
+    id: "team-usa",
+    name: "United States",
+    countryCode: "USA",
+    fifaCode: "USA",
+    fifaRank: 12,
+    fifaRankAsOf: null,
+    createdAt: "",
+    updatedAt: "",
+  },
+];
+
+function r16SlotDraft(slotKey: string, teamId = ""): KnockoutPickSlotDraft {
+  return {
+    rowKey: `round_of_16|${slotKey}`,
+    predictionKind: "round_of_16",
+    tournamentStageId: "r16-stage",
+    slotKey,
+    groupCode: null,
+    bonusKey: null,
+    teamId,
+    sectionLabel: "Round of 32",
+    slotLabel: `M${72 + parseInt(slotKey, 10)} winner`,
+  };
+}
+
+function qfSlotDraft(slotKey: string, teamId = ""): KnockoutPickSlotDraft {
+  return {
+    rowKey: `quarterfinalist|${slotKey}`,
+    predictionKind: "quarterfinalist",
+    tournamentStageId: "qf-stage",
+    slotKey,
+    groupCode: null,
+    bonusKey: null,
+    teamId,
+    sectionLabel: "Quarter-finals",
+    slotLabel: `QF slot ${slotKey}`,
+  };
+}
+
+const m73Started = match({
+  match_code: "M73",
+  stage_code: "round_of_32",
+  kickoff_at: "2026-06-28T12:00:00Z",
+  status: "live",
+  home_country_code: "CAN",
+  home_team_name: "Canada",
+  away_country_code: "MEX",
+  away_team_name: "Mexico",
+});
+
+const nowAfterKickoff = new Date("2026-06-28T19:00:00Z").getTime();
+
+// Reason required
+{
+  assert.strictEqual(
+    validateKnockoutPickCorrectionReason(""),
+    "A reason is required for admin pick corrections.",
+  );
+  assert.match(
+    validateKnockoutPickCorrectionReason("   short") ?? "",
+    /8 characters/,
+  );
+  assert.strictEqual(
+    validateKnockoutPickCorrectionReason(
+      "Participant could not access account before kickoff; organizer-approved correction",
+    ),
+    null,
+  );
+}
+
+// Normal participant cannot edit after kickoff
+{
+  const gradual = getGradualKnockoutSelectionState({
+    matches: [m73Started],
+    teams,
+    nowMs: nowAfterKickoff,
+    fullRoundOf32Official: false,
+  });
+  const ms = matchStateForR16GradualWinnerSlot("1", gradual)!;
+  const participantErr = validateKnockoutMatchPick({
+    slotKey: ms.topSlotKey,
+    selectedTeamId: "team-can",
+    match: ms,
+    teams,
+    nowMs: nowAfterKickoff,
+  });
+  assert.match(
+    participantErr ?? "",
+    /already kicked off/i,
+    "participant validateKnockoutMatchPick blocks started matches",
+  );
+
+  const guarded = applyGradualKnockoutPickSaveGuards({
+    incoming: [
+      {
+        predictionKind: "round_of_16",
+        tournamentStageId: "r16-stage",
+        slotKey: "1",
+        groupCode: null,
+        bonusKey: null,
+        teamId: "team-can",
+      },
+    ],
+    existing: [],
+    teams,
+    matches: [m73Started],
+    fullRoundOf32Official: false,
+    nowMs: nowAfterKickoff,
+  });
+  assert.match(guarded.error ?? "", /already kicked off/i);
+}
+
+// Admin correction resolves started M73 and accepts Canada
+{
+  const slots = Array.from({ length: 16 }, (_, i) =>
+    r16SlotDraft(String(i + 1)),
+  );
+  const resolved = resolveKnockoutPickCorrectionMatch({
+    matchCode: "M73",
+    slots,
+    teams,
+    tournamentMatches: [m73Started],
+    fullRoundOf32Official: false,
+    nowMs: nowAfterKickoff,
+  });
+  assert.ok(!("error" in resolved));
+  assert.strictEqual(resolved.match.predictionKind, "round_of_16");
+  assert.strictEqual(resolved.match.slotKey, r16SlotKeyForR32MatchIndex(0));
+  assert.strictEqual(resolved.match.isStarted, true);
+
+  const teamResolved = resolveKnockoutPickCorrectionTeamId({
+    teamCode: "CAN",
+    teams,
+    allowedTeamIds: resolved.match.allowedTeamIds,
+  });
+  assert.ok(!("error" in teamResolved));
+  assert.strictEqual(teamResolved.teamId, "team-can");
+
+  const applied = applyKnockoutPickCorrection({
+    slots,
+    match: resolved.match,
+    newTeamId: teamResolved.teamId,
+    teams,
+    tournamentMatches: [m73Started],
+    fullRoundOf32Official: false,
+    nowMs: nowAfterKickoff,
+  });
+  const saved = applied.slots.find(
+    (s) => s.predictionKind === "round_of_16" && s.slotKey === "1",
+  );
+  assert.strictEqual(saved?.teamId, "team-can");
+}
+
+// Wrong team rejected
+{
+  const slots = Array.from({ length: 16 }, (_, i) =>
+    r16SlotDraft(String(i + 1)),
+  );
+  const resolved = resolveKnockoutPickCorrectionMatch({
+    matchCode: "M73",
+    slots,
+    teams,
+    tournamentMatches: [m73Started],
+    fullRoundOf32Official: false,
+    nowMs: nowAfterKickoff,
+  });
+  assert.ok(!("error" in resolved));
+  const wrong = resolveKnockoutPickCorrectionTeamId({
+    teamCode: "USA",
+    teams,
+    allowedTeamIds: resolved.match.allowedTeamIds,
+  });
+  assert.ok("error" in wrong);
+  assert.match(wrong.error, /not in this matchup/i);
+}
+
+// Unstarted match rejected for admin correction
+{
+  const future = match({
+    match_code: "M74",
+    stage_code: "round_of_32",
+    kickoff_at: "2026-07-01T19:00:00Z",
+    status: "scheduled",
+    home_country_code: "USA",
+    home_team_name: "United States",
+    away_country_code: "MEX",
+    away_team_name: "Mexico",
+  });
+  const slots = Array.from({ length: 16 }, (_, i) =>
+    r16SlotDraft(String(i + 1)),
+  );
+  const resolved = resolveKnockoutPickCorrectionMatch({
+    matchCode: "M74",
+    slots,
+    teams,
+    tournamentMatches: [future],
+    fullRoundOf32Official: false,
+    nowMs: nowAfterKickoff,
+  });
+  assert.ok("error" in resolved);
+  assert.match(resolved.error, /not kicked off yet/i);
+}
+
+// Downstream invalid picks cleared after correction changes winner
+{
+  const slots = [
+    ...Array.from({ length: 16 }, (_, i) =>
+      r16SlotDraft(String(i + 1), i === 0 ? "team-mex" : ""),
+    ),
+    qfSlotDraft("1", "team-mex"),
+  ];
+  const resolved = resolveKnockoutPickCorrectionMatch({
+    matchCode: "M73",
+    slots,
+    teams,
+    tournamentMatches: [m73Started],
+    fullRoundOf32Official: false,
+    nowMs: nowAfterKickoff,
+  });
+  assert.ok(!("error" in resolved));
+  const applied = applyKnockoutPickCorrection({
+    slots,
+    match: resolved.match,
+    newTeamId: "team-can",
+    teams,
+    tournamentMatches: [m73Started],
+    fullRoundOf32Official: false,
+    nowMs: nowAfterKickoff,
+  });
+  assert.strictEqual(
+    applied.slots.find((s) => s.predictionKind === "round_of_16" && s.slotKey === "1")
+      ?.teamId,
+    "team-can",
+  );
+  assert.ok(applied.cleared.length >= 0);
+}
+
+console.log("knockoutPickCorrection.selftest.ts: ok");

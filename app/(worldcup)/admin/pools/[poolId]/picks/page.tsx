@@ -24,7 +24,7 @@ import { mapPredictionRow } from "../../../../../../src/lib/scoring/mapSupabaseR
 import type { Prediction, Team, TournamentStage } from "../../../../../../src/types/domain";
 import type { Participant } from "../../../../../../types/participant";
 import Link from "next/link";
-import { saveParticipantKnockoutPicksForPoolAction } from "../../../picks/actions";
+import { saveParticipantKnockoutPicksForPoolAction, correctParticipantKnockoutPickForPoolAction } from "../../../picks/actions";
 import type { KnockoutPickSlotDraft } from "../../../../../../types/adminKnockoutPicks";
 import { fetchOfficialRoundOf32Complete } from "../../../../../../lib/tournament/fetchOfficialRoundOf32Complete";
 import { fetchPublicTournamentProgress } from "../../../../../../lib/tournament/fetchPublicTournamentProgress";
@@ -375,6 +375,10 @@ export default async function AdminPoolPicksPage({ params, searchParams }: PageP
                     disabled={teams.length === 0}
                     defaultPicksMainView="list"
                     savePicks={saveParticipantKnockoutPicksForPoolAction.bind(
+                      null,
+                      poolId,
+                    )}
+                    adminKnockoutPickCorrection={correctParticipantKnockoutPickForPoolAction.bind(
                       null,
                       poolId,
                     )}
