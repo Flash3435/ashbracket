@@ -16,6 +16,7 @@ import {
   thirdPlaceRowUnavailableReason,
   thirdPlaceSlotInvalidReason,
 } from "../../lib/predictions/knockoutPickConsistency";
+import { pruneOfficialKnockoutPathPicks } from "../../lib/predictions/pruneOfficialKnockoutPathPicks";
 import { applyQuickPickToSlots } from "../../lib/predictions/knockoutQuickPickStrategies";
 import { CountryFlagIcon } from "../tournament/Flag";
 import { KickoffTimeDisplay } from "../datetime/KickoffTimeDisplay";
@@ -48,6 +49,7 @@ import {
 import { KnockoutBracketPreview } from "./KnockoutBracketPreview";
 import { PicksProgressSummaryPanel } from "./PicksProgressSummaryPanel";
 import { PoolPickDeadlineBanner } from "./PoolPickDeadlineBanner";
+import { KnockoutBracketPathReviewBanner } from "./KnockoutBracketPathReviewBanner";
 import { buildPoolPickDeadlineStatus } from "../../lib/picks/poolPickDeadlineDisplay";
 import {
   buildPicksProgressSummary,
@@ -812,13 +814,32 @@ export function KnockoutPicksWizard({
     !knockoutBracketPicksUnlocked && gradualR32Pickable;
   const knockoutPicksAccessible =
     knockoutBracketPicksUnlocked || gradualR32Pickable;
+  const knockoutPathRepairOnLoad = useMemo(
+    () => pruneOfficialKnockoutPathPicks(initialSlots),
+    [initialSlots],
+  );
   const normalizedInitialSlots = useMemo(
     () =>
-      pruneParticipantPicks(initialSlots, {
+      pruneParticipantPicks(knockoutPathRepairOnLoad.slots, {
         freezeKnockoutProgressionPicks: !knockoutPicksAccessible,
       }),
-    [initialSlots, knockoutPicksAccessible],
+    [knockoutPathRepairOnLoad.slots, knockoutPicksAccessible],
   );
+  const showKnockoutPathReviewBanner =
+    knockoutPathRepairOnLoad.cleared.length > 0 &&
+    knockoutPicksAccessible &&
+    fullBracketPicksUnlocked;
+  const knockoutPathRepairUnsaved = useMemo(() => {
+    if (!showKnockoutPathReviewBanner) return false;
+    return (
+      picksDraftSignature(normalizedInitialSlots) !==
+      picksDraftSignature(initialSlots)
+    );
+  }, [
+    showKnockoutPathReviewBanner,
+    normalizedInitialSlots,
+    initialSlots,
+  ]);
   const initialSignature = useMemo(
     () => picksDraftSignature(normalizedInitialSlots),
     [normalizedInitialSlots],
@@ -1458,6 +1479,10 @@ export function KnockoutPicksWizard({
         >
           {lockedMessage}
         </p>
+      ) : null}
+
+      {showKnockoutPathReviewBanner ? (
+        <KnockoutBracketPathReviewBanner unsavedRepair={knockoutPathRepairUnsaved} />
       ) : null}
 
       {saveUiState.kind === "error" ? (

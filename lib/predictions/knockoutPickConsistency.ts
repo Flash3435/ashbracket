@@ -3,6 +3,7 @@ import type { KnockoutPickSlotDraft } from "../../types/adminKnockoutPicks";
 import type { ParticipantPickSlotPayload } from "../../types/knockoutPicksSave";
 import { WC2026_GROUP_CODES } from "../tournament/wc2026GroupCodes";
 import { isKnockoutProgressionKind } from "./knockoutProgressionKinds";
+import { pruneOfficialKnockoutPathPicks } from "./pruneOfficialKnockoutPathPicks";
 
 /** Shown in the third-place team chooser when a team is not eligible. */
 export const THIRD_PLACE_DISABLED_WINNER =
@@ -559,14 +560,9 @@ export function pruneParticipantPicks(
 ): KnockoutPickSlotDraft[] {
   const advancing = advancingFromGroups(slots);
   const eligibleR32 = eligibleRoundOf32Pool(slots);
-  const r32 = idsForKind(slots, "round_of_32");
-  const r16 = idsForKind(slots, "round_of_16");
-  const qf = idsForKind(slots, "quarterfinalist");
-  const sf = idsForKind(slots, "semifinalist");
-  const fin = idsForKind(slots, "finalist");
   const thirdDupKeys = thirdPlaceDuplicateRowKeys(slots);
 
-  return slots.map((row) => {
+  const afterBasics = slots.map((row) => {
     if (
       options?.freezeKnockoutProgressionPicks &&
       isKnockoutProgressionKind(row.predictionKind)
@@ -590,28 +586,14 @@ export function pruneParticipantPicks(
       return { ...row, teamId: "" };
     }
 
-    if (row.predictionKind === "round_of_16") {
-      if (r32.size > 0 && !r32.has(id)) return { ...row, teamId: "" };
-    }
-
-    if (row.predictionKind === "quarterfinalist") {
-      if (r16.size > 0 && !r16.has(id)) return { ...row, teamId: "" };
-      if (r16.size === 0 && r32.size > 0 && !r32.has(id))
-        return { ...row, teamId: "" };
-    }
-
-    if (row.predictionKind === "semifinalist" && qf.size > 0 && !qf.has(id)) {
-      return { ...row, teamId: "" };
-    }
-    if (row.predictionKind === "finalist" && sf.size > 0 && !sf.has(id)) {
-      return { ...row, teamId: "" };
-    }
-    if (row.predictionKind === "champion" && fin.size > 0 && !fin.has(id)) {
-      return { ...row, teamId: "" };
-    }
-
     return row;
   });
+
+  if (options?.freezeKnockoutProgressionPicks) {
+    return afterBasics;
+  }
+
+  return pruneOfficialKnockoutPathPicks(afterBasics).slots;
 }
 
 /** @deprecated Use pruneParticipantPicks */
