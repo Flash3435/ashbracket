@@ -8,11 +8,16 @@ import { isKnockoutProgressionKind } from "../predictions/knockoutProgressionKin
 import { thirdPlaceSlotInvalidReason } from "../predictions/knockoutPickConsistency";
 import {
   buildKnockoutMatchProgress,
-  firstIncompleteKnockoutWizardStep,
+  firstActionableIncompleteKnockoutWizardStep,
   type KnockoutProgressContext,
 } from "./knockoutMatchProgress";
 
-export type PickSectionStatus = "complete" | "partial" | "not_started" | "locked";
+export type PickSectionStatus =
+  | "complete"
+  | "caught_up"
+  | "partial"
+  | "not_started"
+  | "locked";
 
 export type PickSectionId = "group" | "third_place" | "bonus" | "knockout";
 
@@ -31,6 +36,8 @@ export type NextPickSection = {
   sectionId: PickSectionId;
   label: string;
   ctaLabel: string;
+  /** Continue to the next missing step, or open picks for review only. */
+  intent?: "continue" | "review";
   /** Matches KnockoutPicksWizard bracket step kinds when applicable. */
   wizardBracketKind?: string;
   wizardMode?: "group" | "bonus" | "bracket";
@@ -135,7 +142,7 @@ function firstIncompleteKnockoutRound(
   knockoutContext?: KnockoutProgressContext | null,
 ): (typeof KNOCKOUT_ROUND_ORDER)[number] | null {
   if (knockoutProgress?.useMatchBased && knockoutContext) {
-    const step = firstIncompleteKnockoutWizardStep(knockoutContext);
+    const step = firstActionableIncompleteKnockoutWizardStep(knockoutContext);
     if (!step) return null;
     return step === "champion" ? "champion" : step;
   }
@@ -172,6 +179,7 @@ function findNextSection(
       sectionId: "group",
       label: group.label,
       ctaLabel: "Continue with group stage",
+      intent: "continue",
       wizardMode: "group",
     };
   }
@@ -182,6 +190,7 @@ function findNextSection(
       sectionId: "third_place",
       label: third.label,
       ctaLabel: "Continue with third-place picks",
+      intent: "continue",
       wizardMode: "bracket",
       wizardBracketKind: "third_place_qualifier",
     };
@@ -199,6 +208,7 @@ function findNextSection(
         sectionId: "knockout",
         label,
         ctaLabel: `Continue with ${label.toLowerCase()}`,
+        intent: "continue",
         wizardMode: "bracket",
         wizardBracketKind: round,
       };
@@ -211,6 +221,7 @@ function findNextSection(
       sectionId: "bonus",
       label: bonus.label,
       ctaLabel: "Continue with bonus picks",
+      intent: "continue",
       wizardMode: "bonus",
     };
   }
@@ -265,6 +276,14 @@ function buildOverallCopy(args: {
     return {
       headline: "Get started with group stage",
       detail: `${missing} pick${missing === 1 ? "" : "s"} to go before you're complete.`,
+    };
+  }
+
+  if (missing === 0 && !picksComplete) {
+    return {
+      headline: "You're caught up — 0 picks left",
+      detail:
+        "More picks may unlock as future matchups become available.",
     };
   }
 
@@ -357,6 +376,12 @@ export function buildPicksProgressSummary(
     !knockoutBracketPicksUnlocked &&
     knockoutProgress.steps.length > 0;
 
+  const knockoutCaughtUp =
+    useKnockoutProgressCounts &&
+    knockoutProgress!.missing === 0 &&
+    !knockoutProgress!.complete &&
+    (gradualKnockoutInProgress || knockoutBracketPicksUnlocked);
+
   const groupComplete =
     group.length > 0 && group.every((s) => s.teamId.trim() !== "");
   const thirdComplete = isThirdPlaceSectionComplete(slots);
@@ -429,11 +454,15 @@ export function buildPicksProgressSummary(
       shortLabel: "Knockout",
       status:
         gradualKnockoutInProgress || knockoutBracketPicksUnlocked
-          ? sectionStatusFromCounts(
-              knockoutFilled,
-              knockoutTotal,
-              knockoutComplete,
-            )
+          ? knockoutComplete
+            ? "complete"
+            : knockoutCaughtUp
+              ? "caught_up"
+              : sectionStatusFromCounts(
+                  knockoutFilled,
+                  knockoutTotal,
+                  knockoutComplete,
+                )
           : "locked",
       filled: knockoutFilled,
       total: knockoutTotal,
@@ -442,9 +471,11 @@ export function buildPicksProgressSummary(
         gradualKnockoutInProgress || knockoutBracketPicksUnlocked
           ? knockoutComplete
             ? "Complete"
-            : knockoutFilled === 0
-              ? "Not started"
-              : `${knockoutFilled} of ${knockoutTotal} filled`
+            : knockoutCaughtUp
+              ? `${knockoutFilled} of ${knockoutTotal} available knockout picks filled`
+              : knockoutFilled === 0
+                ? "Not started"
+                : `${knockoutFilled} of ${knockoutTotal} filled`
           : "Confirmed matchups unlock gradually",
     },
   ];
@@ -483,16 +514,38 @@ export function buildPicksProgressSummary(
     sections,
   });
 
-  const nextSection =
-    picksComplete && !waitingForR32
-      ? null
-      : findNextSection(
-          slots,
-          sections,
-          knockoutBracketPicksUnlocked,
-          knockoutProgress,
-          knockoutContext,
-        );
+  const nextSection = (() => {
+    if (waitingForR32) return null;
+    if (picksComplete) {
+      return {
+        sectionId: "knockout" as const,
+        label: "Knockout bracket",
+        ctaLabel: "Review picks",
+        intent: "review" as const,
+        wizardMode: "bracket" as const,
+        wizardBracketKind: "round_of_16",
+      };
+    }
+    const continueSection = findNextSection(
+      slots,
+      sections,
+      knockoutBracketPicksUnlocked,
+      knockoutProgress,
+      knockoutContext,
+    );
+    if (continueSection) return continueSection;
+    if (missing === 0 && knockoutCaughtUp) {
+      return {
+        sectionId: "knockout" as const,
+        label: "Knockout bracket",
+        ctaLabel: "Review knockout picks",
+        intent: "review" as const,
+        wizardMode: "bracket" as const,
+        wizardBracketKind: "round_of_16",
+      };
+    }
+    return null;
+  })();
 
   return {
     sections,

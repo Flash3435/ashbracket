@@ -80,6 +80,7 @@ import {
   allowedTeamsForKnockoutMatchRow,
   buildKnockoutMatchPickRows,
   countKnockoutMatchupsFilled,
+  countPickableKnockoutMissing,
   FINAL_MATCH_INCOMPLETE_MSG,
   isKnockoutMatchDirectPickEligible,
   knockoutMatchStepComplete,
@@ -1782,9 +1783,27 @@ export function KnockoutPicksWizard({
         <>
       <nav aria-label="Tournament pick steps" className="flex flex-wrap gap-2">
         {wizardSteps.map((s, i) => {
-          const done = stepComplete(slots, i, wizardSteps, stepRowOptions);
           const active = i === step;
           const rows = stepRowsFor(slots, i, wizardSteps, stepRowOptions);
+          const matchRowsForStep =
+            s.mode === "bracket" &&
+            stepRowOptions.fullBracketPicksUnlocked &&
+            stepRowOptions.teams &&
+            (usesKnockoutMatchPickRows(s.bracketKind, true) ||
+              s.bracketKind === "champion")
+              ? buildKnockoutMatchPickRows({
+                  bracketKind:
+                    s.bracketKind === "champion"
+                      ? "finalist"
+                      : (s.bracketKind as KnockoutWizardBracketKind),
+                  slots,
+                  teams: stepRowOptions.teams,
+                  tournamentMatches: stepRowOptions.tournamentMatches,
+                  gradual: stepRowOptions.gradualKnockout,
+                  knockoutBracketPicksUnlocked:
+                    stepRowOptions.knockoutBracketPicksUnlocked,
+                })
+              : null;
           const missingInStep =
             stepRowOptions.gradualR32MatchRows &&
             s.mode === "bracket" &&
@@ -1803,38 +1822,23 @@ export function KnockoutPicksWizard({
                         .map((m) => m.matchIndex),
                     }),
                 )
-              : s.mode === "bracket" &&
-                  stepRowOptions.fullBracketPicksUnlocked &&
-                  usesKnockoutMatchPickRows(s.bracketKind, true) &&
-                  stepRowOptions.teams
-                ? (() => {
-                    const matchRows = buildKnockoutMatchPickRows({
-                      bracketKind: s.bracketKind as KnockoutWizardBracketKind,
-                      slots,
-                      teams: stepRowOptions.teams,
-                      tournamentMatches: stepRowOptions.tournamentMatches,
-                      gradual: stepRowOptions.gradualKnockout,
-                      knockoutBracketPicksUnlocked:
-                        stepRowOptions.knockoutBracketPicksUnlocked,
-                    });
-                    const pickable = matchRows.filter(
-                      (r) => r.lockReason === "pickable",
-                    );
-                    return Math.max(
+              : matchRowsForStep
+                ? countPickableKnockoutMissing(matchRowsForStep)
+                : s.mode === "bracket" &&
+                    s.bracketKind === "third_place_qualifier"
+                  ? Math.max(
                       0,
-                      pickable.length -
-                        countKnockoutMatchupsFilled(matchRows, {
-                          onlyPickable: true,
-                        }),
-                    );
-                  })()
-              : s.mode === "bracket" && s.bracketKind === "third_place_qualifier"
-              ? Math.max(
-                  0,
-                  8 -
-                    rows.filter((r) => r.teamId.trim()).length,
-                )
-              : rows.filter((r) => !r.teamId.trim()).length;
+                      8 - rows.filter((r) => r.teamId.trim()).length,
+                    )
+                  : rows.filter((r) => !r.teamId.trim()).length;
+          const stepBlocked =
+            matchRowsForStep != null &&
+            matchRowsForStep.filter((r) => r.lockReason === "pickable")
+              .length === 0;
+          const done =
+            matchRowsForStep != null
+              ? !stepBlocked && missingInStep === 0
+              : stepComplete(slots, i, wizardSteps, stepRowOptions);
           return (
             <button
               key={s.id}
@@ -1843,9 +1847,11 @@ export function KnockoutPicksWizard({
               title={
                 done
                   ? `${s.title} — complete`
-                  : missingInStep > 0
-                    ? `${s.title} — ${missingInStep} missing`
-                    : s.title
+                  : stepBlocked
+                    ? `${s.title} — unlocks after earlier rounds`
+                    : missingInStep > 0
+                      ? `${s.title} — ${missingInStep} missing`
+                      : s.title
               }
               onClick={() => {
                 promoteGradualR32BeforeLaterKnockoutStep(i);

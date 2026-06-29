@@ -12,6 +12,7 @@ import {
 import {
   buildKnockoutMatchPickRows,
   countKnockoutMatchupsFilled,
+  countPickableKnockoutMissing,
   knockoutMatchStepComplete,
   usesKnockoutMatchPickRows,
   type KnockoutWizardBracketKind,
@@ -298,6 +299,61 @@ export function firstIncompleteKnockoutWizardStep(
   const ctx = resolveKnockoutProgressContext(input);
   for (const bracketKind of wizardCompletionSteps(ctx)) {
     if (!isKnockoutWizardStepComplete(bracketKind, ctx)) {
+      return bracketKind;
+    }
+  }
+  return null;
+}
+
+function pickableMissingInWizardStep(
+  bracketKind: KnockoutWizardBracketKindId,
+  ctx: ResolvedKnockoutProgressContext,
+): number {
+  if (bracketKind === "round_of_32") {
+    return r32WinnerStorageStepProgress(ctx).missing;
+  }
+
+  if (bracketKind === "champion") {
+    if (!ctx.fullBracketPicksUnlocked) return 0;
+    const rows = buildKnockoutMatchPickRows({
+      bracketKind: "finalist",
+      slots: ctx.slots,
+      teams: ctx.teams,
+      tournamentMatches: ctx.tournamentMatches,
+      gradual: ctx.gradual,
+      knockoutBracketPicksUnlocked: ctx.officialRoundOf32Complete,
+      nowMs: ctx.nowMs,
+    });
+    return countPickableKnockoutMissing(rows);
+  }
+
+  if (
+    ctx.fullBracketPicksUnlocked &&
+    usesKnockoutMatchPickRows(bracketKind, true)
+  ) {
+    const rows = buildKnockoutMatchPickRows({
+      bracketKind: bracketKind as KnockoutWizardBracketKind,
+      slots: ctx.slots,
+      teams: ctx.teams,
+      tournamentMatches: ctx.tournamentMatches,
+      gradual: ctx.gradual,
+      knockoutBracketPicksUnlocked: ctx.officialRoundOf32Complete,
+      nowMs: ctx.nowMs,
+    });
+    return countPickableKnockoutMissing(rows);
+  }
+
+  const rows = ctx.slots.filter((s) => s.predictionKind === bracketKind);
+  return rows.filter((s) => !s.teamId.trim()).length;
+}
+
+/** First wizard step with a pickable matchup or slot still missing a pick. */
+export function firstActionableIncompleteKnockoutWizardStep(
+  input: KnockoutProgressContext,
+): KnockoutWizardBracketKindId | null {
+  const ctx = resolveKnockoutProgressContext(input);
+  for (const bracketKind of wizardCompletionSteps(ctx)) {
+    if (pickableMissingInWizardStep(bracketKind, ctx) > 0) {
       return bracketKind;
     }
   }

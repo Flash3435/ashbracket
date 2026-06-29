@@ -3,6 +3,7 @@ import type { Team } from "../../src/types/domain";
 import type { KnockoutPickSlotDraft } from "../../types/adminKnockoutPicks";
 import {
   buildKnockoutMatchProgress,
+  firstActionableIncompleteKnockoutWizardStep,
   isKnockoutWizardStepComplete,
   resolveKnockoutProgressContext,
 } from "./knockoutMatchProgress";
@@ -307,6 +308,25 @@ function assertStepComplete(
   assertStepComplete(slots, "quarterfinalist", false);
   assertStepComplete(slots, "semifinalist", false);
   assertStepComplete(slots, "champion", false);
+}
+
+// firstActionableIncompleteKnockoutWizardStep targets the first pickable gap
+{
+  const slots: KnockoutPickSlotDraft[] = [
+    ...fullR16Slots(),
+    ...Array.from({ length: 8 }, (_, i) => qfSlot(String(i + 1))),
+    ...Array.from({ length: 4 }, (_, i) => sfSlot(String(i + 1))),
+    ...Array.from({ length: 2 }, (_, i) => finSlot(String(i + 1))),
+    champSlot(),
+  ];
+  assert.strictEqual(
+    firstActionableIncompleteKnockoutWizardStep({
+      slots,
+      teams,
+      officialRoundOf32Complete: true,
+    }),
+    "round_of_16",
+  );
 }
 
 console.log("knockoutMatchProgress.selftest.ts: ok");

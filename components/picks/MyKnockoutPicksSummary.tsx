@@ -33,6 +33,7 @@ type StageBlockProps = {
 
 const SECTION_STATUS_LABEL: Record<PickSectionStatus, string> = {
   complete: "Complete",
+  caught_up: "Complete for now",
   partial: "In progress",
   not_started: "Not started",
   locked: "Opens later",
@@ -41,6 +42,7 @@ const SECTION_STATUS_LABEL: Record<PickSectionStatus, string> = {
 function sectionStatusClass(status: PickSectionStatus): string {
   switch (status) {
     case "complete":
+    case "caught_up":
       return "border-ash-accent/40 bg-ash-accent/10 text-ash-accent";
     case "partial":
       return "border-amber-700/45 bg-amber-950/30 text-amber-100";

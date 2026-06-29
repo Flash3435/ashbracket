@@ -16,6 +16,7 @@ type Props = {
 
 const STATUS_LABEL: Record<PickSectionStatus, string> = {
   complete: "Complete",
+  caught_up: "Complete for now",
   partial: "In progress",
   not_started: "Not started",
   locked: "Opens later",
@@ -24,6 +25,7 @@ const STATUS_LABEL: Record<PickSectionStatus, string> = {
 function statusChipClass(status: PickSectionStatus): string {
   switch (status) {
     case "complete":
+    case "caught_up":
       return "border-ash-accent/40 bg-ash-accent/10 text-ash-accent";
     case "partial":
       return "border-amber-700/45 bg-amber-950/30 text-amber-100";
@@ -64,7 +66,10 @@ export function PicksProgressSummaryPanel({
 }: Props) {
   const { nextSection, picksComplete, waitingForR32 } = summary;
   const showContinue =
-    onContinue != null && nextSection != null && !picksComplete && !waitingForR32;
+    onContinue != null &&
+    nextSection != null &&
+    !waitingForR32 &&
+    (nextSection.intent === "review" || !picksComplete);
 
   return (
     <div
@@ -99,6 +104,10 @@ export function PicksProgressSummaryPanel({
         ) : picksComplete ? (
           <span className="shrink-0 rounded-full border border-ash-accent/40 bg-ash-accent/15 px-2.5 py-1 text-xs font-semibold text-ash-accent">
             Complete
+          </span>
+        ) : summary.actionableMissingCount === 0 ? (
+          <span className="shrink-0 rounded-full border border-ash-accent/40 bg-ash-accent/15 px-2.5 py-1 text-xs font-semibold text-ash-accent">
+            Caught up
           </span>
         ) : summary.actionableMissingCount > 0 ? (
           <span className="shrink-0 rounded-full border border-amber-700/45 bg-amber-950/30 px-2.5 py-1 text-xs font-semibold tabular-nums text-amber-100">

@@ -350,7 +350,8 @@ function progressOptions(overrides?: {
   assert.strictEqual(knockout?.missing, 0);
   assert.strictEqual(summary.picksComplete, true);
   assert.strictEqual(summary.actionableMissingCount, 0);
-  assert.strictEqual(summary.nextSection, null);
+  assert.strictEqual(summary.nextSection?.ctaLabel, "Review picks");
+  assert.strictEqual(summary.nextSection?.intent, "review");
 }
 
 // Missing 4 quarter-final picks — summary and CTA align
@@ -454,6 +455,28 @@ function progressOptions(overrides?: {
   assert.strictEqual(knockout?.filled, 0);
   assert.strictEqual(knockout?.total, 1);
   assert.strictEqual(summary.actionableMissingCount, 1);
+}
+
+// Caught-up headline when nothing actionable remains (pre-knockout locked)
+{
+  const slots = [
+    ...filledGroupSlots().map((s) => ({ ...s, teamId: "" })),
+    ...eightThirdPlace(),
+  ];
+  const summary = buildPicksProgressSummary(slots, {
+    knockoutBracketPicksUnlocked: false,
+    preKnockoutLocked: true,
+  });
+  assert.strictEqual(summary.actionableMissingCount, 0);
+  assert.strictEqual(
+    summary.overallHeadline,
+    "You're caught up — 0 picks left",
+  );
+  assert.ok(
+    summary.overallDetail?.includes(
+      "More picks may unlock as future matchups become available.",
+    ),
+  );
 }
 
 console.log("picksProgressSummary.selftest: ok");

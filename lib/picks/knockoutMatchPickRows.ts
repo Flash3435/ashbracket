@@ -724,6 +724,28 @@ export function countKnockoutMatchupsFilled(
   }).length;
 }
 
+export function pickableKnockoutMatchRows(
+  rows: KnockoutMatchPickRow[],
+): KnockoutMatchPickRow[] {
+  return rows.filter((r) => r.lockReason === "pickable");
+}
+
+/** Pickable matchups still missing a winner. Blocked rows are excluded. */
+export function countPickableKnockoutMissing(
+  rows: KnockoutMatchPickRow[],
+): number {
+  return pickableKnockoutMatchRows(rows).filter(
+    (r) => !validatedKnockoutMatchWinner(r),
+  ).length;
+}
+
+/** All currently pickable matchups have winners (future rounds may still be blocked). */
+export function knockoutMatchStepCaughtUp(
+  rows: KnockoutMatchPickRow[],
+): boolean {
+  return countPickableKnockoutMissing(rows) === 0;
+}
+
 export function knockoutMatchStepComplete(
   rows: KnockoutMatchPickRow[],
 ): boolean {
