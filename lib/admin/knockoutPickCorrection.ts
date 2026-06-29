@@ -8,6 +8,7 @@ import { pruneOfficialKnockoutPathPicks } from "../predictions/pruneOfficialKnoc
 import {
   applyGradualR32MatchWinnerToSlots,
   getGradualKnockoutSelectionState,
+  isFullKnockoutBracketPicksUnlocked,
   r16SlotKeyForR32MatchIndex,
   readGradualR32MatchWinner,
   type GradualKnockoutSelectionState,
@@ -388,7 +389,15 @@ export function applyKnockoutPickCorrection(input: {
     );
   }
 
-  const pruned = pruneOfficialKnockoutPathPicks(next);
+  const pruned = pruneOfficialKnockoutPathPicks(next, {
+    teams: input.teams,
+    tournamentMatches: input.tournamentMatches,
+    gradual,
+    knockoutBracketPicksUnlocked: isFullKnockoutBracketPicksUnlocked({
+      officialRoundOf32Complete: input.fullRoundOf32Official,
+      gradual,
+    }),
+  });
   const changedPayloads = changedKnockoutPayloads(input.slots, pruned.slots);
 
   return {

@@ -8,6 +8,7 @@ import {
   resolveKnockoutPickCorrectionTeamId,
   validateKnockoutPickCorrectionReason,
 } from "./knockoutPickCorrection";
+import { buildKnockoutMatchPickRows } from "../picks/knockoutMatchPickRows";
 import { applyGradualKnockoutPickSaveGuards } from "../predictions/validateGradualKnockoutPickSave";
 import { validateKnockoutMatchPick } from "../picks/gradualKnockoutUnlock";
 import {
@@ -76,6 +77,36 @@ const teams: Team[] = [
     createdAt: "",
     updatedAt: "",
   },
+  {
+    id: "team-mar",
+    name: "Morocco",
+    countryCode: "MAR",
+    fifaCode: "MAR",
+    fifaRank: 14,
+    fifaRankAsOf: null,
+    createdAt: "",
+    updatedAt: "",
+  },
+  {
+    id: "team-por",
+    name: "Portugal",
+    countryCode: "POR",
+    fifaCode: "POR",
+    fifaRank: 6,
+    fifaRankAsOf: null,
+    createdAt: "",
+    updatedAt: "",
+  },
+  {
+    id: "team-rsa",
+    name: "South Africa",
+    countryCode: "RSA",
+    fifaCode: "RSA",
+    fifaRank: 60,
+    fifaRankAsOf: null,
+    createdAt: "",
+    updatedAt: "",
+  },
 ];
 
 function r16SlotDraft(slotKey: string, teamId = ""): KnockoutPickSlotDraft {
@@ -89,6 +120,20 @@ function r16SlotDraft(slotKey: string, teamId = ""): KnockoutPickSlotDraft {
     teamId,
     sectionLabel: "Round of 32",
     slotLabel: `M${72 + parseInt(slotKey, 10)} winner`,
+  };
+}
+
+function r32SlotDraft(slotKey: string, teamId = ""): KnockoutPickSlotDraft {
+  return {
+    rowKey: `round_of_32|${slotKey}`,
+    predictionKind: "round_of_32",
+    tournamentStageId: "r32-stage",
+    slotKey,
+    groupCode: null,
+    bonusKey: null,
+    teamId,
+    sectionLabel: "Round of 32",
+    slotLabel: `Slot ${slotKey}`,
   };
 }
 
@@ -302,6 +347,81 @@ const nowAfterKickoff = new Date("2026-06-28T19:00:00Z").getTime();
     "team-can",
   );
   assert.ok(applied.cleared.length >= 0);
+}
+
+// Admin correction on locked M73 feeds M90 when M75 winner already set
+{
+  const m73StartedRsaCan = match({
+    match_code: "M73",
+    stage_code: "round_of_32",
+    kickoff_at: "2026-06-28T12:00:00Z",
+    status: "live",
+    home_country_code: "RSA",
+    home_team_name: "South Africa",
+    away_country_code: "CAN",
+    away_team_name: "Canada",
+  });
+  const m75Started = match({
+    match_code: "M75",
+    stage_code: "round_of_32",
+    kickoff_at: "2026-06-28T15:00:00Z",
+    status: "live",
+    home_country_code: "MAR",
+    home_team_name: "Morocco",
+    away_country_code: "POR",
+    away_team_name: "Portugal",
+  });
+  const tournamentMatches = [m73StartedRsaCan, m75Started];
+  const slots = [
+    ...Array.from({ length: 16 }, (_, i) =>
+      r16SlotDraft(String(i + 1), i === 2 ? "team-mar" : ""),
+    ),
+    r32SlotDraft("1", "team-por"),
+    r32SlotDraft("2", "team-mar"),
+  ];
+  const resolved = resolveKnockoutPickCorrectionMatch({
+    matchCode: "M73",
+    slots,
+    teams,
+    tournamentMatches,
+    fullRoundOf32Official: true,
+    knockoutBracketPicksUnlocked: true,
+    nowMs: nowAfterKickoff,
+  });
+  assert.ok(!("error" in resolved));
+  const applied = applyKnockoutPickCorrection({
+    slots,
+    match: resolved.match,
+    newTeamId: "team-can",
+    teams,
+    tournamentMatches,
+    fullRoundOf32Official: true,
+    nowMs: nowAfterKickoff,
+  });
+  assert.strictEqual(
+    applied.slots.find((s) => s.predictionKind === "round_of_16" && s.slotKey === "1")
+      ?.teamId,
+    "team-can",
+  );
+  const gradual = getGradualKnockoutSelectionState({
+    matches: tournamentMatches,
+    teams,
+    nowMs: nowAfterKickoff,
+    fullRoundOf32Official: true,
+  });
+  const r16Rows = buildKnockoutMatchPickRows({
+    bracketKind: "round_of_16",
+    slots: applied.slots,
+    teams,
+    tournamentMatches,
+    gradual,
+    knockoutBracketPicksUnlocked: true,
+    nowMs: nowAfterKickoff,
+  });
+  const m90 = r16Rows.find((r) => r.fifaMatchNo === 90)!;
+  assert.strictEqual(m90.homeTeamId, "team-can");
+  assert.strictEqual(m90.awayTeamId, "team-mar");
+  assert.strictEqual(m90.lockReason, "pickable");
 }
 
 console.log("knockoutPickCorrection.selftest.ts: ok");

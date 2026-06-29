@@ -19,6 +19,11 @@ import {
 } from "../predictions/pruneOfficialKnockoutPathPicks";
 import { pruneParticipantPicks } from "../predictions/knockoutPickConsistency";
 import type { GradualKnockoutSelectionState } from "./gradualKnockoutUnlock";
+import {
+  buildGradualR32MatchPickRows,
+  getGradualKnockoutSelectionState,
+  readGradualR32MatchWinner,
+} from "./gradualKnockoutUnlock";
 import type { TournamentMatchPublicRow } from "../../types/tournamentPublic";
 
 const teams: Team[] = [
@@ -88,6 +93,26 @@ const teams: Team[] = [
     countryCode: "SWE",
     fifaCode: "SWE",
     fifaRank: 20,
+    fifaRankAsOf: null,
+    createdAt: "",
+    updatedAt: "",
+  },
+  {
+    id: "team-mar",
+    name: "Morocco",
+    countryCode: "MAR",
+    fifaCode: "MAR",
+    fifaRank: 14,
+    fifaRankAsOf: null,
+    createdAt: "",
+    updatedAt: "",
+  },
+  {
+    id: "team-por",
+    name: "Portugal",
+    countryCode: "POR",
+    fifaCode: "POR",
+    fifaRank: 6,
     fifaRankAsOf: null,
     createdAt: "",
     updatedAt: "",
@@ -1311,6 +1336,156 @@ function r32Side(slotKey: string, teamId = ""): KnockoutPickSlotDraft {
   assert.strictEqual(m89After.homeTeamId, "team-ger");
   assert.strictEqual(m89After.awayTeamId, "team-fra");
   assert.strictEqual(validatedKnockoutMatchWinner(m89After), "team-fra");
+}
+
+// Locked admin-corrected R32 winner feeds Round of 16 when stale round_of_32 slots disagree
+{
+  const m73 = {
+    match_id: "M73",
+    edition_id: "ed",
+    edition_code: "wc2026",
+    match_code: "M73",
+    stage_code: "round_of_32",
+    stage_label: "R32",
+    stage_sort_order: 2,
+    group_code: null,
+    round_index: 0,
+    kickoff_at: "2026-06-28T19:00:00Z",
+    status: "live",
+    home_goals: null,
+    away_goals: null,
+    home_penalties: null,
+    away_penalties: null,
+    home_team_name: "South Africa",
+    home_country_code: "RSA",
+    away_team_name: "Canada",
+    away_country_code: "CAN",
+    winner_team_name: null,
+    winner_country_code: null,
+  } satisfies TournamentMatchPublicRow;
+  const m75 = {
+    ...m73,
+    match_id: "M75",
+    match_code: "M75",
+    round_index: 2,
+    home_team_name: "Morocco",
+    home_country_code: "MAR",
+    away_team_name: "Portugal",
+    away_country_code: "POR",
+  } satisfies TournamentMatchPublicRow;
+  const tournamentMatches = [m73, m75];
+  const nowMs = new Date("2026-06-29T00:00:00Z").getTime();
+  const gradual = getGradualKnockoutSelectionState({
+    matches: tournamentMatches,
+    teams,
+    nowMs,
+    fullRoundOf32Official: true,
+  });
+  const ctx = {
+    teams,
+    tournamentMatches,
+    gradual,
+    knockoutBracketPicksUnlocked: true,
+  };
+  const slots: KnockoutPickSlotDraft[] = [
+    r32Side("1", "team-por"),
+    r32Side("2", "team-mar"),
+    r32Side("5", "team-mar"),
+    r32Side("6", "team-por"),
+    r16Slot("1", "team-can"),
+    r16Slot("3", "team-mar"),
+  ];
+  const ms73 = gradual.matchStates[0]!;
+  assert.strictEqual(
+    readGradualR32MatchWinner(0, slots, teams, ms73),
+    "team-can",
+    "R32 display reads corrected winner",
+  );
+  assert.strictEqual(
+    readConfirmedR32MatchWinner(0, slots, ctx),
+    "team-can",
+    "downstream builder reads same corrected winner",
+  );
+  const uiRows = buildGradualR32MatchPickRows({
+    slots,
+    state: gradual,
+    teams,
+    fullRoundOf32Official: true,
+  });
+  assert.strictEqual(uiRows[0]!.winnerTeamId, "team-can");
+  const r16Rows = buildKnockoutMatchPickRows({
+    bracketKind: "round_of_16",
+    slots,
+    teams,
+    tournamentMatches,
+    gradual,
+    knockoutBracketPicksUnlocked: true,
+    nowMs,
+  });
+  const m90 = r16Rows.find((r) => r.fifaMatchNo === 90)!;
+  assert.strictEqual(m90.homeTeamId, "team-can");
+  assert.strictEqual(m90.awayTeamId, "team-mar");
+  assert.strictEqual(m90.lockReason, "pickable");
+  const { slots: pruned, cleared } = pruneOfficialKnockoutPathPicks(slots, ctx);
+  assert.strictEqual(cleared.length, 0);
+  assert.strictEqual(
+    pruned.find((s) => s.predictionKind === "round_of_16" && s.slotKey === "1")
+      ?.teamId,
+    "team-can",
+  );
+}
+
+// Missing locked M73 still reports missing when no correction exists
+{
+  const m73 = {
+    match_id: "M73",
+    edition_id: "ed",
+    edition_code: "wc2026",
+    match_code: "M73",
+    stage_code: "round_of_32",
+    stage_label: "R32",
+    stage_sort_order: 2,
+    group_code: null,
+    round_index: 0,
+    kickoff_at: "2026-06-28T19:00:00Z",
+    status: "live",
+    home_goals: null,
+    away_goals: null,
+    home_penalties: null,
+    away_penalties: null,
+    home_team_name: "South Africa",
+    home_country_code: "RSA",
+    away_team_name: "Canada",
+    away_country_code: "CAN",
+    winner_team_name: null,
+    winner_country_code: null,
+  } satisfies TournamentMatchPublicRow;
+  const gradual = getGradualKnockoutSelectionState({
+    matches: [m73],
+    teams,
+    nowMs: new Date("2026-06-29T00:00:00Z").getTime(),
+    fullRoundOf32Official: true,
+  });
+  const ctx = {
+    teams,
+    tournamentMatches: [m73],
+    gradual,
+    knockoutBracketPicksUnlocked: true,
+  };
+  const slots: KnockoutPickSlotDraft[] = [
+    r32Side("1", "team-por"),
+    r32Side("2", "team-mar"),
+    r16Slot("1", ""),
+  ];
+  assert.strictEqual(readConfirmedR32MatchWinner(0, slots, ctx), "");
+  const uiRows = buildGradualR32MatchPickRows({
+    slots,
+    state: gradual,
+    teams,
+    fullRoundOf32Official: true,
+  });
+  assert.strictEqual(uiRows[0]!.winnerTeamId, "");
+  assert.strictEqual(uiRows[0]!.lockReason, "started");
 }
 
 console.log("knockoutMatchPickRows.selftest.ts: ok");

@@ -180,12 +180,36 @@ function r32MatchSideTeamIds(
   };
 }
 
+function officialR32ParticipantIdsFromFixture(
+  matchIndex: number,
+  ctx?: ConfirmedR32WinnerContext,
+): { topId: string | null; bottomId: string | null } | null {
+  const ms = ctx?.gradual?.matchStates[matchIndex];
+  if (!ms?.confirmed) return null;
+
+  let topId = ms.homeTeamId ?? null;
+  let bottomId = ms.awayTeamId ?? null;
+  if (ctx?.teams?.length) {
+    const pub = r32PublicMatchForIndex(ctx.tournamentMatches, matchIndex);
+    if (pub) {
+      topId = topId ?? teamIdForCountryCode(ctx.teams, pub.home_country_code);
+      bottomId =
+        bottomId ?? teamIdForCountryCode(ctx.teams, pub.away_country_code);
+    }
+  }
+  if (!topId && !bottomId) return null;
+  return { topId, bottomId };
+}
+
 /** Official R32 matchup participants from slots, gradual unlock, and tournament data. */
 export function officialR32ParticipantIds(
   matchIndex: number,
   slots: KnockoutPickSlotDraft[],
   ctx?: ConfirmedR32WinnerContext,
 ): { topId: string | null; bottomId: string | null } {
+  const fromFixture = officialR32ParticipantIdsFromFixture(matchIndex, ctx);
+  if (fromFixture) return fromFixture;
+
   const { topId: slotTop, bottomId: slotBottom } = r32MatchSideTeamIds(
     matchIndex,
     slots,
@@ -394,19 +418,21 @@ export function readConfirmedR32MatchWinner(
 export function missingR32FifaMatchNosForR16Row(
   matchIndex: number,
   slots: KnockoutPickSlotDraft[],
+  ctx?: ConfirmedR32WinnerContext,
 ): number[] {
   const pair = r16R32ParticipantPair(matchIndex);
   if (!pair) return [];
   return pair
-    .filter((r32Index) => !readConfirmedR32MatchWinner(r32Index, slots))
+    .filter((r32Index) => !readConfirmedR32MatchWinner(r32Index, slots, ctx))
     .map((r32Index) => 73 + r32Index);
 }
 
 export function incompleteR16MatchMessage(
   matchIndex: number,
   slots: KnockoutPickSlotDraft[],
+  ctx?: ConfirmedR32WinnerContext,
 ): string {
-  const missing = missingR32FifaMatchNosForR16Row(matchIndex, slots);
+  const missing = missingR32FifaMatchNosForR16Row(matchIndex, slots, ctx);
   if (missing.length === 0) return INCOMPLETE_UPSTREAM_MSG;
   const list = missing.map((n) => `M${n}`).join(" and ");
   return `Complete Round of 32 first — pick winners for ${list}.`;
@@ -589,9 +615,10 @@ export function buildKnockoutMatchPickRows(
       lockReason = "started";
     }
 
+    const r32Ctx = confirmedR32WinnerContextFromBuildInput(input);
     const incompleteMsg =
       def.wizardBracketKind === "round_of_16" && lockReason === "incomplete"
-        ? incompleteR16MatchMessage(matchIndex, input.slots)
+        ? incompleteR16MatchMessage(matchIndex, input.slots, r32Ctx)
         : def.wizardBracketKind === "quarterfinalist" && lockReason === "incomplete"
           ? "Complete Round of 16 picks first."
           : def.wizardBracketKind === "semifinalist" && lockReason === "incomplete"
