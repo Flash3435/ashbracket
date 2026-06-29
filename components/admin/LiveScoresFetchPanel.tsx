@@ -15,6 +15,10 @@ import type {
 import { formatCardTotals } from "@/lib/tournament/liveScores/loadMatchCardStatsForLiveScores";
 import { extractApplyPlanOperations, type ApplyPlanMismatch } from "@/lib/tournament/liveScores/applyPlanSignature";
 import {
+  buildLiveScoresApplyPlanSubmitPayload,
+  formatApplyPlanClientDebug,
+} from "@/lib/tournament/liveScores/liveScoresApplyPlanClient";
+import {
   formatHttpDebugLine,
   postLiveScoresApplyScores,
   postLiveScoresRecalculatePool,
@@ -34,15 +38,15 @@ type Props = {
 };
 
 const APPLY_ERROR_STORAGE_KEY = "ashbracket:live-scores:apply-error";
+const PREVIEW_DEBUG_STORAGE_KEY = "ashbracket:live-scores:preview-debug";
 
-function readStoredApplyError(): ApplyErrorState | null {
-  if (typeof window === "undefined") return null;
+function clearStoredApplyState() {
+  if (typeof window === "undefined") return;
   try {
-    const raw = sessionStorage.getItem(APPLY_ERROR_STORAGE_KEY);
-    if (!raw) return null;
-    return JSON.parse(raw) as ApplyErrorState;
+    sessionStorage.removeItem(APPLY_ERROR_STORAGE_KEY);
+    sessionStorage.removeItem(PREVIEW_DEBUG_STORAGE_KEY);
   } catch {
-    return null;
+    // ignore quota / private mode
   }
 }
 
@@ -54,6 +58,19 @@ function storeApplyError(error: ApplyErrorState | null) {
       return;
     }
     sessionStorage.setItem(APPLY_ERROR_STORAGE_KEY, JSON.stringify(error));
+  } catch {
+    // ignore quota / private mode
+  }
+}
+
+function storePreviewDebug(debug: string | null) {
+  if (typeof window === "undefined") return;
+  try {
+    if (!debug) {
+      sessionStorage.removeItem(PREVIEW_DEBUG_STORAGE_KEY);
+      return;
+    }
+    sessionStorage.setItem(PREVIEW_DEBUG_STORAGE_KEY, debug);
   } catch {
     // ignore quota / private mode
   }
@@ -326,6 +343,8 @@ export function LiveScoresFetchPanel({
   const [applySummary, setApplySummary] = useState<LiveScoresApplySummary | null>(null);
   const [standingsRecalc, setStandingsRecalc] = useState<StandingsRecalcState | null>(null);
   const [stepADebugLine, setStepADebugLine] = useState<string | null>(null);
+  const [applyPlanClientDebug, setApplyPlanClientDebug] = useState<string | null>(null);
+  const [lastSubmittedApplyDebug, setLastSubmittedApplyDebug] = useState<string | null>(null);
   const applyAttemptRef = useRef(0);
 
   const stepAEffectLines =
@@ -341,11 +360,11 @@ export function LiveScoresFetchPanel({
       applyBuild,
       deploySha,
     });
-    const stored = readStoredApplyError();
-    if (stored) {
-      setApplyError(stored);
-      setStepADebugLine(stored.debugLine ?? null);
-    }
+    clearStoredApplyState();
+    setApplyError(null);
+    setStepADebugLine(null);
+    setApplyPlanClientDebug(null);
+    setLastSubmittedApplyDebug(null);
   }, [applyBuild, deploySha]);
 
   function setVisibleApplyError(error: ApplyErrorState | null) {
@@ -361,17 +380,30 @@ export function LiveScoresFetchPanel({
     setApplyMessage(null);
     setApplySummary(null);
     setStandingsRecalc(null);
+    setLastSubmittedApplyDebug(null);
+    clearStoredApplyState();
     startFetch(async () => {
       try {
         const res = await fetchLiveScoresPreviewAction();
         if (!res.ok) {
           setPreview(null);
+          setApplyPlanClientDebug(null);
+          storePreviewDebug(null);
           setFetchError(res.error);
           return;
         }
+        const clientDebug = formatApplyPlanClientDebug(res.preview);
         setPreview(res.preview);
+        setApplyPlanClientDebug(clientDebug);
+        storePreviewDebug(clientDebug);
+        console.info("[ashbracket:liveScoresClient] preview fetched", {
+          previewId: res.preview.previewId,
+          operationCount: extractApplyPlanOperations(res.preview.rows).length,
+        });
       } catch (e) {
         setPreview(null);
+        setApplyPlanClientDebug(null);
+        storePreviewDebug(null);
         setFetchError(
           isLikelyClientFailure(e)
             ? "Fetch timed out or failed before the server responded."
@@ -398,9 +430,21 @@ export function LiveScoresFetchPanel({
     console.info("[ashbracket:liveScoresClient] apply started", { attemptId, applyBuild });
 
     try {
+      const submitPayload = buildLiveScoresApplyPlanSubmitPayload(preview);
+      const submittedDebug = [
+        `submittedPreviewId=${submitPayload.previewId}`,
+        `submittedApplyPlanSignature=${submitPayload.previewId}`,
+        `submittedOperationCount=${submitPayload.applyPlanSnapshotCount}`,
+      ].join(" · ");
+      setLastSubmittedApplyDebug(submittedDebug);
+      console.info("[ashbracket:liveScoresClient] apply submit payload", {
+        previewId: submitPayload.previewId,
+        applyPlanSnapshotCount: submitPayload.applyPlanSnapshotCount,
+      });
+
       const call = await postLiveScoresApplyScores({
-        previewId: preview.previewId,
-        applyPlanSnapshot: extractApplyPlanOperations(preview.rows),
+        previewId: submitPayload.previewId,
+        applyPlanSnapshot: submitPayload.applyPlanSnapshot,
         productionAcknowledged,
       });
 
@@ -421,9 +465,20 @@ export function LiveScoresFetchPanel({
           message: outcome.message,
           technicalDetails: outcome.technicalDetails,
           stalePreview: outcome.stalePreview,
-          debugLine: outcome.debugLine,
+          debugLine: outcome.stalePreview
+            ? [
+                outcome.debugLine,
+                `submittedSignature=${outcome.stalePreview.submittedSignature}`,
+                `rebuiltSignature=${outcome.stalePreview.rebuiltSignature}`,
+                `submittedOperationCount=${outcome.stalePreview.submittedOperationCount}`,
+                `rebuiltOperationCount=${outcome.stalePreview.rebuiltOperationCount}`,
+              ].join(" · ")
+            : outcome.debugLine,
         });
         setApplySummary(outcome.applySummary ?? null);
+        setPreview(null);
+        setApplyPlanClientDebug(null);
+        storePreviewDebug(null);
         return;
       }
 
@@ -431,6 +486,10 @@ export function LiveScoresFetchPanel({
       setApplySummary(outcome.applySummary);
       setVisibleApplyError(null);
       setPreview(null);
+      setApplyPlanClientDebug(null);
+      setLastSubmittedApplyDebug(null);
+      clearStoredApplyState();
+      storePreviewDebug(null);
 
       if (outcome.showStepB) {
         setStandingsRecalc({
@@ -564,10 +623,18 @@ export function LiveScoresFetchPanel({
         ) : null}
       </div>
 
-      {adminDebugStatus || stepADebugLine ? (
-        <p className="rounded-md border border-sky-800/50 bg-sky-950/30 px-3 py-2 text-xs text-sky-100">
-          Admin debug: {stepADebugLine ?? adminDebugStatus}
-        </p>
+      {adminDebugStatus || stepADebugLine || applyPlanClientDebug || lastSubmittedApplyDebug ? (
+        <div className="rounded-md border border-sky-800/50 bg-sky-950/30 px-3 py-2 text-xs text-sky-100 space-y-1">
+          {stepADebugLine || adminDebugStatus ? (
+            <p>Admin debug: {stepADebugLine ?? adminDebugStatus}</p>
+          ) : null}
+          {applyPlanClientDebug ? (
+            <p className="font-mono">Client preview: {applyPlanClientDebug}</p>
+          ) : null}
+          {lastSubmittedApplyDebug ? (
+            <p className="font-mono">Client submit: {lastSubmittedApplyDebug}</p>
+          ) : null}
+        </div>
       ) : null}
 
       {fetchError ? (

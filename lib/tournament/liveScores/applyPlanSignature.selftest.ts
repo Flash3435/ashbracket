@@ -5,8 +5,10 @@
 import assert from "node:assert/strict";
 import {
   computeApplyPlanSignature,
+  computeApplyPlanSignatureFromOperations,
   diffApplyPlanOperations,
   extractApplyPlanOperations,
+  matchIntentsFromOperations,
 } from "./applyPlanSignature";
 import { buildScoreChangePreview } from "./matchMapping";
 import { mockNormalizedEventsForFixture } from "./mockFixtureEvents";
@@ -361,6 +363,164 @@ function buildPreview(fixtures: ProviderFixtureScore[], fetchedAt: string) {
     withApplyValidationEvents.previewId,
     "apply validation must fetch card events for score-update rows too",
   );
+}
+
+// M76: score+status at preview vs status-only after partial write — same material intent.
+{
+  const blankDb = matchRow({
+    id: "m76",
+    matchCode: "M76",
+    providerFixtureId: "prov-m76",
+    homeTeamName: "Brazil",
+    awayTeamName: "Japan",
+    homeFifaCode: "BRA",
+    awayFifaCode: "JPN",
+    kickoffAt: "2026-07-01T23:00:00.000Z",
+  });
+  const scheduledWithScore = matchRow({
+    id: "m76",
+    matchCode: "M76",
+    providerFixtureId: "prov-m76",
+    homeTeamName: "Brazil",
+    awayTeamName: "Japan",
+    homeFifaCode: "BRA",
+    awayFifaCode: "JPN",
+    homeGoals: 2,
+    awayGoals: 1,
+    status: "scheduled",
+    kickoffAt: "2026-07-01T23:00:00.000Z",
+  });
+
+  const submittedPreview = buildScoreChangePreview({
+    provider: "mock",
+    providerConfigured: true,
+    configWarning: null,
+    fetchedAt: "2026-06-29T12:00:00.000Z",
+    matches: [blankDb],
+    fixtures: [finishedM76],
+  });
+  const rebuiltPreview = buildScoreChangePreview({
+    provider: "mock",
+    providerConfigured: true,
+    configWarning: null,
+    fetchedAt: "2026-06-29T12:05:00.000Z",
+    matches: [scheduledWithScore],
+    fixtures: [finishedM76],
+  });
+
+  const submittedOps = extractApplyPlanOperations(submittedPreview.rows);
+  const rebuiltOps = extractApplyPlanOperations(rebuiltPreview.rows);
+  assert.equal(submittedOps.length, 1);
+  assert.equal(rebuiltOps.length, 1);
+  assert.equal(submittedPreview.previewId, rebuiltPreview.previewId);
+
+  const diff = diffApplyPlanOperations(submittedOps, rebuiltOps);
+  assert.deepEqual(diff.changedMatchCodes, []);
+  assert.deepEqual(
+    matchIntentsFromOperations(submittedOps),
+    matchIntentsFromOperations(rebuiltOps),
+  );
+}
+
+// True score change 2–1 → 3–1 → stale-plan rejection.
+{
+  const submitted = buildPreview([finishedM73, finishedM76, liveM74(1, 0)], "2026-06-29T12:00:00.000Z");
+  const rebuilt = buildPreview(
+    [finishedM73, { ...finishedM76, homeGoals: 3, awayGoals: 1 }, liveM74(1, 0)],
+    "2026-06-29T12:05:00.000Z",
+  );
+
+  const diff = diffApplyPlanOperations(
+    extractApplyPlanOperations(submitted.rows),
+    extractApplyPlanOperations(rebuilt.rows),
+  );
+  assert.deepEqual(diff.changedMatchCodes, ["M76"]);
+  assert.notEqual(submitted.previewId, rebuilt.previewId);
+}
+
+// True status change finished → live → stale-plan rejection.
+{
+  const submitted = buildPreview([finishedM73, finishedM76, liveM74(1, 0)], "2026-06-29T12:00:00.000Z");
+  const rebuilt = buildPreview(
+    [finishedM73, { ...finishedM76, status: "live" }, liveM74(1, 0)],
+    "2026-06-29T12:05:00.000Z",
+  );
+
+  const diff = diffApplyPlanOperations(
+    extractApplyPlanOperations(submitted.rows),
+    extractApplyPlanOperations(rebuilt.rows),
+  );
+  assert.deepEqual(diff.changedMatchCodes, ["M76"]);
+  assert.deepEqual(diff.removedMatchCodes, ["M76"]);
+}
+
+// Signature ignores matchId / providerFixtureId — material state only.
+{
+  const opsA = extractApplyPlanOperations(
+    buildPreview([finishedM73, finishedM76, liveM74(1, 0)], "2026-06-29T12:00:00.000Z").rows,
+  );
+  const opsB = opsA.map((op) => ({
+    ...op,
+    matchId: op.matchId + "-copy",
+    providerFixtureId: op.providerFixtureId ? `${op.providerFixtureId}-copy` : null,
+  }));
+  assert.equal(
+    computeApplyPlanSignatureFromOperations(opsA),
+    computeApplyPlanSignatureFromOperations(opsB),
+  );
+}
+
+// M73/M76 status-only (scores already correct) stay stable across refetch.
+{
+  const scheduledM73 = matchRow({
+    id: "m73",
+    matchCode: "M73",
+    providerFixtureId: "prov-m73",
+    homeTeamName: "South Africa",
+    awayTeamName: "Canada",
+    homeFifaCode: "RSA",
+    awayFifaCode: "CAN",
+    homeGoals: 0,
+    awayGoals: 1,
+    status: "scheduled",
+  });
+  const scheduledM76 = matchRow({
+    id: "m76",
+    matchCode: "M76",
+    providerFixtureId: "prov-m76",
+    homeTeamName: "Brazil",
+    awayTeamName: "Japan",
+    homeFifaCode: "BRA",
+    awayFifaCode: "JPN",
+    homeGoals: 2,
+    awayGoals: 1,
+    status: "scheduled",
+    kickoffAt: "2026-07-01T23:00:00.000Z",
+  });
+
+  const previewA = buildScoreChangePreview({
+    provider: "mock",
+    providerConfigured: true,
+    configWarning: null,
+    fetchedAt: "2026-06-29T12:00:00.000Z",
+    matches: [scheduledM73, scheduledM76, m74],
+    fixtures: [finishedM73, finishedM76, liveM74(1, 0)],
+  });
+  const previewB = buildScoreChangePreview({
+    provider: "mock",
+    providerConfigured: true,
+    configWarning: null,
+    fetchedAt: "2026-06-29T12:10:00.000Z",
+    matches: [scheduledM73, scheduledM76, m74],
+    fixtures: [finishedM73, finishedM76, liveM74(2, 1)],
+  });
+
+  assert.equal(previewA.previewId, previewB.previewId);
+  const diff = diffApplyPlanOperations(
+    extractApplyPlanOperations(previewA.rows),
+    extractApplyPlanOperations(previewB.rows),
+  );
+  assert.deepEqual(diff.changedMatchCodes, []);
 }
 
 console.log("applyPlanSignature.selftest.ts: all assertions passed");

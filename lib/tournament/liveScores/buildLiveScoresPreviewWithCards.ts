@@ -2,6 +2,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import {
   type ApplyPlanMismatch,
   type ApplyPlanOperation,
+  applyPlanMaterialStatesMatch,
   buildApplyPlanStaleErrorMessage,
   computeApplyPlanSignature,
   computeApplyPlanSignatureFromOperations,
@@ -156,24 +157,37 @@ export async function buildLiveScoresPreviewForApply(
 
   const rebuiltSignature = computeApplyPlanSignature(built.preview.rows);
   const rebuiltOperations = extractApplyPlanOperations(built.preview.rows);
+  const submittedSnapshotSignature = submittedOperations
+    ? computeApplyPlanSignatureFromOperations(submittedOperations)
+    : null;
+  const materialMatch = applyPlanMaterialStatesMatch(
+    submittedOperations ?? [],
+    rebuiltOperations,
+  );
 
   console.info("[ashbracket:liveScoresApply] apply_plan_signature.compare", {
     submittedSignature: expectedApplyPlanSignature,
+    submittedSnapshotSignature,
     rebuiltSignature,
     submittedOperationCount: submittedOperations?.length ?? null,
     rebuiltOperationCount: rebuiltOperations.length,
-    match: rebuiltSignature === expectedApplyPlanSignature,
+    signatureMatch: rebuiltSignature === expectedApplyPlanSignature,
+    snapshotSignatureMatch: submittedSnapshotSignature === rebuiltSignature,
+    materialMatch,
   });
 
-  if (rebuiltSignature === expectedApplyPlanSignature) {
-    if (submittedOperations) {
-      const submittedSignature = computeApplyPlanSignatureFromOperations(submittedOperations);
-      if (submittedSignature !== expectedApplyPlanSignature) {
-        console.warn("[ashbracket:liveScoresApply] apply_plan_snapshot.signature_mismatch", {
-          expectedApplyPlanSignature,
-          submittedSnapshotSignature: submittedSignature,
-        });
-      }
+  if (
+    rebuiltSignature === expectedApplyPlanSignature ||
+    (submittedSnapshotSignature !== null &&
+      submittedSnapshotSignature === rebuiltSignature) ||
+    materialMatch
+  ) {
+    if (submittedOperations && submittedSnapshotSignature !== expectedApplyPlanSignature) {
+      console.warn("[ashbracket:liveScoresApply] apply_plan_snapshot.preview_id_stale", {
+        expectedApplyPlanSignature,
+        submittedSnapshotSignature,
+        rebuiltSignature,
+      });
     }
     return built;
   }
