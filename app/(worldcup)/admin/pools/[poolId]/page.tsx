@@ -1,7 +1,9 @@
 import { IncompleteBracketsPanel } from "@/components/admin/IncompleteBracketsPanel";
+import { KnockoutPickStatusPanel } from "@/components/admin/KnockoutPickStatusPanel";
 import { PoolPotAdminSummary } from "@/components/pools/PoolPotAdminSummary";
 import { PageContainer } from "@/components/ui/PageContainer";
 import { PageTitle } from "@/components/ui/PageTitle";
+import { loadAdminKnockoutPickStatusForPool } from "@/lib/admin/loadAdminKnockoutPickStatusForPool";
 import { loadIncompleteBracketPanelForPool } from "@/lib/admin/loadIncompleteBracketPanelForPool";
 import { getSimulationPoolEmailUiStatus } from "@/lib/admin/simulationPoolEmailPolicy";
 import { requireManagedPool } from "@/lib/admin/requireManagedPool";
@@ -23,14 +25,17 @@ export default async function AdminPoolDashboardPage({
   const simulationEmailStatus = getSimulationPoolEmailUiStatus(
     Boolean(pool.is_simulation),
   );
-  const incompleteBracketPanel = await loadIncompleteBracketPanelForPool(
-    supabase,
-    {
+  const [incompleteBracketPanel, knockoutPickStatus] = await Promise.all([
+    loadIncompleteBracketPanelForPool(supabase, {
       poolId,
       poolName: pool.name?.trim() || "Your pool",
       lockAtIso: pool.lock_at ?? null,
-    },
-  );
+    }),
+    loadAdminKnockoutPickStatusForPool(supabase, {
+      poolId,
+      poolName: pool.name?.trim() || "Your pool",
+    }),
+  ]);
 
   let potParticipants: { paid: boolean }[] = [];
   if (poolIsPaidPool) {
@@ -60,6 +65,8 @@ export default async function AdminPoolDashboardPage({
           />
         </div>
       ) : null}
+
+      <KnockoutPickStatusPanel data={knockoutPickStatus} className="mb-6" />
 
       <IncompleteBracketsPanel
         data={incompleteBracketPanel}

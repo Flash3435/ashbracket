@@ -56,6 +56,8 @@
     "test:change-password": "tsx lib/auth/changePassword.selftest.ts",
     "test:pool-join": "tsx lib/join/planPoolJoin.selftest.ts",
     "test:incomplete-bracket-panel": "tsx lib/admin/incompleteBracketPanel.selftest.ts",
+    "test:admin-knockout-pick-status": "tsx lib/admin/adminKnockoutPickStatus.selftest.ts",
+    "test:knockout-match-progress": "tsx lib/picks/knockoutMatchProgress.selftest.ts",
     "test:pool-membership-completion": "tsx lib/picks/poolMembershipCompletionStatus.selftest.ts",
     "test": "node scripts/run-all-selftests.mjs",
     "apply:live-match-score": "tsx scripts/apply-live-match-score.ts",
