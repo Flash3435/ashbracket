@@ -14,9 +14,12 @@ import type {
 } from "@/lib/tournament/liveScores/types";
 import { formatCardTotals } from "@/lib/tournament/liveScores/loadMatchCardStatsForLiveScores";
 import {
+  formatHttpDebugLine,
   postLiveScoresApplyScores,
   postLiveScoresRecalculatePool,
 } from "@/lib/tournament/liveScores/liveScoresApplyClient";
+import { buildStepAImpactLines } from "@/lib/tournament/liveScores/liveScoresHttpClient";
+import { interpretStepAResponse } from "@/lib/tournament/liveScores/liveScoresStepAUi";
 import { AdminRiskConfirmPanel } from "./AdminRiskConfirmPanel";
 
 type Props = {
@@ -29,10 +32,31 @@ type Props = {
   deploySha: string;
 };
 
-type ApplyErrorState = {
-  message: string;
-  technicalDetails?: LiveScoresApplyTechnicalDetails;
-};
+const APPLY_ERROR_STORAGE_KEY = "ashbracket:live-scores:apply-error";
+
+function readStoredApplyError(): ApplyErrorState | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = sessionStorage.getItem(APPLY_ERROR_STORAGE_KEY);
+    if (!raw) return null;
+    return JSON.parse(raw) as ApplyErrorState;
+  } catch {
+    return null;
+  }
+}
+
+function storeApplyError(error: ApplyErrorState | null) {
+  if (typeof window === "undefined") return;
+  try {
+    if (!error) {
+      sessionStorage.removeItem(APPLY_ERROR_STORAGE_KEY);
+      return;
+    }
+    sessionStorage.setItem(APPLY_ERROR_STORAGE_KEY, JSON.stringify(error));
+  } catch {
+    // ignore quota / private mode
+  }
+}
 
 type StandingsRecalcState = {
   editionId: string;
@@ -90,6 +114,12 @@ function formatFetchedCards(row: ScoreChangePreviewRow): string {
     row.fetchedAwayRedCards,
   );
 }
+
+type ApplyErrorState = {
+  message: string;
+  technicalDetails?: LiveScoresApplyTechnicalDetails;
+  debugLine?: string;
+};
 
 function formatTechnicalDetails(details: LiveScoresApplyTechnicalDetails): string {
   return JSON.stringify(details, null, 2);
@@ -249,6 +279,9 @@ function ErrorBanner({
       role="alert"
     >
       <p>{error.message}</p>
+      {error.debugLine ? (
+        <p className="mt-2 font-mono text-xs text-red-100/90">HTTP debug: {error.debugLine}</p>
+      ) : null}
       {error.technicalDetails ? (
         <details className="mt-3 rounded-md border border-red-900/60 bg-red-950/30 px-3 py-2 text-xs text-red-100/90">
           <summary className="cursor-pointer font-medium text-red-50">Technical details</summary>
@@ -282,18 +315,38 @@ export function LiveScoresFetchPanel({
   const [applyMessage, setApplyMessage] = useState<string | null>(null);
   const [applySummary, setApplySummary] = useState<LiveScoresApplySummary | null>(null);
   const [standingsRecalc, setStandingsRecalc] = useState<StandingsRecalcState | null>(null);
+  const [stepADebugLine, setStepADebugLine] = useState<string | null>(null);
   const applyAttemptRef = useRef(0);
+
+  const stepAEffectLines =
+    impact.editionName && impact.editionCode
+      ? buildStepAImpactLines({
+          editionName: impact.editionName,
+          editionCode: impact.editionCode,
+        })
+      : impact.effectLines;
 
   useEffect(() => {
     console.info("[ashbracket:liveScoresClient] panel mounted", {
       applyBuild,
       deploySha,
     });
+    const stored = readStoredApplyError();
+    if (stored) {
+      setApplyError(stored);
+      setStepADebugLine(stored.debugLine ?? null);
+    }
   }, [applyBuild, deploySha]);
+
+  function setVisibleApplyError(error: ApplyErrorState | null) {
+    setApplyError(error);
+    storeApplyError(error);
+    setStepADebugLine(error?.debugLine ?? null);
+  }
 
   function fetchPreview() {
     setFetchError(null);
-    setApplyError(null);
+    setVisibleApplyError(null);
     setRecalcError(null);
     setApplyMessage(null);
     setApplySummary(null);
@@ -325,86 +378,72 @@ export function LiveScoresFetchPanel({
 
     const attemptId = ++applyAttemptRef.current;
     setIsApplying(true);
-    setApplyError(null);
+    setVisibleApplyError(null);
     setRecalcError(null);
     setApplyMessage(null);
     setApplySummary(null);
     setStandingsRecalc(null);
+    setStepADebugLine("Step A: client submit started…");
     setAdminDebugStatus("Step A: client submit started…");
     console.info("[ashbracket:liveScoresClient] apply started", { attemptId, applyBuild });
 
-    let gotResult = false;
     try {
-      const res = await postLiveScoresApplyScores({
+      const call = await postLiveScoresApplyScores({
         previewId: preview.previewId,
         productionAcknowledged,
       });
 
       if (attemptId !== applyAttemptRef.current) return;
 
-      if (res == null || typeof res !== "object") {
-        setApplyError({
-          message:
-            "Apply returned no payload from the server. Check Vercel logs for /api/admin/live-scores/apply.",
+      const outcome = interpretStepAResponse({
+        clientOk: call.ok,
+        clientError: call.ok ? undefined : call.error,
+        debug: call.debug,
+        payload: call.ok ? call.data : call.data,
+      });
+
+      setStepADebugLine(`Step A finished · ${outcome.debugLine}`);
+      setAdminDebugStatus(`Step A finished · ${outcome.debugLine}`);
+
+      if (outcome.kind === "error") {
+        setVisibleApplyError({
+          message: outcome.message,
+          technicalDetails: outcome.technicalDetails,
+          debugLine: outcome.debugLine,
         });
+        setApplySummary(outcome.applySummary ?? null);
         return;
       }
 
-      gotResult = true;
-
-      if (!res.ok) {
-        setApplyError({
-          message: res.error,
-          technicalDetails: res.technicalDetails,
-        });
-        setApplySummary(res.applySummary ?? null);
-        setAdminDebugStatus(`Step A failed (${res.build ?? applyBuild}).`);
-        return;
-      }
-
-      setApplyMessage(res.message);
-      setApplySummary(res.applySummary);
+      setApplyMessage(outcome.message);
+      setApplySummary(outcome.applySummary);
+      setVisibleApplyError(null);
       setPreview(null);
 
-      if (res.standingsRecalculationPending && res.pendingPoolIds.length > 0) {
+      if (outcome.showStepB) {
         setStandingsRecalc({
-          editionId: res.editionId,
-          poolIds: res.pendingPoolIds,
+          editionId: outcome.editionId,
+          poolIds: outcome.pendingPoolIds,
           completed: 0,
         });
-        setAdminDebugStatus(
-          `Step A saved scores (${res.build}). Step B pending for ${res.pendingPoolIds.length} pool(s).`,
-        );
       } else {
-        setAdminDebugStatus(`Step A completed (${res.build}).`);
         router.refresh();
       }
     } catch (e) {
       if (attemptId !== applyAttemptRef.current) return;
-      gotResult = true;
-      setApplyError({
-        message: isLikelyClientFailure(e)
-          ? "Apply timed out or failed before the server returned JSON. Scores may or may not have been written — check tournament status before retrying."
-          : e instanceof Error
-            ? e.message
-            : "Unexpected apply error.",
-      });
+      const message = isLikelyClientFailure(e)
+        ? "Apply threw before a response could be handled. Check network tab and Vercel logs."
+        : e instanceof Error
+          ? e.message
+          : "Unexpected apply error.";
+      setVisibleApplyError({ message, debugLine: "Step A: unhandled client exception" });
+      setStepADebugLine(`Step A exception · ${message}`);
       setAdminDebugStatus("Step A: client caught an exception.");
     } finally {
       if (attemptId === applyAttemptRef.current) {
         setIsApplying(false);
-        if (!gotResult) {
-          setApplyError({
-            message:
-              "Apply ended without a server response. The function likely timed out or the connection was interrupted.",
-          });
-          setAdminDebugStatus("Step A ended with no result payload.");
-        }
-        console.info("[ashbracket:liveScoresClient] apply finished", {
-          attemptId,
-          gotResult,
-        });
       }
+      console.info("[ashbracket:liveScoresClient] apply finished", { attemptId });
     }
   }
 
@@ -443,9 +482,10 @@ export function LiveScoresFetchPanel({
           });
           setRecalcError({
             message: `Pool recalculation failed on pool ${index + 1}/${total}: ${res.error}`,
-            technicalDetails: res.technicalDetails,
+            technicalDetails: res.data?.ok === false ? res.data.technicalDetails : undefined,
+            debugLine: formatHttpDebugLine(res.debug),
           });
-          setAdminDebugStatus(`Step B failed on pool ${index + 1}/${total}.`);
+          setAdminDebugStatus(`Step B failed on pool ${index + 1}/${total}. · ${formatHttpDebugLine(res.debug)}`);
           return;
         }
 
@@ -512,9 +552,9 @@ export function LiveScoresFetchPanel({
         ) : null}
       </div>
 
-      {adminDebugStatus ? (
+      {adminDebugStatus || stepADebugLine ? (
         <p className="rounded-md border border-sky-800/50 bg-sky-950/30 px-3 py-2 text-xs text-sky-100">
-          Admin debug: {adminDebugStatus}
+          Admin debug: {stepADebugLine ?? adminDebugStatus}
         </p>
       ) : null}
 
@@ -609,10 +649,17 @@ export function LiveScoresFetchPanel({
 
           <PreviewTable rows={preview.rows} />
 
+          {applyError ? (
+            <div className="sticky top-2 z-10">
+              <ErrorBanner error={applyError} />
+            </div>
+          ) : null}
+
           {preview.summary.willUpdate > 0 || preview.summary.cardsWillUpdate > 0 ? (
             <AdminRiskConfirmPanel
               isProduction={isProduction}
               impact={impact}
+              effectLines={stepAEffectLines}
               actionTitle="Step A — Apply fetched scores/cards (no standings yet)"
               buttonLabel={
                 isApplying ? "Saving scores…" : "Apply scores/cards (Step A)"

@@ -38,7 +38,7 @@ import type {
 } from "./types";
 
 /** Bump when changing live-scores apply workflow — shown in admin debug UI. */
-export const LIVE_SCORES_APPLY_BUILD = "split-apply-v2";
+export const LIVE_SCORES_APPLY_BUILD = "split-apply-v3";
 
 export type LiveScoresApplyScoresResult =
   | {

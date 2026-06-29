@@ -14,60 +14,86 @@ type ApplyRequestBody = {
   productionAcknowledged?: boolean;
 };
 
+function jsonResponse(body: unknown, status: number): NextResponse {
+  return NextResponse.json(body, {
+    status,
+    headers: {
+      "Content-Type": "application/json; charset=utf-8",
+      "Cache-Control": "no-store",
+    },
+  });
+}
+
 export async function POST(req: Request) {
-  console.info("[ashbracket:liveScoresApplyRoute] POST started", {
+  console.info("[ashbracket:liveScoresApplyRoute] route.entered", {
     build: LIVE_SCORES_APPLY_BUILD,
     at: new Date().toISOString(),
+    method: req.method,
+    url: req.url,
   });
 
   try {
+    console.info("[ashbracket:liveScoresApplyRoute] auth.start");
     const supabase = await createClient();
     const {
       data: { user },
     } = await supabase.auth.getUser();
-    if (!user || !(await isGlobalAdmin(supabase))) {
-      return NextResponse.json(
+    const admin = user ? await isGlobalAdmin(supabase) : false;
+    console.info("[ashbracket:liveScoresApplyRoute] auth.end", {
+      hasUser: Boolean(user),
+      isGlobalAdmin: admin,
+    });
+
+    if (!user || !admin) {
+      return jsonResponse(
         { ok: false, build: LIVE_SCORES_APPLY_BUILD, error: "Unauthorized." },
-        { status: 401 },
+        401,
       );
     }
 
+    console.info("[ashbracket:liveScoresApplyRoute] body.parse.start");
     let body: ApplyRequestBody;
     try {
       body = (await req.json()) as ApplyRequestBody;
     } catch {
-      return NextResponse.json(
+      return jsonResponse(
         { ok: false, build: LIVE_SCORES_APPLY_BUILD, error: "Invalid JSON body." },
-        { status: 400 },
+        400,
       );
     }
+    console.info("[ashbracket:liveScoresApplyRoute] body.parse.end", {
+      hasPreviewId: Boolean(body.previewId?.trim()),
+      productionAcknowledged: Boolean(body.productionAcknowledged),
+    });
 
     const previewId = body.previewId?.trim();
     if (!previewId) {
-      return NextResponse.json(
+      return jsonResponse(
         { ok: false, build: LIVE_SCORES_APPLY_BUILD, error: "previewId is required." },
-        { status: 400 },
+        400,
       );
     }
 
+    console.info("[ashbracket:liveScoresApplyRoute] workflow.start", { previewId });
     const result = await runLiveScoresApplyScoresOnly(supabase, {
       previewId,
       productionAcknowledged: body.productionAcknowledged,
     });
-
-    console.info("[ashbracket:liveScoresApplyRoute] POST finished", {
-      build: LIVE_SCORES_APPLY_BUILD,
+    console.info("[ashbracket:liveScoresApplyRoute] workflow.end", {
       ok: result.ok,
       runId: result.technicalDetails?.runId,
+      standingsRecalculationPending:
+        result.ok && "standingsRecalculationPending" in result
+          ? result.standingsRecalculationPending
+          : null,
     });
 
-    return NextResponse.json(result, { status: result.ok ? 200 : 500 });
+    const status = result.ok ? 200 : 500;
+    console.info("[ashbracket:liveScoresApplyRoute] response.send", { status, ok: result.ok });
+    return jsonResponse(result, status);
   } catch (e) {
     const error = e instanceof Error ? e.message : "Unexpected route error.";
-    console.error("[ashbracket:liveScoresApplyRoute] POST failed", { error });
-    return NextResponse.json(
-      { ok: false, build: LIVE_SCORES_APPLY_BUILD, error },
-      { status: 500 },
-    );
+    console.error("[ashbracket:liveScoresApplyRoute] response.error", { error });
+    return jsonResponse({ ok: false, build: LIVE_SCORES_APPLY_BUILD, error }, 500);
   }
 }

@@ -14,7 +14,9 @@ type Props = {
   variant?: "live" | "simulation";
   /** Extra checkbox label; defaults based on impact mode. */
   confirmLabel?: string;
-  onConfirm: (productionAcknowledged: boolean) => void;
+  /** Override default impact effect lines (e.g. Step A vs Step B copy). */
+  effectLines?: string[];
+  onConfirm: (productionAcknowledged: boolean) => void | Promise<void>;
 };
 
 export function AdminRiskConfirmPanel({
@@ -26,6 +28,7 @@ export function AdminRiskConfirmPanel({
   disabled = false,
   variant,
   confirmLabel,
+  effectLines,
   onConfirm,
 }: Props) {
   const [checked, setChecked] = useState(false);
@@ -46,7 +49,10 @@ export function AdminRiskConfirmPanel({
 
   return (
     <div className="space-y-4">
-      <AdminImpactSummaryCard impact={impact} title={actionTitle} />
+      <AdminImpactSummaryCard
+        impact={effectLines ? { ...impact, effectLines } : impact}
+        title={actionTitle}
+      />
 
       {isProduction ? (
         <p
@@ -74,7 +80,11 @@ export function AdminRiskConfirmPanel({
       <button
         type="button"
         disabled={!canRun}
-        onClick={() => onConfirm(needsAck ? checked : false)}
+        onClick={() => {
+          void Promise.resolve(onConfirm(needsAck ? checked : false)).catch((e) => {
+            console.error("[AdminRiskConfirmPanel] onConfirm failed", e);
+          });
+        }}
         className={buttonClass}
       >
         {pending ? "Working…" : buttonLabel}
