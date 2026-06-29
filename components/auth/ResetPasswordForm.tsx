@@ -9,11 +9,16 @@ import {
   mapResetLinkAuthParams,
   mapResetLinkExchangeError,
   PASSWORD_MISMATCH_MESSAGE,
+  PASSWORD_RESET_SUCCESS_MESSAGE,
   RESET_LINK_INVALID_MESSAGE,
   RESET_LINK_MISSING_MESSAGE,
 } from "@/lib/auth/authFormValidation";
+import {
+  clearAuthHashFromUrl,
+  hasRecoveryTokensInHash,
+} from "@/lib/auth/recoveryUrlParams";
 
-type Phase = "loading" | "form" | "link-invalid";
+type Phase = "loading" | "form" | "link-invalid" | "success";
 
 export function ResetPasswordForm() {
   const router = useRouter();
@@ -57,9 +62,24 @@ export function ResetPasswordForm() {
           setPhase("link-invalid");
           return;
         }
+        clearAuthHashFromUrl();
         router.replace("/reset-password");
         setPhase("form");
         return;
+      }
+
+      if (hasRecoveryTokensInHash()) {
+        await new Promise((resolve) => setTimeout(resolve, 2500));
+        if (cancelled) return;
+        const {
+          data: { session: hashSession },
+        } = await supabase.auth.getSession();
+        if (hashSession) {
+          clearAuthHashFromUrl();
+          router.replace("/reset-password");
+          setPhase("form");
+          return;
+        }
       }
 
       const {
@@ -82,6 +102,8 @@ export function ResetPasswordForm() {
       if (cancelled) return;
       if (event === "PASSWORD_RECOVERY") {
         setLinkError(null);
+        clearAuthHashFromUrl();
+        router.replace("/reset-password");
         setPhase("form");
       }
     });
@@ -118,7 +140,29 @@ export function ResetPasswordForm() {
     }
 
     await supabase.auth.signOut();
-    router.replace("/login?reset=success");
+    setPhase("success");
+  }
+
+  if (phase === "success") {
+    return (
+      <div className="ash-surface space-y-4 p-6 text-sm" role="status">
+        <p className="text-ash-accent">{PASSWORD_RESET_SUCCESS_MESSAGE}</p>
+        <div className="flex flex-wrap gap-3">
+          <Link
+            href="/login"
+            className="btn-primary inline-flex text-sm no-underline"
+          >
+            Sign in
+          </Link>
+          <Link
+            href="/account"
+            className="btn-ghost inline-flex text-sm no-underline ring-1 ring-ash-border"
+          >
+            My account
+          </Link>
+        </div>
+      </div>
+    );
   }
 
   if (phase === "loading") {

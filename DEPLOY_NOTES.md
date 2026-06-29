@@ -38,7 +38,9 @@ Required for signup, email change, and **password reset** links to land on produ
 - `http://localhost:3000/reset-password`
 
 Password-reset emails should include a `redirect_to` query param like  
-`https://ashbracket.com/auth/confirm?next=%2Freset-password` (the app sends this via `POST /api/auth/forgot-password` → `resetPasswordForEmail(..., { redirectTo })`).
+`https://ashbracket.com/reset-password` (the app sends this via `POST /api/auth/forgot-password`, the admin support action on `/admin/pilot`, or `npm run send-password-reset -- --send` → `resetPasswordForEmail(..., { redirectTo })`).
+
+**Do not use Supabase Dashboard “Send password recovery” for support resets.** Dashboard recovery may use the Site URL and land users on the homepage with no way to set a new password. Use AshBracket’s [forgot-password](/forgot-password) page or the admin support action so `redirectTo` points to `/reset-password`.
 
 If the emailed link shows only `redirect_to=https://ashbracket.com` (no path), Supabase rejected the redirect URL and fell back to Site URL. Ensure these are in **Redirect URLs**:
 
@@ -46,7 +48,7 @@ If the emailed link shows only `redirect_to=https://ashbracket.com` (no path), S
 - `https://ashbracket.com/reset-password`
 - `https://ashbracket.com/**`
 
-Request a **new** reset email after any dashboard change. Check Vercel logs for `[forgot-password] resetPasswordForEmail redirectTo:` to confirm what the app sent.
+Request a **new** reset email after any dashboard change. Check Vercel logs for `[forgot-password] resetPasswordForEmail redirectTo:` or `[sendPasswordResetEmail] resetPasswordForEmail redirectTo:` to confirm what the app sent.
 
 **Recovery email template (optional):** Under Authentication → Email Templates → Reset password, Supabase’s PKCE-friendly link format is documented in [Email Templates](https://supabase.com/docs/guides/auth/auth-email-templates). If you customize the template, use `{{ .RedirectTo }}` (not only `{{ .SiteURL }}`) when building the action link.
 

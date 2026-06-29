@@ -1,3 +1,4 @@
+import { AdminPasswordResetSupportPanel } from "@/components/admin/AdminPasswordResetSupportPanel";
 import { PilotEnvironmentSummary } from "@/components/admin/PilotEnvironmentSummary";
 import { PilotRecentEventsPanel } from "@/components/admin/PilotRecentEventsPanel";
 import { PilotRunOrderPanel } from "@/components/admin/PilotRunOrderPanel";
@@ -75,6 +76,7 @@ export default async function AdminPilotPage() {
       </p>
 
       <div className="space-y-8">
+        <AdminPasswordResetSupportPanel />
         <PilotEnvironmentSummary context={context} />
         <PilotRunOrderPanel />
         <PilotStandingsSnapshotPanel

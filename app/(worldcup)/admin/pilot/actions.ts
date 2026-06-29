@@ -1,6 +1,7 @@
 "use server";
 
 import { isGlobalAdmin } from "@/lib/auth/permissions";
+import { sendPasswordResetEmail } from "@/lib/auth/sendPasswordResetEmail";
 import {
   capturePoolStandingsState,
   comparePilotStandings,
@@ -199,4 +200,30 @@ export async function compareLivePoolToSnapshotAction(input: {
       error: e instanceof Error ? e.message : "Could not compare standings.",
     };
   }
+}
+
+export type PasswordResetSupportActionResult =
+  | { ok: true; redirectTo: string }
+  | { ok: false; error: string };
+
+export async function sendPasswordResetSupportAction(
+  email: string,
+): Promise<PasswordResetSupportActionResult> {
+  const gate = await requireGlobalAdminUser();
+  if (!gate.ok) {
+    return { ok: false, error: gate.error };
+  }
+
+  const result = await sendPasswordResetEmail(gate.supabase, email);
+  if (!result.ok) {
+    if (result.error === "Enter a valid email address.") {
+      return { ok: false, error: result.error };
+    }
+    return {
+      ok: false,
+      error: "Could not send recovery email. Try again in a few minutes.",
+    };
+  }
+
+  return { ok: true, redirectTo: result.redirectTo };
 }

@@ -1,11 +1,6 @@
-import {
-  assertPasswordResetRedirectUrl,
-  buildPasswordResetRedirectUrl,
-  logPasswordResetRedirect,
-} from "@/lib/auth/passwordResetRedirect";
-import { isValidEmailFormat } from "@/lib/auth/authFormValidation";
-import { createClient } from "@/lib/supabase/server";
+import { sendPasswordResetEmail } from "@/lib/auth/sendPasswordResetEmail";
 import { NextResponse } from "next/server";
+import { createClient } from "@/lib/supabase/server";
 
 export async function POST(request: Request) {
   let body: { email?: string };
@@ -19,38 +14,22 @@ export async function POST(request: Request) {
   }
 
   const trimmed = body.email?.trim() ?? "";
-  if (!isValidEmailFormat(trimmed)) {
-    return NextResponse.json(
-      { ok: false, error: "Enter a valid email address." },
-      { status: 400 },
-    );
-  }
-
-  const redirectTo = buildPasswordResetRedirectUrl();
-  try {
-    assertPasswordResetRedirectUrl(redirectTo);
-  } catch (e) {
-    console.error("[forgot-password] invalid redirect URL:", e);
-    return NextResponse.json(
-      { ok: false, error: "Password reset is temporarily unavailable." },
-      { status: 500 },
-    );
-  }
-
-  logPasswordResetRedirect(redirectTo);
-  console.info("[forgot-password] resetPasswordForEmail redirectTo:", redirectTo);
-
   const supabase = await createClient();
-  const { error } = await supabase.auth.resetPasswordForEmail(trimmed, {
-    redirectTo,
-  });
+  const result = await sendPasswordResetEmail(supabase, trimmed);
 
-  if (error) {
-    console.error("[forgot-password] supabase error:", error.message);
+  if (!result.ok) {
+    if (result.error === "Enter a valid email address.") {
+      return NextResponse.json({ ok: false, error: result.error }, { status: 400 });
+    }
+    if (result.error === "Password reset is temporarily unavailable.") {
+      return NextResponse.json({ ok: false, error: result.error }, { status: 500 });
+    }
   }
 
   return NextResponse.json({
     ok: true,
-    ...(process.env.NODE_ENV === "development" ? { redirectTo } : {}),
+    ...(process.env.NODE_ENV === "development" && result.ok
+      ? { redirectTo: result.redirectTo }
+      : {}),
   });
 }
