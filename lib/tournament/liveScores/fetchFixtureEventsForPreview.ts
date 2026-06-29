@@ -1,8 +1,11 @@
+import { mapWithConcurrency } from "@/lib/util/mapWithConcurrency";
 import type { NormalizedFixtureEvents } from "./apiFootballEvents";
 import type { LiveScoresProviderConfig } from "./types";
 import { fetchApiFootballFixtureEvents, normalizeApiFootballFixtureEvents } from "./apiFootballEvents";
 import { mockNormalizedEventsForFixture } from "./mockFixtureEvents";
-import type { ProviderFixtureScore } from "./types";
+import type { ProviderFixtureScore, ScoreChangePreviewRow } from "./types";
+
+const EVENT_FETCH_CONCURRENCY = 6;
 
 export type FixtureEventsFetchInput = {
   provider: string;
@@ -25,11 +28,11 @@ export async function fetchFixtureEventsForPreview(
   const eventsByFixtureId = new Map<string, NormalizedFixtureEvents | null>();
   const fetchFailures = new Set<string>();
 
-  for (const fixtureId of input.fixtureIds) {
+  await mapWithConcurrency(input.fixtureIds, EVENT_FETCH_CONCURRENCY, async (fixtureId) => {
     const fixture = byId.get(fixtureId);
     if (!fixture) {
       eventsByFixtureId.set(fixtureId, null);
-      continue;
+      return;
     }
 
     if (input.provider === "mock") {
@@ -42,19 +45,19 @@ export async function fetchFixtureEventsForPreview(
           awayFifaCode: fixture.awayFifaCode,
         }),
       );
-      continue;
+      return;
     }
 
     if (input.provider !== "api-football") {
       eventsByFixtureId.set(fixtureId, null);
-      continue;
+      return;
     }
 
     const fetched = await fetchApiFootballFixtureEvents(fixtureId, input.config);
     if (!fetched.ok) {
       eventsByFixtureId.set(fixtureId, null);
       fetchFailures.add(fixtureId);
-      continue;
+      return;
     }
 
     eventsByFixtureId.set(
@@ -66,7 +69,7 @@ export async function fetchFixtureEventsForPreview(
         awayFifaCode: fixture.awayFifaCode,
       }),
     );
-  }
+  });
 
   return { eventsByFixtureId, fetchFailures };
 }
@@ -79,6 +82,28 @@ export function fixtureIdsEligibleForEventFetch(
     if (!row.providerFixtureId) continue;
     if (row.fetchedStatus !== "finished") continue;
     ids.add(row.providerFixtureId);
+  }
+  return [...ids];
+}
+
+/** Event fetch for score patches during apply validation. */
+export function fixtureIdsForApplyEventFetch(rows: ScoreChangePreviewRow[]): string[] {
+  const ids = new Set<string>();
+  for (const row of rows) {
+    if (!row.providerFixtureId) continue;
+    if (row.willUpdate) ids.add(row.providerFixtureId);
+  }
+  return [...ids];
+}
+
+/** Event fetch when score-only preview differs — likely card totals need verification. */
+export function fixtureIdsForCardApplyEventFetch(rows: ScoreChangePreviewRow[]): string[] {
+  const ids = new Set<string>();
+  for (const row of rows) {
+    if (!row.providerFixtureId) continue;
+    if (row.fetchedStatus !== "finished") continue;
+    if (row.reason === "unmapped" || row.reason === "ambiguous") continue;
+    if (!row.willUpdate) ids.add(row.providerFixtureId);
   }
   return [...ids];
 }

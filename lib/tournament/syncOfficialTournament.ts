@@ -5,6 +5,7 @@ import {
 } from "@/lib/poolActivity/scoreImpact/buildScoreImpactMatchResults";
 import { loadTeamNameMapForEdition } from "@/lib/poolActivity/scoreImpact/loadScoreImpactContext";
 import { recomputePoolLedgersWithScoreImpact } from "@/lib/poolActivity/scoreImpact/recomputeWithScoreImpact";
+import type { ApplyPhaseLogger } from "./liveScores/applyPhaseLogger";
 import {
   publishConfirmedRoundOf32Fixtures,
   type PublishRoundOf32FixturesSummary,
@@ -99,7 +100,24 @@ export function applyPatches(matches: DbMatch[], patches: OfficialMatchScorePatc
   return { applied, skipped };
 }
 
-function recomputeWinners(matches: DbMatch[]) {
+function snapshotMatchRow(m: DbMatch): string {
+  return [
+    m.home_team_id ?? "",
+    m.away_team_id ?? "",
+    m.home_goals ?? "",
+    m.away_goals ?? "",
+    m.home_penalties ?? "",
+    m.away_penalties ?? "",
+    m.winner_team_id ?? "",
+    m.status,
+  ].join("\0");
+}
+
+function matchRowChanged(before: DbMatch, after: DbMatch): boolean {
+  return snapshotMatchRow(before) !== snapshotMatchRow(after);
+}
+
+export function recomputeWinners(matches: DbMatch[]) {
   for (const m of matches) {
     m.winner_team_id = winnerFromMatchScores({
       homeTeamId: m.home_team_id,
@@ -118,7 +136,7 @@ function recomputeWinners(matches: DbMatch[]) {
 /**
  * Copy winners into downstream matches until stable (KO bracket).
  */
-function propagateBracketAdvance(matches: DbMatch[]) {
+export function propagateBracketAdvance(matches: DbMatch[]) {
   const byId = new Map(matches.map((m) => [m.id, m]));
   let changed = true;
   let guard = 0;
@@ -150,9 +168,12 @@ function propagateBracketAdvance(matches: DbMatch[]) {
 async function persistMatches(
   supabase: SupabaseClient,
   matches: DbMatch[],
-): Promise<{ error?: string }> {
+  dirtyMatchIds?: Set<string>,
+): Promise<{ error?: string; persistedCount: number }> {
   const now = new Date().toISOString();
+  let persistedCount = 0;
   for (const m of matches) {
+    if (dirtyMatchIds && !dirtyMatchIds.has(m.id)) continue;
     const { error } = await supabase
       .from("tournament_matches")
       .update({
@@ -167,9 +188,10 @@ async function persistMatches(
         last_sync_at: now,
       })
       .eq("id", m.id);
-    if (error) return { error: error.message };
+    if (error) return { error: error.message, persistedCount };
+    persistedCount += 1;
   }
-  return {};
+  return { persistedCount };
 }
 
 async function loadStageIdsByCode(
@@ -195,13 +217,15 @@ export async function syncOfficialTournament(
     editionCode: string;
     poolIds: string[];
     patches?: OfficialMatchScorePatch[];
+    logger?: ApplyPhaseLogger;
   },
 ): Promise<
   | { ok: true; summary: SyncOfficialTournamentSummary; patchOutcome: PatchApplyOutcome }
   | { ok: false; error: string }
 > {
-  const { editionCode, poolIds, patches = [] } = options;
+  const { editionCode, poolIds, patches = [], logger } = options;
 
+  try {
   const { data: edition, error: edErr } = await supabase
     .from("tournament_editions")
     .select("id, is_simulation")
@@ -224,15 +248,47 @@ export async function syncOfficialTournament(
 
   if (mErr) return { ok: false, error: mErr.message };
   const matches = (rawMatches ?? []) as DbMatch[];
+  const beforeById = new Map(matches.map((m) => [m.id, snapshotMatchRow(m)]));
+
+  logger?.log("sync.patches_planned", {
+    patchCount: patches.length,
+    patchMatchCodes: patches.map((p) => p.matchCode),
+    poolCount: poolIds.length,
+    matchCount: matches.length,
+  });
 
   const patchOutcome = applyPatches(matches, patches);
   recomputeWinners(matches);
   propagateBracketAdvance(matches);
 
-  const persistRes = await persistMatches(supabase, matches);
+  const dirtyMatchIds = new Set<string>();
+  for (const m of matches) {
+    const before = beforeById.get(m.id);
+    if (before == null || before !== snapshotMatchRow(m)) {
+      dirtyMatchIds.add(m.id);
+    }
+  }
+
+  logger?.log("sync.score_patches_applied", {
+    applied: patchOutcome.applied,
+    skipped: patchOutcome.skipped,
+    dirtyMatchCount: dirtyMatchIds.size,
+  });
+
+  const persistRes = await (logger
+    ? logger.time(
+        "sync.persist_matches",
+        () => persistMatches(supabase, matches, dirtyMatchIds),
+        { dirtyMatchCount: dirtyMatchIds.size },
+      )
+    : persistMatches(supabase, matches, dirtyMatchIds));
   if (persistRes.error) {
     return { ok: false, error: persistRes.error };
   }
+
+  logger?.log("sync.score_writes_complete", {
+    persistedCount: persistRes.persistedCount,
+  });
 
   const stages = await loadStageIdsByCode(supabase);
   if ("error" in stages) {
@@ -266,7 +322,7 @@ export async function syncOfficialTournament(
   if (delErr) return { ok: false, error: delErr.message };
 
   const resolvedAt = new Date().toISOString();
-  const inserts: Record<string, unknown>[] = [];
+  const insertByKey = new Map<string, Record<string, unknown>>();
 
   const groupStageId = stageMap.get("group");
   if (!groupStageId) {
@@ -315,7 +371,7 @@ export async function syncOfficialTournament(
     const wKey = resultSlotKey(groupStageId, "group_winner", g, null);
     const rKey = resultSlotKey(groupStageId, "group_runner_up", g, null);
     if (!lockedKeys.has(wKey)) {
-      inserts.push({
+      insertByKey.set(wKey, {
         edition_id: editionId,
         tournament_stage_id: groupStageId,
         kind: "group_winner",
@@ -328,7 +384,7 @@ export async function syncOfficialTournament(
       });
     }
     if (!lockedKeys.has(rKey)) {
-      inserts.push({
+      insertByKey.set(rKey, {
         edition_id: editionId,
         tournament_stage_id: groupStageId,
         kind: "group_runner_up",
@@ -354,7 +410,7 @@ export async function syncOfficialTournament(
       slotKey,
     );
     if (lockedKeys.has(k)) continue;
-    inserts.push({
+    insertByKey.set(k, {
       edition_id: editionId,
       tournament_stage_id: stageId,
       kind: m.scoring_result_kind,
@@ -367,15 +423,26 @@ export async function syncOfficialTournament(
     });
   }
 
+  const inserts = [...insertByKey.values()];
+
+  logger?.log("sync.derived_results_rebuild_start", {
+    knockoutResultCandidates: matches.filter(
+      (m) => m.scoring_result_kind && m.scoring_stage_code,
+    ).length,
+    knockoutResultsWithWinner: matches.filter(
+      (m) => m.scoring_result_kind && m.scoring_stage_code && m.winner_team_id,
+    ).length,
+  });
+
   if (inserts.length > 0) {
     const { error: insErr } = await supabase.from("results").insert(inserts);
     if (insErr) return { ok: false, error: insErr.message };
   }
 
-  console.info(
-    "[ashbracket:sync] results rebuilt from tournament_matches; recomputing ledgers",
-    { insertCount: inserts.length, poolCount: poolIds.length },
-  );
+  logger?.log("sync.derived_results_rebuild_end", {
+    insertCount: inserts.length,
+    poolCount: poolIds.length,
+  });
 
   const teamNameById = await loadTeamNameMapForEdition(supabase, editionId);
   const matchResults = buildScoreImpactMatchResults({
@@ -394,16 +461,28 @@ export async function syncOfficialTournament(
       matchResults,
       scoreSignature,
     },
-    { editionIsSimulation },
+    {
+      editionIsSimulation,
+      onPoolStart: (poolId, index) => {
+        logger?.log("sync.pool_recalc_start", { poolId, index, total: poolIds.length });
+      },
+      onPoolEnd: (poolId, index, error) => {
+        logger?.log("sync.pool_recalc_end", {
+          poolId,
+          index,
+          total: poolIds.length,
+          ok: !error,
+          error: error ?? null,
+        });
+      },
+    },
   );
   if (!ledgerOut.ok) {
-    console.error("[ashbracket:sync] ledger recompute failed", {
-      error: ledgerOut.error,
-    });
+    logger?.log("sync.pool_recalc_failed", { error: ledgerOut.error });
     return { ok: false, error: ledgerOut.error };
   }
 
-  console.info("[ashbracket:sync] ledger recompute finished for all pools");
+  logger?.log("sync.pool_recalc_complete", { poolCount: poolIds.length });
 
   let roundOf32Publish: PublishRoundOf32FixturesSummary | null = null;
   if (!editionIsSimulation) {
@@ -446,4 +525,9 @@ export async function syncOfficialTournament(
     },
     patchOutcome,
   };
+  } catch (e) {
+    const message = e instanceof Error ? e.message : "Unexpected tournament sync error.";
+    logger?.log("sync.failed", { error: message });
+    return { ok: false, error: message };
+  }
 }

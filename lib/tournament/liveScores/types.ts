@@ -201,3 +201,13 @@ export type LiveScoresApplySummary = {
   details: LiveScoresApplyMatchDetail[];
   cardDetails: LiveScoresApplyCardDetail[];
 };
+
+export type LiveScoresApplyTechnicalDetails = {
+  runId: string;
+  totalDurationMs: number;
+  phases: Array<{
+    phase: string;
+    durationMs: number;
+    detail?: Record<string, unknown>;
+  }>;
+};

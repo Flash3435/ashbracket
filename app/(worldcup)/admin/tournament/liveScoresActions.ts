@@ -14,7 +14,8 @@ import {
   applyLiveScoresAndSync,
   LIVE_SCORES_REVALIDATED_PATHS,
 } from "@/lib/tournament/liveScores/applyLiveScores";
-import { buildLiveScoresPreviewWithCards } from "@/lib/tournament/liveScores/buildLiveScoresPreviewWithCards";
+import { ApplyPhaseLogger } from "@/lib/tournament/liveScores/applyPhaseLogger";
+import { buildLiveScoresPreviewForApply, buildLiveScoresPreviewWithCards } from "@/lib/tournament/liveScores/buildLiveScoresPreviewWithCards";
 import {
   buildLiveScoresApplyFailureMessage,
   buildLiveScoresApplySuccessMessage,
@@ -26,6 +27,7 @@ import {
 import { getLiveScoresProviderConfig } from "@/lib/tournament/liveScores/provider";
 import type {
   LiveScoresApplySummary,
+  LiveScoresApplyTechnicalDetails,
   ScoreChangePreview,
 } from "@/lib/tournament/liveScores/types";
 import { recordLiveDailyUpdateStatus } from "@/lib/tournament/liveDailyUpdateStatus";
@@ -49,11 +51,37 @@ export type LiveScoresApplyResult =
       lastUpdatedAt: string;
       message: string;
       warnings: string[];
+      technicalDetails: LiveScoresApplyTechnicalDetails;
     }
-  | { ok: false; error: string; applySummary?: LiveScoresApplySummary; warnings?: string[] };
+  | {
+      ok: false;
+      error: string;
+      applySummary?: LiveScoresApplySummary;
+      warnings?: string[];
+      technicalDetails?: LiveScoresApplyTechnicalDetails;
+    };
 
 function messageFromUnknown(e: unknown): string {
-  return e instanceof Error ? e.message : "Unexpected error.";
+  if (e instanceof Error) return e.message;
+  return "Unexpected error.";
+}
+
+function isLikelyServerActionTimeout(e: unknown): boolean {
+  if (!(e instanceof Error)) return false;
+  const msg = e.message.toLowerCase();
+  return (
+    msg.includes("timeout") ||
+    msg.includes("timed out") ||
+    msg.includes("aborted") ||
+    msg.includes("failed to fetch")
+  );
+}
+
+function buildActionErrorMessage(e: unknown): string {
+  if (isLikelyServerActionTimeout(e)) {
+    return "Apply timed out before finishing. Check Vercel function logs for phase timings, then retry or split score apply from pool recalculation.";
+  }
+  return messageFromUnknown(e);
 }
 
 function revalidateLiveScoresPaths(): void {
@@ -140,6 +168,7 @@ export async function applyLiveScoresAction(input: {
   previewId: string;
   productionAcknowledged?: boolean;
 }): Promise<LiveScoresApplyResult> {
+  const logger = new ApplyPhaseLogger("liveScoresAction");
   try {
     const ack = checkProductionAdminAck(input.productionAcknowledged);
     if (!ack.ok) return ack;
@@ -152,17 +181,23 @@ export async function applyLiveScoresAction(input: {
       return {
         ok: false,
         error: "Only global administrators can apply live scores.",
+        technicalDetails: logger.snapshot(),
       };
     }
 
     const liveEdition = await fetchOfficialLiveEdition(supabase);
     if (!liveEdition) {
-      return { ok: false, error: "Official live tournament edition is not installed." };
+      return {
+        ok: false,
+        error: "Official live tournament edition is not installed.",
+        technicalDetails: logger.snapshot(),
+      };
     }
     if (liveEdition.isSimulation) {
       return {
         ok: false,
         error: "Official edition is marked simulation — refusing live score apply.",
+        technicalDetails: logger.snapshot(),
       };
     }
 
@@ -171,23 +206,27 @@ export async function applyLiveScoresAction(input: {
       return {
         ok: false,
         error: config.configWarning ?? "Live scores provider is not configured.",
+        technicalDetails: logger.snapshot(),
       };
     }
 
-    const loaded = await buildLiveScoresPreviewWithCards(supabase, liveEdition.id, new Date().toISOString());
+    const loaded = await logger.time("action.rebuild_preview_for_apply", () =>
+      buildLiveScoresPreviewForApply(
+        supabase,
+        liveEdition.id,
+        new Date().toISOString(),
+        input.previewId,
+      ),
+    );
     if (!loaded.ok) {
-      return { ok: false, error: loaded.error };
+      return {
+        ok: false,
+        error: loaded.error,
+        technicalDetails: logger.snapshot(),
+      };
     }
 
     const preview = loaded.preview;
-
-    if (preview.previewId !== input.previewId) {
-      return {
-        ok: false,
-        error:
-          "Provider data changed since preview — fetch latest scores and cards again and confirm the new plan.",
-      };
-    }
 
     const patches = patchesFromPreviewRows(preview.rows);
     const cardPatches = cardPatchesFromPreviewRows(
@@ -195,10 +234,17 @@ export async function applyLiveScoresAction(input: {
       liveEdition.id,
       loaded.matches,
     );
+    logger.log("action.patches_planned", {
+      scorePatchCount: patches.length,
+      cardPatchCount: cardPatches.length,
+      previewId: preview.previewId,
+    });
+
     if (patches.length === 0 && cardPatches.length === 0) {
       return {
         ok: false,
         error: preview.message ?? "No final score or card changes to apply.",
+        technicalDetails: logger.snapshot(),
       };
     }
 
@@ -220,6 +266,7 @@ export async function applyLiveScoresAction(input: {
       patches,
       cardPatches,
       providerFixtureIdUpdates,
+      logger,
     });
 
     if (!applied.ok) {
@@ -243,6 +290,7 @@ export async function applyLiveScoresAction(input: {
         error: failureMessage,
         applySummary: applied.applySummary,
         warnings: applied.warnings,
+        technicalDetails: logger.snapshot(),
       };
     }
 
@@ -260,6 +308,7 @@ export async function applyLiveScoresAction(input: {
           ok: false,
           error: `Scores applied but could not save last-update time: ${recorded.error}`,
           warnings: applied.warnings,
+          technicalDetails: logger.snapshot(),
         };
       }
       lastUpdatedAt = recorded.lastUpdatedAt;
@@ -302,9 +351,15 @@ export async function applyLiveScoresAction(input: {
       lastUpdatedAt,
       message,
       warnings: applied.warnings,
+      technicalDetails: logger.snapshot(),
     };
   } catch (e) {
-    return { ok: false, error: messageFromUnknown(e) };
+    logger.log("action.failed", { error: messageFromUnknown(e) });
+    return {
+      ok: false,
+      error: buildActionErrorMessage(e),
+      technicalDetails: logger.snapshot(),
+    };
   }
 }
 

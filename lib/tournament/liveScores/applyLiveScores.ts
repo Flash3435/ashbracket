@@ -14,6 +14,7 @@ import type {
 import { applyProviderCardStats } from "./applyProviderCardStats";
 import { verifyAppliedLiveScorePatches } from "./verifyAppliedPatches";
 import { verifyAppliedProviderCardPatches } from "./verifyAppliedCardStats";
+import { ApplyPhaseLogger } from "./applyPhaseLogger";
 
 export type SyncOfficialTournamentFn = (
   supabase: SupabaseClient,
@@ -21,6 +22,7 @@ export type SyncOfficialTournamentFn = (
     editionCode: string;
     poolIds: string[];
     patches?: OfficialMatchScorePatch[];
+    logger?: ApplyPhaseLogger;
   },
 ) => ReturnType<typeof syncOfficialTournament>;
 
@@ -133,11 +135,21 @@ export async function applyLiveScoresAndSync(
     cardPatches?: ProviderCardPatchInput[];
     providerFixtureIdUpdates?: Array<{ matchId: string; providerFixtureId: string }>;
     syncFn?: SyncOfficialTournamentFn;
+    logger?: ApplyPhaseLogger;
   },
 ): Promise<ApplyLiveScoresResult> {
   const warnings: string[] = [];
   const syncFn = options.syncFn ?? syncOfficialTournament;
   const cardPatches = options.cardPatches ?? [];
+  const logger = options.logger ?? new ApplyPhaseLogger("liveScoresApply");
+
+  logger.log("apply.provider_rows_selected", {
+    previewRowCount: options.previewRows.length,
+    scorePatchesPlanned: options.patches.length,
+    cardPatchesPlanned: cardPatches.length,
+    providerFixtureIdUpdates: options.providerFixtureIdUpdates?.length ?? 0,
+    poolCount: options.poolIds.length,
+  });
 
   if (options.patches.length === 0 && cardPatches.length === 0) {
     return { ok: false, error: "No score or card changes to apply.", warnings };
@@ -145,7 +157,9 @@ export async function applyLiveScoresAndSync(
 
   let providerFixtureIdsSaved = 0;
   if (options.providerFixtureIdUpdates?.length) {
-    const saved = await persistProviderFixtureIds(supabase, options.providerFixtureIdUpdates);
+    const saved = await logger.time("apply.persist_provider_fixture_ids", () =>
+      persistProviderFixtureIds(supabase, options.providerFixtureIdUpdates!),
+    );
     providerFixtureIdsSaved = saved.saved;
     if (saved.error) {
       warnings.push(`Could not save provider fixture ids: ${saved.error}`);
@@ -166,11 +180,18 @@ export async function applyLiveScoresAndSync(
   };
 
   if (options.patches.length > 0) {
-    const out = await syncFn(supabase, {
-      editionCode: options.editionCode,
-      poolIds: options.poolIds,
-      patches: toOfficialMatchScorePatches(options.patches),
+    logger.log("apply.official_tournament_sync_start", {
+      patchMatchCodes: options.patches.map((p) => p.matchCode),
     });
+    const out = await logger.time("apply.official_tournament_sync", () =>
+      syncFn(supabase, {
+        editionCode: options.editionCode,
+        poolIds: options.poolIds,
+        patches: toOfficialMatchScorePatches(options.patches),
+        logger,
+      }),
+    );
+    logger.log("apply.official_tournament_sync_end", { ok: out.ok });
 
     if (!out.ok) {
       return { ok: false, error: out.error, warnings };
@@ -179,6 +200,11 @@ export async function applyLiveScoresAndSync(
     patchOutcome = out.patchOutcome;
     syncSummary = out.summary;
   }
+
+  logger.log("apply.score_card_writes_complete", {
+    scoresWritten: patchOutcome.applied.length,
+    cardsPlanned: cardPatches.length,
+  });
 
   const skipped = patchOutcome.skipped.map((s) => ({
     matchCode: s.matchCode,
@@ -219,7 +245,9 @@ export async function applyLiveScoresAndSync(
   let cardsWritten = 0;
   let cardDetails: LiveScoresApplySummary["cardDetails"] = [];
   if (cardPatches.length > 0) {
-    const cardApply = await applyProviderCardStats(supabase, cardPatches);
+    const cardApply = await logger.time("apply.card_stats_write", () =>
+      applyProviderCardStats(supabase, cardPatches),
+    );
     cardsWritten = cardApply.written;
     if (cardApply.error) {
       return {
@@ -229,12 +257,14 @@ export async function applyLiveScoresAndSync(
       };
     }
 
-    const cardVerified = await verifyAppliedProviderCardPatches(
-      supabase,
-      options.editionId,
-      options.previewRows,
-      cardPatches,
-      cardPatches.map((p) => p.matchCode),
+    const cardVerified = await logger.time("apply.card_stats_verify", () =>
+      verifyAppliedProviderCardPatches(
+        supabase,
+        options.editionId,
+        options.previewRows,
+        cardPatches,
+        cardPatches.map((p) => p.matchCode),
+      ),
     );
     cardDetails = cardVerified.details;
 
@@ -280,6 +310,14 @@ export async function applyLiveScoresAndSync(
       `Skipped ${manualConflicts.length} match(es) with manual card totals that differ from provider.`,
     );
   }
+
+  logger.log("apply.final_response", {
+    ok: true,
+    matchesUpdated: patchOutcome.applied.length,
+    cardsWritten,
+    poolsRecalculated: syncSummary.poolsRecalculated,
+    totalDurationMs: logger.snapshot().totalDurationMs,
+  });
 
   return {
     ok: true,

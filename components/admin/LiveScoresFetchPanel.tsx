@@ -11,6 +11,7 @@ import type { AdminImpactSummary } from "@/lib/admin/fetchAdminImpactSummary";
 import type {
   CardChangeRowReason,
   LiveScoresApplySummary,
+  LiveScoresApplyTechnicalDetails,
   ScoreChangePreview,
   ScoreChangePreviewRow,
 } from "@/lib/tournament/liveScores/types";
@@ -71,6 +72,27 @@ function formatFetchedCards(row: ScoreChangePreviewRow): string {
     row.fetchedAwayYellowCards,
     row.fetchedHomeRedCards,
     row.fetchedAwayRedCards,
+  );
+}
+
+type ApplyErrorState = {
+  message: string;
+  technicalDetails?: LiveScoresApplyTechnicalDetails;
+};
+
+function formatTechnicalDetails(details: LiveScoresApplyTechnicalDetails): string {
+  return JSON.stringify(details, null, 2);
+}
+
+function isLikelyClientActionFailure(e: unknown): boolean {
+  if (!(e instanceof Error)) return true;
+  const msg = e.message.toLowerCase();
+  return (
+    msg.includes("timeout") ||
+    msg.includes("timed out") ||
+    msg.includes("aborted") ||
+    msg.includes("failed to fetch") ||
+    msg.includes("network")
   );
 }
 
@@ -214,45 +236,71 @@ export function LiveScoresFetchPanel({
   const router = useRouter();
   const [isFetching, startFetch] = useTransition();
   const [isApplying, startApply] = useTransition();
-  const [error, setError] = useState<string | null>(null);
+  const [fetchError, setFetchError] = useState<string | null>(null);
+  const [applyError, setApplyError] = useState<ApplyErrorState | null>(null);
   const [preview, setPreview] = useState<ScoreChangePreview | null>(null);
   const [applyMessage, setApplyMessage] = useState<string | null>(null);
   const [applySummary, setApplySummary] = useState<LiveScoresApplySummary | null>(null);
 
   function fetchPreview() {
-    setError(null);
+    setFetchError(null);
+    setApplyError(null);
     setApplyMessage(null);
     setApplySummary(null);
     startFetch(async () => {
-      const res = await fetchLiveScoresPreviewAction();
-      if (!res.ok) {
+      try {
+        const res = await fetchLiveScoresPreviewAction();
+        if (!res.ok) {
+          setPreview(null);
+          setFetchError(res.error);
+          return;
+        }
+        setPreview(res.preview);
+      } catch (e) {
         setPreview(null);
-        setError(res.error);
-        return;
+        setFetchError(
+          isLikelyClientActionFailure(e)
+            ? "Fetch timed out or failed before the server responded. Retry, then check function logs if it keeps happening."
+            : e instanceof Error
+              ? e.message
+              : "Unexpected fetch error.",
+        );
       }
-      setPreview(res.preview);
     });
   }
 
   function applyScores(productionAcknowledged: boolean) {
     if (!preview) return;
-    setError(null);
+    setApplyError(null);
     setApplyMessage(null);
     setApplySummary(null);
     startApply(async () => {
-      const res = await applyLiveScoresAction({
-        previewId: preview.previewId,
-        productionAcknowledged,
-      });
-      if (!res.ok) {
-        setError(res.error);
-        setApplySummary(res.applySummary ?? null);
-        return;
+      try {
+        const res = await applyLiveScoresAction({
+          previewId: preview.previewId,
+          productionAcknowledged,
+        });
+        if (!res.ok) {
+          setApplyError({
+            message: res.error,
+            technicalDetails: res.technicalDetails,
+          });
+          setApplySummary(res.applySummary ?? null);
+          return;
+        }
+        setApplyMessage(res.message);
+        setApplySummary(res.applySummary);
+        setPreview(null);
+        router.refresh();
+      } catch (e) {
+        setApplyError({
+          message: isLikelyClientActionFailure(e)
+            ? "Apply timed out or failed before the server returned a result. Scores may or may not have been written — check tournament status and function logs before retrying."
+            : e instanceof Error
+              ? e.message
+              : "Unexpected apply error.",
+        });
       }
-      setApplyMessage(res.message);
-      setApplySummary(res.applySummary);
-      setPreview(null);
-      router.refresh();
     });
   }
 
@@ -312,10 +360,29 @@ export function LiveScoresFetchPanel({
         </details>
       </div>
 
-      {error ? (
+      {fetchError ? (
         <p className="rounded-md border border-red-800/80 bg-red-950/40 px-3 py-2 text-sm text-red-200">
-          {error}
+          {fetchError}
         </p>
+      ) : null}
+
+      {applyError ? (
+        <div
+          className="rounded-md border border-red-800/80 bg-red-950/40 px-3 py-2 text-sm text-red-200"
+          role="alert"
+        >
+          <p>{applyError.message}</p>
+          {applyError.technicalDetails ? (
+            <details className="mt-3 rounded-md border border-red-900/60 bg-red-950/30 px-3 py-2 text-xs text-red-100/90">
+              <summary className="cursor-pointer font-medium text-red-50">
+                Technical details
+              </summary>
+              <pre className="mt-2 overflow-x-auto whitespace-pre-wrap break-words font-mono">
+                {formatTechnicalDetails(applyError.technicalDetails)}
+              </pre>
+            </details>
+          ) : null}
+        </div>
       ) : null}
 
       {applySummary ? (

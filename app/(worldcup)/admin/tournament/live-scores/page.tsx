@@ -12,6 +12,8 @@ import { createClient } from "@/lib/supabase/server";
 import Link from "next/link";
 
 export const dynamic = "force-dynamic";
+/** Allow long-running apply: provider revalidation, official sync, and multi-pool recalculation. */
+export const maxDuration = 300;
 
 export default async function AdminLiveScoresPage() {
   await requireGlobalAdminPage("/admin/tournament/live-scores");
