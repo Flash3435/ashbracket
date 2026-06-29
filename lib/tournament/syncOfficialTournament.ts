@@ -218,12 +218,14 @@ export async function syncOfficialTournament(
     poolIds: string[];
     patches?: OfficialMatchScorePatch[];
     logger?: ApplyPhaseLogger;
+    /** When true, save scores/results/bracket only — skip live pool ledger recompute. */
+    skipPoolRecalculation?: boolean;
   },
 ): Promise<
   | { ok: true; summary: SyncOfficialTournamentSummary; patchOutcome: PatchApplyOutcome }
   | { ok: false; error: string }
 > {
-  const { editionCode, poolIds, patches = [], logger } = options;
+  const { editionCode, poolIds, patches = [], logger, skipPoolRecalculation = false } = options;
 
   try {
   const { data: edition, error: edErr } = await supabase
@@ -442,47 +444,54 @@ export async function syncOfficialTournament(
   logger?.log("sync.derived_results_rebuild_end", {
     insertCount: inserts.length,
     poolCount: poolIds.length,
+    skipPoolRecalculation,
   });
 
-  const teamNameById = await loadTeamNameMapForEdition(supabase, editionId);
-  const matchResults = buildScoreImpactMatchResults({
-    matches,
-    patches,
-    teamNameById,
-  });
-  const scoreSignature = scoreImpactSignatureFromMatchResults(matchResults);
+  let poolsRecalculated = 0;
+  if (!skipPoolRecalculation && poolIds.length > 0) {
+    const teamNameById = await loadTeamNameMapForEdition(supabase, editionId);
+    const matchResults = buildScoreImpactMatchResults({
+      matches,
+      patches,
+      teamNameById,
+    });
+    const scoreSignature = scoreImpactSignatureFromMatchResults(matchResults);
 
-  const ledgerOut = await recomputePoolLedgersWithScoreImpact(
-    supabase,
-    poolIds,
-    "tournament_sync",
-    {
-      editionId,
-      matchResults,
-      scoreSignature,
-    },
-    {
-      editionIsSimulation,
-      onPoolStart: (poolId, index) => {
-        logger?.log("sync.pool_recalc_start", { poolId, index, total: poolIds.length });
+    const ledgerOut = await recomputePoolLedgersWithScoreImpact(
+      supabase,
+      poolIds,
+      "tournament_sync",
+      {
+        editionId,
+        matchResults,
+        scoreSignature,
       },
-      onPoolEnd: (poolId, index, error) => {
-        logger?.log("sync.pool_recalc_end", {
-          poolId,
-          index,
-          total: poolIds.length,
-          ok: !error,
-          error: error ?? null,
-        });
+      {
+        editionIsSimulation,
+        onPoolStart: (poolId, index) => {
+          logger?.log("sync.pool_recalc_start", { poolId, index, total: poolIds.length });
+        },
+        onPoolEnd: (poolId, index, error) => {
+          logger?.log("sync.pool_recalc_end", {
+            poolId,
+            index,
+            total: poolIds.length,
+            ok: !error,
+            error: error ?? null,
+          });
+        },
       },
-    },
-  );
-  if (!ledgerOut.ok) {
-    logger?.log("sync.pool_recalc_failed", { error: ledgerOut.error });
-    return { ok: false, error: ledgerOut.error };
+    );
+    if (!ledgerOut.ok) {
+      logger?.log("sync.pool_recalc_failed", { error: ledgerOut.error });
+      return { ok: false, error: ledgerOut.error };
+    }
+
+    poolsRecalculated = poolIds.length;
+    logger?.log("sync.pool_recalc_complete", { poolCount: poolIds.length });
+  } else if (skipPoolRecalculation) {
+    logger?.log("sync.pool_recalc_skipped", { poolCount: poolIds.length });
   }
-
-  logger?.log("sync.pool_recalc_complete", { poolCount: poolIds.length });
 
   let roundOf32Publish: PublishRoundOf32FixturesSummary | null = null;
   if (!editionIsSimulation) {
@@ -517,7 +526,7 @@ export async function syncOfficialTournament(
       matchesWithScoresCount,
       finishedMatchCount,
       derivedResultsInserted: inserts.length,
-      poolsRecalculated: poolIds.length,
+      poolsRecalculated,
       syncLockedMatchCount,
       patchesApplied: patchOutcome.applied.length,
       patchesSkipped: patchOutcome.skipped.length,

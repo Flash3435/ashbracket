@@ -7,6 +7,7 @@ import { isProductionDeployment } from "@/lib/admin/deploymentEnvironment";
 import { fetchLiveTournamentSyncImpactSummary } from "@/lib/admin/fetchAdminImpactSummary";
 import { requireGlobalAdminPage } from "@/lib/admin/requireGlobalAdmin";
 import { OFFICIAL_EDITION_CODE } from "@/lib/config/officialTournament";
+import { LIVE_SCORES_APPLY_BUILD } from "@/lib/tournament/liveScores/runLiveScoresApplyWorkflow";
 import { getLiveScoresProviderConfig } from "@/lib/tournament/liveScores/provider";
 import { createClient } from "@/lib/supabase/server";
 import Link from "next/link";
@@ -60,6 +61,8 @@ export default async function AdminLiveScoresPage() {
           provider={providerConfig.provider}
           providerConfigured={providerConfig.configured}
           configWarning={providerConfig.configWarning}
+          applyBuild={LIVE_SCORES_APPLY_BUILD}
+          deploySha={process.env.VERCEL_GIT_COMMIT_SHA?.slice(0, 7) ?? "local"}
         />
       ) : (
         <div className="ash-surface space-y-3 p-4 text-sm text-ash-muted">

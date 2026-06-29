@@ -23,6 +23,7 @@ export type SyncOfficialTournamentFn = (
     poolIds: string[];
     patches?: OfficialMatchScorePatch[];
     logger?: ApplyPhaseLogger;
+    skipPoolRecalculation?: boolean;
   },
 ) => ReturnType<typeof syncOfficialTournament>;
 
@@ -136,6 +137,7 @@ export async function applyLiveScoresAndSync(
     providerFixtureIdUpdates?: Array<{ matchId: string; providerFixtureId: string }>;
     syncFn?: SyncOfficialTournamentFn;
     logger?: ApplyPhaseLogger;
+    skipPoolRecalculation?: boolean;
   },
 ): Promise<ApplyLiveScoresResult> {
   const warnings: string[] = [];
@@ -186,9 +188,10 @@ export async function applyLiveScoresAndSync(
     const out = await logger.time("apply.official_tournament_sync", () =>
       syncFn(supabase, {
         editionCode: options.editionCode,
-        poolIds: options.poolIds,
+        poolIds: options.skipPoolRecalculation ? [] : options.poolIds,
         patches: toOfficialMatchScorePatches(options.patches),
         logger,
+        skipPoolRecalculation: options.skipPoolRecalculation,
       }),
     );
     logger.log("apply.official_tournament_sync_end", { ok: out.ok });

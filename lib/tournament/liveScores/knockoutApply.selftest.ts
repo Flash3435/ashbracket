@@ -263,22 +263,24 @@ async function runKnockoutApplyIntegrationTest() {
       editionCode: "fifa_wc_2026",
       poolIds: ["pool-1", "pool-2", "pool-3"],
       previewRows: knockoutPreview.rows,
-      patches,
-      syncFn: async (_sb, opts) => {
-        syncPoolIds = opts.poolIds;
-        return {
+    patches,
+    skipPoolRecalculation: true,
+    syncFn: async (_sb, opts) => {
+      syncPoolIds = opts.poolIds;
+      assert.equal(opts.skipPoolRecalculation, true);
+      return {
           ok: true,
           summary: {
             matchCount: 104,
             matchesWithScoresCount: 2,
             finishedMatchCount: 2,
             derivedResultsInserted: 2,
-            poolsRecalculated: opts.poolIds.length,
-            syncLockedMatchCount: 0,
-            patchesApplied: opts.patches?.length ?? 0,
-            patchesSkipped: 0,
-            roundOf32Publish: null,
-          },
+          poolsRecalculated: 0,
+          syncLockedMatchCount: 0,
+          patchesApplied: 2,
+          patchesSkipped: 0,
+          roundOf32Publish: null,
+        },
           patchOutcome: {
             applied: (opts.patches ?? []).map((p) => p.matchCode),
             skipped: [],
@@ -288,9 +290,9 @@ async function runKnockoutApplyIntegrationTest() {
   });
 
   assert(applyOut.ok);
-  assert.equal(syncPoolIds.length, 3);
+  assert.equal(syncPoolIds.length, 0, "Step A should not pass pools into sync");
   assert.equal(applyOut.applySummary.planned, 2);
-  assert.equal(applyOut.applySummary.ledgersRecomputed, 3);
+  assert.equal(applyOut.applySummary.ledgersRecomputed, 0);
 }
 
 runKnockoutApplyIntegrationTest()

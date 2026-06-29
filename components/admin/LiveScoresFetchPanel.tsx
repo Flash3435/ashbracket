@@ -2,11 +2,8 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useState, useTransition } from "react";
-import {
-  applyLiveScoresAction,
-  fetchLiveScoresPreviewAction,
-} from "../../app/(worldcup)/admin/tournament/liveScoresActions";
+import { useEffect, useRef, useState, useTransition } from "react";
+import { fetchLiveScoresPreviewAction } from "../../app/(worldcup)/admin/tournament/liveScoresActions";
 import type { AdminImpactSummary } from "@/lib/admin/fetchAdminImpactSummary";
 import type {
   CardChangeRowReason,
@@ -16,6 +13,10 @@ import type {
   ScoreChangePreviewRow,
 } from "@/lib/tournament/liveScores/types";
 import { formatCardTotals } from "@/lib/tournament/liveScores/loadMatchCardStatsForLiveScores";
+import {
+  postLiveScoresApplyScores,
+  postLiveScoresRecalculatePool,
+} from "@/lib/tournament/liveScores/liveScoresApplyClient";
 import { AdminRiskConfirmPanel } from "./AdminRiskConfirmPanel";
 
 type Props = {
@@ -24,6 +25,21 @@ type Props = {
   provider: string;
   providerConfigured: boolean;
   configWarning: string | null;
+  applyBuild: string;
+  deploySha: string;
+};
+
+type ApplyErrorState = {
+  message: string;
+  technicalDetails?: LiveScoresApplyTechnicalDetails;
+};
+
+type StandingsRecalcState = {
+  editionId: string;
+  poolIds: string[];
+  completed: number;
+  failedPoolId?: string;
+  error?: string;
 };
 
 function formatScore(
@@ -75,16 +91,11 @@ function formatFetchedCards(row: ScoreChangePreviewRow): string {
   );
 }
 
-type ApplyErrorState = {
-  message: string;
-  technicalDetails?: LiveScoresApplyTechnicalDetails;
-};
-
 function formatTechnicalDetails(details: LiveScoresApplyTechnicalDetails): string {
   return JSON.stringify(details, null, 2);
 }
 
-function isLikelyClientActionFailure(e: unknown): boolean {
+function isLikelyClientFailure(e: unknown): boolean {
   if (!(e instanceof Error)) return true;
   const msg = e.message.toLowerCase();
   return (
@@ -92,7 +103,8 @@ function isLikelyClientActionFailure(e: unknown): boolean {
     msg.includes("timed out") ||
     msg.includes("aborted") ||
     msg.includes("failed to fetch") ||
-    msg.includes("network")
+    msg.includes("network") ||
+    msg.includes("empty response")
   );
 }
 
@@ -226,27 +238,66 @@ function PreviewTable({ rows }: { rows: ScoreChangePreviewRow[] }) {
   );
 }
 
+function ErrorBanner({
+  error,
+}: {
+  error: ApplyErrorState;
+}) {
+  return (
+    <div
+      className="rounded-md border border-red-800/80 bg-red-950/40 px-3 py-2 text-sm text-red-200"
+      role="alert"
+    >
+      <p>{error.message}</p>
+      {error.technicalDetails ? (
+        <details className="mt-3 rounded-md border border-red-900/60 bg-red-950/30 px-3 py-2 text-xs text-red-100/90">
+          <summary className="cursor-pointer font-medium text-red-50">Technical details</summary>
+          <pre className="mt-2 overflow-x-auto whitespace-pre-wrap break-words font-mono">
+            {formatTechnicalDetails(error.technicalDetails)}
+          </pre>
+        </details>
+      ) : null}
+    </div>
+  );
+}
+
 export function LiveScoresFetchPanel({
   isProduction,
   impact,
   provider,
   providerConfigured,
   configWarning,
+  applyBuild,
+  deploySha,
 }: Props) {
   const router = useRouter();
   const [isFetching, startFetch] = useTransition();
-  const [isApplying, startApply] = useTransition();
+  const [isApplying, setIsApplying] = useState(false);
+  const [isRecalculating, setIsRecalculating] = useState(false);
   const [fetchError, setFetchError] = useState<string | null>(null);
   const [applyError, setApplyError] = useState<ApplyErrorState | null>(null);
+  const [recalcError, setRecalcError] = useState<ApplyErrorState | null>(null);
+  const [adminDebugStatus, setAdminDebugStatus] = useState<string | null>(null);
   const [preview, setPreview] = useState<ScoreChangePreview | null>(null);
   const [applyMessage, setApplyMessage] = useState<string | null>(null);
   const [applySummary, setApplySummary] = useState<LiveScoresApplySummary | null>(null);
+  const [standingsRecalc, setStandingsRecalc] = useState<StandingsRecalcState | null>(null);
+  const applyAttemptRef = useRef(0);
+
+  useEffect(() => {
+    console.info("[ashbracket:liveScoresClient] panel mounted", {
+      applyBuild,
+      deploySha,
+    });
+  }, [applyBuild, deploySha]);
 
   function fetchPreview() {
     setFetchError(null);
     setApplyError(null);
+    setRecalcError(null);
     setApplyMessage(null);
     setApplySummary(null);
+    setStandingsRecalc(null);
     startFetch(async () => {
       try {
         const res = await fetchLiveScoresPreviewAction();
@@ -259,8 +310,8 @@ export function LiveScoresFetchPanel({
       } catch (e) {
         setPreview(null);
         setFetchError(
-          isLikelyClientActionFailure(e)
-            ? "Fetch timed out or failed before the server responded. Retry, then check function logs if it keeps happening."
+          isLikelyClientFailure(e)
+            ? "Fetch timed out or failed before the server responded."
             : e instanceof Error
               ? e.message
               : "Unexpected fetch error.",
@@ -269,51 +320,179 @@ export function LiveScoresFetchPanel({
     });
   }
 
-  function applyScores(productionAcknowledged: boolean) {
-    if (!preview) return;
+  async function applyScores(productionAcknowledged: boolean) {
+    if (!preview || isApplying || isRecalculating) return;
+
+    const attemptId = ++applyAttemptRef.current;
+    setIsApplying(true);
     setApplyError(null);
+    setRecalcError(null);
     setApplyMessage(null);
     setApplySummary(null);
-    startApply(async () => {
-      try {
-        const res = await applyLiveScoresAction({
-          previewId: preview.previewId,
-          productionAcknowledged,
-        });
-        if (!res.ok) {
-          setApplyError({
-            message: res.error,
-            technicalDetails: res.technicalDetails,
-          });
-          setApplySummary(res.applySummary ?? null);
-          return;
-        }
-        setApplyMessage(res.message);
-        setApplySummary(res.applySummary);
-        setPreview(null);
-        router.refresh();
-      } catch (e) {
+    setStandingsRecalc(null);
+    setAdminDebugStatus("Step A: client submit started…");
+    console.info("[ashbracket:liveScoresClient] apply started", { attemptId, applyBuild });
+
+    let gotResult = false;
+    try {
+      const res = await postLiveScoresApplyScores({
+        previewId: preview.previewId,
+        productionAcknowledged,
+      });
+
+      if (attemptId !== applyAttemptRef.current) return;
+
+      if (res == null || typeof res !== "object") {
         setApplyError({
-          message: isLikelyClientActionFailure(e)
-            ? "Apply timed out or failed before the server returned a result. Scores may or may not have been written — check tournament status and function logs before retrying."
-            : e instanceof Error
-              ? e.message
-              : "Unexpected apply error.",
+          message:
+            "Apply returned no payload from the server. Check Vercel logs for /api/admin/live-scores/apply.",
+        });
+        return;
+      }
+
+      gotResult = true;
+
+      if (!res.ok) {
+        setApplyError({
+          message: res.error,
+          technicalDetails: res.technicalDetails,
+        });
+        setApplySummary(res.applySummary ?? null);
+        setAdminDebugStatus(`Step A failed (${res.build ?? applyBuild}).`);
+        return;
+      }
+
+      setApplyMessage(res.message);
+      setApplySummary(res.applySummary);
+      setPreview(null);
+
+      if (res.standingsRecalculationPending && res.pendingPoolIds.length > 0) {
+        setStandingsRecalc({
+          editionId: res.editionId,
+          poolIds: res.pendingPoolIds,
+          completed: 0,
+        });
+        setAdminDebugStatus(
+          `Step A saved scores (${res.build}). Step B pending for ${res.pendingPoolIds.length} pool(s).`,
+        );
+      } else {
+        setAdminDebugStatus(`Step A completed (${res.build}).`);
+        router.refresh();
+      }
+    } catch (e) {
+      if (attemptId !== applyAttemptRef.current) return;
+      gotResult = true;
+      setApplyError({
+        message: isLikelyClientFailure(e)
+          ? "Apply timed out or failed before the server returned JSON. Scores may or may not have been written — check tournament status before retrying."
+          : e instanceof Error
+            ? e.message
+            : "Unexpected apply error.",
+      });
+      setAdminDebugStatus("Step A: client caught an exception.");
+    } finally {
+      if (attemptId === applyAttemptRef.current) {
+        setIsApplying(false);
+        if (!gotResult) {
+          setApplyError({
+            message:
+              "Apply ended without a server response. The function likely timed out or the connection was interrupted.",
+          });
+          setAdminDebugStatus("Step A ended with no result payload.");
+        }
+        console.info("[ashbracket:liveScoresClient] apply finished", {
+          attemptId,
+          gotResult,
         });
       }
-    });
+    }
   }
 
-  const pending = isFetching || isApplying;
+  async function recalculateAllPools(productionAcknowledged: boolean) {
+    if (!standingsRecalc || isRecalculating || isApplying) return;
+
+    setIsRecalculating(true);
+    setRecalcError(null);
+    setAdminDebugStatus(
+      `Step B: recalculating ${standingsRecalc.poolIds.length} live pool(s)…`,
+    );
+
+    let completed = 0;
+    const total = standingsRecalc.poolIds.length;
+
+    try {
+      for (let index = 0; index < total; index += 1) {
+        const poolId = standingsRecalc.poolIds[index]!;
+        setAdminDebugStatus(`Step B: pool ${index + 1}/${total} (${poolId.slice(0, 8)}…)…`);
+
+        const res = await postLiveScoresRecalculatePool({
+          editionId: standingsRecalc.editionId,
+          poolId,
+          poolIndex: index,
+          poolTotal: total,
+          productionAcknowledged,
+          revalidateWhenComplete: index === total - 1,
+        });
+
+        if (!res.ok) {
+          setStandingsRecalc({
+            ...standingsRecalc,
+            completed,
+            failedPoolId: poolId,
+            error: res.error,
+          });
+          setRecalcError({
+            message: `Pool recalculation failed on pool ${index + 1}/${total}: ${res.error}`,
+            technicalDetails: res.technicalDetails,
+          });
+          setAdminDebugStatus(`Step B failed on pool ${index + 1}/${total}.`);
+          return;
+        }
+
+        completed += 1;
+        setStandingsRecalc({
+          editionId: standingsRecalc.editionId,
+          poolIds: standingsRecalc.poolIds,
+          completed,
+        });
+      }
+
+      setStandingsRecalc(null);
+      setApplyMessage((prev) =>
+        prev
+          ? `${prev} All ${total} live pool standings recalculated.`
+          : `All ${total} live pool standings recalculated.`,
+      );
+      setAdminDebugStatus(`Step B completed for ${total} pool(s).`);
+      router.refresh();
+    } catch (e) {
+      setRecalcError({
+        message: isLikelyClientFailure(e)
+          ? "Pool recalculation timed out or failed mid-run. Some pools may already be updated."
+          : e instanceof Error
+            ? e.message
+            : "Unexpected pool recalculation error.",
+      });
+      setAdminDebugStatus("Step B: client caught an exception.");
+    } finally {
+      setIsRecalculating(false);
+    }
+  }
+
+  const pending = isFetching || isApplying || isRecalculating;
 
   return (
     <div className="ash-surface flex flex-col gap-4 border border-sky-800/40 bg-sky-950/10 p-5">
       <div>
         <h2 className="text-lg font-bold text-ash-text">Fetch latest scores and cards</h2>
         <p className="mt-2 text-sm leading-relaxed text-ash-muted">
-          Fetch latest final scores and card totals from the configured provider, then update
-          standings. Preview always runs first — nothing is written until you confirm apply.
-          Manual card entries are kept if they differ from provider data.
+          Two-step workflow: Step A saves official scores, cards, and derived knockout results.
+          Step B recalculates live pool standings one pool at a time so score writes cannot time out.
+        </p>
+        <p className="mt-2 text-xs text-ash-muted">
+          Deploy: <span className="font-mono text-ash-text">{deploySha}</span>
+          {" · "}
+          Apply build: <span className="font-mono text-ash-text">{applyBuild}</span>
         </p>
         <p className="mt-2 text-sm text-ash-muted">
           <span className="font-medium text-ash-text">Provider:</span> {provider}
@@ -331,34 +510,13 @@ export function LiveScoresFetchPanel({
             {configWarning}
           </p>
         ) : null}
-        <details className="mt-3 rounded-md border border-ash-border/60 bg-ash-body/20 px-3 py-2 text-sm text-ash-muted">
-          <summary className="cursor-pointer font-medium text-ash-text">
-            Environment variables
-          </summary>
-          <ul className="mt-2 list-disc space-y-1 pl-5">
-            <li>
-              <code className="text-xs">LIVE_SCORES_PROVIDER</code> —{" "}
-              <code className="text-xs">api-football</code> (default) or{" "}
-              <code className="text-xs">mock</code> for local tests
-            </li>
-            <li>
-              <code className="text-xs">API_FOOTBALL_KEY</code> — API key from api-football.com
-            </li>
-            <li>
-              <code className="text-xs">API_FOOTBALL_LEAGUE_ID</code> — competition id for World
-              Cup 2026 in your provider account
-            </li>
-            <li>
-              <code className="text-xs">API_FOOTBALL_SEASON</code> — season year (default{" "}
-              <code className="text-xs">2026</code>)
-            </li>
-          </ul>
-          <p className="mt-2">
-            Local: add to <code className="text-xs">.env.local</code>. Production: Vercel →
-            Project → Settings → Environment Variables.
-          </p>
-        </details>
       </div>
+
+      {adminDebugStatus ? (
+        <p className="rounded-md border border-sky-800/50 bg-sky-950/30 px-3 py-2 text-xs text-sky-100">
+          Admin debug: {adminDebugStatus}
+        </p>
+      ) : null}
 
       {fetchError ? (
         <p className="rounded-md border border-red-800/80 bg-red-950/40 px-3 py-2 text-sm text-red-200">
@@ -366,24 +524,8 @@ export function LiveScoresFetchPanel({
         </p>
       ) : null}
 
-      {applyError ? (
-        <div
-          className="rounded-md border border-red-800/80 bg-red-950/40 px-3 py-2 text-sm text-red-200"
-          role="alert"
-        >
-          <p>{applyError.message}</p>
-          {applyError.technicalDetails ? (
-            <details className="mt-3 rounded-md border border-red-900/60 bg-red-950/30 px-3 py-2 text-xs text-red-100/90">
-              <summary className="cursor-pointer font-medium text-red-50">
-                Technical details
-              </summary>
-              <pre className="mt-2 overflow-x-auto whitespace-pre-wrap break-words font-mono">
-                {formatTechnicalDetails(applyError.technicalDetails)}
-              </pre>
-            </details>
-          ) : null}
-        </div>
-      ) : null}
+      {applyError ? <ErrorBanner error={applyError} /> : null}
+      {recalcError ? <ErrorBanner error={recalcError} /> : null}
 
       {applySummary ? (
         <div
@@ -397,24 +539,7 @@ export function LiveScoresFetchPanel({
             {" · "}
             <span className="font-medium text-ash-text">Cards written:</span>{" "}
             {applySummary.cardsWritten}/{applySummary.cardsPlanned}
-            {" · "}
-            <span className="font-medium text-ash-text">Card conflicts:</span>{" "}
-            {applySummary.cardsManualConflict}
           </p>
-          {applySummary.details.some((d) => d.planned && !d.verified) ? (
-            <ul className="mt-2 list-disc space-y-1 pl-5 text-amber-100">
-              {applySummary.details
-                .filter((d) => d.planned && !d.verified)
-                .map((d) => (
-                  <li key={d.matchCode}>
-                    <span className="font-mono text-xs">{d.matchCode}</span>: expected{" "}
-                    {d.expectedScore ?? "—"} ({d.expectedStatus ?? "finished"}), database has{" "}
-                    {d.actualScore ?? "—"} ({d.actualStatus ?? "missing"})
-                    {d.reason ? ` — ${d.reason}` : ""}
-                  </li>
-                ))}
-            </ul>
-          ) : null}
         </div>
       ) : null}
 
@@ -424,17 +549,36 @@ export function LiveScoresFetchPanel({
           role="status"
         >
           <p>{applyMessage}</p>
-          <p className="mt-2 text-ash-muted">
-            <Link href="/admin/tournament/status" className="ash-link">
-              Tournament status
-            </Link>
-            {" · "}
-            <Link href="/admin/activity" className="ash-link">
-              Activity
-            </Link>
-            {" · "}
-            Open a live pool leaderboard to spot-check points.
+        </div>
+      ) : null}
+
+      {standingsRecalc ? (
+        <div className="rounded-md border border-amber-700/50 bg-amber-950/30 px-3 py-2 text-sm text-amber-100">
+          <p className="font-medium text-amber-50">Step B required — live pool standings</p>
+          <p className="mt-1">
+            Scores and derived results are saved.{" "}
+            {standingsRecalc.completed}/{standingsRecalc.poolIds.length} live pool(s) recalculated.
           </p>
+          {standingsRecalc.error ? (
+            <p className="mt-2 text-red-200">Last error: {standingsRecalc.error}</p>
+          ) : null}
+          <div className="mt-4">
+            <AdminRiskConfirmPanel
+              isProduction={isProduction}
+              impact={impact}
+              actionTitle="Recalculate live pool standings (Step B)"
+              buttonLabel={
+                isRecalculating
+                  ? `Recalculating ${standingsRecalc.completed}/${standingsRecalc.poolIds.length}…`
+                  : "Recalculate all live pool standings"
+              }
+              pending={isRecalculating}
+              disabled={isApplying}
+              variant="live"
+              confirmLabel="I understand this recalculates every live pool's leaderboard from the saved scores."
+              onConfirm={recalculateAllPools}
+            />
+          </div>
         </div>
       ) : null}
 
@@ -460,31 +604,7 @@ export function LiveScoresFetchPanel({
               {" · "}
               <span className="font-medium text-ash-text">Cards will update:</span>{" "}
               {preview.summary.cardsWillUpdate}
-              {" · "}
-              <span className="font-medium text-ash-text">Card conflicts:</span>{" "}
-              {preview.summary.cardsManualConflict}
             </p>
-            {preview.message ? (
-              <p className="mt-2 text-amber-100">{preview.message}</p>
-            ) : null}
-            {preview.fixtureIdentityWarnings.length > 0 ? (
-              <div className="mt-2 rounded-md border border-amber-800/50 bg-amber-950/30 p-3 text-xs text-amber-100">
-                <p className="font-medium text-amber-50">
-                  {preview.summary.fixturesMissingIdentity} provider fixture
-                  {preview.summary.fixturesMissingIdentity === 1 ? "" : "s"} skipped (incomplete team/kickoff data):
-                </p>
-                <ul className="mt-1 list-disc space-y-1 pl-4">
-                  {preview.fixtureIdentityWarnings.slice(0, 8).map((warning) => (
-                    <li key={warning}>{warning}</li>
-                  ))}
-                </ul>
-                {preview.fixtureIdentityWarnings.length > 8 ? (
-                  <p className="mt-1 text-amber-200/80">
-                    …and {preview.fixtureIdentityWarnings.length - 8} more.
-                  </p>
-                ) : null}
-              </div>
-            ) : null}
           </div>
 
           <PreviewTable rows={preview.rows} />
@@ -493,19 +613,18 @@ export function LiveScoresFetchPanel({
             <AdminRiskConfirmPanel
               isProduction={isProduction}
               impact={impact}
-              actionTitle="Apply fetched scores/cards and update standings"
-              buttonLabel="Apply scores/cards & update standings"
+              actionTitle="Step A — Apply fetched scores/cards (no standings yet)"
+              buttonLabel={
+                isApplying ? "Saving scores…" : "Apply scores/cards (Step A)"
+              }
               pending={isApplying}
-              disabled={isFetching}
+              disabled={isFetching || isRecalculating}
               variant="live"
-              confirmLabel="I understand this writes live match scores and provider card totals from the provider and recalculates every live pool when scores change."
+              confirmLabel="I understand Step A writes live match scores and provider card totals, rebuilds derived knockout results, and does not recalculate pool standings yet."
               onConfirm={applyScores}
             />
           ) : (
-            <p className="text-sm text-ash-muted">
-              Nothing to apply — only final matches with changed scores or provider card totals are
-              written. Manual card entries that differ from the provider are skipped.
-            </p>
+            <p className="text-sm text-ash-muted">Nothing to apply.</p>
           )}
         </div>
       ) : null}

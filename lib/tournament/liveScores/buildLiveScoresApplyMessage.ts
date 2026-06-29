@@ -44,6 +44,38 @@ function buildCardOnlySuccessMessage(input: {
   return lines.join(" ");
 }
 
+export function buildLiveScoresScoresSavedMessage(input: {
+  editionName: string;
+  editionCode: string;
+  lastUpdatedAt: string;
+  matchesUpdated: number;
+  summary: SyncOfficialTournamentSummary;
+  applySummary: LiveScoresApplySummary;
+  warnings: string[];
+  pendingPoolCount: number;
+}): string {
+  const lines = [
+    ...scoreSummaryLines({
+      matchesUpdated: input.matchesUpdated,
+      applySummary: input.applySummary,
+    }),
+    `Official match scores and derived knockout results were saved for edition “${input.editionName}” (${input.editionCode}).`,
+    `${input.summary.derivedResultsInserted} derived result row(s) rebuilt; bracket propagation applied.`,
+    `Live pool standings were not recalculated yet — ${input.pendingPoolCount} live pool(s) still need Step B.`,
+    `Last scores update recorded at ${input.lastUpdatedAt}.`,
+  ];
+
+  if (input.applySummary.cardsPlanned > 0) {
+    lines.splice(2, 0, cardSummaryLine(input.applySummary));
+  }
+
+  if (input.warnings.length > 0) {
+    lines.push(`Warnings: ${input.warnings.join(" ")}`);
+  }
+
+  return lines.join(" ");
+}
+
 export function buildLiveScoresApplySuccessMessage(input: {
   editionName: string;
   editionCode: string;
