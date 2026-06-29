@@ -154,8 +154,16 @@ function buildPreview(fixtures: ProviderFixtureScore[], fetchedAt: string) {
     extractApplyPlanOperations(rebuilt.rows),
   );
   assert.deepEqual(diff.changedMatchCodes, ["M73"]);
-  assert.equal(diff.submittedOperations.find((op) => op.matchCode === "M73" && op.kind === "score")?.homeGoals, 0);
-  assert.equal(diff.rebuiltOperations.find((op) => op.matchCode === "M73" && op.kind === "score")?.homeGoals, 1);
+  const submittedM73 = diff.submittedOperations.find(
+    (op) => op.matchCode === "M73" && op.kind === "score",
+  );
+  const rebuiltM73 = diff.rebuiltOperations.find(
+    (op) => op.matchCode === "M73" && op.kind === "score",
+  );
+  assert(submittedM73?.kind === "score");
+  assert(rebuiltM73?.kind === "score");
+  assert.equal(submittedM73.homeGoals, 0);
+  assert.equal(rebuiltM73.homeGoals, 1);
 }
 
 // Completed planned match becomes not-finished → signature mismatch.
@@ -213,6 +221,59 @@ function buildPreview(fixtures: ProviderFixtureScore[], fetchedAt: string) {
   assert(scoreOp && scoreOp.kind === "score");
   assert.equal(scoreOp.status, "finished");
   assert.equal(previewA.previewId, previewB.previewId);
+}
+
+// Event warnings / diagnostic text on preview rows do not affect the apply plan signature.
+{
+  const cardMatch = matchRow({
+    id: "m73",
+    matchCode: "M73",
+    providerFixtureId: "prov-m73",
+    homeTeamName: "South Africa",
+    awayTeamName: "Canada",
+    homeFifaCode: "RSA",
+    awayFifaCode: "CAN",
+    homeGoals: 0,
+    awayGoals: 1,
+    status: "scheduled",
+  });
+  const events = mockNormalizedEventsForFixture("prov-m73", {
+    homeTeamName: "South Africa",
+    awayTeamName: "Canada",
+    homeFifaCode: "RSA",
+    awayFifaCode: "CAN",
+  })!;
+  const previewWithWarnings = buildScoreChangePreview({
+    provider: "mock",
+    providerConfigured: true,
+    configWarning: null,
+    fetchedAt: "2026-06-29T12:00:00.000Z",
+    matches: [cardMatch, m74],
+    fixtures: [finishedM73, liveM74(1, 0)],
+    cardStatsByMatchId: new Map(),
+    eventsByFixtureId: new Map([["prov-m73", events]]),
+    eventFetchFailures: new Set(["prov-m73"]),
+  });
+  const previewWithoutWarnings = buildScoreChangePreview({
+    provider: "mock",
+    providerConfigured: true,
+    configWarning: null,
+    fetchedAt: "2026-06-29T12:05:00.000Z",
+    matches: [cardMatch, m74],
+    fixtures: [finishedM73, liveM74(2, 1)],
+    cardStatsByMatchId: new Map(),
+    eventsByFixtureId: new Map([["prov-m73", events]]),
+  });
+
+  const warnedRow = previewWithWarnings.rows.find((r) => r.matchCode === "M73")!;
+  assert(warnedRow.willUpdate);
+  assert(warnedRow.warnings.length > 0 || warnedRow.cardReason === "no_event_data");
+
+  assert.equal(previewWithWarnings.previewId, previewWithoutWarnings.previewId);
+  assert.deepEqual(
+    extractApplyPlanOperations(previewWithWarnings.rows),
+    extractApplyPlanOperations(previewWithoutWarnings.rows),
+  );
 }
 
 // Signature excludes unstable provider fetchedStatus on planned rows (uses finished patch status).
