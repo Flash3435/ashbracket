@@ -27,6 +27,9 @@ export type SeedOfficialWc2026KnockoutFixturesSummary = {
  * Idempotent upsert of official Round of 32 shell rows (M73–M88) for WC 2026.
  * Teams start null; kickoffs come from canonical JSON.
  *
+ * Existing rows are never reset to `scheduled` or cleared — only missing shells are
+ * inserted and canonical kickoff/stage metadata is patched when the JSON changes.
+ *
  * scoring_* columns are omitted (NULL), matching official group-stage rows and
  * tournament_matches_scoring_result_kind_check (round_of_16 is not allowed).
  */
@@ -111,27 +114,47 @@ export async function seedOfficialWc2026KnockoutFixtures(
   let shellRowsCreated = 0;
   let shellRowsUpdated = 0;
 
+  const rowsToInsert: Record<string, unknown>[] = [];
+  const rowsToPatch: Array<{ matchCode: string; updates: Record<string, unknown> }> = [];
+
   for (const row of matchRows) {
     const code = row.match_code as string;
     const existing = existingByCode.get(code);
     if (!existing) {
+      rowsToInsert.push(row);
       shellRowsCreated += 1;
       continue;
     }
-    const kickoffChanged =
-      (existing.kickoff_at as string | null) !== (row.kickoff_at as string);
-    const roundChanged = (existing.round_index as number) !== (row.round_index as number);
-    const stageChanged = (existing.stage_code as string) !== (row.stage_code as string);
-    if (kickoffChanged || roundChanged || stageChanged) {
+
+    const updates: Record<string, unknown> = {};
+    if ((existing.kickoff_at as string | null) !== (row.kickoff_at as string)) {
+      updates.kickoff_at = row.kickoff_at;
+    }
+    if ((existing.round_index as number) !== (row.round_index as number)) {
+      updates.round_index = row.round_index;
+    }
+    if ((existing.stage_code as string) !== (row.stage_code as string)) {
+      updates.stage_code = row.stage_code;
+    }
+    if (Object.keys(updates).length > 0) {
+      rowsToPatch.push({ matchCode: code, updates });
       shellRowsUpdated += 1;
     }
   }
 
-  const { error: upErr } = await supabase.from("tournament_matches").upsert(matchRows, {
-    onConflict: "edition_id,match_code",
-    ignoreDuplicates: false,
-  });
-  if (upErr) return { ok: false, error: upErr.message };
+  if (rowsToInsert.length > 0) {
+    const { error: insErr } = await supabase.from("tournament_matches").insert(rowsToInsert);
+    if (insErr) return { ok: false, error: insErr.message };
+  }
+
+  for (const { matchCode, updates } of rowsToPatch) {
+    const { error: patchErr } = await supabase
+      .from("tournament_matches")
+      .update(updates)
+      .eq("edition_id", editionId)
+      .eq("match_code", matchCode);
+    if (patchErr) return { ok: false, error: patchErr.message };
+  }
 
   return {
     ok: true,

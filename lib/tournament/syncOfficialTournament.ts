@@ -251,12 +251,24 @@ export async function syncOfficialTournament(
   if (mErr) return { ok: false, error: mErr.message };
   const matches = (rawMatches ?? []) as DbMatch[];
   const beforeById = new Map(matches.map((m) => [m.id, snapshotMatchRow(m)]));
+  const beforeStatusByCode = new Map(matches.map((m) => [m.match_code, m.status]));
+  const patchByCode = new Map(patches.map((p) => [p.matchCode, p]));
+  const matchByCode = new Map(matches.map((m) => [m.match_code, m]));
 
   logger?.log("sync.patches_planned", {
     patchCount: patches.length,
     patchMatchCodes: patches.map((p) => p.matchCode),
     poolCount: poolIds.length,
     matchCount: matches.length,
+    patchTargets: patches.map((p) => {
+      const row = matchByCode.get(p.matchCode);
+      return {
+        matchCode: p.matchCode,
+        previousDbStatus: beforeStatusByCode.get(p.matchCode) ?? null,
+        providerStatus: p.status ?? null,
+        plannedStatus: p.status ?? "finished",
+      };
+    }),
   });
 
   const patchOutcome = applyPatches(matches, patches);
@@ -270,11 +282,29 @@ export async function syncOfficialTournament(
       dirtyMatchIds.add(m.id);
     }
   }
+  for (const matchCode of patchOutcome.applied) {
+    const row = matchByCode.get(matchCode);
+    if (row) dirtyMatchIds.add(row.id);
+  }
 
   logger?.log("sync.score_patches_applied", {
     applied: patchOutcome.applied,
     skipped: patchOutcome.skipped,
     dirtyMatchCount: dirtyMatchIds.size,
+    patchTargets: patchOutcome.applied.map((matchCode) => {
+      const patch = patchByCode.get(matchCode);
+      const row = matchByCode.get(matchCode);
+      return {
+        matchCode,
+        previousDbStatus: beforeStatusByCode.get(matchCode) ?? null,
+        providerStatus: patch?.status ?? null,
+        plannedStatus: patch?.status ?? "finished",
+        updatePayloadStatus: row?.status ?? null,
+        homeGoals: row?.home_goals ?? null,
+        awayGoals: row?.away_goals ?? null,
+        winnerTeamId: row?.winner_team_id ?? null,
+      };
+    }),
   });
 
   const persistRes = await (logger
@@ -291,6 +321,30 @@ export async function syncOfficialTournament(
   logger?.log("sync.score_writes_complete", {
     persistedCount: persistRes.persistedCount,
   });
+
+  async function logPatchTargetDbStatus(phase: string) {
+    if (!logger || patchOutcome.applied.length === 0) return;
+    const { data, error } = await supabase
+      .from("tournament_matches")
+      .select("match_code, status, home_goals, away_goals, winner_team_id")
+      .eq("edition_id", editionId)
+      .in("match_code", patchOutcome.applied);
+    if (error) {
+      logger.log(phase, { error: error.message });
+      return;
+    }
+    logger.log(phase, {
+      targets: (data ?? []).map((row) => ({
+        matchCode: row.match_code,
+        postWriteDbStatus: row.status,
+        homeGoals: row.home_goals,
+        awayGoals: row.away_goals,
+        winnerTeamId: row.winner_team_id,
+      })),
+    });
+  }
+
+  await logPatchTargetDbStatus("sync.patch_targets_after_persist");
 
   const stages = await loadStageIdsByCode(supabase);
   if ("error" in stages) {
@@ -500,6 +554,7 @@ export async function syncOfficialTournament(
       return { ok: false, error: publishOut.error };
     }
     roundOf32Publish = publishOut.summary;
+    await logPatchTargetDbStatus("sync.patch_targets_after_r32_publish");
     if (
       publishOut.summary.conflicts.length > 0 ||
       publishOut.summary.confirmedFixturesPublished > 0
