@@ -1,10 +1,9 @@
 import {
   knockoutParticipantSlotPair,
   r16R32ParticipantPair,
-  WC2026_R16_R32_PARTICIPANT_PAIRS,
 } from "../bracket/wc2026KnockoutPairings";
+import { WC2026_R32_MATCH_DEFS } from "../bracket/wc2026RoundOf32";
 import {
-  officialR32ParticipantIds,
   readConfirmedR32MatchWinner,
   type ConfirmedR32WinnerContext,
 } from "../picks/knockoutMatchPickRows";
@@ -45,15 +44,6 @@ function slotTeamId(
   );
 }
 
-function r32MatchParticipants(
-  slots: KnockoutPickSlotDraft[],
-  matchIndex: number,
-  ctx?: ConfirmedR32WinnerContext,
-): { home: string | null; away: string | null } {
-  const { topId, bottomId } = officialR32ParticipantIds(matchIndex, slots, ctx);
-  return { home: topId, away: bottomId };
-}
-
 function r32WinnerTeamId(
   slots: KnockoutPickSlotDraft[],
   matchIndex: number,
@@ -81,10 +71,7 @@ function isValidR32WinnerForMatch(
   ctx?: ConfirmedR32WinnerContext,
 ): boolean {
   if (!teamId) return true;
-  const { home, away } = r32MatchParticipants(slots, matchIndex, ctx);
-  if (!home && !away) return true;
-  if (home && away) return teamId === home || teamId === away;
-  return (home != null && teamId === home) || (away != null && teamId === away);
+  return readConfirmedR32MatchWinner(matchIndex, slots, ctx) === teamId;
 }
 
 function clearRow(
@@ -201,7 +188,7 @@ export function pruneOfficialKnockoutPathPicks(
   const cleared: ClearedKnockoutPathPick[] = [];
   let result = slots;
 
-  for (let matchIndex = 0; matchIndex < WC2026_R16_R32_PARTICIPANT_PAIRS.length; matchIndex++) {
+  for (let matchIndex = 0; matchIndex < WC2026_R32_MATCH_DEFS.length; matchIndex++) {
     const slotKey = r16SlotKeyForR32MatchIndex(matchIndex);
     const row = result.find(
       (s) => s.predictionKind === "round_of_16" && s.slotKey === slotKey,

@@ -185,7 +185,7 @@ function officialR32ParticipantIdsFromFixture(
   ctx?: ConfirmedR32WinnerContext,
 ): { topId: string | null; bottomId: string | null } | null {
   const ms = ctx?.gradual?.matchStates[matchIndex];
-  if (!ms?.confirmed) return null;
+  if (!ms) return null;
 
   let topId = ms.homeTeamId ?? null;
   let bottomId = ms.awayTeamId ?? null;
@@ -197,8 +197,10 @@ function officialR32ParticipantIdsFromFixture(
         bottomId ?? teamIdForCountryCode(ctx.teams, pub.away_country_code);
     }
   }
-  if (!topId && !bottomId) return null;
-  return { topId, bottomId };
+  // Fixture / gradual teams are authoritative — do not fall back to legacy slots.
+  if (topId || bottomId) return { topId, bottomId };
+  if (!ms.confirmed) return null;
+  return null;
 }
 
 /** Official R32 matchup participants from slots, gradual unlock, and tournament data. */
@@ -387,6 +389,24 @@ export function readConfirmedR32MatchWinner(
   slots: KnockoutPickSlotDraft[],
   ctx?: ConfirmedR32WinnerContext,
 ): string {
+  const resultWinner = officialR32ResultWinner(matchIndex, ctx);
+  if (resultWinner) {
+    return resultWinner;
+  }
+
+  const ms = ctx?.gradual?.matchStates[matchIndex];
+  if (ms && ctx?.teams?.length) {
+    const gradualWinner = readGradualR32MatchWinner(
+      matchIndex,
+      slots,
+      ctx.teams,
+      ms,
+    );
+    if (gradualWinner) {
+      return gradualWinner;
+    }
+  }
+
   const r16Key = r16SlotKeyForR32MatchIndex(matchIndex);
   const stored = slotTeamId(slots, "round_of_16", r16Key);
   const { topId, bottomId: botId } = officialR32ParticipantIds(
@@ -395,11 +415,6 @@ export function readConfirmedR32MatchWinner(
     ctx,
   );
   const hasParticipants = topId != null || botId != null;
-  const resultWinner = officialR32ResultWinner(matchIndex, ctx);
-
-  if (resultWinner) {
-    return resultWinner;
-  }
 
   if (stored) {
     if (!hasParticipants || isTeamInR32Match(stored, topId, botId)) {

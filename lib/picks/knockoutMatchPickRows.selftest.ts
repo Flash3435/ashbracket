@@ -1488,4 +1488,251 @@ function r32Side(slotKey: string, teamId = ""): KnockoutPickSlotDraft {
   assert.strictEqual(uiRows[0]!.lockReason, "started");
 }
 
+// R32 display and R16 builder share the same winner source for M74/M78/M80
+{
+  const norEngTeams: Team[] = [
+    {
+      id: "team-nor",
+      name: "Norway",
+      countryCode: "NOR",
+      fifaCode: "NOR",
+      fifaRank: 45,
+      fifaRankAsOf: null,
+      createdAt: "",
+      updatedAt: "",
+    },
+    {
+      id: "team-eng",
+      name: "England",
+      countryCode: "ENG",
+      fifaCode: "ENG",
+      fifaRank: 4,
+      fifaRankAsOf: null,
+      createdAt: "",
+      updatedAt: "",
+    },
+    {
+      id: "team-sui",
+      name: "Switzerland",
+      countryCode: "SUI",
+      fifaCode: "SUI",
+      fifaRank: 18,
+      fifaRankAsOf: null,
+      createdAt: "",
+      updatedAt: "",
+    },
+    {
+      id: "team-cro",
+      name: "Croatia",
+      countryCode: "CRO",
+      fifaCode: "CRO",
+      fifaRank: 10,
+      fifaRankAsOf: null,
+      createdAt: "",
+      updatedAt: "",
+    },
+    {
+      id: "team-esp",
+      name: "Spain",
+      countryCode: "ESP",
+      fifaCode: "ESP",
+      fifaRank: 7,
+      fifaRankAsOf: null,
+      createdAt: "",
+      updatedAt: "",
+    },
+    {
+      id: "team-jpn",
+      name: "Japan",
+      countryCode: "JPN",
+      fifaCode: "JPN",
+      fifaRank: 17,
+      fifaRankAsOf: null,
+      createdAt: "",
+      updatedAt: "",
+    },
+    {
+      id: "team-sen",
+      name: "Senegal",
+      countryCode: "SEN",
+      fifaCode: "SEN",
+      fifaRank: 22,
+      fifaRankAsOf: null,
+      createdAt: "",
+      updatedAt: "",
+    },
+    {
+      id: "team-bel",
+      name: "Belgium",
+      countryCode: "BEL",
+      fifaCode: "BEL",
+      fifaRank: 12,
+      fifaRankAsOf: null,
+      createdAt: "",
+      updatedAt: "",
+    },
+    {
+      id: "team-col",
+      name: "Colombia",
+      countryCode: "COL",
+      fifaCode: "COL",
+      fifaRank: 11,
+      fifaRankAsOf: null,
+      createdAt: "",
+      updatedAt: "",
+    },
+  ];
+  const allTeams = [...teams, ...norEngTeams];
+  function r32Pub(
+    code: string,
+    home: string,
+    away: string,
+  ): TournamentMatchPublicRow {
+    return {
+      match_id: code,
+      edition_id: "ed",
+      edition_code: "wc2026",
+      match_code: code,
+      stage_code: "round_of_32",
+      stage_label: "R32",
+      stage_sort_order: 2,
+      group_code: null,
+      round_index: 0,
+      kickoff_at: "2026-07-01T19:00:00Z",
+      status: "live",
+      home_goals: null,
+      away_goals: null,
+      home_penalties: null,
+      away_penalties: null,
+      home_team_name: home,
+      home_country_code: home,
+      away_team_name: away,
+      away_country_code: away,
+      winner_team_name: null,
+      winner_country_code: null,
+    };
+  }
+  const tournamentMatches = [
+    r32Pub("M74", "GER", "SUI"),
+    r32Pub("M76", "COL", "POR"),
+    r32Pub("M77", "FRA", "BEL"),
+    r32Pub("M78", "NOR", "CRO"),
+    r32Pub("M79", "ESP", "JPN"),
+    r32Pub("M80", "ENG", "SEN"),
+  ];
+  const nowMs = new Date("2026-06-29T00:00:00Z").getTime();
+  const gradual = getGradualKnockoutSelectionState({
+    matches: tournamentMatches,
+    teams: allTeams,
+    nowMs,
+    fullRoundOf32Official: true,
+  });
+  const ctx = {
+    teams: allTeams,
+    tournamentMatches,
+    gradual,
+    knockoutBracketPicksUnlocked: true,
+  };
+  const r16Winners: Record<string, string> = {
+    "2": "team-ger",
+    "4": "team-col",
+    "5": "team-fra",
+    "6": "team-nor",
+    "7": "team-esp",
+    "8": "team-eng",
+  };
+  const slots: KnockoutPickSlotDraft[] = [
+    r32Side("3", "team-bra"),
+    r32Side("4", "team-ned"),
+    r32Side("11", "team-mar"),
+    r32Side("12", "team-por"),
+    r32Side("15", "team-rsa"),
+    r32Side("16", "team-can"),
+    ...Array.from({ length: 16 }, (_, i) =>
+      r16Slot(String(i + 1), r16Winners[String(i + 1)] ?? ""),
+    ),
+  ];
+  for (const matchIndex of [1, 5, 7] as const) {
+    const ms = gradual.matchStates[matchIndex]!;
+    const gradualWinner = readGradualR32MatchWinner(
+      matchIndex,
+      slots,
+      allTeams,
+      ms,
+    );
+    const confirmedWinner = readConfirmedR32MatchWinner(
+      matchIndex,
+      slots,
+      ctx,
+    );
+    assert.strictEqual(
+      confirmedWinner,
+      gradualWinner,
+      `M${73 + matchIndex} display and R16 source must agree`,
+    );
+    assert.ok(gradualWinner, `M${73 + matchIndex} should have a winner`);
+  }
+  const uiRows = buildGradualR32MatchPickRows({
+    slots,
+    state: gradual,
+    teams: allTeams,
+    fullRoundOf32Official: true,
+  });
+  assert.strictEqual(uiRows.find((r) => r.fifaMatchNo === 74)!.winnerTeamId, "team-ger");
+  assert.strictEqual(uiRows.find((r) => r.fifaMatchNo === 78)!.winnerTeamId, "team-nor");
+  assert.strictEqual(uiRows.find((r) => r.fifaMatchNo === 80)!.winnerTeamId, "team-eng");
+  const r16Rows = buildKnockoutMatchPickRows({
+    bracketKind: "round_of_16",
+    slots,
+    teams: allTeams,
+    tournamentMatches,
+    gradual,
+    knockoutBracketPicksUnlocked: true,
+    nowMs,
+  });
+  const m89 = r16Rows.find((r) => r.fifaMatchNo === 89)!;
+  const m91 = r16Rows.find((r) => r.fifaMatchNo === 91)!;
+  const m92 = r16Rows.find((r) => r.fifaMatchNo === 92)!;
+  assert.ok(
+    !m89.display.statusLine?.includes("M74"),
+    "M89 must not report M74 missing when R32 shows Germany",
+  );
+  assert.ok(
+    !m91.display.statusLine?.includes("M78"),
+    "M91 must not report M78 missing when R32 shows Norway",
+  );
+  assert.ok(
+    !m92.display.statusLine?.includes("M80"),
+    "M92 must not report M80 missing when R32 shows England",
+  );
+  assert.strictEqual(m89.homeTeamId, "team-ger");
+  assert.strictEqual(m89.awayTeamId, "team-fra");
+  assert.strictEqual(m91.homeTeamId, "team-col");
+  assert.strictEqual(m91.awayTeamId, "team-nor");
+  assert.strictEqual(m92.homeTeamId, "team-esp");
+  assert.strictEqual(m92.awayTeamId, "team-eng");
+  const { slots: pruned, cleared } = pruneOfficialKnockoutPathPicks(slots, ctx);
+  assert.strictEqual(cleared.length, 0);
+  assert.strictEqual(
+    pruned.find((s) => s.predictionKind === "round_of_16" && s.slotKey === "2")
+      ?.teamId,
+    "team-ger",
+  );
+  const displaySlots = pruneParticipantPicks(slots, { r32WinnerContext: ctx });
+  const displayR16 = buildKnockoutMatchPickRows({
+    bracketKind: "round_of_16",
+    slots: displaySlots,
+    teams: allTeams,
+    tournamentMatches,
+    gradual,
+    knockoutBracketPicksUnlocked: true,
+    nowMs,
+  });
+  assert.ok(
+    !displayR16.find((r) => r.fifaMatchNo === 89)!.display.statusLine?.includes(
+      "M74",
+    ),
+  );
+}
+
 console.log("knockoutMatchPickRows.selftest.ts: ok");
