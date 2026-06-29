@@ -64,6 +64,8 @@ export type ApplyPlanMismatch = {
   rebuiltOperationCount: number;
   submittedMaterialIntents: ApplyPlanMatchIntent[];
   rebuiltMaterialIntents: ApplyPlanMatchIntent[];
+  materialIntentMatch: boolean;
+  rawOperationSignatureMatch: boolean;
   changedMatchCodes: string[];
   addedMatchCodes: string[];
   removedMatchCodes: string[];
@@ -104,6 +106,10 @@ function serializeMatchIntent(intent: ApplyPlanMatchIntent): string {
     parts.push("manual_card_conflict");
   }
   return parts.join("\0");
+}
+
+export function isLiveOrInProgressPreviewRow(row: ScoreChangePreviewRow): boolean {
+  return row.reason === "in_progress" || row.fetchedStatus === "live";
 }
 
 export function operationsToMatchIntents(
@@ -167,6 +173,110 @@ function matchIntentsEqual(
   return true;
 }
 
+/** Compare only fields the user confirmed in the submitted plan. */
+function intentMatchesSubmittedPlan(
+  submitted: ApplyPlanMatchIntent,
+  rebuilt: ApplyPlanMatchIntent | undefined,
+): boolean {
+  if (!rebuilt) return false;
+  if (submitted.score) {
+    if (!rebuilt.score || serializeScoreIntent(submitted.score) !== serializeScoreIntent(rebuilt.score)) {
+      return false;
+    }
+  }
+  if (submitted.cards) {
+    if (!rebuilt.cards || serializeCardIntent(submitted.cards) !== serializeCardIntent(rebuilt.cards)) {
+      return false;
+    }
+  }
+  if (!!submitted.manualCardConflict !== !!rebuilt.manualCardConflict) {
+    return false;
+  }
+  return true;
+}
+
+function isNewFinishedScoreWrite(
+  rebuiltIntent: ApplyPlanMatchIntent,
+  row: ScoreChangePreviewRow | undefined,
+): boolean {
+  if (!rebuiltIntent.score) return false;
+  if (!row) return true;
+  if (isLiveOrInProgressPreviewRow(row)) return false;
+  return row.willUpdate && row.fetchedStatus === "finished";
+}
+
+/**
+ * Stale-plan decision: submitted preview is authoritative for score/card targets.
+ * Rebuilt-only card ops and live/in-progress rows never block Step A.
+ */
+export function evaluateApplyPlanFreshness(
+  submitted: ApplyPlanOperation[],
+  rebuilt: ApplyPlanOperation[],
+  rebuiltRows: ScoreChangePreviewRow[],
+): ApplyPlanMismatch {
+  const submittedIntents = operationsToMatchIntents(submitted);
+  const rebuiltIntents = operationsToMatchIntents(rebuilt);
+  const rowByCode = new Map(rebuiltRows.map((row) => [row.matchCode, row]));
+
+  const changedMatchCodes: string[] = [];
+  const addedMatchCodes: string[] = [];
+  const removedMatchCodes: string[] = [];
+
+  for (const matchCode of [...submittedIntents.keys()].sort()) {
+    const subIntent = submittedIntents.get(matchCode)!;
+    const rebIntent = rebuiltIntents.get(matchCode);
+    const row = rowByCode.get(matchCode);
+
+    if (!rebIntent) {
+      if (row && isLiveOrInProgressPreviewRow(row)) {
+        if (subIntent.score) {
+          removedMatchCodes.push(matchCode);
+          changedMatchCodes.push(matchCode);
+        }
+        continue;
+      }
+      removedMatchCodes.push(matchCode);
+      changedMatchCodes.push(matchCode);
+      continue;
+    }
+
+    if (!intentMatchesSubmittedPlan(subIntent, rebIntent)) {
+      changedMatchCodes.push(matchCode);
+    }
+  }
+
+  for (const matchCode of [...rebuiltIntents.keys()].sort()) {
+    if (submittedIntents.has(matchCode)) continue;
+    const rebIntent = rebuiltIntents.get(matchCode)!;
+    const row = rowByCode.get(matchCode);
+    if (row && isLiveOrInProgressPreviewRow(row)) continue;
+    if (isNewFinishedScoreWrite(rebIntent, row)) {
+      addedMatchCodes.push(matchCode);
+      changedMatchCodes.push(matchCode);
+    }
+  }
+
+  const submittedSignature = computeApplyPlanSignatureFromOperations(submitted);
+  const rebuiltSignature = computeApplyPlanSignatureFromOperations(rebuilt);
+  const materialIntentMatch = changedMatchCodes.length === 0;
+
+  return {
+    submittedSignature,
+    rebuiltSignature,
+    submittedOperations: submitted,
+    rebuiltOperations: rebuilt,
+    submittedOperationCount: submitted.length,
+    rebuiltOperationCount: rebuilt.length,
+    submittedMaterialIntents: matchIntentsFromOperations(submitted),
+    rebuiltMaterialIntents: matchIntentsFromOperations(rebuilt),
+    materialIntentMatch,
+    rawOperationSignatureMatch: submittedSignature === rebuiltSignature,
+    changedMatchCodes,
+    addedMatchCodes,
+    removedMatchCodes,
+  };
+}
+
 /** Material Step A operations only — excludes live/unplanned rows and unstable provider UI fields. */
 export function extractApplyPlanOperations(
   rows: ScoreChangePreviewRow[],
@@ -174,6 +284,8 @@ export function extractApplyPlanOperations(
   const ops: ApplyPlanOperation[] = [];
 
   for (const row of rows) {
+    if (isLiveOrInProgressPreviewRow(row)) continue;
+
     if (row.willUpdate) {
       if (row.fetchedHomeGoals == null || row.fetchedAwayGoals == null) continue;
       if (row.fetchedStatus !== "finished") continue;
@@ -248,57 +360,17 @@ export function computeApplyPlanSignature(rows: ScoreChangePreviewRow[]): string
 export function diffApplyPlanOperations(
   submitted: ApplyPlanOperation[],
   rebuilt: ApplyPlanOperation[],
+  rebuiltRows: ScoreChangePreviewRow[] = [],
 ): ApplyPlanMismatch {
-  const submittedIntents = operationsToMatchIntents(submitted);
-  const rebuiltIntents = operationsToMatchIntents(rebuilt);
-  const allCodes = new Set([...submittedIntents.keys(), ...rebuiltIntents.keys()]);
-
-  const changedMatchCodes: string[] = [];
-  const addedMatchCodes: string[] = [];
-  const removedMatchCodes: string[] = [];
-
-  for (const matchCode of [...allCodes].sort()) {
-    const sub = submittedIntents.get(matchCode);
-    const reb = rebuiltIntents.get(matchCode);
-
-    if (!sub && reb) {
-      addedMatchCodes.push(matchCode);
-      changedMatchCodes.push(matchCode);
-      continue;
-    }
-    if (sub && !reb) {
-      removedMatchCodes.push(matchCode);
-      changedMatchCodes.push(matchCode);
-      continue;
-    }
-    if (!matchIntentsEqual(sub, reb)) {
-      changedMatchCodes.push(matchCode);
-    }
-  }
-
-  const submittedMaterialIntents = matchIntentsFromOperations(submitted);
-  const rebuiltMaterialIntents = matchIntentsFromOperations(rebuilt);
-
-  return {
-    submittedSignature: computeApplyPlanSignatureFromOperations(submitted),
-    rebuiltSignature: computeApplyPlanSignatureFromOperations(rebuilt),
-    submittedOperations: submitted,
-    rebuiltOperations: rebuilt,
-    submittedOperationCount: submitted.length,
-    rebuiltOperationCount: rebuilt.length,
-    submittedMaterialIntents,
-    rebuiltMaterialIntents,
-    changedMatchCodes,
-    addedMatchCodes,
-    removedMatchCodes,
-  };
+  return evaluateApplyPlanFreshness(submitted, rebuilt, rebuiltRows);
 }
 
 export function applyPlanMaterialStatesMatch(
   submitted: ApplyPlanOperation[],
   rebuilt: ApplyPlanOperation[],
+  rebuiltRows: ScoreChangePreviewRow[] = [],
 ): boolean {
-  return diffApplyPlanOperations(submitted, rebuilt).changedMatchCodes.length === 0;
+  return evaluateApplyPlanFreshness(submitted, rebuilt, rebuiltRows).materialIntentMatch;
 }
 
 export function buildApplyPlanStaleErrorMessage(mismatch: ApplyPlanMismatch): string {

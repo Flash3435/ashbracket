@@ -89,7 +89,9 @@ export async function fetchLiveScoresPreviewAction(): Promise<LiveScoresPreviewR
     }
 
     const fetchedAt = new Date().toISOString();
-    const built = await buildLiveScoresPreviewWithCards(supabase, liveEdition.id, fetchedAt);
+    const built = await buildLiveScoresPreviewWithCards(supabase, liveEdition.id, fetchedAt, {
+      eventFetchMode: "apply_validation",
+    });
     if (!built.ok) {
       logAdminRiskAction({
         action: "live_scores_preview",

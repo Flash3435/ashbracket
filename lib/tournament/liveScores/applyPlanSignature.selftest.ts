@@ -7,6 +7,7 @@ import {
   computeApplyPlanSignature,
   computeApplyPlanSignatureFromOperations,
   diffApplyPlanOperations,
+  evaluateApplyPlanFreshness,
   extractApplyPlanOperations,
   matchIntentsFromOperations,
 } from "./applyPlanSignature";
@@ -433,8 +434,10 @@ function buildPreview(fixtures: ProviderFixtureScore[], fetchedAt: string) {
   const diff = diffApplyPlanOperations(
     extractApplyPlanOperations(submitted.rows),
     extractApplyPlanOperations(rebuilt.rows),
+    rebuilt.rows,
   );
   assert.deepEqual(diff.changedMatchCodes, ["M76"]);
+  assert.equal(diff.materialIntentMatch, false);
   assert.notEqual(submitted.previewId, rebuilt.previewId);
 }
 
@@ -446,12 +449,14 @@ function buildPreview(fixtures: ProviderFixtureScore[], fetchedAt: string) {
     "2026-06-29T12:05:00.000Z",
   );
 
-  const diff = diffApplyPlanOperations(
+  const freshness = evaluateApplyPlanFreshness(
     extractApplyPlanOperations(submitted.rows),
     extractApplyPlanOperations(rebuilt.rows),
+    rebuilt.rows,
   );
-  assert.deepEqual(diff.changedMatchCodes, ["M76"]);
-  assert.deepEqual(diff.removedMatchCodes, ["M76"]);
+  assert.deepEqual(freshness.changedMatchCodes, ["M76"]);
+  assert.deepEqual(freshness.removedMatchCodes, ["M76"]);
+  assert.equal(freshness.materialIntentMatch, false);
 }
 
 // Signature ignores matchId / providerFixtureId — material state only.
@@ -516,11 +521,110 @@ function buildPreview(fixtures: ProviderFixtureScore[], fetchedAt: string) {
   });
 
   assert.equal(previewA.previewId, previewB.previewId);
-  const diff = diffApplyPlanOperations(
+  const freshness = evaluateApplyPlanFreshness(
     extractApplyPlanOperations(previewA.rows),
     extractApplyPlanOperations(previewB.rows),
+    previewB.rows,
   );
-  assert.deepEqual(diff.changedMatchCodes, []);
+  assert.equal(freshness.materialIntentMatch, true);
+  assert.deepEqual(freshness.changedMatchCodes, []);
+}
+
+// 5 submitted ops vs 7 rebuilt ops — rebuilt adds card ops user did not confirm; material match proceeds.
+{
+  const submittedPreview = buildPreview([finishedM73, finishedM76, liveM74(1, 0)], "2026-06-29T12:00:00.000Z");
+  const submittedScoreOps = extractApplyPlanOperations(submittedPreview.rows);
+  const submittedOps: typeof submittedScoreOps = [
+    ...submittedScoreOps,
+    {
+      kind: "score",
+      matchCode: "M77",
+      matchId: "m77",
+      providerFixtureId: "prov-m77",
+      homeGoals: 1,
+      awayGoals: 0,
+      homePenalties: null,
+      awayPenalties: null,
+      status: "finished",
+    },
+    {
+      kind: "score",
+      matchCode: "M78",
+      matchId: "m78",
+      providerFixtureId: "prov-m78",
+      homeGoals: 2,
+      awayGoals: 2,
+      homePenalties: 4,
+      awayPenalties: 3,
+      status: "finished",
+    },
+    {
+      kind: "score",
+      matchCode: "M79",
+      matchId: "m79",
+      providerFixtureId: "prov-m79",
+      homeGoals: 0,
+      awayGoals: 3,
+      homePenalties: null,
+      awayPenalties: null,
+      status: "finished",
+    },
+  ];
+  assert.equal(submittedOps.length, 5);
+
+  const rebuiltPreview = buildPreview([finishedM73, finishedM76, liveM74(2, 1)], "2026-06-29T12:05:00.000Z");
+  const rebuiltScoreOps = extractApplyPlanOperations(rebuiltPreview.rows);
+  const rebuiltOps: typeof submittedOps = [
+    ...submittedOps,
+    {
+      kind: "cards",
+      matchCode: "M73",
+      matchId: "m73",
+      providerFixtureId: "prov-m73",
+      homeYellowCards: 1,
+      awayYellowCards: 2,
+      homeRedCards: 0,
+      awayRedCards: 0,
+    },
+    {
+      kind: "cards",
+      matchCode: "M76",
+      matchId: "m76",
+      providerFixtureId: "prov-m76",
+      homeYellowCards: 0,
+      awayYellowCards: 1,
+      homeRedCards: 0,
+      awayRedCards: 0,
+    },
+  ];
+  assert.equal(rebuiltOps.length, 7);
+  assert.notEqual(
+    computeApplyPlanSignatureFromOperations(submittedOps),
+    computeApplyPlanSignatureFromOperations(rebuiltOps),
+  );
+
+  const freshness = evaluateApplyPlanFreshness(submittedOps, rebuiltOps, rebuiltPreview.rows);
+  assert.equal(freshness.submittedOperationCount, 5);
+  assert.equal(freshness.rebuiltOperationCount, 7);
+  assert.equal(freshness.materialIntentMatch, true);
+  assert.equal(freshness.rawOperationSignatureMatch, false);
+  assert.deepEqual(freshness.changedMatchCodes, []);
+}
+
+// M74 live in rebuilt preview never blocks when absent from submitted plan.
+{
+  const submittedPreview = buildPreview([finishedM73, finishedM76, liveM74(1, 0)], "2026-06-29T12:00:00.000Z");
+  const rebuiltPreview = buildPreview(
+    [finishedM73, finishedM76, liveM74(3, 2)],
+    "2026-06-29T12:05:00.000Z",
+  );
+  const freshness = evaluateApplyPlanFreshness(
+    extractApplyPlanOperations(submittedPreview.rows),
+    extractApplyPlanOperations(rebuiltPreview.rows),
+    rebuiltPreview.rows,
+  );
+  assert.equal(freshness.materialIntentMatch, true);
+  assert(!freshness.changedMatchCodes.includes("M74"));
 }
 
 console.log("applyPlanSignature.selftest.ts: all assertions passed");

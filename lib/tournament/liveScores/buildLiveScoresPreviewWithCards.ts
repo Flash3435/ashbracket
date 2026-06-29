@@ -2,11 +2,9 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import {
   type ApplyPlanMismatch,
   type ApplyPlanOperation,
-  applyPlanMaterialStatesMatch,
   buildApplyPlanStaleErrorMessage,
   computeApplyPlanSignature,
-  computeApplyPlanSignatureFromOperations,
-  diffApplyPlanOperations,
+  evaluateApplyPlanFreshness,
   extractApplyPlanOperations,
 } from "./applyPlanSignature";
 import {
@@ -78,7 +76,7 @@ async function buildLiveScoresPreviewWithCardsInternal(
     fixtures: fetchResult.fixtures,
   });
 
-  const eventFetchMode = options?.eventFetchMode ?? "all_finished";
+  const eventFetchMode = options?.eventFetchMode ?? "apply_validation";
   let fixtureIds: string[] = [];
   if (eventFetchMode === "all_finished") {
     fixtureIds = fixtureIdsEligibleForEventFetch(basePreview.rows);
@@ -141,7 +139,7 @@ export async function buildLiveScoresPreviewWithCards(
 
 /**
  * Rebuild provider preview for apply validation with card events for every planned row.
- * Compares a stable apply-plan signature, not full provider preview state.
+ * Allow/reject uses material intent match only — raw signature drift is logged, not blocking.
  */
 export async function buildLiveScoresPreviewForApply(
   supabase: SupabaseClient,
@@ -155,66 +153,56 @@ export async function buildLiveScoresPreviewForApply(
   });
   if (!built.ok) return built;
 
-  const rebuiltSignature = computeApplyPlanSignature(built.preview.rows);
   const rebuiltOperations = extractApplyPlanOperations(built.preview.rows);
-  const submittedSnapshotSignature = submittedOperations
-    ? computeApplyPlanSignatureFromOperations(submittedOperations)
-    : null;
-  const materialMatch = applyPlanMaterialStatesMatch(
+  const freshness = evaluateApplyPlanFreshness(
     submittedOperations ?? [],
     rebuiltOperations,
+    built.preview.rows,
   );
 
   console.info("[ashbracket:liveScoresApply] apply_plan_signature.compare", {
     submittedSignature: expectedApplyPlanSignature,
-    submittedSnapshotSignature,
-    rebuiltSignature,
-    submittedOperationCount: submittedOperations?.length ?? null,
-    rebuiltOperationCount: rebuiltOperations.length,
-    signatureMatch: rebuiltSignature === expectedApplyPlanSignature,
-    snapshotSignatureMatch: submittedSnapshotSignature === rebuiltSignature,
-    materialMatch,
+    submittedSnapshotSignature: freshness.submittedSignature,
+    rebuiltSignature: freshness.rebuiltSignature,
+    submittedOperationCount: freshness.submittedOperationCount,
+    rebuiltOperationCount: freshness.rebuiltOperationCount,
+    rawOperationSignatureMatch: freshness.rawOperationSignatureMatch,
+    materialIntentMatch: freshness.materialIntentMatch,
+    previewIdMatch: freshness.rebuiltSignature === expectedApplyPlanSignature,
   });
 
-  if (
-    rebuiltSignature === expectedApplyPlanSignature ||
-    (submittedSnapshotSignature !== null &&
-      submittedSnapshotSignature === rebuiltSignature) ||
-    materialMatch
-  ) {
-    if (submittedOperations && submittedSnapshotSignature !== expectedApplyPlanSignature) {
-      console.warn("[ashbracket:liveScoresApply] apply_plan_snapshot.preview_id_stale", {
+  if (freshness.materialIntentMatch) {
+    if (!freshness.rawOperationSignatureMatch) {
+      console.warn("[ashbracket:liveScoresApply] apply_plan_signature.raw_drift_allowed", {
         expectedApplyPlanSignature,
-        submittedSnapshotSignature,
-        rebuiltSignature,
+        submittedSnapshotSignature: freshness.submittedSignature,
+        rebuiltSignature: freshness.rebuiltSignature,
+        submittedOperationCount: freshness.submittedOperationCount,
+        rebuiltOperationCount: freshness.rebuiltOperationCount,
       });
     }
     return built;
   }
 
-  const mismatch = diffApplyPlanOperations(submittedOperations ?? [], rebuiltOperations);
-
-  console.warn("[ashbracket:liveScoresApply] apply_plan_signature.mismatch", {
-    submittedSignature: expectedApplyPlanSignature,
-    rebuiltSignature,
-    changedMatchCodes: mismatch.changedMatchCodes,
-    submittedOperations: submittedOperations ?? [],
-    rebuiltOperations,
+  console.warn("[ashbracket:liveScoresApply] apply_plan_signature.material_mismatch", {
+    expectedApplyPlanSignature,
+    rebuiltSignature: freshness.rebuiltSignature,
+    materialIntentMatch: freshness.materialIntentMatch,
+    rawOperationSignatureMatch: freshness.rawOperationSignatureMatch,
+    changedMatchCodes: freshness.changedMatchCodes,
+    submittedMaterialIntents: freshness.submittedMaterialIntents,
+    rebuiltMaterialIntents: freshness.rebuiltMaterialIntents,
   });
 
   return {
     ok: false,
     error: buildApplyPlanStaleErrorMessage({
-      ...mismatch,
+      ...freshness,
       submittedSignature: expectedApplyPlanSignature,
-      rebuiltSignature,
     }),
     stalePreview: {
-      ...mismatch,
+      ...freshness,
       submittedSignature: expectedApplyPlanSignature,
-      rebuiltSignature,
-      submittedOperations: submittedOperations ?? [],
-      rebuiltOperations,
     },
     httpStatus: 409,
   };

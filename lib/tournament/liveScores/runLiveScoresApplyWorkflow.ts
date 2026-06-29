@@ -39,7 +39,7 @@ import type {
 import type { ApplyPlanMismatch, ApplyPlanOperation } from "./applyPlanSignature";
 
 /** Bump when changing live-scores apply workflow — shown in admin debug UI. */
-export const LIVE_SCORES_APPLY_BUILD = "split-apply-v3";
+export const LIVE_SCORES_APPLY_BUILD = "split-apply-v4-material-intent";
 
 export type LiveScoresApplyScoresResult =
   | {
@@ -228,7 +228,11 @@ export async function runLiveScoresApplyScoresOnly(
       logger.log("action.apply_plan_mismatch", {
         submittedSignature: input.previewId,
         rebuiltSignature: loaded.stalePreview?.rebuiltSignature ?? null,
+        materialIntentMatch: loaded.stalePreview?.materialIntentMatch ?? null,
+        rawOperationSignatureMatch: loaded.stalePreview?.rawOperationSignatureMatch ?? null,
         changedMatchCodes: loaded.stalePreview?.changedMatchCodes ?? [],
+        submittedMaterialIntents: loaded.stalePreview?.submittedMaterialIntents ?? [],
+        rebuiltMaterialIntents: loaded.stalePreview?.rebuiltMaterialIntents ?? [],
         submittedOperations: loaded.stalePreview?.submittedOperations ?? input.applyPlanSnapshot ?? [],
         rebuiltOperations: loaded.stalePreview?.rebuiltOperations ?? [],
       });

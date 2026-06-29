@@ -470,6 +470,8 @@ export function LiveScoresFetchPanel({
                 outcome.debugLine,
                 `submittedSignature=${outcome.stalePreview.submittedSignature}`,
                 `rebuiltSignature=${outcome.stalePreview.rebuiltSignature}`,
+                `materialIntentMatch=${outcome.stalePreview.materialIntentMatch}`,
+                `rawOperationSignatureMatch=${outcome.stalePreview.rawOperationSignatureMatch}`,
                 `submittedOperationCount=${outcome.stalePreview.submittedOperationCount}`,
                 `rebuiltOperationCount=${outcome.stalePreview.rebuiltOperationCount}`,
               ].join(" · ")
