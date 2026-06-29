@@ -20,6 +20,7 @@ import { BracketOutlookView } from "./BracketOutlookView";
 import type { BracketOutlookSummary } from "@/lib/leaderboard/bracketOutlookSeparation";
 import { TournamentStatLeadersPanel } from "@/components/tournament/TournamentStatLeadersPanel";
 import type { TournamentStatLeadersView } from "@/lib/tournament/matchTeamStats/buildTournamentStatLeadersView";
+import { participantPublicProfileHref } from "@/lib/participant/participantProfileRouting";
 
 function summaryCard(label: string, value: string, hint: string) {
   return (
@@ -117,6 +118,47 @@ function participantNameCell(
         <p className="mt-0.5 text-xs text-ash-border-hover">Tied at rank {row.rank}</p>
       ) : null}
     </>
+  );
+}
+
+function participantProfileLink(
+  row: PublicPoolLeaderboardRowDisplay,
+  isViewerRow: boolean,
+  className: string,
+  wrapper?: "block" | "inline",
+) {
+  const href = participantPublicProfileHref(row.participantId);
+  const content =
+    wrapper === "block" ? (
+      <div className="flex items-start justify-between gap-3">
+        <div className="flex items-center gap-3">
+          {rankCell(row)}
+          <div className="min-w-0">
+            <div className="flex flex-wrap items-center gap-2">
+              <p className="font-semibold text-ash-text">{row.displayName}</p>
+              {isViewerRow ? <ViewerYouChip /> : null}
+            </div>
+            {row.isTiedAtRank ? (
+              <p className="text-xs text-ash-muted">Tied at rank {row.rank}</p>
+            ) : null}
+          </div>
+        </div>
+        <span className="text-xl font-bold tabular-nums text-ash-text">
+          {row.pointsLabel}
+        </span>
+      </div>
+    ) : (
+      participantNameCell(row, isViewerRow)
+    );
+
+  if (!href) {
+    return <div className={className}>{content}</div>;
+  }
+
+  return (
+    <Link href={href} className={className}>
+      {content}
+    </Link>
   );
 }
 
@@ -332,12 +374,11 @@ export function PublicPoolLeaderboardView({
                 >
                   <td className="px-4 py-3.5">{rankCell(row)}</td>
                   <td className="px-4 py-3.5">
-                    <Link
-                      href={`/participant/${row.participantId}`}
-                      className="inline-block underline-offset-2 hover:text-ash-accent hover:underline"
-                    >
-                      {participantNameCell(row, isViewerRow)}
-                    </Link>
+                    {participantProfileLink(
+                      row,
+                      isViewerRow,
+                      "inline-block underline-offset-2 hover:text-ash-accent hover:underline",
+                    )}
                   </td>
                   <td className="px-4 py-3.5 text-right">
                     <span className="text-lg font-bold tabular-nums text-ash-text">
@@ -367,28 +408,12 @@ export function PublicPoolLeaderboardView({
               tabIndex={scrollProps.tabIndex}
               aria-current={isViewerRow ? "true" : undefined}
             >
-              <Link
-                href={`/participant/${row.participantId}`}
-                className={`block rounded-xl border border-ash-border/70 px-4 py-4 transition-colors hover:bg-ash-body/40 ${rowSurfaceClass(row, isViewerRow)}`}
-              >
-                <div className="flex items-start justify-between gap-3">
-                  <div className="flex items-center gap-3">
-                    {rankCell(row)}
-                    <div className="min-w-0">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <p className="font-semibold text-ash-text">{row.displayName}</p>
-                        {isViewerRow ? <ViewerYouChip /> : null}
-                      </div>
-                      {row.isTiedAtRank ? (
-                        <p className="text-xs text-ash-muted">Tied at rank {row.rank}</p>
-                      ) : null}
-                    </div>
-                  </div>
-                  <span className="text-xl font-bold tabular-nums text-ash-text">
-                    {row.pointsLabel}
-                  </span>
-                </div>
-              </Link>
+              {participantProfileLink(
+                row,
+                isViewerRow,
+                `block rounded-xl border border-ash-border/70 px-4 py-4 transition-colors hover:bg-ash-body/40 ${rowSurfaceClass(row, isViewerRow)}`,
+                "block",
+              )}
             </li>
             );
           })}

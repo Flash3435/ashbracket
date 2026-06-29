@@ -1,4 +1,5 @@
 import type { PublicLeaderboardPoolSection } from "../../types/leaderboard";
+import { participantPublicProfileHref } from "@/lib/participant/participantProfileRouting";
 import { formatPoolPoints } from "@/lib/format/poolPoints";
 import Link from "next/link";
 
@@ -67,15 +68,20 @@ export function PublicLeaderboard({
                 </tr>
               </thead>
               <tbody className="divide-y divide-ash-border">
-                {section.rows.map((r) => (
+                {section.rows.map((r) => {
+                  const profileHref = nameLinks
+                    ? participantPublicProfileHref(r.participantId)
+                    : null;
+
+                  return (
                   <tr key={r.participantId} className={rowHighlightClass(r.rank)}>
                     <td className="px-3 py-2 font-medium tabular-nums text-ash-text">
                       {r.rank}
                     </td>
                     <td className="px-3 py-2 text-ash-muted">
-                      {nameLinks ? (
+                      {profileHref ? (
                         <Link
-                          href={`/participant/${r.participantId}`}
+                          href={profileHref}
                           className="text-ash-text underline-offset-2 hover:text-ash-accent hover:underline focus:outline-none focus-visible:rounded-sm focus-visible:ring-2 focus-visible:ring-ash-accent focus-visible:ring-offset-2 focus-visible:ring-offset-ash-surface"
                         >
                           {r.displayName}
@@ -88,7 +94,8 @@ export function PublicLeaderboard({
                       {formatPoolPoints(r.totalPoints)}
                     </td>
                   </tr>
-                ))}
+                  );
+                })}
               </tbody>
             </table>
           </div>

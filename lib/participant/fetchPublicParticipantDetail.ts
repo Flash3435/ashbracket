@@ -1,6 +1,12 @@
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { createClient } from "@/lib/supabase/server";
+import { createServiceRoleClient } from "@/lib/supabase/service";
+import { buildPoolStandingsFromLedger } from "../leaderboard/buildPoolStandingsFromLedger";
 import type { LeaderboardPublicRowDb } from "../../types/leaderboard";
-import type { PublicParticipantDetail } from "../../types/publicParticipant";
+import type {
+  PublicParticipantDetail,
+  PublicParticipantPick,
+} from "../../types/publicParticipant";
 import { mapPublicLeaderboardRow } from "../leaderboard/publicLeaderboard";
 import {
   mapLedgerPublicRow,
@@ -8,98 +14,81 @@ import {
   type PointsLedgerPublicRowDb,
   type PredictionsPublicRowDb,
 } from "./mapPublicParticipantRows";
+import { normalizeParticipantProfileRouteId } from "./participantProfileRouting";
 
-const UUID_RE =
-  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+type ParticipantBracketHeaderRpcRow = {
+  display_name: string;
+  pool_id: string;
+  pool_name: string;
+  lock_at: string | null;
+  is_public: boolean;
+};
 
-function isUuid(s: string): boolean {
-  return UUID_RE.test(s);
-}
+type PredictionTableRow = {
+  id: string;
+  prediction_kind: string;
+  group_code: string | null;
+  slot_key: string | null;
+  bonus_key: string | null;
+  team_id: string | null;
+  tournament_stage_id: string | null;
+};
 
 export type FetchPublicParticipantResult =
   | { ok: true; data: PublicParticipantDetail }
   | { ok: false; kind: "not_found" | "error"; message?: string };
 
 /**
- * Loads public-safe summary (`leaderboard_public`), picks (`predictions_public`),
- * and ledger lines (`points_ledger_public`) for one participant.
+ * Loads participant profile data when the caller may view that bracket:
+ * public pools (anon-safe views) or same-pool members / managers (private pools).
  */
 export async function fetchPublicParticipantDetail(
   participantId: string,
 ): Promise<FetchPublicParticipantResult> {
-  if (!isUuid(participantId)) {
+  const trimmed = normalizeParticipantProfileRouteId(participantId);
+  if (!trimmed) {
     return { ok: false, kind: "not_found" };
   }
 
   try {
     const supabase = await createClient();
 
-    const [summaryRes, picksRes, ledgerRes] = await Promise.all([
-      supabase
-        .from("leaderboard_public")
-        .select(
-          "pool_id, pool_name, participant_id, display_name, total_points, rank",
-        )
-        .eq("participant_id", participantId)
-        .maybeSingle(),
-      supabase
-        .from("predictions_public")
-        .select(
-          "prediction_id, participant_id, pool_id, prediction_kind, group_code, slot_key, bonus_key, stage_code, stage_label, stage_sort_order, team_name, team_country_code",
-        )
-        .eq("participant_id", participantId)
-        .order("stage_sort_order", { ascending: true, nullsFirst: false })
-        .order("prediction_kind", { ascending: true }),
-      supabase
-        .from("points_ledger_public")
-        .select(
-          "id, participant_id, pool_id, points_delta, prediction_kind, created_at, prediction_id, result_id",
-        )
-        .eq("participant_id", participantId)
-        .order("created_at", { ascending: false }),
-    ]);
+    const { data: headerRaw, error: headerErr } = await supabase.rpc(
+      "ashbracket_participant_bracket_header",
+      { p_participant_id: trimmed },
+    );
 
-    if (summaryRes.error) {
-      return {
-        ok: false,
-        kind: "error",
-        message: summaryRes.error.message,
-      };
+    if (headerErr) {
+      return { ok: false, kind: "error", message: headerErr.message };
     }
-    if (!summaryRes.data) {
+
+    if (
+      headerRaw == null ||
+      typeof headerRaw !== "object" ||
+      !("pool_id" in headerRaw)
+    ) {
       return { ok: false, kind: "not_found" };
     }
 
-    if (picksRes.error) {
-      return { ok: false, kind: "error", message: picksRes.error.message };
-    }
-    if (ledgerRes.error) {
-      return { ok: false, kind: "error", message: ledgerRes.error.message };
+    const header = headerRaw as ParticipantBracketHeaderRpcRow;
+    const poolId = header.pool_id as string;
+    const poolName = String(header.pool_name ?? "").trim() || "Pool";
+    const displayName =
+      String(header.display_name ?? "").trim() || "Participant";
+
+    if (header.is_public) {
+      return loadPublicPoolParticipantDetail(supabase, trimmed, {
+        poolId,
+        poolName,
+        displayName,
+      });
     }
 
-    const summary = mapPublicLeaderboardRow(
-      summaryRes.data as LeaderboardPublicRowDb,
-    );
-    const picks = (picksRes.data ?? []).map((row) =>
-      mapPredictionPublicRow(row as PredictionsPublicRowDb),
-    );
-    const ledger = (ledgerRes.data ?? []).map((row) =>
-      mapLedgerPublicRow(row as PointsLedgerPublicRowDb),
-    );
-
-    return {
-      ok: true,
-      data: {
-        displayName: summary.displayName,
-        poolName: summary.poolName,
-        poolId: summary.poolId,
-        participantId: summary.participantId,
-        totalPoints: summary.totalPoints,
-        rank: summary.rank,
-        picks,
-        ledger,
-      },
-    };
+    return loadPeerPoolParticipantDetail(trimmed, {
+      poolId,
+      poolName,
+      displayName,
+    });
   } catch (e) {
     return {
       ok: false,
@@ -108,4 +97,235 @@ export async function fetchPublicParticipantDetail(
         e instanceof Error ? e.message : "Failed to load participant profile.",
     };
   }
+}
+
+async function loadPublicPoolParticipantDetail(
+  supabase: SupabaseClient,
+  participantId: string,
+  header: { poolId: string; poolName: string; displayName: string },
+): Promise<FetchPublicParticipantResult> {
+  const [summaryRes, picksRes, ledgerRes] = await Promise.all([
+    supabase
+      .from("leaderboard_public")
+      .select(
+        "pool_id, pool_name, participant_id, display_name, total_points, rank",
+      )
+      .eq("participant_id", participantId)
+      .maybeSingle(),
+    supabase
+      .from("predictions_public")
+      .select(
+        "prediction_id, participant_id, pool_id, prediction_kind, group_code, slot_key, bonus_key, stage_code, stage_label, stage_sort_order, team_name, team_country_code",
+      )
+      .eq("participant_id", participantId)
+      .order("stage_sort_order", { ascending: true, nullsFirst: false })
+      .order("prediction_kind", { ascending: true }),
+    supabase
+      .from("points_ledger_public")
+      .select(
+        "id, participant_id, pool_id, points_delta, prediction_kind, created_at, prediction_id, result_id",
+      )
+      .eq("participant_id", participantId)
+      .order("created_at", { ascending: false }),
+  ]);
+
+  if (summaryRes.error) {
+    return { ok: false, kind: "error", message: summaryRes.error.message };
+  }
+  if (!summaryRes.data) {
+    return { ok: false, kind: "not_found" };
+  }
+  if (picksRes.error) {
+    return { ok: false, kind: "error", message: picksRes.error.message };
+  }
+  if (ledgerRes.error) {
+    return { ok: false, kind: "error", message: ledgerRes.error.message };
+  }
+
+  const summary = mapPublicLeaderboardRow(
+    summaryRes.data as LeaderboardPublicRowDb,
+  );
+  const picks = (picksRes.data ?? []).map((row) =>
+    mapPredictionPublicRow(row as PredictionsPublicRowDb),
+  );
+  const ledger = (ledgerRes.data ?? []).map((row) =>
+    mapLedgerPublicRow(row as PointsLedgerPublicRowDb),
+  );
+
+  return {
+    ok: true,
+    data: {
+      displayName: summary.displayName,
+      poolName: summary.poolName,
+      poolId: summary.poolId,
+      participantId: summary.participantId,
+      totalPoints: summary.totalPoints,
+      rank: summary.rank,
+      picks,
+      ledger,
+    },
+  };
+}
+
+async function loadPeerPoolParticipantDetail(
+  participantId: string,
+  header: { poolId: string; poolName: string; displayName: string },
+): Promise<FetchPublicParticipantResult> {
+  const service = createServiceRoleClient();
+  const [
+    { data: participants, error: participantsErr },
+    { data: ledgerLines, error: ledgerErr },
+    picks,
+  ] = await Promise.all([
+    service
+      .from("participants")
+      .select("id, display_name")
+      .eq("pool_id", header.poolId),
+    service
+      .from("points_ledger")
+      .select("participant_id, points_delta")
+      .eq("pool_id", header.poolId),
+    loadPicksFromPredictionsTable(service, header.poolId, participantId),
+  ]);
+
+  if (participantsErr) {
+    return { ok: false, kind: "error", message: participantsErr.message };
+  }
+  if (ledgerErr) {
+    return { ok: false, kind: "error", message: ledgerErr.message };
+  }
+
+  const standings = buildPoolStandingsFromLedger({
+    poolId: header.poolId,
+    poolName: header.poolName,
+    participants: participants ?? [],
+    ledgerLines: ledgerLines ?? [],
+  });
+  const standingRow = standings.find((row) => row.participantId === participantId);
+  if (!standingRow) {
+    return { ok: false, kind: "not_found" };
+  }
+
+  const { data: ledgerRows, error: ledgerRowsErr } = await service
+    .from("points_ledger")
+    .select(
+      "id, participant_id, pool_id, points_delta, prediction_kind, created_at, prediction_id, result_id",
+    )
+    .eq("participant_id", participantId)
+    .eq("pool_id", header.poolId)
+    .order("created_at", { ascending: false });
+
+  if (ledgerRowsErr) {
+    return { ok: false, kind: "error", message: ledgerRowsErr.message };
+  }
+
+  const ledger = (ledgerRows ?? []).map((row) =>
+    mapLedgerPublicRow(row as PointsLedgerPublicRowDb),
+  );
+
+  return {
+    ok: true,
+    data: {
+      displayName: standingRow.displayName,
+      poolName: header.poolName,
+      poolId: header.poolId,
+      participantId,
+      totalPoints: standingRow.totalPoints,
+      rank: standingRow.rank,
+      picks,
+      ledger,
+    },
+  };
+}
+
+async function loadPicksFromPredictionsTable(
+  service: SupabaseClient,
+  poolId: string,
+  participantId: string,
+): Promise<PublicParticipantPick[]> {
+  const { data: predictions, error } = await service
+    .from("predictions")
+    .select(
+      "id, prediction_kind, group_code, slot_key, bonus_key, team_id, tournament_stage_id",
+    )
+    .eq("pool_id", poolId)
+    .eq("participant_id", participantId);
+
+  if (error) {
+    throw error;
+  }
+
+  const rows = (predictions ?? []) as PredictionTableRow[];
+  if (rows.length === 0) {
+    return [];
+  }
+
+  const teamIds = [
+    ...new Set(
+      rows
+        .map((row) => row.team_id)
+        .filter((id): id is string => Boolean(id)),
+    ),
+  ];
+  const stageIds = [
+    ...new Set(
+      rows
+        .map((row) => row.tournament_stage_id)
+        .filter((id): id is string => Boolean(id)),
+    ),
+  ];
+
+  const [teamsRes, stagesRes] = await Promise.all([
+    teamIds.length > 0
+      ? service.from("teams").select("id, name, country_code").in("id", teamIds)
+      : Promise.resolve({ data: [], error: null }),
+    stageIds.length > 0
+      ? service
+          .from("tournament_stages")
+          .select("id, code, label, sort_order")
+          .in("id", stageIds)
+      : Promise.resolve({ data: [], error: null }),
+  ]);
+
+  if (teamsRes.error) {
+    throw teamsRes.error;
+  }
+  if (stagesRes.error) {
+    throw stagesRes.error;
+  }
+
+  const teamById = new Map(
+    (teamsRes.data ?? []).map((team) => [team.id as string, team]),
+  );
+  const stageById = new Map(
+    (stagesRes.data ?? []).map((stage) => [stage.id as string, stage]),
+  );
+
+  const picks = rows.map((row) => {
+    const team = row.team_id ? teamById.get(row.team_id) : undefined;
+    const stage = row.tournament_stage_id
+      ? stageById.get(row.tournament_stage_id)
+      : undefined;
+
+    return {
+      predictionId: row.id,
+      predictionKind: row.prediction_kind,
+      groupCode: row.group_code,
+      slotKey: row.slot_key,
+      bonusKey: row.bonus_key,
+      stageCode: (stage?.code as string | undefined) ?? null,
+      stageLabel: String(stage?.label ?? "Other"),
+      stageSortOrder: Number(stage?.sort_order ?? 10_000),
+      teamName: (team?.name as string | undefined) ?? null,
+      teamCountryCode: (team?.country_code as string | undefined) ?? null,
+    } satisfies PublicParticipantPick;
+  });
+
+  picks.sort(
+    (a, b) =>
+      a.stageSortOrder - b.stageSortOrder ||
+      a.predictionKind.localeCompare(b.predictionKind),
+  );
+
+  return picks;
 }

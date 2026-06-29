@@ -20,6 +20,7 @@
     "test:pool-scoring-config": "tsx lib/scoring/poolScoringConfig.selftest.ts",
     "test:rules-scoring": "tsx lib/rules/publicRulesScoringConsistency.selftest.ts",
     "test:participant-presentation": "tsx lib/participant/publicParticipantPresentation.selftest.ts",
+    "test:participant-profile-routing": "tsx lib/participant/participantProfileRouting.selftest.ts",
     "test:pool-leaderboard": "tsx lib/leaderboard/buildPublicPoolLeaderboardPresentation.selftest.ts",
     "test:picks-save-state": "tsx lib/predictions/picksSaveState.selftest.ts",
     "test:participant-picks-save": "tsx lib/predictions/participantPicksSaveFlow.selftest.ts",
