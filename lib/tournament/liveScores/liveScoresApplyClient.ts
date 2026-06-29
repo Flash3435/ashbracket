@@ -2,6 +2,7 @@ import type {
   LiveScoresApplyScoresResult,
   LiveScoresRecalculatePoolResult,
 } from "@/lib/tournament/liveScores/runLiveScoresApplyWorkflow";
+import type { ApplyPlanOperation } from "./applyPlanSignature";
 import {
   formatHttpDebugLine,
   postLiveScoresJson,
@@ -27,10 +28,12 @@ function toClientResult<T>(outcome: LiveScoresHttpOutcome<T>): LiveScoresClientC
 
 export async function postLiveScoresApplyScores(input: {
   previewId: string;
+  applyPlanSnapshot?: ApplyPlanOperation[];
   productionAcknowledged: boolean;
 }): Promise<LiveScoresClientCallResult<LiveScoresApplyScoresResult>> {
   console.info("[ashbracket:liveScoresClient] apply submit started", {
     previewId: input.previewId,
+    applyPlanSnapshotCount: input.applyPlanSnapshot?.length ?? 0,
     at: new Date().toISOString(),
   });
 

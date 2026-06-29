@@ -1,8 +1,18 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import {
+  type ApplyPlanMismatch,
+  type ApplyPlanOperation,
+  buildApplyPlanStaleErrorMessage,
+  computeApplyPlanSignature,
+  computeApplyPlanSignatureFromOperations,
+  diffApplyPlanOperations,
+  extractApplyPlanOperations,
+} from "./applyPlanSignature";
+import {
   fetchFixtureEventsForPreview,
   fixtureIdsEligibleForEventFetch,
   fixtureIdsForApplyEventFetch,
+  fixtureIdsForApplyPlanValidation,
   fixtureIdsForCardApplyEventFetch,
 } from "./fetchFixtureEventsForPreview";
 import { loadMatchCardStatsForLiveScores } from "./loadMatchCardStatsForLiveScores";
@@ -13,10 +23,20 @@ import type { ScoreChangePreview, TournamentMatchForLiveScores } from "./types";
 
 export type BuildLiveScoresPreviewOptions = {
   /** Preview UI fetches card events for every finished fixture; apply uses narrower sets. */
-  eventFetchMode?: "all_finished" | "apply_scores" | "apply_cards" | "none";
+  eventFetchMode?: "all_finished" | "apply_scores" | "apply_cards" | "apply_validation" | "none";
 };
 
-export async function buildLiveScoresPreviewWithCards(
+export type BuildLiveScoresPreviewForApplyResult =
+  | { ok: true; preview: ScoreChangePreview; matches: TournamentMatchForLiveScores[] }
+  | {
+      ok: false;
+      error: string;
+      configWarning?: string | null;
+      stalePreview?: ApplyPlanMismatch;
+      httpStatus?: 409;
+    };
+
+async function buildLiveScoresPreviewWithCardsInternal(
   supabase: SupabaseClient,
   editionId: string,
   fetchedAt: string,
@@ -65,6 +85,8 @@ export async function buildLiveScoresPreviewWithCards(
     fixtureIds = fixtureIdsForApplyEventFetch(basePreview.rows);
   } else if (eventFetchMode === "apply_cards") {
     fixtureIds = fixtureIdsForCardApplyEventFetch(basePreview.rows);
+  } else if (eventFetchMode === "apply_validation") {
+    fixtureIds = fixtureIdsForApplyPlanValidation(basePreview.rows);
   }
 
   let eventsByFixtureId = new Map<string, import("./apiFootballEvents").NormalizedFixtureEvents | null>();
@@ -104,40 +126,82 @@ export async function buildLiveScoresPreviewWithCards(
   return { ok: true, preview, matches: loaded.matches };
 }
 
+export async function buildLiveScoresPreviewWithCards(
+  supabase: SupabaseClient,
+  editionId: string,
+  fetchedAt: string,
+  options?: BuildLiveScoresPreviewOptions,
+): Promise<
+  | { ok: true; preview: ScoreChangePreview; matches: TournamentMatchForLiveScores[] }
+  | { ok: false; error: string; configWarning?: string | null }
+> {
+  return buildLiveScoresPreviewWithCardsInternal(supabase, editionId, fetchedAt, options);
+}
+
 /**
- * Rebuild provider preview for apply validation with minimal event fetching.
- * Score-only preview first; card events fetched only when previewId still differs.
+ * Rebuild provider preview for apply validation with card events for every planned row.
+ * Compares a stable apply-plan signature, not full provider preview state.
  */
 export async function buildLiveScoresPreviewForApply(
   supabase: SupabaseClient,
   editionId: string,
   fetchedAt: string,
-  expectedPreviewId: string,
-): Promise<
-  | { ok: true; preview: ScoreChangePreview; matches: TournamentMatchForLiveScores[] }
-  | { ok: false; error: string; configWarning?: string | null }
-> {
-  const scoreOnly = await buildLiveScoresPreviewWithCards(supabase, editionId, fetchedAt, {
-    eventFetchMode: "none",
+  expectedApplyPlanSignature: string,
+  submittedOperations?: ApplyPlanOperation[],
+): Promise<BuildLiveScoresPreviewForApplyResult> {
+  const built = await buildLiveScoresPreviewWithCardsInternal(supabase, editionId, fetchedAt, {
+    eventFetchMode: "apply_validation",
   });
-  if (!scoreOnly.ok) return scoreOnly;
+  if (!built.ok) return built;
 
-  if (scoreOnly.preview.previewId === expectedPreviewId) {
-    return scoreOnly;
+  const rebuiltSignature = computeApplyPlanSignature(built.preview.rows);
+  const rebuiltOperations = extractApplyPlanOperations(built.preview.rows);
+
+  console.info("[ashbracket:liveScoresApply] apply_plan_signature.compare", {
+    submittedSignature: expectedApplyPlanSignature,
+    rebuiltSignature,
+    submittedOperationCount: submittedOperations?.length ?? null,
+    rebuiltOperationCount: rebuiltOperations.length,
+    match: rebuiltSignature === expectedApplyPlanSignature,
+  });
+
+  if (rebuiltSignature === expectedApplyPlanSignature) {
+    if (submittedOperations) {
+      const submittedSignature = computeApplyPlanSignatureFromOperations(submittedOperations);
+      if (submittedSignature !== expectedApplyPlanSignature) {
+        console.warn("[ashbracket:liveScoresApply] apply_plan_snapshot.signature_mismatch", {
+          expectedApplyPlanSignature,
+          submittedSnapshotSignature: submittedSignature,
+        });
+      }
+    }
+    return built;
   }
 
-  const withCards = await buildLiveScoresPreviewWithCards(supabase, editionId, fetchedAt, {
-    eventFetchMode: "apply_cards",
+  const mismatch = diffApplyPlanOperations(submittedOperations ?? [], rebuiltOperations);
+
+  console.warn("[ashbracket:liveScoresApply] apply_plan_signature.mismatch", {
+    submittedSignature: expectedApplyPlanSignature,
+    rebuiltSignature,
+    changedMatchCodes: mismatch.changedMatchCodes,
+    submittedOperations: submittedOperations ?? [],
+    rebuiltOperations,
   });
-  if (!withCards.ok) return withCards;
 
-  if (withCards.preview.previewId !== expectedPreviewId) {
-    return {
-      ok: false,
-      error:
-        "Provider data changed since preview — fetch latest scores and cards again and confirm the new plan.",
-    };
-  }
-
-  return withCards;
+  return {
+    ok: false,
+    error: buildApplyPlanStaleErrorMessage({
+      ...mismatch,
+      submittedSignature: expectedApplyPlanSignature,
+      rebuiltSignature,
+    }),
+    stalePreview: {
+      ...mismatch,
+      submittedSignature: expectedApplyPlanSignature,
+      rebuiltSignature,
+      submittedOperations: submittedOperations ?? [],
+      rebuiltOperations,
+    },
+    httpStatus: 409,
+  };
 }

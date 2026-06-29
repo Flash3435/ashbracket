@@ -5,12 +5,14 @@ import {
   LIVE_SCORES_APPLY_BUILD,
   runLiveScoresApplyScoresOnly,
 } from "@/lib/tournament/liveScores/runLiveScoresApplyWorkflow";
+import type { ApplyPlanOperation } from "@/lib/tournament/liveScores/applyPlanSignature";
 
 export const maxDuration = 300;
 export const dynamic = "force-dynamic";
 
 type ApplyRequestBody = {
   previewId?: string;
+  applyPlanSnapshot?: ApplyPlanOperation[];
   productionAcknowledged?: boolean;
 };
 
@@ -63,6 +65,9 @@ export async function POST(req: Request) {
     }
     console.info("[ashbracket:liveScoresApplyRoute] body.parse.end", {
       hasPreviewId: Boolean(body.previewId?.trim()),
+      applyPlanSnapshotCount: Array.isArray(body.applyPlanSnapshot)
+        ? body.applyPlanSnapshot.length
+        : 0,
       productionAcknowledged: Boolean(body.productionAcknowledged),
     });
 
@@ -74,9 +79,17 @@ export async function POST(req: Request) {
       );
     }
 
-    console.info("[ashbracket:liveScoresApplyRoute] workflow.start", { previewId });
+    console.info("[ashbracket:liveScoresApplyRoute] workflow.start", {
+      previewId,
+      applyPlanSnapshotCount: Array.isArray(body.applyPlanSnapshot)
+        ? body.applyPlanSnapshot.length
+        : 0,
+    });
     const result = await runLiveScoresApplyScoresOnly(supabase, {
       previewId,
+      applyPlanSnapshot: Array.isArray(body.applyPlanSnapshot)
+        ? body.applyPlanSnapshot
+        : undefined,
       productionAcknowledged: body.productionAcknowledged,
     });
     console.info("[ashbracket:liveScoresApplyRoute] workflow.end", {
@@ -88,7 +101,7 @@ export async function POST(req: Request) {
           : null,
     });
 
-    const status = result.ok ? 200 : 500;
+    const status = result.ok ? 200 : (result.httpStatus ?? 500);
     console.info("[ashbracket:liveScoresApplyRoute] response.send", { status, ok: result.ok });
     return jsonResponse(result, status);
   } catch (e) {

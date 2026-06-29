@@ -13,6 +13,7 @@ import type {
   ScoreChangePreviewRow,
 } from "@/lib/tournament/liveScores/types";
 import { formatCardTotals } from "@/lib/tournament/liveScores/loadMatchCardStatsForLiveScores";
+import { extractApplyPlanOperations, type ApplyPlanMismatch } from "@/lib/tournament/liveScores/applyPlanSignature";
 import {
   formatHttpDebugLine,
   postLiveScoresApplyScores,
@@ -118,6 +119,7 @@ function formatFetchedCards(row: ScoreChangePreviewRow): string {
 type ApplyErrorState = {
   message: string;
   technicalDetails?: LiveScoresApplyTechnicalDetails;
+  stalePreview?: ApplyPlanMismatch;
   debugLine?: string;
 };
 
@@ -282,6 +284,14 @@ function ErrorBanner({
       {error.debugLine ? (
         <p className="mt-2 font-mono text-xs text-red-100/90">HTTP debug: {error.debugLine}</p>
       ) : null}
+      {error.stalePreview ? (
+        <details className="mt-3 rounded-md border border-red-900/60 bg-red-950/30 px-3 py-2 text-xs text-red-100/90">
+          <summary className="cursor-pointer font-medium text-red-50">Apply plan diff</summary>
+          <pre className="mt-2 overflow-x-auto whitespace-pre-wrap break-words font-mono">
+            {JSON.stringify(error.stalePreview, null, 2)}
+          </pre>
+        </details>
+      ) : null}
       {error.technicalDetails ? (
         <details className="mt-3 rounded-md border border-red-900/60 bg-red-950/30 px-3 py-2 text-xs text-red-100/90">
           <summary className="cursor-pointer font-medium text-red-50">Technical details</summary>
@@ -390,6 +400,7 @@ export function LiveScoresFetchPanel({
     try {
       const call = await postLiveScoresApplyScores({
         previewId: preview.previewId,
+        applyPlanSnapshot: extractApplyPlanOperations(preview.rows),
         productionAcknowledged,
       });
 
@@ -409,6 +420,7 @@ export function LiveScoresFetchPanel({
         setVisibleApplyError({
           message: outcome.message,
           technicalDetails: outcome.technicalDetails,
+          stalePreview: outcome.stalePreview,
           debugLine: outcome.debugLine,
         });
         setApplySummary(outcome.applySummary ?? null);

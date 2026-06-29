@@ -36,6 +36,7 @@ import type {
   LiveScoresApplySummary,
   LiveScoresApplyTechnicalDetails,
 } from "./types";
+import type { ApplyPlanMismatch, ApplyPlanOperation } from "./applyPlanSignature";
 
 /** Bump when changing live-scores apply workflow — shown in admin debug UI. */
 export const LIVE_SCORES_APPLY_BUILD = "split-apply-v3";
@@ -66,6 +67,8 @@ export type LiveScoresApplyScoresResult =
       applySummary?: LiveScoresApplySummary;
       warnings?: string[];
       technicalDetails?: LiveScoresApplyTechnicalDetails;
+      stalePreview?: ApplyPlanMismatch;
+      httpStatus?: number;
     };
 
 export type LiveScoresRecalculatePoolResult =
@@ -183,6 +186,7 @@ export async function runLiveScoresApplyScoresOnly(
   supabase: SupabaseClient,
   input: {
     previewId: string;
+    applyPlanSnapshot?: ApplyPlanOperation[];
     productionAcknowledged?: boolean;
     logger?: ApplyPhaseLogger;
   },
@@ -191,6 +195,7 @@ export async function runLiveScoresApplyScoresOnly(
   logger.log("action.started", {
     build: LIVE_SCORES_APPLY_BUILD,
     previewId: input.previewId,
+    applyPlanSnapshotCount: input.applyPlanSnapshot?.length ?? 0,
     at: new Date().toISOString(),
   });
 
@@ -216,13 +221,23 @@ export async function runLiveScoresApplyScoresOnly(
         liveEdition.id,
         new Date().toISOString(),
         input.previewId,
+        input.applyPlanSnapshot,
       ),
     );
     if (!loaded.ok) {
+      logger.log("action.apply_plan_mismatch", {
+        submittedSignature: input.previewId,
+        rebuiltSignature: loaded.stalePreview?.rebuiltSignature ?? null,
+        changedMatchCodes: loaded.stalePreview?.changedMatchCodes ?? [],
+        submittedOperations: loaded.stalePreview?.submittedOperations ?? input.applyPlanSnapshot ?? [],
+        rebuiltOperations: loaded.stalePreview?.rebuiltOperations ?? [],
+      });
       return {
         ok: false,
         build: LIVE_SCORES_APPLY_BUILD,
         error: loaded.error,
+        stalePreview: loaded.stalePreview,
+        httpStatus: loaded.httpStatus ?? 500,
         technicalDetails: logger.snapshot(),
       };
     }
@@ -238,6 +253,8 @@ export async function runLiveScoresApplyScoresOnly(
       scorePatchCount: patches.length,
       cardPatchCount: cardPatches.length,
       previewId: preview.previewId,
+      applyPlanSignature: preview.previewId,
+      submittedPreviewId: input.previewId,
     });
 
     if (patches.length === 0 && cardPatches.length === 0) {

@@ -1,5 +1,5 @@
-import { createHash } from "node:crypto";
 import type { NormalizedFixtureEvents } from "./apiFootballEvents";
+import { computeApplyPlanSignature } from "./applyPlanSignature";
 import { effectiveDbCardTotals } from "./loadMatchCardStatsForLiveScores";
 import { fifaCodeFromTeamName, normalizeNullableText, teamNamesMatch } from "./normalizeTeamName";
 import type {
@@ -746,7 +746,7 @@ export function buildScoreChangePreview(input: {
     (f) => !mappedFixtureIds.has(f.providerFixtureId),
   ).length;
 
-  const previewId = computePreviewId(rows);
+  const previewId = computeApplyPlanSignature(rows);
 
   let message: string | null = null;
   const finishedFixtures = input.fixtures.filter((f) => f.status === "finished").length;
@@ -783,30 +783,12 @@ export function buildScoreChangePreview(input: {
   };
 }
 
-/** Stable id from planned score/card changes only — must not include fetch timestamp. */
+/** @deprecated Use computeApplyPlanSignature — kept for existing selftests. */
 export function computePreviewId(rows: ScoreChangePreviewRow[]): string {
-  const payload = rows
-    .filter((r) => r.willUpdate || r.cardWillUpdate)
-    .map((r) =>
-      [
-        r.matchCode,
-        r.willUpdate ? "score" : "",
-        r.fetchedHomeGoals,
-        r.fetchedAwayGoals,
-        r.fetchedHomePenalties ?? "",
-        r.fetchedAwayPenalties ?? "",
-        r.fetchedStatus ?? "",
-        r.cardWillUpdate ? "cards" : "",
-        r.fetchedHomeYellowCards ?? "",
-        r.fetchedAwayYellowCards ?? "",
-        r.fetchedHomeRedCards ?? "",
-        r.fetchedAwayRedCards ?? "",
-      ].join("\0"),
-    )
-    .sort()
-    .join("\n");
-  return createHash("sha256").update(payload).digest("hex").slice(0, 16);
+  return computeApplyPlanSignature(rows);
 }
+
+export { computeApplyPlanSignature } from "./applyPlanSignature";
 
 export function patchesFromPreviewRows(
   rows: ScoreChangePreviewRow[],

@@ -1,5 +1,6 @@
 import type { LiveScoresApplySummary, LiveScoresApplyTechnicalDetails } from "./types";
 import type { LiveScoresApplyScoresResult } from "./runLiveScoresApplyWorkflow";
+import type { ApplyPlanMismatch } from "./applyPlanSignature";
 import type { LiveScoresHttpDebug } from "./liveScoresHttpClient";
 import { formatHttpDebugLine } from "./liveScoresHttpClient";
 
@@ -9,6 +10,7 @@ export type StepAUiOutcome =
       message: string;
       technicalDetails?: LiveScoresApplyTechnicalDetails;
       applySummary?: LiveScoresApplySummary | null;
+      stalePreview?: ApplyPlanMismatch;
       debugLine: string;
     }
   | {
@@ -35,6 +37,7 @@ export function interpretStepAResponse(input: {
       message: input.clientError ?? "Step A failed before a valid response was received.",
       technicalDetails: input.payload?.ok === false ? input.payload.technicalDetails : undefined,
       applySummary: input.payload?.ok === false ? input.payload.applySummary ?? null : null,
+      stalePreview: input.payload?.ok === false ? input.payload.stalePreview : undefined,
       debugLine,
     };
   }
@@ -50,6 +53,7 @@ export function interpretStepAResponse(input: {
       message,
       technicalDetails: payload && payload.ok === false ? payload.technicalDetails : undefined,
       applySummary: payload && payload.ok === false ? payload.applySummary ?? null : null,
+      stalePreview: payload && payload.ok === false ? payload.stalePreview : undefined,
       debugLine,
     };
   }

@@ -107,3 +107,13 @@ export function fixtureIdsForCardApplyEventFetch(rows: ScoreChangePreviewRow[]):
   }
   return [...ids];
 }
+
+/** Event fetch for apply-plan validation — scores being applied plus card-only finished rows. */
+export function fixtureIdsForApplyPlanValidation(rows: ScoreChangePreviewRow[]): string[] {
+  return [
+    ...new Set([
+      ...fixtureIdsForApplyEventFetch(rows),
+      ...fixtureIdsForCardApplyEventFetch(rows),
+    ]),
+  ];
+}
