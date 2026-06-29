@@ -14,6 +14,9 @@ import {
   validateKnockoutLaterMatchPick,
   validatedKnockoutMatchWinner,
 } from "./knockoutMatchPickRows";
+import {
+  pruneOfficialKnockoutPathPicks,
+} from "../predictions/pruneOfficialKnockoutPathPicks";
 import { pruneParticipantPicks } from "../predictions/knockoutPickConsistency";
 import type { GradualKnockoutSelectionState } from "./gradualKnockoutUnlock";
 import type { TournamentMatchPublicRow } from "../../types/tournamentPublic";
@@ -829,6 +832,125 @@ function r32Side(slotKey: string, teamId = ""): KnockoutPickSlotDraft {
     gradual: emptyGradual,
   });
   assert.strictEqual(knockoutMatchStepComplete(completedRows), true);
+}
+
+// Semi-final winner picks survive prune when only one side of the final is known
+{
+  const slots: KnockoutPickSlotDraft[] = [
+    r16Slot("1", "team-can"),
+    r16Slot("2", "team-ger"),
+    r16Slot("3", "team-ned"),
+    r16Slot("4", "team-bra"),
+    r16Slot("5", "team-fra"),
+    r16Slot("6", "team-rsa"),
+    r16Slot("7", "team-ned"),
+    r16Slot("8", "team-bra"),
+    r16Slot("9", "team-ned"),
+    r16Slot("10", "team-ger"),
+    r16Slot("11", "team-fra"),
+    r16Slot("12", "team-ger"),
+    r16Slot("13", "team-can"),
+    r16Slot("14", "team-ned"),
+    r16Slot("15", "team-bra"),
+    r16Slot("16", "team-rsa"),
+    qfSlot("1", "team-ger"),
+    qfSlot("2", "team-can"),
+    qfSlot("3", "team-bra"),
+    qfSlot("4", "team-ned"),
+    qfSlot("5", "team-fra"),
+    qfSlot("6", "team-ger"),
+    qfSlot("7", "team-ned"),
+    qfSlot("8", "team-can"),
+    sfSlot("1", "team-ger"),
+    sfSlot("2", "team-fra"),
+    sfSlot("3", "team-bra"),
+    sfSlot("4", "team-ned"),
+    finSlot("1"),
+    finSlot("2"),
+  ];
+  const rows = buildKnockoutMatchPickRows({
+    bracketKind: "semifinalist",
+    slots,
+    teams,
+    gradual: emptyGradual,
+  });
+  const m101 = rows.find((r) => r.fifaMatchNo === 101)!;
+  const m102 = rows.find((r) => r.fifaMatchNo === 102)!;
+  const afterM101 = pruneParticipantPicks(
+    applyKnockoutMatchWinnerToSlots(slots, m101, "team-ger"),
+  );
+  assert.strictEqual(
+    afterM101.find((s) => s.predictionKind === "finalist" && s.slotKey === "1")
+      ?.teamId,
+    "team-ger",
+    "M101 winner must not be pruned before M102 is picked",
+  );
+  const afterBoth = pruneParticipantPicks(
+    applyKnockoutMatchWinnerToSlots(afterM101, m102, "team-fra"),
+  );
+  assert.strictEqual(
+    afterBoth.find((s) => s.predictionKind === "finalist" && s.slotKey === "1")
+      ?.teamId,
+    "team-ger",
+  );
+  assert.strictEqual(
+    afterBoth.find((s) => s.predictionKind === "finalist" && s.slotKey === "2")
+      ?.teamId,
+    "team-fra",
+  );
+  const { cleared } = pruneOfficialKnockoutPathPicks(afterBoth);
+  assert.strictEqual(cleared.length, 0);
+}
+
+// Semi-final winner not in the official matchup is pruned
+{
+  const slots: KnockoutPickSlotDraft[] = [
+    r16Slot("1", "team-can"),
+    r16Slot("2", "team-ger"),
+    r16Slot("3", "team-ned"),
+    r16Slot("4", "team-bra"),
+    r16Slot("5", "team-fra"),
+    r16Slot("6", "team-rsa"),
+    r16Slot("7", "team-ned"),
+    r16Slot("8", "team-bra"),
+    r16Slot("9", "team-ned"),
+    r16Slot("10", "team-ger"),
+    r16Slot("11", "team-fra"),
+    r16Slot("12", "team-ger"),
+    r16Slot("13", "team-can"),
+    r16Slot("14", "team-ned"),
+    r16Slot("15", "team-bra"),
+    r16Slot("16", "team-rsa"),
+    qfSlot("1", "team-ger"),
+    qfSlot("2", "team-can"),
+    qfSlot("3", "team-bra"),
+    qfSlot("4", "team-ned"),
+    qfSlot("5", "team-fra"),
+    qfSlot("6", "team-ger"),
+    qfSlot("7", "team-ned"),
+    qfSlot("8", "team-can"),
+    sfSlot("1", "team-ger"),
+    sfSlot("2", "team-fra"),
+    sfSlot("3", "team-bra"),
+    sfSlot("4", "team-ned"),
+    finSlot("1", "team-can"),
+    finSlot("2"),
+  ];
+  const { slots: pruned, cleared } = pruneOfficialKnockoutPathPicks(slots);
+  assert.ok(
+    cleared.some(
+      (c) =>
+        c.predictionKind === "finalist" &&
+        c.slotKey === "1" &&
+        c.teamId === "team-can",
+    ),
+    "Canada is not in M101 and must be cleared from finalist slot 1",
+  );
+  assert.strictEqual(
+    pruned.find((s) => s.predictionKind === "finalist" && s.slotKey === "1")
+      ?.teamId,
+    "",
+  );
 }
 
 // Accessibility labels include match code for later-round picks

@@ -202,6 +202,49 @@ function groupWinner(groupCode: string, teamId: string): KnockoutPickSlotDraft {
   );
 }
 
+// Valid semi-final match winner in finalist slot preserved
+{
+  const slots = [
+    r16Winner("2", "ger"),
+    r16Winner("5", "fra"),
+    r16Winner("4", "bra"),
+    r16Winner("3", "ned"),
+    r16Winner("1", "can"),
+    r16Winner("6", "rsa"),
+    r16Winner("7", "ned"),
+    r16Winner("8", "bra"),
+    r16Winner("9", "ned"),
+    r16Winner("10", "ger"),
+    r16Winner("11", "fra"),
+    r16Winner("12", "ger"),
+    r16Winner("13", "can"),
+    r16Winner("14", "ned"),
+    r16Winner("15", "bra"),
+    r16Winner("16", "rsa"),
+    qf("1", "ger"),
+    qf("2", "can"),
+    qf("3", "bra"),
+    qf("4", "ned"),
+    qf("5", "fra"),
+    qf("6", "ger"),
+    qf("7", "ned"),
+    qf("8", "can"),
+    sf("1", "ger"),
+    sf("2", "fra"),
+    sf("3", "bra"),
+    sf("4", "ned"),
+    fin("1", "ger"),
+    fin("2"),
+  ];
+  const { slots: next, cleared } = pruneOfficialKnockoutPathPicks(slots);
+  assert.strictEqual(cleared.length, 0);
+  assert.strictEqual(
+    next.find((s) => s.predictionKind === "finalist" && s.slotKey === "1")
+      ?.teamId,
+    "ger",
+  );
+}
+
 assert.ok(KNOCKOUT_BRACKET_PATH_REVIEW_MESSAGE.includes("FIFA"));
 assert.strictEqual(
   participantNeedsKnockoutPathReview([

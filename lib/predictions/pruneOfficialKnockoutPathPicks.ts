@@ -254,12 +254,14 @@ export function pruneOfficialKnockoutPathPicks(
     }
   }
 
-  for (const slotKey of ["1", "2"]) {
+  // Finalist slots store semi-final match winners (M101/M102), not the final pairing.
+  for (let matchIndex = 0; matchIndex < 2; matchIndex++) {
+    const slotKey = String(matchIndex + 1);
     const row = result.find(
       (s) => s.predictionKind === "finalist" && s.slotKey === slotKey,
     );
     if (!row?.teamId.trim()) continue;
-    const sides = officialFinalSides(result);
+    const sides = officialSfSides(result, matchIndex, ctx);
     const reason: KnockoutPathPickClearReason =
       !sides.home || !sides.away ? "upstream_incomplete" : "not_in_official_matchup";
     if (
