@@ -307,8 +307,8 @@ export function incompleteR16MatchMessage(
   return `Complete Round of 32 first — pick winners for ${list}.`;
 }
 
-/** Winner pick counts as a side only when it matches that row's official matchup. */
-function validatedMatchWinner(
+/** Winner pick counts only when it matches that row's official matchup. */
+export function validatedKnockoutMatchWinner(
   row: KnockoutMatchPickRow | undefined,
 ): string | null {
   if (!row) return null;
@@ -316,6 +316,28 @@ function validatedMatchWinner(
   if (!w || !row.homeTeamId || !row.awayTeamId) return null;
   if (w === row.homeTeamId || w === row.awayTeamId) return w;
   return null;
+}
+
+export function isKnockoutMatchDirectPickEligible(
+  row: KnockoutMatchPickRow,
+): boolean {
+  return (
+    row.lockReason === "pickable" &&
+    Boolean(row.homeTeamId?.trim()) &&
+    Boolean(row.awayTeamId?.trim())
+  );
+}
+
+export function knockoutMatchTeamPickAriaLabel(input: {
+  teamName: string;
+  fifaMatchNo: number;
+  pickKind: "winner" | "champion";
+}): string {
+  const matchRef = input.fifaMatchNo > 0 ? `M${input.fifaMatchNo}` : "the final";
+  if (input.pickKind === "champion") {
+    return `Pick ${input.teamName} as champion in ${matchRef}`;
+  }
+  return `Pick ${input.teamName} to win ${matchRef}`;
 }
 
 function upstreamWizardKindForMatchSides(
@@ -381,8 +403,8 @@ function readMatchSides(
   const homeIdx = parseInt(slotPair[0], 10) - 1;
   const awayIdx = parseInt(slotPair[1], 10) - 1;
   return {
-    homeTeamId: validatedMatchWinner(rows[homeIdx]),
-    awayTeamId: validatedMatchWinner(rows[awayIdx]),
+    homeTeamId: validatedKnockoutMatchWinner(rows[homeIdx]),
+    awayTeamId: validatedKnockoutMatchWinner(rows[awayIdx]),
   };
 }
 
@@ -584,7 +606,7 @@ export function countKnockoutMatchupsFilled(
 ): number {
   return rows.filter((r) => {
     if (options?.onlyPickable && r.lockReason !== "pickable") return false;
-    return Boolean(r.winnerTeamId);
+    return Boolean(validatedKnockoutMatchWinner(r));
   }).length;
 }
 
@@ -593,7 +615,7 @@ export function knockoutMatchStepComplete(
 ): boolean {
   const pickable = rows.filter((r) => r.lockReason === "pickable");
   if (pickable.length === 0) return rows.length > 0;
-  return pickable.every((r) => Boolean(r.winnerTeamId));
+  return pickable.every((r) => Boolean(validatedKnockoutMatchWinner(r)));
 }
 
 export function validateKnockoutLaterMatchPick(

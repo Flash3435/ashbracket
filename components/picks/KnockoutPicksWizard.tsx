@@ -76,16 +76,18 @@ import {
   shouldUseR32MatchRowUi,
 } from "../../lib/picks/gradualKnockoutUnlock";
 import {
-  allowedTeamsForKnockoutMatchRow,
   applyKnockoutMatchWinnerToSlots,
   buildKnockoutMatchPickRows,
   countKnockoutMatchupsFilled,
   FINAL_MATCH_INCOMPLETE_MSG,
+  isKnockoutMatchDirectPickEligible,
   knockoutMatchStepComplete,
   usesKnockoutMatchPickRows,
+  validatedKnockoutMatchWinner,
   type KnockoutMatchPickRow,
   type KnockoutWizardBracketKind,
 } from "../../lib/picks/knockoutMatchPickRows";
+import { KnockoutMatchDirectTeamPick } from "./KnockoutMatchTeamPick";
 import { isKnockoutProgressionKind } from "../../lib/predictions/knockoutProgressionKinds";
 import {
   applyKnockoutPickCorrection,
@@ -2025,29 +2027,28 @@ export function KnockoutPicksWizard({
           <ul className="mt-4 space-y-3">
             {activeKnockoutMatchRows
               ? activeKnockoutMatchRows.map((matchRow) => {
-                  const matchTeams = allowedTeamsForKnockoutMatchRow(
-                    matchRow,
-                    teams,
-                  );
-                  const matchupPair: [Team, Team] | null =
-                    matchTeams.length === 2
-                      ? [matchTeams[0]!, matchTeams[1]!]
-                      : null;
-                  const effectiveTeamId = matchRow.winnerTeamId;
-                  const team = effectiveTeamId
-                    ? teamById.get(effectiveTeamId)
+                  const matchupPair: [Team, Team] | null = (() => {
+                    const homeId = matchRow.homeTeamId?.trim();
+                    const awayId = matchRow.awayTeamId?.trim();
+                    if (!homeId || !awayId) return null;
+                    const home = teamById.get(homeId);
+                    const away = teamById.get(awayId);
+                    return home && away ? [home, away] : null;
+                  })();
+                  const selectedTeamId =
+                    validatedKnockoutMatchWinner(matchRow) ?? "";
+                  const team = selectedTeamId
+                    ? teamById.get(selectedTeamId)
                     : undefined;
                   const strength = team
                     ? teamStrengthLabel(team.countryCode)
                     : null;
-                  const isEmptyPick = !effectiveTeamId;
+                  const isEmptyPick = !selectedTeamId;
                   const isChampionPickRow =
                     matchRow.savePredictionKind === "champion";
                   const directPickEligible =
-                    matchRow.lockReason === "pickable" && matchupPair != null;
-                  const useDirectEmptyLayout = directPickEligible && isEmptyPick;
-                  const championDirectPick =
-                    isChampionPickRow && directPickEligible && isEmptyPick;
+                    isKnockoutMatchDirectPickEligible(matchRow) &&
+                    matchupPair != null;
                   const rowPickDisabled =
                     coreDisabled ||
                     !fullBracketPicksUnlocked ||
@@ -2058,9 +2059,6 @@ export function KnockoutPicksWizard({
                     matchRow.lockReason === "pickable"
                       ? matchRow.display.emptyPrimaryLine
                       : null;
-                  const chooseButtonLabel =
-                    matchRow.display.chooseButtonLabel ??
-                    (isChampionPickRow ? "Pick champion" : "Pick winner");
 
                   return (
                     <li
@@ -2073,135 +2071,95 @@ export function KnockoutPicksWizard({
                             : "border-ash-border bg-ash-body/40"
                       }`}
                     >
-                      {useDirectEmptyLayout ? (
-                        <div>
-                          <p className="text-xs font-medium uppercase tracking-wide text-ash-muted">
-                            {heading}
+                      <div>
+                        <p className="text-xs font-medium uppercase tracking-wide text-ash-muted">
+                          {heading}
+                        </p>
+                        {isChampionPickRow && matchupLine && isEmptyPick ? (
+                          <p className="mt-1 text-sm font-medium text-ash-text">
+                            {matchupLine}
                           </p>
-                          {championDirectPick && matchupLine ? (
-                            <p className="mt-1 text-sm font-medium text-ash-text">
-                              {matchupLine}
-                            </p>
-                          ) : null}
-                          {championDirectPick ? (
-                            <p className="mt-1 text-xs text-ash-muted">
-                              Tap a finalist to set your champion pick.
-                            </p>
-                          ) : null}
-                          <R32MatchDirectTeamPick
-                            teams={matchupPair}
-                            disabled={rowPickDisabled}
-                            pickKind={isChampionPickRow ? "champion" : "winner"}
-                            onPick={(teamId) => {
-                              setKnockoutMatchWinner(matchRow, teamId);
-                              setOpenRowKey(null);
-                              setSearch("");
-                            }}
-                          />
-                        </div>
-                      ) : (
-                        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                          <div>
-                            <p className="text-xs font-medium uppercase tracking-wide text-ash-muted">
-                              {heading}
-                            </p>
-                            {isChampionPickRow && matchupLine && isEmptyPick ? (
-                              <p className="mt-1 text-sm font-medium text-ash-text">
-                                {matchupLine}
-                              </p>
-                            ) : (
-                              <div className="mt-1 flex items-center gap-2">
-                                <CountryFlagIcon
-                                  countryCode={team?.countryCode ?? ""}
-                                  size="lg"
-                                />
-                                <div>
-                                  <p
-                                    className={`text-sm font-medium ${
-                                      isEmptyPick
-                                        ? "text-amber-100/90"
-                                        : "text-ash-text"
-                                    }`}
-                                  >
-                                    {team?.name ??
-                                      (isChampionPickRow
-                                        ? matchupLine
-                                        : matchRow.display.emptyPrimaryLine) ??
-                                      "Pick needed"}
-                                  </p>
-                                  {team && strength ? (
-                                    <p
-                                      className="text-xs text-ash-muted"
-                                      title={
-                                        [
-                                          fifaRankSnapshotTitle(team),
-                                          strengthLabelHint(strength),
-                                        ]
-                                          .filter(Boolean)
-                                          .join(" ") || undefined
-                                      }
-                                    >
-                                      {isChampionPickRow
-                                        ? `Your champion pick · ${teamPickMetaLine(team, strength)}`
-                                        : teamPickMetaLine(team, strength)}
-                                    </p>
-                                  ) : isChampionPickRow && team ? (
-                                    <p className="text-xs text-ash-muted">
-                                      Your champion pick
-                                    </p>
-                                  ) : null}
-                                </div>
-                              </div>
-                            )}
-                          </div>
-                          <div className="flex shrink-0 flex-wrap gap-2">
+                        ) : null}
+                        {isChampionPickRow && directPickEligible && isEmptyPick ? (
+                          <p className="mt-1 text-xs text-ash-muted">
+                            Tap a finalist to set your champion pick.
+                          </p>
+                        ) : null}
+                        {directPickEligible && matchupPair ? (
+                          <>
+                            <KnockoutMatchDirectTeamPick
+                              teams={matchupPair}
+                              selectedTeamId={selectedTeamId || undefined}
+                              disabled={rowPickDisabled}
+                              pickKind={isChampionPickRow ? "champion" : "winner"}
+                              fifaMatchNo={matchRow.fifaMatchNo}
+                              onPick={(teamId) => {
+                                setKnockoutMatchWinner(matchRow, teamId);
+                                setOpenRowKey(null);
+                                setSearch("");
+                              }}
+                            />
                             {team ? (
-                              <button
-                                type="button"
-                                disabled={rowPickDisabled}
-                                onClick={() => {
-                                  setKnockoutMatchWinner(matchRow, "");
-                                  setOpenRowKey(null);
-                                  setSearch("");
-                                }}
-                                className="rounded-lg border border-ash-border bg-ash-body px-3 py-1.5 text-sm font-medium text-ash-muted transition-colors hover:bg-ash-surface disabled:cursor-not-allowed disabled:opacity-50"
-                              >
-                                Clear
-                              </button>
+                              <div className="mt-2 flex flex-wrap gap-2">
+                                <button
+                                  type="button"
+                                  disabled={rowPickDisabled}
+                                  onClick={() => {
+                                    setKnockoutMatchWinner(matchRow, "");
+                                    setOpenRowKey(null);
+                                    setSearch("");
+                                  }}
+                                  className="rounded-lg border border-ash-border bg-ash-body px-3 py-1.5 text-sm font-medium text-ash-muted transition-colors hover:bg-ash-surface disabled:cursor-not-allowed disabled:opacity-50"
+                                >
+                                  Clear
+                                </button>
+                              </div>
                             ) : null}
-                            {(isChampionPickRow ||
-                              !directPickEligible ||
-                              team ||
-                              isEmptyPick) &&
-                            matchRow.lockReason !== "started" ? (
-                              <button
-                                type="button"
-                                disabled={rowPickDisabled}
-                                onClick={() => {
-                                  setOpenRowKey((k) =>
-                                    k === matchRow.rowKey ? null : matchRow.rowKey,
-                                  );
-                                  setSearch("");
-                                }}
-                                className="rounded-lg border border-ash-border bg-ash-body px-3 py-1.5 text-sm font-medium text-ash-text transition-colors hover:bg-ash-surface disabled:cursor-not-allowed disabled:opacity-50"
+                          </>
+                        ) : (
+                          <div className="mt-1">
+                            <p
+                              className={`text-sm font-medium ${
+                                isEmptyPick
+                                  ? "text-amber-100/90"
+                                  : "text-ash-text"
+                              }`}
+                            >
+                              {team?.name ??
+                                matchRow.display.emptyPrimaryLine ??
+                                "Pick needed"}
+                            </p>
+                            {team && strength ? (
+                              <p
+                                className="mt-0.5 text-xs text-ash-muted"
+                                title={
+                                  [
+                                    fifaRankSnapshotTitle(team),
+                                    strengthLabelHint(strength),
+                                  ]
+                                    .filter(Boolean)
+                                    .join(" ") || undefined
+                                }
                               >
-                                {team ? "Change" : chooseButtonLabel}
-                              </button>
+                                {isChampionPickRow
+                                  ? `Your champion pick · ${teamPickMetaLine(team, strength)}`
+                                  : teamPickMetaLine(team, strength)}
+                              </p>
                             ) : null}
-                            {matchRow.lockReason === "started"
-                              ? renderAdminKnockoutCorrectionButton({
-                                  matchCode: `M${matchRow.fifaMatchNo}`,
-                                  matchLabel: heading,
-                                  allowedTeamIds: [
-                                    matchRow.homeTeamId,
-                                    matchRow.awayTeamId,
-                                  ].filter((id): id is string => Boolean(id)),
-                                  currentTeamId: effectiveTeamId || undefined,
-                                })
-                              : null}
                           </div>
-                        </div>
-                      )}
+                        )}
+                        {matchRow.lockReason === "started"
+                          ? renderAdminKnockoutCorrectionButton({
+                              matchCode: `M${matchRow.fifaMatchNo}`,
+                              matchLabel: heading,
+                              allowedTeamIds: [
+                                matchRow.homeTeamId,
+                                matchRow.awayTeamId,
+                              ].filter((id): id is string => Boolean(id)),
+                              currentTeamId: selectedTeamId || undefined,
+                            })
+                          : null}
+                      </div>
 
                       {matchRow.display.statusLine && isEmptyPick ? (
                         <p
@@ -2221,29 +2179,6 @@ export function KnockoutPicksWizard({
                             emptyLabel="Time TBD"
                           />
                         </p>
-                      ) : null}
-                      {openRowKey === matchRow.rowKey &&
-                      (!useDirectEmptyLayout || !isEmptyPick) ? (
-                        <div className="mt-3 border-t border-ash-border pt-3">
-                          {matchupPair ? (
-                            <R32MatchDirectTeamPick
-                              teams={matchupPair}
-                              selectedTeamId={effectiveTeamId || undefined}
-                              disabled={rowPickDisabled}
-                              pickKind={isChampionPickRow ? "champion" : "winner"}
-                              onPick={(teamId) => {
-                                setKnockoutMatchWinner(matchRow, teamId);
-                                setOpenRowKey(null);
-                                setSearch("");
-                              }}
-                            />
-                          ) : (
-                            <p className="text-sm text-amber-200">
-                              {matchRow.display.statusLine ??
-                                FINAL_MATCH_INCOMPLETE_MSG}
-                            </p>
-                          )}
-                        </div>
                       ) : null}
                     </li>
                   );

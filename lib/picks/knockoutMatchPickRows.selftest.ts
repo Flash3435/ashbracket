@@ -6,10 +6,13 @@ import {
   buildKnockoutMatchPickRows,
   FINAL_MATCH_INCOMPLETE_MSG,
   incompleteR16MatchMessage,
+  isKnockoutMatchDirectPickEligible,
   knockoutMatchStepComplete,
+  knockoutMatchTeamPickAriaLabel,
   readConfirmedR32MatchWinner,
   readR32MatchWinnerForBracket,
   validateKnockoutLaterMatchPick,
+  validatedKnockoutMatchWinner,
 } from "./knockoutMatchPickRows";
 import { pruneParticipantPicks } from "../predictions/knockoutPickConsistency";
 import type { GradualKnockoutSelectionState } from "./gradualKnockoutUnlock";
@@ -500,13 +503,13 @@ function r32Side(slotKey: string, teamId = ""): KnockoutPickSlotDraft {
   const slots: KnockoutPickSlotDraft[] = [
     ...Array.from({ length: 16 }, (_, i) => r16Slot(String(i + 1), "team-rsa")),
     qfSlot("1", "team-rsa"),
-    qfSlot("2", "team-ger"),
-    qfSlot("3", "team-ned"),
-    qfSlot("4", "team-bra"),
+    qfSlot("2", "team-rsa"),
+    qfSlot("3", "team-rsa"),
+    qfSlot("4", "team-rsa"),
     qfSlot("5", "team-rsa"),
-    qfSlot("6", "team-ger"),
-    qfSlot("7", "team-ned"),
-    qfSlot("8", "team-bra"),
+    qfSlot("6", "team-rsa"),
+    qfSlot("7", "team-rsa"),
+    qfSlot("8", "team-rsa"),
   ];
   const rows = buildKnockoutMatchPickRows({
     bracketKind: "round_of_16",
@@ -703,6 +706,183 @@ function r32Side(slotKey: string, teamId = ""): KnockoutPickSlotDraft {
     next.find((s) => s.predictionKind === "champion")?.rowKey,
     "champion|",
   );
+}
+
+// Pickable rows with both teams expose direct-pick eligibility
+{
+  const slots: KnockoutPickSlotDraft[] = [
+    r16Slot("1", "team-can"),
+    r16Slot("2", "team-ger"),
+    r16Slot("3", "team-ned"),
+    r16Slot("4", "team-bra"),
+    r16Slot("5", "team-fra"),
+    r16Slot("6", "team-rsa"),
+    r16Slot("7", "team-ned"),
+    r16Slot("8", "team-bra"),
+    r16Slot("9", "team-ned"),
+    r16Slot("10", "team-ger"),
+    r16Slot("11", "team-fra"),
+    r16Slot("12", "team-ger"),
+    r16Slot("13", "team-can"),
+    r16Slot("14", "team-ned"),
+    r16Slot("15", "team-bra"),
+    r16Slot("16", "team-rsa"),
+    qfSlot("1", "team-ger"),
+    qfSlot("2", "team-can"),
+    qfSlot("3", "team-bra"),
+    qfSlot("4", "team-ned"),
+    qfSlot("5", "team-fra"),
+    qfSlot("6", "team-ger"),
+    qfSlot("7", "team-ned"),
+    qfSlot("8", "team-can"),
+    sfSlot("1", "team-ger"),
+    sfSlot("2", "team-fra"),
+    sfSlot("3", "team-bra"),
+    sfSlot("4", "team-ned"),
+    finSlot("1"),
+    finSlot("2"),
+  ];
+  const rows = buildKnockoutMatchPickRows({
+    bracketKind: "semifinalist",
+    slots,
+    teams,
+    gradual: emptyGradual,
+  });
+  assert.strictEqual(rows.length, 2);
+  for (const row of rows) {
+    assert.strictEqual(isKnockoutMatchDirectPickEligible(row), true);
+    assert.ok(row.homeTeamId);
+    assert.ok(row.awayTeamId);
+  }
+}
+
+// Semi-final winner picks write finalist slots and complete the step
+{
+  const slots: KnockoutPickSlotDraft[] = [
+    r16Slot("1", "team-can"),
+    r16Slot("2", "team-ger"),
+    r16Slot("3", "team-ned"),
+    r16Slot("4", "team-bra"),
+    r16Slot("5", "team-fra"),
+    r16Slot("6", "team-rsa"),
+    r16Slot("7", "team-ned"),
+    r16Slot("8", "team-bra"),
+    r16Slot("9", "team-ned"),
+    r16Slot("10", "team-ger"),
+    r16Slot("11", "team-fra"),
+    r16Slot("12", "team-ger"),
+    r16Slot("13", "team-can"),
+    r16Slot("14", "team-ned"),
+    r16Slot("15", "team-bra"),
+    r16Slot("16", "team-rsa"),
+    qfSlot("1", "team-ger"),
+    qfSlot("2", "team-can"),
+    qfSlot("3", "team-bra"),
+    qfSlot("4", "team-ned"),
+    qfSlot("5", "team-fra"),
+    qfSlot("6", "team-ger"),
+    qfSlot("7", "team-ned"),
+    qfSlot("8", "team-can"),
+    sfSlot("1", "team-ger"),
+    sfSlot("2", "team-fra"),
+    sfSlot("3", "team-bra"),
+    sfSlot("4", "team-ned"),
+    finSlot("1"),
+    finSlot("2"),
+  ];
+  const rows = buildKnockoutMatchPickRows({
+    bracketKind: "semifinalist",
+    slots,
+    teams,
+    gradual: emptyGradual,
+  });
+  assert.strictEqual(knockoutMatchStepComplete(rows), false);
+  const m101 = rows.find((r) => r.fifaMatchNo === 101)!;
+  const m102 = rows.find((r) => r.fifaMatchNo === 102)!;
+  const afterM101 = applyKnockoutMatchWinnerToSlots(slots, m101, "team-ger");
+  assert.strictEqual(
+    afterM101.find((s) => s.predictionKind === "finalist" && s.slotKey === "1")
+      ?.teamId,
+    "team-ger",
+  );
+  const afterBoth = applyKnockoutMatchWinnerToSlots(afterM101, m102, "team-fra");
+  assert.strictEqual(
+    afterBoth.find((s) => s.predictionKind === "finalist" && s.slotKey === "2")
+      ?.teamId,
+    "team-fra",
+  );
+  const completedRows = buildKnockoutMatchPickRows({
+    bracketKind: "semifinalist",
+    slots: afterBoth,
+    teams,
+    gradual: emptyGradual,
+  });
+  assert.strictEqual(knockoutMatchStepComplete(completedRows), true);
+}
+
+// Accessibility labels include match code for later-round picks
+{
+  assert.strictEqual(
+    knockoutMatchTeamPickAriaLabel({
+      teamName: "England",
+      fifaMatchNo: 101,
+      pickKind: "winner",
+    }),
+    "Pick England to win M101",
+  );
+  assert.strictEqual(
+    knockoutMatchTeamPickAriaLabel({
+      teamName: "France",
+      fifaMatchNo: 104,
+      pickKind: "champion",
+    }),
+    "Pick France as champion in M104",
+  );
+}
+
+// Stale winner ids do not count as filled or selected
+{
+  const slots: KnockoutPickSlotDraft[] = [
+    r16Slot("1", "team-can"),
+    r16Slot("2", "team-ger"),
+    r16Slot("3", "team-ned"),
+    r16Slot("4", "team-bra"),
+    r16Slot("5", "team-fra"),
+    r16Slot("6", "team-rsa"),
+    r16Slot("7", "team-ned"),
+    r16Slot("8", "team-bra"),
+    r16Slot("9", "team-ned"),
+    r16Slot("10", "team-ger"),
+    r16Slot("11", "team-fra"),
+    r16Slot("12", "team-ger"),
+    r16Slot("13", "team-can"),
+    r16Slot("14", "team-ned"),
+    r16Slot("15", "team-bra"),
+    r16Slot("16", "team-rsa"),
+    qfSlot("1", "team-ger"),
+    qfSlot("2", "team-can"),
+    qfSlot("3", "team-bra"),
+    qfSlot("4", "team-ned"),
+    qfSlot("5", "team-fra"),
+    qfSlot("6", "team-ger"),
+    qfSlot("7", "team-ned"),
+    qfSlot("8", "team-can"),
+    sfSlot("1", "team-ger"),
+    sfSlot("2", "team-fra"),
+    sfSlot("3", "team-bra"),
+    sfSlot("4", "team-ned"),
+    finSlot("1", "team-can"), // stale: not in M101 (Germany vs Brazil)
+    finSlot("2"),
+  ];
+  const rows = buildKnockoutMatchPickRows({
+    bracketKind: "semifinalist",
+    slots,
+    teams,
+    gradual: emptyGradual,
+  });
+  const m101 = rows.find((r) => r.fifaMatchNo === 101)!;
+  assert.strictEqual(validatedKnockoutMatchWinner(m101), null);
+  assert.strictEqual(knockoutMatchStepComplete(rows), false);
 }
 
 console.log("knockoutMatchPickRows.selftest.ts: ok");
