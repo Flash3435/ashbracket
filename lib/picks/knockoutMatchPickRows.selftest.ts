@@ -840,6 +840,46 @@ function r32Side(slotKey: string, teamId = ""): KnockoutPickSlotDraft {
   );
 }
 
+// Blocked steps with no pickable rows must not count as complete
+{
+  const slots: KnockoutPickSlotDraft[] = [
+    r16Slot("1", "team-can"),
+    r16Slot("2", "team-ger"),
+    r16Slot("3", "team-ned"),
+    r16Slot("4", "team-bra"),
+    r16Slot("5", "team-fra"),
+    ...Array.from({ length: 11 }, (_, i) => r16Slot(String(i + 6))),
+    ...Array.from({ length: 8 }, (_, i) => qfSlot(String(i + 1), "team-ger")),
+    ...Array.from({ length: 4 }, (_, i) => sfSlot(String(i + 1), "team-ger")),
+    finSlot("1", "team-ger"),
+    champSlot("team-ger"),
+  ];
+  const qfRows = buildKnockoutMatchPickRows({
+    bracketKind: "quarterfinalist",
+    slots,
+    teams,
+    gradual: emptyGradual,
+  });
+  assert.ok(qfRows.every((r) => r.lockReason === "incomplete"));
+  assert.strictEqual(knockoutMatchStepComplete(qfRows), false);
+
+  const sfRows = buildKnockoutMatchPickRows({
+    bracketKind: "semifinalist",
+    slots,
+    teams,
+    gradual: emptyGradual,
+  });
+  assert.strictEqual(knockoutMatchStepComplete(sfRows), false);
+
+  const finalRows = buildKnockoutMatchPickRows({
+    bracketKind: "finalist",
+    slots,
+    teams,
+    gradual: emptyGradual,
+  });
+  assert.strictEqual(knockoutMatchStepComplete(finalRows), false);
+}
+
 // Stale winner ids do not count as filled or selected
 {
   const slots: KnockoutPickSlotDraft[] = [

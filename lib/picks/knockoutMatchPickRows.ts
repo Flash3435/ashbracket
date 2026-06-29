@@ -613,9 +613,8 @@ export function countKnockoutMatchupsFilled(
 export function knockoutMatchStepComplete(
   rows: KnockoutMatchPickRow[],
 ): boolean {
-  const pickable = rows.filter((r) => r.lockReason === "pickable");
-  if (pickable.length === 0) return rows.length > 0;
-  return pickable.every((r) => Boolean(validatedKnockoutMatchWinner(r)));
+  if (rows.length === 0) return false;
+  return rows.every((r) => Boolean(validatedKnockoutMatchWinner(r)));
 }
 
 export function validateKnockoutLaterMatchPick(
