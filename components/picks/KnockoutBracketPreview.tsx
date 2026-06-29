@@ -8,6 +8,7 @@ import {
   CountryFlagPlaceholder,
 } from "../tournament/Flag";
 import { deriveParticipantBracket } from "../../lib/bracket/deriveParticipantBracket";
+import { officialKnockoutPreviewPairs } from "../../lib/bracket/officialKnockoutPreviewPairs";
 import {
   filterKnockoutSlots,
   pairKnockoutSlots,
@@ -275,12 +276,29 @@ export function KnockoutBracketPreview({
 }: KnockoutBracketPreviewProps) {
   const teamById = useMemo(() => new Map(teams.map((t) => [t.id, t])), [teams]);
 
+  const previewInput = useMemo(
+    () => ({ slots, teams, knockoutBracketPicksUnlocked: true }),
+    [slots, teams],
+  );
+
   const third = filterKnockoutSlots(slots, "third_place_qualifier");
   const r32 = pairKnockoutSlots(filterKnockoutSlots(slots, "round_of_32"));
-  const r16 = pairKnockoutSlots(filterKnockoutSlots(slots, "round_of_16"));
-  const qf = pairKnockoutSlots(filterKnockoutSlots(slots, "quarterfinalist"));
-  const sf = pairKnockoutSlots(filterKnockoutSlots(slots, "semifinalist"));
-  const fin = pairKnockoutSlots(filterKnockoutSlots(slots, "finalist"));
+  const r16 = useMemo(
+    () => officialKnockoutPreviewPairs("round_of_16", previewInput),
+    [previewInput],
+  );
+  const qf = useMemo(
+    () => officialKnockoutPreviewPairs("quarterfinalist", previewInput),
+    [previewInput],
+  );
+  const sf = useMemo(
+    () => officialKnockoutPreviewPairs("semifinalist", previewInput),
+    [previewInput],
+  );
+  const fin = useMemo(
+    () => officialKnockoutPreviewPairs("finalist", previewInput),
+    [previewInput],
+  );
   const champRow = slots.find((s) => s.predictionKind === "champion");
 
   const champTid = champRow?.teamId.trim() ?? "";

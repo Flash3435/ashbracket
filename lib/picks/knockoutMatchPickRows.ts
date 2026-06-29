@@ -130,28 +130,26 @@ function slotTeamId(
   );
 }
 
-function idsForKind(
+function r32MatchSideTeamIds(
+  matchIndex: number,
   slots: KnockoutPickSlotDraft[],
-  kind: KnockoutProgressionPredictionKind,
-): Set<string> {
-  const s = new Set<string>();
-  for (const row of slots) {
-    const id = row.teamId.trim();
-    if (id && row.predictionKind === kind) s.add(id);
-  }
-  return s;
+): { topId: string | null; bottomId: string | null } {
+  const { top, bottom } = r32SlotKeysForMatchIndex(matchIndex);
+  return {
+    topId: slotTeamId(slots, "round_of_32", top) || null,
+    bottomId: slotTeamId(slots, "round_of_32", bottom) || null,
+  };
 }
 
-function pickWinnerAmongParticipants(
-  homeId: string | null,
-  awayId: string | null,
-  nextRoundIds: Set<string>,
-): string {
-  const ha = homeId ? nextRoundIds.has(homeId) : false;
-  const hb = awayId ? nextRoundIds.has(awayId) : false;
-  if (ha && !hb) return homeId!;
-  if (hb && !ha) return awayId!;
-  return "";
+function isTeamInR32Match(
+  teamId: string,
+  topId: string | null,
+  bottomId: string | null,
+): boolean {
+  return (
+    (topId != null && teamId === topId) ||
+    (bottomId != null && teamId === bottomId)
+  );
 }
 
 function publicMatchForFifaNo(
@@ -262,8 +260,8 @@ export function readR32MatchWinnerForBracket(
 }
 
 /**
- * Confirmed R32 match winner for later-round bracket rows: `round_of_16` slot
- * 1–16 and inference from that participant set — never raw `round_of_32` side picks.
+ * Confirmed R32 match winner for later-round bracket rows: canonical `round_of_16`
+ * slot 1–16 when valid, otherwise a single known official `round_of_32` side.
  */
 export function readConfirmedR32MatchWinner(
   matchIndex: number,
@@ -271,18 +269,20 @@ export function readConfirmedR32MatchWinner(
 ): string {
   const r16Key = r16SlotKeyForR32MatchIndex(matchIndex);
   const stored = slotTeamId(slots, "round_of_16", r16Key);
-  if (stored) return stored;
+  const { topId, bottomId: botId } = r32MatchSideTeamIds(matchIndex, slots);
+  const hasOfficialSides = topId != null || botId != null;
 
-  const { top, bottom } = r32SlotKeysForMatchIndex(matchIndex);
-  const topId = slotTeamId(slots, "round_of_32", top) || null;
-  const botId = slotTeamId(slots, "round_of_32", bottom) || null;
+  if (stored) {
+    if (!hasOfficialSides || isTeamInR32Match(stored, topId, botId)) {
+      return stored;
+    }
+  }
 
   // Legacy single-side winner before canonical `round_of_16` storage.
   if (topId && !botId) return topId;
   if (botId && !topId) return botId;
 
-  const r16Participants = idsForKind(slots, "round_of_16");
-  return pickWinnerAmongParticipants(topId, botId, r16Participants);
+  return "";
 }
 
 /** Which upstream R32 fixtures still need a confirmed winner for this R16 row. */

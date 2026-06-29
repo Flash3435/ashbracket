@@ -1,6 +1,7 @@
 import type { Team } from "../../src/types/domain";
 import type { KnockoutPickSlotDraft } from "../../types/adminKnockoutPicks";
-import { filterKnockoutSlots, pairKnockoutSlots } from "../predictions/knockoutBracketLayout";
+import { officialKnockoutResolvedColumn } from "./officialKnockoutPreviewPairs";
+import { readConfirmedR32MatchWinner } from "../picks/knockoutMatchPickRows";
 import type {
   BracketMatchResolved,
   BracketSideResolved,
@@ -31,29 +32,6 @@ function groupPickTeamId(
   );
   const id = row?.teamId?.trim();
   return id || null;
-}
-
-function pickWinnerFromNextRound(
-  a: string | null,
-  b: string | null,
-  nextIds: Set<string>,
-): string | null {
-  const ta = a?.trim() || null;
-  const tb = b?.trim() || null;
-  const ha = ta ? nextIds.has(ta) : false;
-  const hb = tb ? nextIds.has(tb) : false;
-  if (ha && !hb) return ta;
-  if (hb && !ha) return tb;
-  return null;
-}
-
-function idsForKind(slots: KnockoutPickSlotDraft[], kind: string): Set<string> {
-  const s = new Set<string>();
-  for (const row of slots) {
-    const id = row.teamId.trim();
-    if (id && row.predictionKind === kind) s.add(id);
-  }
-  return s;
 }
 
 const LATE_ROUND_PLACEHOLDER_LABEL = "Opens in Stage 3";
@@ -158,46 +136,6 @@ function resolveR32Side(
   };
 }
 
-function buildKnockoutColumn(
-  slots: KnockoutPickSlotDraft[],
-  kind: KnockoutPickSlotDraft["predictionKind"],
-  teamById: Map<string, Team>,
-  nextKind: KnockoutPickSlotDraft["predictionKind"] | "champion",
-  nextIds: Set<string>,
-): BracketMatchResolved[] {
-  const rows = filterKnockoutSlots(slots, kind);
-  const pairs = pairKnockoutSlots(rows);
-  return pairs.map((p, idx) => {
-    const topKey = p.top?.slotKey ?? null;
-    const botKey = p.bottom?.slotKey ?? null;
-    const topId = p.top?.teamId?.trim() || null;
-    const botId = p.bottom?.teamId?.trim() || null;
-    const winner =
-      nextKind === "champion"
-        ? null
-        : pickWinnerFromNextRound(topId, botId, nextIds);
-    const top: BracketSideResolved = {
-      slotKey: topKey,
-      pickRowKey: p.top?.rowKey ?? null,
-      teamId: topId,
-      displayLabel: topId ? teamLabel(teamById, topId) : "TBD",
-    };
-    const bottom: BracketSideResolved = {
-      slotKey: botKey,
-      pickRowKey: p.bottom?.rowKey ?? null,
-      teamId: botId,
-      displayLabel: botId ? teamLabel(teamById, botId) : "TBD",
-    };
-    return {
-      matchKey: `${String(kind)}-${idx + 1}`,
-      fifaMatchNo: 0,
-      home: top,
-      away: bottom,
-      winnerTeamId: winner,
-    };
-  });
-}
-
 export type DeriveParticipantBracketInput = {
   slots: KnockoutPickSlotDraft[];
   teams: Team[];
@@ -239,8 +177,7 @@ export function deriveParticipantBracket(input: DeriveParticipantBracketInput): 
 
     let winnerTeamId: string | null = null;
     if (knockoutBracketPicksUnlocked) {
-      const r16 = idsForKind(slots, "round_of_16");
-      winnerTeamId = pickWinnerFromNextRound(home.teamId, away.teamId, r16);
+      winnerTeamId = readConfirmedR32MatchWinner(i, slots) || null;
     }
 
     return {
@@ -266,48 +203,30 @@ export function deriveParticipantBracket(input: DeriveParticipantBracketInput): 
     final = ph.final;
     champion = { teamId: null, pickRowKey: null };
   } else {
-    const qfIds = idsForKind(slots, "quarterfinalist");
-    const sfIds = idsForKind(slots, "semifinalist");
-    const finIds = idsForKind(slots, "finalist");
+    const previewInput = {
+      slots,
+      teams,
+      knockoutBracketPicksUnlocked: true,
+    };
     const champRow = slots.find((s) => s.predictionKind === "champion");
     const champId = champRow?.teamId.trim() || null;
 
-    roundOf16 = buildKnockoutColumn(slots, "round_of_16", teamById, "quarterfinalist", qfIds);
-    quarterfinals = buildKnockoutColumn(
-      slots,
-      "quarterfinalist",
+    roundOf16 = officialKnockoutResolvedColumn(
+      "round_of_16",
+      previewInput,
       teamById,
-      "semifinalist",
-      sfIds,
     );
-    semifinals = buildKnockoutColumn(slots, "semifinalist", teamById, "finalist", finIds);
-
-    const finPairs = pairKnockoutSlots(filterKnockoutSlots(slots, "finalist"));
-    final = finPairs.map((p, idx) => {
-      const topId = p.top?.teamId?.trim() || null;
-      const botId = p.bottom?.teamId?.trim() || null;
-      const winnerTeamId =
-        champId && (champId === topId || champId === botId)
-          ? champId
-          : pickWinnerFromNextRound(topId, botId, champId ? new Set([champId]) : new Set());
-      return {
-        matchKey: `final-${idx + 1}`,
-        fifaMatchNo: 0,
-        home: {
-          slotKey: p.top?.slotKey ?? null,
-          pickRowKey: p.top?.rowKey ?? null,
-          teamId: topId,
-          displayLabel: topId ? teamLabel(teamById, topId) : "TBD",
-        },
-        away: {
-          slotKey: p.bottom?.slotKey ?? null,
-          pickRowKey: p.bottom?.rowKey ?? null,
-          teamId: botId,
-          displayLabel: botId ? teamLabel(teamById, botId) : "TBD",
-        },
-        winnerTeamId,
-      };
-    });
+    quarterfinals = officialKnockoutResolvedColumn(
+      "quarterfinalist",
+      previewInput,
+      teamById,
+    );
+    semifinals = officialKnockoutResolvedColumn(
+      "semifinalist",
+      previewInput,
+      teamById,
+    );
+    final = officialKnockoutResolvedColumn("finalist", previewInput, teamById);
 
     champion = {
       teamId: champId,

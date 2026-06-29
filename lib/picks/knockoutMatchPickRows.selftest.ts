@@ -78,6 +78,16 @@ const teams: Team[] = [
     createdAt: "",
     updatedAt: "",
   },
+  {
+    id: "team-swe",
+    name: "Sweden",
+    countryCode: "SWE",
+    fifaCode: "SWE",
+    fifaRank: 20,
+    fifaRankAsOf: null,
+    createdAt: "",
+    updatedAt: "",
+  },
 ];
 
 function r16Slot(slotKey: string, teamId = ""): KnockoutPickSlotDraft {
@@ -923,6 +933,149 @@ function r32Side(slotKey: string, teamId = ""): KnockoutPickSlotDraft {
   const m101 = rows.find((r) => r.fifaMatchNo === 101)!;
   assert.strictEqual(validatedKnockoutMatchWinner(m101), null);
   assert.strictEqual(knockoutMatchStepComplete(rows), false);
+}
+
+// M89 winner pick must not change matchup sides (Germany/France regression)
+{
+  const slots: KnockoutPickSlotDraft[] = [
+    r16Slot("2", "team-ger"), // M74
+    r16Slot("5", "team-fra"), // M77
+    ...Array.from({ length: 14 }, (_, i) =>
+      r16Slot(String(i < 1 ? i + 1 : i + 2)),
+    ),
+    ...Array.from({ length: 8 }, (_, i) => qfSlot(String(i + 1))),
+  ];
+  const rows = buildKnockoutMatchPickRows({
+    bracketKind: "round_of_16",
+    slots,
+    teams,
+    gradual: emptyGradual,
+    knockoutBracketPicksUnlocked: true,
+  });
+  const m89 = rows.find((r) => r.fifaMatchNo === 89)!;
+  assert.strictEqual(m89.homeTeamId, "team-ger");
+  assert.strictEqual(m89.awayTeamId, "team-fra");
+  assert.strictEqual(isKnockoutMatchDirectPickEligible(m89), true);
+
+  const afterPick = pruneParticipantPicks(
+    applyKnockoutMatchWinnerToSlots(slots, m89, "team-fra"),
+  );
+  assert.strictEqual(
+    afterPick.find(
+      (s) => s.predictionKind === "quarterfinalist" && s.slotKey === "1",
+    )?.teamId,
+    "team-fra",
+  );
+  assert.strictEqual(
+    afterPick.find(
+      (s) => s.predictionKind === "round_of_16" && s.slotKey === "5",
+    )?.teamId,
+    "team-fra",
+  );
+  const afterRows = buildKnockoutMatchPickRows({
+    bracketKind: "round_of_16",
+    slots: afterPick,
+    teams,
+    gradual: emptyGradual,
+    knockoutBracketPicksUnlocked: true,
+  });
+  const m89After = afterRows.find((r) => r.fifaMatchNo === 89)!;
+  assert.strictEqual(m89After.homeTeamId, "team-ger");
+  assert.strictEqual(m89After.awayTeamId, "team-fra");
+  assert.strictEqual(validatedKnockoutMatchWinner(m89After), "team-fra");
+}
+
+// M77 winner Sweden: France must not appear as an M89 side or pick option
+{
+  const slots: KnockoutPickSlotDraft[] = [
+    r16Slot("2", "team-ger"), // M74
+    r16Slot("5", "team-swe"), // M77
+    ...Array.from({ length: 14 }, (_, i) =>
+      r16Slot(String(i < 1 ? i + 1 : i + 2)),
+    ),
+    ...Array.from({ length: 8 }, (_, i) => qfSlot(String(i + 1))),
+  ];
+  const rows = buildKnockoutMatchPickRows({
+    bracketKind: "round_of_16",
+    slots,
+    teams,
+    gradual: emptyGradual,
+    knockoutBracketPicksUnlocked: true,
+  });
+  const m89 = rows.find((r) => r.fifaMatchNo === 89)!;
+  assert.strictEqual(m89.homeTeamId, "team-ger");
+  assert.strictEqual(m89.awayTeamId, "team-swe");
+  assert.strictEqual(
+    validateKnockoutLaterMatchPick(m89, "team-fra"),
+    "That team is not in this matchup.",
+  );
+}
+
+// Stale round_of_16 slot must not show France when M77 R32 winner is Sweden
+{
+  const slots: KnockoutPickSlotDraft[] = [
+    r16Slot("2", "team-ger"),
+    r16Slot("5", "team-fra"), // stale: not in M77 R32 match below
+    ...Array.from({ length: 14 }, (_, i) =>
+      r16Slot(String(i < 1 ? i + 1 : i + 2)),
+    ),
+    r32Side("9", "team-swe"),
+    r32Side("10", ""),
+    ...Array.from({ length: 8 }, (_, i) => qfSlot(String(i + 1))),
+  ];
+  const rows = buildKnockoutMatchPickRows({
+    bracketKind: "round_of_16",
+    slots,
+    teams,
+    gradual: emptyGradual,
+    knockoutBracketPicksUnlocked: true,
+  });
+  const m89 = rows.find((r) => r.fifaMatchNo === 89)!;
+  assert.strictEqual(m89.homeTeamId, "team-ger");
+  assert.strictEqual(m89.awayTeamId, "team-swe");
+  assert.notStrictEqual(m89.awayTeamId, "team-fra");
+  assert.strictEqual(
+    validateKnockoutLaterMatchPick(m89, "team-fra"),
+    "That team is not in this matchup.",
+  );
+
+  const afterPick = pruneParticipantPicks(
+    applyKnockoutMatchWinnerToSlots(slots, m89, "team-swe"),
+  );
+  const afterRows = buildKnockoutMatchPickRows({
+    bracketKind: "round_of_16",
+    slots: afterPick,
+    teams,
+    gradual: emptyGradual,
+    knockoutBracketPicksUnlocked: true,
+  });
+  const m89After = afterRows.find((r) => r.fifaMatchNo === 89)!;
+  assert.strictEqual(m89After.homeTeamId, "team-ger");
+  assert.strictEqual(m89After.awayTeamId, "team-swe");
+}
+
+// Stale quarterfinalist slot must not change M89 sides
+{
+  const slots: KnockoutPickSlotDraft[] = [
+    r16Slot("2", "team-ger"),
+    r16Slot("5", "team-fra"),
+    ...Array.from({ length: 14 }, (_, i) =>
+      r16Slot(String(i < 1 ? i + 1 : i + 2)),
+    ),
+    qfSlot("1", "team-can"), // stale downstream pick
+    ...Array.from({ length: 7 }, (_, i) => qfSlot(String(i + 2))),
+  ];
+  const rows = buildKnockoutMatchPickRows({
+    bracketKind: "round_of_16",
+    slots,
+    teams,
+    gradual: emptyGradual,
+    knockoutBracketPicksUnlocked: true,
+  });
+  const m89 = rows.find((r) => r.fifaMatchNo === 89)!;
+  assert.strictEqual(m89.homeTeamId, "team-ger");
+  assert.strictEqual(m89.awayTeamId, "team-fra");
+  assert.strictEqual(validatedKnockoutMatchWinner(m89), null);
 }
 
 console.log("knockoutMatchPickRows.selftest.ts: ok");

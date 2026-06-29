@@ -115,16 +115,45 @@ function officialR16Sides(
   };
 }
 
-function officialQfSides(
+function validatedR16MatchWinner(
+  slots: KnockoutPickSlotDraft[],
+  r16MatchIndex: number,
+): string | null {
+  const sides = officialR16Sides(slots, r16MatchIndex);
+  const pick = slotTeamId(slots, "quarterfinalist", String(r16MatchIndex + 1));
+  if (!pick || !sides.home || !sides.away) return null;
+  if (pick === sides.home || pick === sides.away) return pick;
+  return null;
+}
+
+function validatedQfMatchWinner(
+  slots: KnockoutPickSlotDraft[],
+  qfMatchIndex: number,
+): string | null {
+  const sides = officialQfMatchSides(slots, qfMatchIndex);
+  const pick = slotTeamId(slots, "semifinalist", String(qfMatchIndex + 1));
+  if (!pick || !sides.home || !sides.away) return null;
+  if (pick === sides.home || pick === sides.away) return pick;
+  return null;
+}
+
+function officialQfMatchSides(
   slots: KnockoutPickSlotDraft[],
   matchIndex: number,
 ): { home: string | null; away: string | null } {
   const pair = knockoutParticipantSlotPair("quarterfinal", matchIndex);
   if (!pair) return { home: null, away: null };
   return {
-    home: slotTeamId(slots, "quarterfinalist", pair[0]) || null,
-    away: slotTeamId(slots, "quarterfinalist", pair[1]) || null,
+    home: validatedR16MatchWinner(slots, parseInt(pair[0], 10) - 1),
+    away: validatedR16MatchWinner(slots, parseInt(pair[1], 10) - 1),
   };
+}
+
+function officialQfSides(
+  slots: KnockoutPickSlotDraft[],
+  matchIndex: number,
+): { home: string | null; away: string | null } {
+  return officialQfMatchSides(slots, matchIndex);
 }
 
 function officialSfSides(
@@ -134,8 +163,8 @@ function officialSfSides(
   const pair = knockoutParticipantSlotPair("semifinal", matchIndex);
   if (!pair) return { home: null, away: null };
   return {
-    home: slotTeamId(slots, "semifinalist", pair[0]) || null,
-    away: slotTeamId(slots, "semifinalist", pair[1]) || null,
+    home: validatedQfMatchWinner(slots, parseInt(pair[0], 10) - 1),
+    away: validatedQfMatchWinner(slots, parseInt(pair[1], 10) - 1),
   };
 }
 
