@@ -130,6 +130,45 @@ function slotTeamId(
   );
 }
 
+export type ConfirmedR32WinnerContext = {
+  teams?: Team[];
+  tournamentMatches?: TournamentMatchPublicRow[] | null;
+  gradual?: GradualKnockoutSelectionState;
+  knockoutBracketPicksUnlocked?: boolean;
+};
+
+function normalizeCountryCode(code: string | null | undefined): string {
+  return (code ?? "").trim().toUpperCase();
+}
+
+function teamIdForCountryCode(
+  teams: Team[],
+  code: string | null | undefined,
+): string | null {
+  const normalized = normalizeCountryCode(code);
+  if (!normalized) return null;
+  const match = teams.find(
+    (t) => normalizeCountryCode(t.countryCode) === normalized,
+  );
+  return match?.id ?? null;
+}
+
+function r32PublicMatchForIndex(
+  tournamentMatches: TournamentMatchPublicRow[] | null | undefined,
+  matchIndex: number,
+): TournamentMatchPublicRow | null {
+  const fifaMatchNo = 73 + matchIndex;
+  const r32 = (tournamentMatches ?? []).filter(
+    (m) => m.stage_code === "round_of_32",
+  );
+  const direct = `M${fifaMatchNo}`;
+  return (
+    r32.find((m) => m.match_code === direct) ??
+    r32.find((m) => m.match_code.endsWith(`-${fifaMatchNo}`)) ??
+    null
+  );
+}
+
 function r32MatchSideTeamIds(
   matchIndex: number,
   slots: KnockoutPickSlotDraft[],
@@ -141,6 +180,47 @@ function r32MatchSideTeamIds(
   };
 }
 
+/** Official R32 matchup participants from slots, gradual unlock, and tournament data. */
+export function officialR32ParticipantIds(
+  matchIndex: number,
+  slots: KnockoutPickSlotDraft[],
+  ctx?: ConfirmedR32WinnerContext,
+): { topId: string | null; bottomId: string | null } {
+  const { topId: slotTop, bottomId: slotBottom } = r32MatchSideTeamIds(
+    matchIndex,
+    slots,
+  );
+  let topId = slotTop;
+  let bottomId = slotBottom;
+
+  const ms = ctx?.gradual?.matchStates[matchIndex];
+  if (ms) {
+    topId = topId ?? ms.homeTeamId ?? null;
+    bottomId = bottomId ?? ms.awayTeamId ?? null;
+  }
+
+  if (ctx?.teams?.length) {
+    const pub = r32PublicMatchForIndex(ctx.tournamentMatches, matchIndex);
+    if (pub) {
+      topId = topId ?? teamIdForCountryCode(ctx.teams, pub.home_country_code);
+      bottomId =
+        bottomId ?? teamIdForCountryCode(ctx.teams, pub.away_country_code);
+    }
+  }
+
+  return { topId, bottomId };
+}
+
+function officialR32ResultWinner(
+  matchIndex: number,
+  ctx?: ConfirmedR32WinnerContext,
+): string | null {
+  if (!ctx?.teams?.length) return null;
+  const pub = r32PublicMatchForIndex(ctx.tournamentMatches, matchIndex);
+  if (!pub?.winner_country_code?.trim()) return null;
+  return teamIdForCountryCode(ctx.teams, pub.winner_country_code);
+}
+
 function isTeamInR32Match(
   teamId: string,
   topId: string | null,
@@ -150,6 +230,17 @@ function isTeamInR32Match(
     (topId != null && teamId === topId) ||
     (bottomId != null && teamId === bottomId)
   );
+}
+
+function confirmedR32WinnerContextFromBuildInput(
+  input: BuildKnockoutMatchPickRowsInput,
+): ConfirmedR32WinnerContext {
+  return {
+    teams: input.teams,
+    tournamentMatches: input.tournamentMatches,
+    gradual: input.gradual,
+    knockoutBracketPicksUnlocked: input.knockoutBracketPicksUnlocked,
+  };
 }
 
 function publicMatchForFifaNo(
@@ -241,7 +332,11 @@ export function readR32MatchWinnerForBracket(
   },
 ): string {
   if (options.knockoutBracketPicksUnlocked) {
-    return readConfirmedR32MatchWinner(matchIndex, slots);
+    return readConfirmedR32MatchWinner(matchIndex, slots, {
+      teams,
+      gradual: options.gradual,
+      knockoutBracketPicksUnlocked: true,
+    });
   }
 
   const ms = options.gradual?.matchStates[matchIndex];
@@ -266,14 +361,24 @@ export function readR32MatchWinnerForBracket(
 export function readConfirmedR32MatchWinner(
   matchIndex: number,
   slots: KnockoutPickSlotDraft[],
+  ctx?: ConfirmedR32WinnerContext,
 ): string {
   const r16Key = r16SlotKeyForR32MatchIndex(matchIndex);
   const stored = slotTeamId(slots, "round_of_16", r16Key);
-  const { topId, bottomId: botId } = r32MatchSideTeamIds(matchIndex, slots);
-  const hasOfficialSides = topId != null || botId != null;
+  const { topId, bottomId: botId } = officialR32ParticipantIds(
+    matchIndex,
+    slots,
+    ctx,
+  );
+  const hasParticipants = topId != null || botId != null;
+  const resultWinner = officialR32ResultWinner(matchIndex, ctx);
+
+  if (resultWinner) {
+    return resultWinner;
+  }
 
   if (stored) {
-    if (!hasOfficialSides || isTeamInR32Match(stored, topId, botId)) {
+    if (!hasParticipants || isTeamInR32Match(stored, topId, botId)) {
       return stored;
     }
   }
@@ -380,8 +485,17 @@ function readMatchSides(
       return { homeTeamId: null, awayTeamId: null };
     }
     const [homeR32Index, awayR32Index] = pair;
-    const home = readConfirmedR32MatchWinner(homeR32Index, input.slots);
-    const away = readConfirmedR32MatchWinner(awayR32Index, input.slots);
+    const r32Ctx = confirmedR32WinnerContextFromBuildInput(input);
+    const home = readConfirmedR32MatchWinner(
+      homeR32Index,
+      input.slots,
+      r32Ctx,
+    );
+    const away = readConfirmedR32MatchWinner(
+      awayR32Index,
+      input.slots,
+      r32Ctx,
+    );
     return {
       homeTeamId: home || null,
       awayTeamId: away || null,

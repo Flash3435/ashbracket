@@ -16,6 +16,7 @@ import {
 } from "./knockoutMatchPickRows";
 import { pruneParticipantPicks } from "../predictions/knockoutPickConsistency";
 import type { GradualKnockoutSelectionState } from "./gradualKnockoutUnlock";
+import type { TournamentMatchPublicRow } from "../../types/tournamentPublic";
 
 const teams: Team[] = [
   {
@@ -1076,6 +1077,118 @@ function r32Side(slotKey: string, teamId = ""): KnockoutPickSlotDraft {
   assert.strictEqual(m89.homeTeamId, "team-ger");
   assert.strictEqual(m89.awayTeamId, "team-fra");
   assert.strictEqual(validatedKnockoutMatchWinner(m89), null);
+}
+
+// Stale M77 slot ignored when official tournament result is Sweden (initial render).
+{
+  const tournamentMatches: TournamentMatchPublicRow[] = [
+    {
+      match_id: "m77",
+      edition_id: "ed",
+      edition_code: "2026",
+      match_code: "M77",
+      stage_code: "round_of_32",
+      stage_label: "Round of 32",
+      stage_sort_order: 1,
+      group_code: null,
+      round_index: 0,
+      kickoff_at: "2026-07-01T18:00:00Z",
+      status: "finished",
+      home_goals: 2,
+      away_goals: 1,
+      home_penalties: null,
+      away_penalties: null,
+      home_team_name: "Sweden",
+      home_country_code: "SWE",
+      away_team_name: "France",
+      away_country_code: "FRA",
+      winner_team_name: "Sweden",
+      winner_country_code: "SWE",
+    },
+  ];
+  const slots: KnockoutPickSlotDraft[] = [
+    r16Slot("2", "team-ger"),
+    r16Slot("5", "team-fra"), // stale upstream slot
+    ...Array.from({ length: 14 }, (_, i) =>
+      r16Slot(String(i < 1 ? i + 1 : i + 2)),
+    ),
+    ...Array.from({ length: 8 }, (_, i) => qfSlot(String(i + 1))),
+  ];
+  const rows = buildKnockoutMatchPickRows({
+    bracketKind: "round_of_16",
+    slots,
+    teams,
+    tournamentMatches,
+    gradual: emptyGradual,
+    knockoutBracketPicksUnlocked: true,
+  });
+  const m89 = rows.find((r) => r.fifaMatchNo === 89)!;
+  assert.strictEqual(m89.homeTeamId, "team-ger");
+  assert.strictEqual(m89.awayTeamId, "team-swe");
+  assert.strictEqual(
+    validateKnockoutLaterMatchPick(m89, "team-fra"),
+    "That team is not in this matchup.",
+  );
+  assert.strictEqual(isKnockoutMatchDirectPickEligible(m89), true);
+
+  const afterPick = pruneParticipantPicks(
+    applyKnockoutMatchWinnerToSlots(slots, m89, "team-swe"),
+    { r32WinnerContext: { teams, tournamentMatches, knockoutBracketPicksUnlocked: true } },
+  );
+  assert.strictEqual(
+    afterPick.find(
+      (s) => s.predictionKind === "quarterfinalist" && s.slotKey === "1",
+    )?.teamId,
+    "team-swe",
+  );
+  const afterRows = buildKnockoutMatchPickRows({
+    bracketKind: "round_of_16",
+    slots: afterPick,
+    teams,
+    tournamentMatches,
+    gradual: emptyGradual,
+    knockoutBracketPicksUnlocked: true,
+  });
+  const m89After = afterRows.find((r) => r.fifaMatchNo === 89)!;
+  assert.strictEqual(m89After.homeTeamId, "team-ger");
+  assert.strictEqual(m89After.awayTeamId, "team-swe");
+  assert.strictEqual(validatedKnockoutMatchWinner(m89After), "team-swe");
+}
+
+// Valid M77 winner France stays stable through M89 selection.
+{
+  const slots: KnockoutPickSlotDraft[] = [
+    r16Slot("2", "team-ger"),
+    r16Slot("5", "team-fra"),
+    ...Array.from({ length: 14 }, (_, i) =>
+      r16Slot(String(i < 1 ? i + 1 : i + 2)),
+    ),
+    ...Array.from({ length: 8 }, (_, i) => qfSlot(String(i + 1))),
+  ];
+  const rows = buildKnockoutMatchPickRows({
+    bracketKind: "round_of_16",
+    slots,
+    teams,
+    gradual: emptyGradual,
+    knockoutBracketPicksUnlocked: true,
+  });
+  const m89 = rows.find((r) => r.fifaMatchNo === 89)!;
+  assert.strictEqual(m89.homeTeamId, "team-ger");
+  assert.strictEqual(m89.awayTeamId, "team-fra");
+  const afterPick = pruneParticipantPicks(
+    applyKnockoutMatchWinnerToSlots(slots, m89, "team-fra"),
+  );
+  const afterRows = buildKnockoutMatchPickRows({
+    bracketKind: "round_of_16",
+    slots: afterPick,
+    teams,
+    gradual: emptyGradual,
+    knockoutBracketPicksUnlocked: true,
+  });
+  const m89After = afterRows.find((r) => r.fifaMatchNo === 89)!;
+  assert.strictEqual(m89After.homeTeamId, "team-ger");
+  assert.strictEqual(m89After.awayTeamId, "team-fra");
+  assert.strictEqual(validatedKnockoutMatchWinner(m89After), "team-fra");
 }
 
 console.log("knockoutMatchPickRows.selftest.ts: ok");

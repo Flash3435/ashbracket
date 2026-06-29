@@ -3,6 +3,7 @@ import type { KnockoutPickSlotDraft } from "../../types/adminKnockoutPicks";
 import type { ParticipantPickSlotPayload } from "../../types/knockoutPicksSave";
 import { WC2026_GROUP_CODES } from "../tournament/wc2026GroupCodes";
 import { isKnockoutProgressionKind } from "./knockoutProgressionKinds";
+import type { ConfirmedR32WinnerContext } from "../picks/knockoutMatchPickRows";
 import { pruneOfficialKnockoutPathPicks } from "./pruneOfficialKnockoutPathPicks";
 
 /** Shown in the third-place team chooser when a team is not eligible. */
@@ -556,7 +557,10 @@ function thirdPlaceDuplicateRowKeys(slots: KnockoutPickSlotDraft[]): Set<string>
  */
 export function pruneParticipantPicks(
   slots: KnockoutPickSlotDraft[],
-  options?: { freezeKnockoutProgressionPicks?: boolean },
+  options?: {
+    freezeKnockoutProgressionPicks?: boolean;
+    r32WinnerContext?: ConfirmedR32WinnerContext;
+  },
 ): KnockoutPickSlotDraft[] {
   const advancing = advancingFromGroups(slots);
   const eligibleR32 = eligibleRoundOf32Pool(slots);
@@ -593,7 +597,7 @@ export function pruneParticipantPicks(
     return afterBasics;
   }
 
-  return pruneOfficialKnockoutPathPicks(afterBasics).slots;
+  return pruneOfficialKnockoutPathPicks(afterBasics, options?.r32WinnerContext).slots;
 }
 
 /** @deprecated Use pruneParticipantPicks */
@@ -610,7 +614,10 @@ export function assignParticipantPickDeduped(
   slots: KnockoutPickSlotDraft[],
   rowKey: string,
   teamId: string,
-  options?: { freezeKnockoutProgressionPicks?: boolean },
+  options?: {
+    freezeKnockoutProgressionPicks?: boolean;
+    r32WinnerContext?: ConfirmedR32WinnerContext;
+  },
 ): KnockoutPickSlotDraft[] {
   const target = slots.find((s) => s.rowKey === rowKey);
   if (!target) return slots;

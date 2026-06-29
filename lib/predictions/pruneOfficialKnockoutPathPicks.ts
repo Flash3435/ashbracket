@@ -3,8 +3,11 @@ import {
   r16R32ParticipantPair,
   WC2026_R16_R32_PARTICIPANT_PAIRS,
 } from "../bracket/wc2026KnockoutPairings";
-import { r32SlotKeysForMatchIndex } from "../bracket/wc2026RoundOf32";
-import { readConfirmedR32MatchWinner } from "../picks/knockoutMatchPickRows";
+import {
+  officialR32ParticipantIds,
+  readConfirmedR32MatchWinner,
+  type ConfirmedR32WinnerContext,
+} from "../picks/knockoutMatchPickRows";
 import { r16SlotKeyForR32MatchIndex } from "../picks/gradualKnockoutUnlock";
 import type { KnockoutPickSlotDraft } from "../../types/adminKnockoutPicks";
 import type { KnockoutProgressionPredictionKind } from "./knockoutProgressionKinds";
@@ -45,18 +48,18 @@ function slotTeamId(
 function r32MatchParticipants(
   slots: KnockoutPickSlotDraft[],
   matchIndex: number,
+  ctx?: ConfirmedR32WinnerContext,
 ): { home: string | null; away: string | null } {
-  const { top, bottom } = r32SlotKeysForMatchIndex(matchIndex);
-  const home = slotTeamId(slots, "round_of_32", top) || null;
-  const away = slotTeamId(slots, "round_of_32", bottom) || null;
-  return { home, away };
+  const { topId, bottomId } = officialR32ParticipantIds(matchIndex, slots, ctx);
+  return { home: topId, away: bottomId };
 }
 
 function r32WinnerTeamId(
   slots: KnockoutPickSlotDraft[],
   matchIndex: number,
+  ctx?: ConfirmedR32WinnerContext,
 ): string | null {
-  const winner = readConfirmedR32MatchWinner(matchIndex, slots);
+  const winner = readConfirmedR32MatchWinner(matchIndex, slots, ctx);
   return winner || null;
 }
 
@@ -75,9 +78,10 @@ function isValidR32WinnerForMatch(
   slots: KnockoutPickSlotDraft[],
   matchIndex: number,
   teamId: string,
+  ctx?: ConfirmedR32WinnerContext,
 ): boolean {
   if (!teamId) return true;
-  const { home, away } = r32MatchParticipants(slots, matchIndex);
+  const { home, away } = r32MatchParticipants(slots, matchIndex, ctx);
   if (!home && !away) return true;
   if (home && away) return teamId === home || teamId === away;
   return (home != null && teamId === home) || (away != null && teamId === away);
@@ -106,20 +110,22 @@ function clearRow(
 function officialR16Sides(
   slots: KnockoutPickSlotDraft[],
   matchIndex: number,
+  ctx?: ConfirmedR32WinnerContext,
 ): { home: string | null; away: string | null } {
   const pair = r16R32ParticipantPair(matchIndex);
   if (!pair) return { home: null, away: null };
   return {
-    home: r32WinnerTeamId(slots, pair[0]),
-    away: r32WinnerTeamId(slots, pair[1]),
+    home: r32WinnerTeamId(slots, pair[0], ctx),
+    away: r32WinnerTeamId(slots, pair[1], ctx),
   };
 }
 
 function validatedR16MatchWinner(
   slots: KnockoutPickSlotDraft[],
   r16MatchIndex: number,
+  ctx?: ConfirmedR32WinnerContext,
 ): string | null {
-  const sides = officialR16Sides(slots, r16MatchIndex);
+  const sides = officialR16Sides(slots, r16MatchIndex, ctx);
   const pick = slotTeamId(slots, "quarterfinalist", String(r16MatchIndex + 1));
   if (!pick || !sides.home || !sides.away) return null;
   if (pick === sides.home || pick === sides.away) return pick;
@@ -129,8 +135,9 @@ function validatedR16MatchWinner(
 function validatedQfMatchWinner(
   slots: KnockoutPickSlotDraft[],
   qfMatchIndex: number,
+  ctx?: ConfirmedR32WinnerContext,
 ): string | null {
-  const sides = officialQfMatchSides(slots, qfMatchIndex);
+  const sides = officialQfMatchSides(slots, qfMatchIndex, ctx);
   const pick = slotTeamId(slots, "semifinalist", String(qfMatchIndex + 1));
   if (!pick || !sides.home || !sides.away) return null;
   if (pick === sides.home || pick === sides.away) return pick;
@@ -140,31 +147,34 @@ function validatedQfMatchWinner(
 function officialQfMatchSides(
   slots: KnockoutPickSlotDraft[],
   matchIndex: number,
+  ctx?: ConfirmedR32WinnerContext,
 ): { home: string | null; away: string | null } {
   const pair = knockoutParticipantSlotPair("quarterfinal", matchIndex);
   if (!pair) return { home: null, away: null };
   return {
-    home: validatedR16MatchWinner(slots, parseInt(pair[0], 10) - 1),
-    away: validatedR16MatchWinner(slots, parseInt(pair[1], 10) - 1),
+    home: validatedR16MatchWinner(slots, parseInt(pair[0], 10) - 1, ctx),
+    away: validatedR16MatchWinner(slots, parseInt(pair[1], 10) - 1, ctx),
   };
 }
 
 function officialQfSides(
   slots: KnockoutPickSlotDraft[],
   matchIndex: number,
+  ctx?: ConfirmedR32WinnerContext,
 ): { home: string | null; away: string | null } {
-  return officialQfMatchSides(slots, matchIndex);
+  return officialQfMatchSides(slots, matchIndex, ctx);
 }
 
 function officialSfSides(
   slots: KnockoutPickSlotDraft[],
   matchIndex: number,
+  ctx?: ConfirmedR32WinnerContext,
 ): { home: string | null; away: string | null } {
   const pair = knockoutParticipantSlotPair("semifinal", matchIndex);
   if (!pair) return { home: null, away: null };
   return {
-    home: validatedQfMatchWinner(slots, parseInt(pair[0], 10) - 1),
-    away: validatedQfMatchWinner(slots, parseInt(pair[1], 10) - 1),
+    home: validatedQfMatchWinner(slots, parseInt(pair[0], 10) - 1, ctx),
+    away: validatedQfMatchWinner(slots, parseInt(pair[1], 10) - 1, ctx),
   };
 }
 
@@ -186,6 +196,7 @@ function officialFinalSides(slots: KnockoutPickSlotDraft[]): {
  */
 export function pruneOfficialKnockoutPathPicks(
   slots: KnockoutPickSlotDraft[],
+  ctx?: ConfirmedR32WinnerContext,
 ): PruneOfficialKnockoutPathResult {
   const cleared: ClearedKnockoutPathPick[] = [];
   let result = slots;
@@ -196,7 +207,9 @@ export function pruneOfficialKnockoutPathPicks(
       (s) => s.predictionKind === "round_of_16" && s.slotKey === slotKey,
     );
     if (!row?.teamId.trim()) continue;
-    if (!isValidR32WinnerForMatch(result, matchIndex, row.teamId.trim())) {
+    if (
+      !isValidR32WinnerForMatch(result, matchIndex, row.teamId.trim(), ctx)
+    ) {
       result = clearRow(result, row, "not_in_r32_match", cleared);
     }
   }
@@ -207,7 +220,7 @@ export function pruneOfficialKnockoutPathPicks(
       (s) => s.predictionKind === "quarterfinalist" && s.slotKey === slotKey,
     );
     if (!row?.teamId.trim()) continue;
-    const sides = officialR16Sides(result, matchIndex);
+    const sides = officialR16Sides(result, matchIndex, ctx);
     const reason: KnockoutPathPickClearReason =
       !sides.home || !sides.away ? "upstream_incomplete" : "not_in_official_matchup";
     if (
@@ -227,7 +240,7 @@ export function pruneOfficialKnockoutPathPicks(
       (s) => s.predictionKind === "semifinalist" && s.slotKey === slotKey,
     );
     if (!row?.teamId.trim()) continue;
-    const sides = officialQfSides(result, matchIndex);
+    const sides = officialQfSides(result, matchIndex, ctx);
     const reason: KnockoutPathPickClearReason =
       !sides.home || !sides.away ? "upstream_incomplete" : "not_in_official_matchup";
     if (

@@ -77,6 +77,7 @@ import {
 } from "../../lib/picks/gradualKnockoutUnlock";
 import {
   applyKnockoutMatchWinnerToSlots,
+  allowedTeamsForKnockoutMatchRow,
   buildKnockoutMatchPickRows,
   countKnockoutMatchupsFilled,
   FINAL_MATCH_INCOMPLETE_MSG,
@@ -836,16 +837,26 @@ export function KnockoutPicksWizard({
     knockoutBracketPicksUnlocked && !gradualR32MatchRows;
   const knockoutPicksAccessible =
     knockoutBracketPicksUnlocked || gradualR32Pickable;
+  const r32WinnerContext = useMemo(
+    () => ({
+      teams,
+      tournamentMatches,
+      gradual: gradualKnockout,
+      knockoutBracketPicksUnlocked,
+    }),
+    [teams, tournamentMatches, gradualKnockout, knockoutBracketPicksUnlocked],
+  );
   const knockoutPathRepairOnLoad = useMemo(
-    () => pruneOfficialKnockoutPathPicks(initialSlots),
-    [initialSlots],
+    () => pruneOfficialKnockoutPathPicks(initialSlots, r32WinnerContext),
+    [initialSlots, r32WinnerContext],
   );
   const normalizedInitialSlots = useMemo(
     () =>
       pruneParticipantPicks(knockoutPathRepairOnLoad.slots, {
         freezeKnockoutProgressionPicks: !knockoutPicksAccessible,
+        r32WinnerContext,
       }),
-    [knockoutPathRepairOnLoad.slots, knockoutPicksAccessible],
+    [knockoutPathRepairOnLoad.slots, knockoutPicksAccessible, r32WinnerContext],
   );
   const showKnockoutPathReviewBanner =
     knockoutPathRepairOnLoad.cleared.length > 0 &&
@@ -868,6 +879,13 @@ export function KnockoutPicksWizard({
   );
   const [slots, setSlots] = useState<KnockoutPickSlotDraft[]>(
     () => normalizedInitialSlots,
+  );
+  const knockoutDisplaySlots = useMemo(
+    () =>
+      knockoutPicksAccessible
+        ? pruneParticipantPicks(slots, { r32WinnerContext })
+        : slots,
+    [slots, knockoutPicksAccessible, r32WinnerContext],
   );
   const gradualR32MatchRowsByKey = useMemo(() => {
     if (!gradualR32MatchRows) return null;
@@ -1122,7 +1140,7 @@ export function KnockoutPicksWizard({
     }
     return buildKnockoutMatchPickRows({
       bracketKind: currentStepDef.bracketKind as KnockoutWizardBracketKind,
-      slots,
+      slots: knockoutDisplaySlots,
       teams,
       tournamentMatches,
       gradual: gradualKnockout,
@@ -1131,7 +1149,7 @@ export function KnockoutPicksWizard({
   }, [
     currentStepDef,
     fullBracketPicksUnlocked,
-    slots,
+    knockoutDisplaySlots,
     teams,
     tournamentMatches,
     gradualKnockout,
@@ -1147,7 +1165,7 @@ export function KnockoutPicksWizard({
     }
     return buildKnockoutMatchPickRows({
       bracketKind: "finalist",
-      slots,
+      slots: knockoutDisplaySlots,
       teams,
       tournamentMatches,
       gradual: gradualKnockout,
@@ -1156,7 +1174,7 @@ export function KnockoutPicksWizard({
   }, [
     currentStepDef,
     fullBracketPicksUnlocked,
-    slots,
+    knockoutDisplaySlots,
     teams,
     tournamentMatches,
     gradualKnockout,
@@ -1223,6 +1241,7 @@ export function KnockoutPicksWizard({
       const next = applyKnockoutMatchWinnerToSlots(prev, freshRow, id);
       return pruneParticipantPicks(next, {
         freezeKnockoutProgressionPicks: !knockoutPicksAccessible,
+        r32WinnerContext,
       });
     });
   }
@@ -2027,14 +2046,14 @@ export function KnockoutPicksWizard({
           <ul className="mt-4 space-y-3">
             {activeKnockoutMatchRows
               ? activeKnockoutMatchRows.map((matchRow) => {
-                  const matchupPair: [Team, Team] | null = (() => {
-                    const homeId = matchRow.homeTeamId?.trim();
-                    const awayId = matchRow.awayTeamId?.trim();
-                    if (!homeId || !awayId) return null;
-                    const home = teamById.get(homeId);
-                    const away = teamById.get(awayId);
-                    return home && away ? [home, away] : null;
-                  })();
+                  const allowedTeams = allowedTeamsForKnockoutMatchRow(
+                    matchRow,
+                    teams,
+                  );
+                  const matchupPair: [Team, Team] | null =
+                    allowedTeams.length === 2
+                      ? [allowedTeams[0]!, allowedTeams[1]!]
+                      : null;
                   const selectedTeamId =
                     validatedKnockoutMatchWinner(matchRow) ?? "";
                   const team = selectedTeamId
