@@ -214,7 +214,7 @@ function analyzeLaterRoundMissing(
       nowMs: ctx.nowMs,
     });
     for (const row of rows) {
-      if (row.lockReason === "incomplete") continue;
+      if (row.lockReason === "incomplete" || row.lockReason === "frozen") continue;
       if (validatedKnockoutMatchWinner(row)) continue;
       const stage =
         STAGE_KEY_FOR_BRACKET[bracketKind] ?? "roundOf16";

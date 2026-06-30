@@ -2158,7 +2158,8 @@ export function KnockoutPicksWizard({
                             ) : null}
                           </div>
                         )}
-                        {matchRow.lockReason === "started"
+                        {(matchRow.lockReason === "started" ||
+                          matchRow.lockReason === "frozen")
                           ? renderAdminKnockoutCorrectionButton({
                               matchCode: `M${matchRow.fifaMatchNo}`,
                               matchLabel: heading,

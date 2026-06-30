@@ -13,7 +13,10 @@ import {
   readGradualR32MatchWinner,
   r16SlotKeyForR32MatchIndex,
 } from "./gradualKnockoutUnlock";
-import { isKnockoutMatchLockedForParticipant } from "./knockoutPickEditability";
+import {
+  isKnockoutMatchLockedForParticipant,
+  isKnockoutSlotFrozenByOfficialFeeders,
+} from "./knockoutPickEditability";
 import { isMatchStarted } from "./knockoutSelectionWindow";
 
 export type KnockoutWizardBracketKind =
@@ -23,7 +26,7 @@ export type KnockoutWizardBracketKind =
   | "finalist"
   | "champion";
 
-export type KnockoutMatchLockReason = "pickable" | "incomplete" | "started";
+export type KnockoutMatchLockReason = "pickable" | "incomplete" | "started" | "frozen";
 
 export type KnockoutMatchPickRow = {
   matchIndex: number;
@@ -344,6 +347,16 @@ function matchRowDisplay(
     };
   }
 
+  if (lockReason === "frozen") {
+    return {
+      heading,
+      emptyPrimaryLine: matchupLine ?? "Locked",
+      kickoffIso: null,
+      statusLine: "Locked — feeder results are official.",
+      chooseButtonLabel,
+    };
+  }
+
   return {
     heading,
     emptyPrimaryLine: matchupLine ?? "Pick needed",
@@ -609,6 +622,16 @@ export function buildKnockoutMatchPickRows(
   if (!def) return [];
 
   const nowMs = input.nowMs ?? Date.now();
+  const gradual = input.gradual ?? {
+    r32MatchCount: 16,
+    confirmedCount: 0,
+    pickableCount: 0,
+    pendingCount: 16,
+    allR32Confirmed: false,
+    anyR32Started: false,
+    earliestPickableKickoffIso: null,
+    matchStates: [],
+  };
   const stageMatches = (input.tournamentMatches ?? []).filter(
     (m) => m.stage_code === def.stageCode,
   );
@@ -651,6 +674,15 @@ export function buildKnockoutMatchPickRows(
       isKnockoutMatchLockedForParticipant(publicMatch, nowMs)
     ) {
       lockReason = "started";
+    } else if (
+      isKnockoutSlotFrozenByOfficialFeeders({
+        predictionKind: def.resultKind,
+        slotKey: saveSlotKey,
+        tournamentMatches: input.tournamentMatches,
+        gradual,
+      })
+    ) {
+      lockReason = "frozen";
     }
 
     const r32Ctx = confirmedR32WinnerContextFromBuildInput(input);
@@ -831,6 +863,9 @@ export function validateKnockoutLaterMatchPick(
   }
   if (row.lockReason === "started") {
     return "This match has already kicked off and can no longer be edited.";
+  }
+  if (row.lockReason === "frozen") {
+    return "This pick is locked because feeder match results are official.";
   }
   if (teamId !== row.homeTeamId && teamId !== row.awayTeamId) {
     return "That team is not in this matchup.";

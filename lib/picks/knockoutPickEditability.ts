@@ -1,4 +1,8 @@
 import type { TournamentMatchPublicRow } from "../../types/tournamentPublic";
+import {
+  knockoutParticipantSlotPair,
+  r16R32ParticipantPair,
+} from "../bracket/wc2026KnockoutPairings";
 import { isKnockoutProgressionKind } from "../predictions/knockoutProgressionKinds";
 import {
   matchStateForR16GradualWinnerSlot,
@@ -13,6 +17,9 @@ export const KNOCKOUT_PICK_LOCKED_AT_KICKOFF =
 
 export const KNOCKOUT_PICK_LOCKED_OFFICIAL_RESULT =
   "This match is locked because an official result is published.";
+
+export const KNOCKOUT_PICK_LOCKED_FEEDER_RESULTS =
+  "This pick is locked because feeder match results are official.";
 
 const LATER_KNOCKOUT_SLOT_STAGES: {
   predictionKind: string;
@@ -147,12 +154,110 @@ export function resolveTournamentMatchForKnockoutSlot(input: {
   );
 }
 
+/** Upstream fixtures that determine teams in a saved knockout progression slot. */
+export function resolveFeederMatchesForKnockoutSlot(input: {
+  predictionKind: string;
+  slotKey: string | null;
+  tournamentMatches?: TournamentMatchPublicRow[] | null;
+  gradual: GradualKnockoutSelectionState;
+}): TournamentMatchPublicRow[] {
+  if (!isKnockoutProgressionKind(input.predictionKind)) return [];
+
+  if (input.predictionKind === "round_of_32") return [];
+
+  if (input.predictionKind === "round_of_16") {
+    const r32Index = r32MatchIndexForR16SlotKey(input.slotKey);
+    if (r32Index < 0) return [];
+    const match = resolveR32PublicMatch(
+      r32Index,
+      input.gradual,
+      input.tournamentMatches,
+    );
+    return match ? [match] : [];
+  }
+
+  if (input.predictionKind === "quarterfinalist") {
+    const slotNo = parseInt(input.slotKey ?? "", 10);
+    if (!Number.isFinite(slotNo) || slotNo < 1 || slotNo > 8) return [];
+    const pair = r16R32ParticipantPair(slotNo - 1);
+    if (!pair) return [];
+    return pair
+      .map((idx) =>
+        resolveR32PublicMatch(idx, input.gradual, input.tournamentMatches),
+      )
+      .filter((m): m is TournamentMatchPublicRow => m != null);
+  }
+
+  if (input.predictionKind === "semifinalist") {
+    const slotNo = parseInt(input.slotKey ?? "", 10);
+    if (!Number.isFinite(slotNo) || slotNo < 1 || slotNo > 4) return [];
+    const pair = knockoutParticipantSlotPair("quarterfinal", slotNo - 1);
+    if (!pair) return [];
+    return pair
+      .map((sk) =>
+        publicMatchForFifaNo(
+          input.tournamentMatches ?? [],
+          "round_of_16",
+          89 + parseInt(sk, 10) - 1,
+        ),
+      )
+      .filter((m): m is TournamentMatchPublicRow => m != null);
+  }
+
+  if (input.predictionKind === "finalist") {
+    const slotNo = parseInt(input.slotKey ?? "", 10);
+    if (!Number.isFinite(slotNo) || slotNo < 1 || slotNo > 2) return [];
+    const pair = knockoutParticipantSlotPair("semifinal", slotNo - 1);
+    if (!pair) return [];
+    return pair
+      .map((sk) =>
+        publicMatchForFifaNo(
+          input.tournamentMatches ?? [],
+          "quarterfinal",
+          97 + parseInt(sk, 10) - 1,
+        ),
+      )
+      .filter((m): m is TournamentMatchPublicRow => m != null);
+  }
+
+  if (input.predictionKind === "champion") {
+    const pair = knockoutParticipantSlotPair("final", 0);
+    if (!pair) return [];
+    return pair
+      .map((sk) =>
+        publicMatchForFifaNo(
+          input.tournamentMatches ?? [],
+          "semifinal",
+          101 + parseInt(sk, 10) - 1,
+        ),
+      )
+      .filter((m): m is TournamentMatchPublicRow => m != null);
+  }
+
+  return [];
+}
+
+/** True when any upstream feeder has a published winner. */
+export function isKnockoutSlotFrozenByOfficialFeeders(input: {
+  predictionKind: string;
+  slotKey: string | null;
+  tournamentMatches?: TournamentMatchPublicRow[] | null;
+  gradual: GradualKnockoutSelectionState;
+}): boolean {
+  return resolveFeederMatchesForKnockoutSlot(input).some((match) =>
+    hasOfficialKnockoutMatchResult(match),
+  );
+}
+
 export function knockoutPickEditBlockedMessage(input: {
   predictionKind: string;
   slotKey: string | null;
   tournamentMatches?: TournamentMatchPublicRow[] | null;
   gradual: GradualKnockoutSelectionState;
 }): string {
+  if (isKnockoutSlotFrozenByOfficialFeeders(input)) {
+    return KNOCKOUT_PICK_LOCKED_FEEDER_RESULTS;
+  }
   const match = resolveTournamentMatchForKnockoutSlot(input);
   if (match && hasOfficialKnockoutMatchResult(match)) {
     return KNOCKOUT_PICK_LOCKED_OFFICIAL_RESULT;
@@ -207,9 +312,11 @@ export function isKnockoutPickEditableForParticipant(input: {
 
   if (!input.fullRoundOf32Official) return false;
 
+  if (isKnockoutSlotFrozenByOfficialFeeders(input)) return false;
+
   const match = resolveTournamentMatchForKnockoutSlot(input);
-  if (!match) return false;
-  return !isKnockoutMatchLockedForParticipant(match, nowMs);
+  if (match && isKnockoutMatchLockedForParticipant(match, nowMs)) return false;
+  return true;
 }
 
 /** True when kickoff, live/final status, or an official result freezes the saved pick. */
@@ -233,6 +340,7 @@ export function isKnockoutPickFrozenForParticipant(input: {
       input.tournamentMatches,
     );
     if (pub && hasOfficialKnockoutMatchResult(pub)) return true;
+    return false;
   }
 
   if (input.predictionKind === "round_of_32") {
@@ -247,7 +355,10 @@ export function isKnockoutPickFrozenForParticipant(input: {
           )
         : null;
     if (pub && hasOfficialKnockoutMatchResult(pub)) return true;
+    return false;
   }
+
+  if (isKnockoutSlotFrozenByOfficialFeeders(input)) return true;
 
   const match = resolveTournamentMatchForKnockoutSlot(input);
   return match != null && isKnockoutMatchLockedForParticipant(match, nowMs);

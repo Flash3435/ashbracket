@@ -200,7 +200,7 @@ function resolveLaterKnockoutCorrectionMatch(input: {
   if (!row) {
     return { error: `Could not resolve ${input.matchCode} in the bracket model.` };
   }
-  if (row.lockReason !== "started") {
+  if (row.lockReason !== "started" && row.lockReason !== "frozen") {
     if (row.lockReason === "incomplete") {
       return {
         error: `${input.matchCode} is not ready for correction — upstream picks are incomplete.`,

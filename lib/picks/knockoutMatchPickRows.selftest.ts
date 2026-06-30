@@ -1272,11 +1272,12 @@ function r32Side(slotKey: string, teamId = ""): KnockoutPickSlotDraft {
   const m89 = rows.find((r) => r.fifaMatchNo === 89)!;
   assert.strictEqual(m89.homeTeamId, "team-ger");
   assert.strictEqual(m89.awayTeamId, "team-swe");
+  assert.strictEqual(m89.lockReason, "frozen");
   assert.strictEqual(
     validateKnockoutLaterMatchPick(m89, "team-fra"),
-    "That team is not in this matchup.",
+    "This pick is locked because feeder match results are official.",
   );
-  assert.strictEqual(isKnockoutMatchDirectPickEligible(m89), true);
+  assert.strictEqual(isKnockoutMatchDirectPickEligible(m89), false);
 
   const afterPick = pruneParticipantPicks(
     applyKnockoutMatchWinnerToSlots(slots, m89, "team-swe"),
