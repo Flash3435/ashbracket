@@ -12,6 +12,7 @@ import { poolLocked } from "@/lib/pools/poolLocked";
 import { fetchBracketOutlookForPool } from "@/lib/leaderboard/fetchBracketOutlookForPool";
 import { fetchChampionPickExposureForPool } from "@/lib/pool/fetchChampionPickExposureForPool";
 import { fetchKnockoutMatchExposureForPool } from "@/lib/pool/fetchKnockoutMatchExposureForPool";
+import { fetchParticipantRaceOutlookForPool } from "@/lib/pool/fetchParticipantRaceOutlookForPool";
 import { computeBracketOutlookSummary } from "@/lib/leaderboard/bracketOutlookSeparation";
 import { TournamentStatLeadersPanel } from "@/components/tournament/TournamentStatLeadersPanel";
 import { loadTournamentTeamStatLeaders } from "@/lib/tournament/matchTeamStats/loadTournamentTeamStatLeaders";
@@ -107,8 +108,19 @@ export default async function PublicPoolLeaderboardPage({ params }: PageProps) {
   const championPickExposure =
     showChampionPickExposure && exposureRes?.ok ? exposureRes.exposure : null;
 
+  const raceOutlookRes = picksLocked
+    ? await fetchParticipantRaceOutlookForPool(poolIdTrimmed, {
+        leaderboardRows: rows,
+        viewerParticipantId,
+      })
+    : null;
+  const showParticipantRaceOutlook =
+    raceOutlookRes?.ok === true && raceOutlookRes.showOutlook;
+  const participantRaceOutlook =
+    showParticipantRaceOutlook && raceOutlookRes?.ok ? raceOutlookRes.outlook : null;
+
   const matchExposureRes = picksLocked
-    ? await fetchKnockoutMatchExposureForPool(poolIdTrimmed)
+    ? await fetchKnockoutMatchExposureForPool(poolIdTrimmed, { leaderboardRows: rows })
     : null;
   const showKnockoutMatchExposure =
     matchExposureRes?.ok === true && matchExposureRes.showExposure;
@@ -145,6 +157,8 @@ export default async function PublicPoolLeaderboardPage({ params }: PageProps) {
         decisiveResultCount={decisiveResultCount}
         championPickExposure={championPickExposure}
         showChampionPickExposure={showChampionPickExposure}
+        participantRaceOutlook={participantRaceOutlook}
+        showParticipantRaceOutlook={showParticipantRaceOutlook}
         knockoutMatchExposure={knockoutMatchExposure}
         showKnockoutMatchExposure={showKnockoutMatchExposure}
       />

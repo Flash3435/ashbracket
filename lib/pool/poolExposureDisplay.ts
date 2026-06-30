@@ -1,5 +1,6 @@
 import type { ChampionPickExposure } from "./buildChampionPickExposure";
 import type { KnockoutMatchExposure } from "./buildKnockoutMatchExposure";
+import type { ParticipantRaceOutlook } from "./buildParticipantRaceOutlook";
 
 /**
  * Participant-facing champion exposure is shown after picks lock when at least one
@@ -25,6 +26,22 @@ export function shouldShowKnockoutMatchExposure(input: {
     input.picksLocked &&
     input.exposure.totalCompletedBrackets > 0 &&
     input.exposure.fixtures.length > 0
+  );
+}
+
+/**
+ * Race outlook is shown after picks lock when complete brackets exist and at least
+ * one leaderboard-visible participant qualifies for the outlook list.
+ */
+export function shouldShowParticipantRaceOutlook(input: {
+  picksLocked: boolean;
+  outlook: ParticipantRaceOutlook;
+  totalCompletedBrackets: number;
+}): boolean {
+  return (
+    input.picksLocked &&
+    input.totalCompletedBrackets > 0 &&
+    input.outlook.rows.length > 0
   );
 }
 

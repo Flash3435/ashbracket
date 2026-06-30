@@ -1,15 +1,13 @@
-import {
-  buildCompletionStatusForParticipant,
-  loadPicksCompletenessInputsForPool,
-} from "@/lib/communications/picksCompleteness";
-import { buildAllParticipantPickDrafts } from "@/lib/predictions/buildParticipantPickDrafts";
-import { poolLocked } from "@/lib/pools/poolLocked";
+import { mapPublicLeaderboardRow } from "@/lib/leaderboard/publicLeaderboard";
 import { createServiceRoleClient } from "@/lib/supabase/service";
+import type { LeaderboardPublicRow } from "../../types/leaderboard";
+import type { LeaderboardPublicRowDb } from "../../types/leaderboard";
 import {
   buildKnockoutMatchExposure,
   type KnockoutMatchExposure,
 } from "./buildKnockoutMatchExposure";
-import { loadTournamentPublicMatches } from "./loadTournamentPublicMatches";
+import { buildLeaderboardNameContext } from "./buildNamePreview";
+import { loadPoolExposureContext } from "./loadPoolExposureContext";
 import { shouldShowKnockoutMatchExposure } from "./poolExposureDisplay";
 
 export type FetchKnockoutMatchExposureResult =
@@ -28,110 +26,71 @@ const EMPTY_EXPOSURE: KnockoutMatchExposure = {
   incompleteCount: 0,
 };
 
+async function resolveLeaderboardRowsForExposure(
+  poolId: string,
+  provided?: LeaderboardPublicRow[],
+): Promise<LeaderboardPublicRow[]> {
+  if (provided && provided.length > 0) return provided;
+
+  const service = createServiceRoleClient();
+  const { data, error } = await service
+    .from("leaderboard_public")
+    .select("pool_id, pool_name, participant_id, display_name, total_points, rank")
+    .eq("pool_id", poolId)
+    .order("rank", { ascending: true });
+
+  if (error || !data?.length) return [];
+  return data.map((row) => mapPublicLeaderboardRow(row as LeaderboardPublicRowDb));
+}
+
 /**
  * Read-only knockout match exposure for participant-facing pages.
  * Uses service role for picks aggregation so public leaderboard works for anonymous visitors.
- * Returns aggregate bracket counts per fixture only — no per-participant pick rows.
+ * Name previews are limited to leaderboard-visible display names.
  */
 export async function fetchKnockoutMatchExposureForPool(
   poolId: string,
+  options?: {
+    leaderboardRows?: LeaderboardPublicRow[];
+  },
 ): Promise<FetchKnockoutMatchExposureResult> {
-  const trimmedPoolId = poolId.trim();
-  if (!trimmedPoolId) {
-    return { ok: false, error: "Pool not found." };
+  const loaded = await loadPoolExposureContext(poolId);
+  if (!loaded.ok) {
+    if (loaded.error === "Pool picks are not locked.") {
+      return {
+        ok: true,
+        exposure: EMPTY_EXPOSURE,
+        showExposure: false,
+        knockoutBracketPicksUnlocked: false,
+        picksLocked: false,
+      };
+    }
+    return { ok: false, error: loaded.error };
   }
 
-  const service = createServiceRoleClient();
-  const { data: poolRow, error: poolErr } = await service
-    .from("pools")
-    .select("id, lock_at, tournament_edition_id")
-    .eq("id", trimmedPoolId)
-    .maybeSingle();
-
-  if (poolErr || !poolRow) {
-    return { ok: false, error: poolErr?.message ?? "Pool not found." };
-  }
-
-  const locked = poolLocked(poolRow.lock_at as string | null);
-  if (!locked) {
-    return {
-      ok: true,
-      exposure: EMPTY_EXPOSURE,
-      showExposure: false,
-      knockoutBracketPicksUnlocked: false,
-      picksLocked: false,
-    };
-  }
-
-  const editionId = (poolRow.tournament_edition_id as string | null)?.trim() || null;
-  if (!editionId) {
-    return {
-      ok: true,
-      exposure: EMPTY_EXPOSURE,
-      showExposure: false,
-      knockoutBracketPicksUnlocked: false,
-      picksLocked: true,
-    };
-  }
-
-  const { data: parRows, error: parErr } = await service
-    .from("participants")
-    .select("id")
-    .eq("pool_id", trimmedPoolId);
-
-  if (parErr) {
-    return { ok: false, error: parErr.message };
-  }
-
-  const participantIds = (parRows ?? []).map((r) => r.id as string);
-
-  const inputs = await loadPicksCompletenessInputsForPool(
-    service,
-    trimmedPoolId,
-    participantIds,
+  const { context } = loaded;
+  const leaderboardRows = await resolveLeaderboardRowsForExposure(
+    poolId.trim(),
+    options?.leaderboardRows,
   );
-
-  if (!inputs) {
-    return { ok: false, error: "Could not load pool picks." };
-  }
-
-  const incomplete = new Set<string>();
-  for (const pid of participantIds) {
-    const status = buildCompletionStatusForParticipant(inputs, pid);
-    if (!status.isComplete) incomplete.add(pid);
-  }
-
-  const completeParticipantIds = participantIds.filter((id) => !incomplete.has(id));
-  const completeParticipantBrackets = completeParticipantIds.map((participantId) => ({
-    participantId,
-    slots: buildAllParticipantPickDrafts({
-      stageByCode: inputs.stageByCode,
-      predictions: inputs.predictions,
-      participantId,
-      bonusKeys: inputs.bonusKeys,
-      teams: inputs.teams,
-      groupTeamCountryCodesByLetter: inputs.groupTeamCountryCodesByLetter,
-    }),
-  }));
-
-  let matches: Awaited<ReturnType<typeof loadTournamentPublicMatches>> = [];
-  try {
-    matches = await loadTournamentPublicMatches(service, editionId);
-  } catch (err) {
-    const message = err instanceof Error ? err.message : "Could not load tournament matches.";
-    return { ok: false, error: message };
-  }
+  const nameContext =
+    leaderboardRows.length > 0
+      ? {
+          ...buildLeaderboardNameContext(leaderboardRows),
+          namePreviewLimit: 5,
+        }
+      : undefined;
 
   const exposure = buildKnockoutMatchExposure({
-    matches,
-    completeParticipantBrackets,
-    teams: inputs.teams,
-    incompleteCount: incomplete.size,
+    matches: context.matches,
+    completeParticipantBrackets: context.completeParticipantBrackets,
+    teams: context.teams,
+    incompleteCount: context.incompleteCount,
+    nameContext,
   });
 
-  const knockoutBracketPicksUnlocked = inputs.knockoutBracketPicksUnlocked;
   const showExposure = shouldShowKnockoutMatchExposure({
-    picksLocked: locked,
+    picksLocked: context.picksLocked,
     exposure,
   });
 
@@ -139,7 +98,7 @@ export async function fetchKnockoutMatchExposureForPool(
     ok: true,
     exposure,
     showExposure,
-    knockoutBracketPicksUnlocked,
-    picksLocked: true,
+    knockoutBracketPicksUnlocked: context.knockoutBracketPicksUnlocked,
+    picksLocked: context.picksLocked,
   };
 }

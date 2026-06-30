@@ -5,6 +5,7 @@ import {
   poolExposurePayloadIsAggregateOnly,
   shouldShowChampionPickExposure,
   shouldShowKnockoutMatchExposure,
+  shouldShowParticipantRaceOutlook,
 } from "./poolExposureDisplay";
 
 // Exposure shows when picks locked and champion picks exist (R32 official results not required)
@@ -58,6 +59,10 @@ import {
         homeHelpsCount: 10,
         awayHelpsCount: 2,
         neutralCount: 5,
+        homeParticipantNamesPreview: ["Emil", "Fraser"],
+        awayParticipantNamesPreview: ["Vinay"],
+        homeAdditionalCount: 0,
+        awayAdditionalCount: 0,
         swing: "big",
         hasExposure: true,
       },
@@ -98,6 +103,41 @@ import {
   );
 }
 
+// Race outlook shows when locked with qualifying rows
+{
+  assert.strictEqual(
+    shouldShowParticipantRaceOutlook({
+      picksLocked: true,
+      totalCompletedBrackets: 5,
+      outlook: {
+        rows: [
+          {
+            participantId: "p1",
+            displayName: "Emil",
+            rank: 1,
+            totalPoints: 62,
+            championTeamName: "France",
+            championTeamCode: "FRA",
+            championAlive: true,
+            hasChampionPick: true,
+            liveKnockoutPicksRemaining: 9,
+            statusLabel: "Leading",
+          },
+        ],
+      },
+    }),
+    true,
+  );
+  assert.strictEqual(
+    shouldShowParticipantRaceOutlook({
+      picksLocked: false,
+      totalCompletedBrackets: 5,
+      outlook: { rows: [] },
+    }),
+    false,
+  );
+}
+
 // Aggregate payloads do not leak participant identifiers (public/anonymous safe)
 {
   const champion: ChampionPickExposure = {
@@ -121,6 +161,10 @@ import {
         homeHelpsCount: 8,
         awayHelpsCount: 2,
         neutralCount: 4,
+        homeParticipantNamesPreview: ["Emil", "Fraser"],
+        awayParticipantNamesPreview: ["Vinay"],
+        homeAdditionalCount: 1,
+        awayAdditionalCount: 0,
         swing: "medium",
         hasExposure: true,
       },

@@ -25,6 +25,8 @@ import { ChampionPickExposureCard } from "@/components/pool/ChampionPickExposure
 import type { ChampionPickExposure } from "@/lib/pool/buildChampionPickExposure";
 import { KnockoutMatchExposureSection } from "@/components/pool/KnockoutMatchExposureSection";
 import type { KnockoutMatchExposure } from "@/lib/pool/buildKnockoutMatchExposure";
+import { ParticipantRaceOutlookCard } from "@/components/pool/ParticipantRaceOutlookCard";
+import type { ParticipantRaceOutlook } from "@/lib/pool/buildParticipantRaceOutlook";
 
 function summaryCard(label: string, value: string, hint: string) {
   return (
@@ -188,6 +190,8 @@ type Props = {
   decisiveResultCount?: number;
   championPickExposure?: ChampionPickExposure | null;
   showChampionPickExposure?: boolean;
+  participantRaceOutlook?: ParticipantRaceOutlook | null;
+  showParticipantRaceOutlook?: boolean;
   knockoutMatchExposure?: KnockoutMatchExposure | null;
   showKnockoutMatchExposure?: boolean;
 };
@@ -209,6 +213,8 @@ export function PublicPoolLeaderboardView({
   decisiveResultCount = 0,
   championPickExposure = null,
   showChampionPickExposure = false,
+  participantRaceOutlook = null,
+  showParticipantRaceOutlook = false,
   knockoutMatchExposure = null,
   showKnockoutMatchExposure = false,
 }: Props) {
@@ -246,6 +252,9 @@ export function PublicPoolLeaderboardView({
           showOutlook={showBracketOutlook && bracketOutlookSummary != null}
           summary={bracketOutlookSummary}
         />
+        {showParticipantRaceOutlook && participantRaceOutlook ? (
+          <ParticipantRaceOutlookCard outlook={participantRaceOutlook} />
+        ) : null}
         {showChampionPickExposure && championPickExposure ? (
           <ChampionPickExposureCard exposure={championPickExposure} />
         ) : null}
@@ -343,6 +352,10 @@ export function PublicPoolLeaderboardView({
         {summaryCard("On the board", cards.progressLine, cards.progressHint)}
         {summaryCard("Entries", cards.entriesLine, cards.entriesHint)}
       </section>
+
+      {showParticipantRaceOutlook && participantRaceOutlook ? (
+        <ParticipantRaceOutlookCard outlook={participantRaceOutlook} />
+      ) : null}
 
       {showChampionPickExposure && championPickExposure ? (
         <ChampionPickExposureCard exposure={championPickExposure} />

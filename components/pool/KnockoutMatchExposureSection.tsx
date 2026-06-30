@@ -21,8 +21,26 @@ function bracketCountLabel(count: number): string {
   return count === 1 ? "1 bracket" : `${count} brackets`;
 }
 
+function participantNamesLine(
+  names: string[],
+  additionalCount: number,
+): string | null {
+  if (names.length === 0) return null;
+  const base = names.join(", ");
+  if (additionalCount <= 0) return base;
+  return `${base}, +${additionalCount} more`;
+}
+
 function MatchExposureCard({ fixture }: { fixture: KnockoutMatchExposureFixture }) {
   const swing = swingLabel(fixture.swing);
+  const homeNames = participantNamesLine(
+    fixture.homeParticipantNamesPreview,
+    fixture.homeAdditionalCount,
+  );
+  const awayNames = participantNamesLine(
+    fixture.awayParticipantNamesPreview,
+    fixture.awayAdditionalCount,
+  );
 
   return (
     <article className="rounded-lg border border-ash-border/60 bg-ash-body/20 px-4 py-4">
@@ -56,12 +74,22 @@ function MatchExposureCard({ fixture }: { fixture: KnockoutMatchExposureFixture 
       </div>
 
       {fixture.hasExposure ? (
-        <ul className="mt-4 space-y-2 text-sm text-ash-text">
+        <ul className="mt-4 space-y-3 text-sm text-ash-text">
           <li>
-            {fixture.homeTeamName} helps {bracketCountLabel(fixture.homeHelpsCount)}
+            <p>
+              {fixture.homeTeamName} helps {bracketCountLabel(fixture.homeHelpsCount)}
+            </p>
+            {homeNames ? (
+              <p className="mt-1 text-ash-muted">{homeNames}</p>
+            ) : null}
           </li>
           <li>
-            {fixture.awayTeamName} helps {bracketCountLabel(fixture.awayHelpsCount)}
+            <p>
+              {fixture.awayTeamName} helps {bracketCountLabel(fixture.awayHelpsCount)}
+            </p>
+            {awayNames ? (
+              <p className="mt-1 text-ash-muted">{awayNames}</p>
+            ) : null}
           </li>
           <li className="text-ash-muted">
             Neutral: {bracketCountLabel(fixture.neutralCount)}
@@ -91,7 +119,8 @@ export function KnockoutMatchExposureSection({ exposure }: Props) {
         Who needs this result?
       </h2>
       <p className="mt-2 max-w-3xl text-sm leading-relaxed text-ash-muted">
-        Shows how many completed brackets benefit from each team advancing.
+        Shows how many completed brackets benefit from each team advancing, with a
+        preview of who is rooting for each side.
       </p>
 
       <div className="mt-4 space-y-3">

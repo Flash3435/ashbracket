@@ -8,6 +8,7 @@ import {
   isEligibleKnockoutExposureMatch,
   sortKnockoutExposureMatches,
 } from "./buildKnockoutMatchExposure";
+import { buildLeaderboardNameContext } from "./buildNamePreview";
 
 const teams = [
   {
@@ -250,6 +251,98 @@ const espVsJpn = knockoutMatch({
     ["m-live", "m-1", "m-2"],
   );
   assert.strictEqual(isEligibleKnockoutExposureMatch(live, teams), true);
+}
+
+// Match exposure includes only limited name previews
+{
+  const leaderboardRows = [
+    {
+      poolId: "pool-1",
+      poolName: "Pool",
+      participantId: "p1",
+      displayName: "Emil",
+      totalPoints: 62,
+      rank: 1,
+    },
+    {
+      poolId: "pool-1",
+      poolName: "Pool",
+      participantId: "p2",
+      displayName: "Fraser",
+      totalPoints: 60,
+      rank: 2,
+    },
+    {
+      poolId: "pool-1",
+      poolName: "Pool",
+      participantId: "p3",
+      displayName: "Hidden",
+      totalPoints: 55,
+      rank: 3,
+    },
+    {
+      poolId: "pool-1",
+      poolName: "Pool",
+      participantId: "p4",
+      displayName: "Neal",
+      totalPoints: 54,
+      rank: 4,
+    },
+    {
+      poolId: "pool-1",
+      poolName: "Pool",
+      participantId: "p5",
+      displayName: "Vinay",
+      totalPoints: 53,
+      rank: 5,
+    },
+    {
+      poolId: "pool-1",
+      poolName: "Pool",
+      participantId: "p6",
+      displayName: "Dipa",
+      totalPoints: 52,
+      rank: 6,
+    },
+    {
+      poolId: "pool-1",
+      poolName: "Pool",
+      participantId: "p7",
+      displayName: "Joel",
+      totalPoints: 51,
+      rank: 7,
+    },
+  ];
+  const visibleRows = leaderboardRows.filter((row) => row.participantId !== "p3");
+  const nameContext = {
+    ...buildLeaderboardNameContext(visibleRows),
+    namePreviewLimit: 3,
+  };
+
+  const exposure = buildKnockoutMatchExposure({
+    matches: [braVsJpn],
+    completeParticipantBrackets: [
+      { participantId: "p1", slots: [slot({ predictionKind: "champion", teamId: "team-bra" })] },
+      { participantId: "p2", slots: [slot({ predictionKind: "champion", teamId: "team-bra" })] },
+      { participantId: "p3", slots: [slot({ predictionKind: "champion", teamId: "team-bra" })] },
+      { participantId: "p4", slots: [slot({ predictionKind: "champion", teamId: "team-bra" })] },
+      { participantId: "p5", slots: [slot({ predictionKind: "champion", teamId: "team-bra" })] },
+      { participantId: "p6", slots: [slot({ predictionKind: "champion", teamId: "team-jpn" })] },
+      { participantId: "p7", slots: [slot({ predictionKind: "champion", teamId: "team-jpn" })] },
+    ],
+    teams,
+    nameContext,
+  });
+
+  const fixture = exposure.fixtures[0];
+  assert(fixture);
+  assert.strictEqual(fixture.homeHelpsCount, 5);
+  assert.strictEqual(fixture.awayHelpsCount, 2);
+  assert.strictEqual(fixture.homeParticipantNamesPreview.length, 3);
+  assert.strictEqual(fixture.homeAdditionalCount, 1);
+  assert.deepStrictEqual(fixture.awayParticipantNamesPreview, ["Dipa", "Joel"]);
+  assert.strictEqual(fixture.awayAdditionalCount, 0);
+  assert.ok(!fixture.homeParticipantNamesPreview.includes("Hidden"));
 }
 
 console.log("buildKnockoutMatchExposure.selftest.ts: all passed");

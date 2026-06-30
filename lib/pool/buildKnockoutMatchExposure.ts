@@ -3,6 +3,7 @@ import { isFinishedMatchWithScores } from "../tournament/matchScoreDisplay";
 import type { KnockoutPickSlotDraft } from "../../types/adminKnockoutPicks";
 import type { Team } from "../../src/types/domain";
 import type { TournamentMatchPublicRow } from "../../types/tournamentPublic";
+import { buildParticipantNamePreview } from "./buildNamePreview";
 
 export type MatchExposureSwing = "big" | "medium" | "small";
 
@@ -19,8 +20,18 @@ export type KnockoutMatchExposureFixture = {
   homeHelpsCount: number;
   awayHelpsCount: number;
   neutralCount: number;
+  homeParticipantNamesPreview: string[];
+  awayParticipantNamesPreview: string[];
+  homeAdditionalCount: number;
+  awayAdditionalCount: number;
   swing: MatchExposureSwing | null;
   hasExposure: boolean;
+};
+
+export type KnockoutMatchExposureNameContext = {
+  leaderboardVisibleParticipantIds: ReadonlySet<string>;
+  displayNameByParticipantId: ReadonlyMap<string, string>;
+  namePreviewLimit?: number;
 };
 
 export type KnockoutMatchExposure = {
@@ -127,12 +138,33 @@ function fixtureFromMatch(
     awayHelpsCount: number;
     neutralCount: number;
     totalCompletedBrackets: number;
+    homeParticipantIds: string[];
+    awayParticipantIds: string[];
+    nameContext?: KnockoutMatchExposureNameContext;
   },
 ): KnockoutMatchExposureFixture {
   const homeHelpsCount = counts.homeHelpsCount;
   const awayHelpsCount = counts.awayHelpsCount;
   const neutralCount = counts.neutralCount;
   const hasExposure = homeHelpsCount > 0 || awayHelpsCount > 0;
+
+  const emptyPreview = { names: [] as string[], additionalCount: 0 };
+  const homePreview = counts.nameContext
+    ? buildParticipantNamePreview({
+        participantIds: counts.homeParticipantIds,
+        leaderboardVisibleParticipantIds: counts.nameContext.leaderboardVisibleParticipantIds,
+        displayNameByParticipantId: counts.nameContext.displayNameByParticipantId,
+        limit: counts.nameContext.namePreviewLimit,
+      })
+    : emptyPreview;
+  const awayPreview = counts.nameContext
+    ? buildParticipantNamePreview({
+        participantIds: counts.awayParticipantIds,
+        leaderboardVisibleParticipantIds: counts.nameContext.leaderboardVisibleParticipantIds,
+        displayNameByParticipantId: counts.nameContext.displayNameByParticipantId,
+        limit: counts.nameContext.namePreviewLimit,
+      })
+    : emptyPreview;
 
   return {
     matchId: m.match_id,
@@ -147,6 +179,10 @@ function fixtureFromMatch(
     homeHelpsCount,
     awayHelpsCount,
     neutralCount,
+    homeParticipantNamesPreview: homePreview.names,
+    awayParticipantNamesPreview: awayPreview.names,
+    homeAdditionalCount: homePreview.additionalCount,
+    awayAdditionalCount: awayPreview.additionalCount,
     swing: classifyMatchExposureSwing({
       homeHelpsCount,
       awayHelpsCount,
@@ -164,6 +200,7 @@ export function buildKnockoutMatchExposure(input: {
   completeParticipantBrackets: ParticipantBracketForExposure[];
   teams: Team[];
   incompleteCount?: number;
+  nameContext?: KnockoutMatchExposureNameContext;
 }): KnockoutMatchExposure {
   const totalCompletedBrackets = input.completeParticipantBrackets.length;
   const incompleteCount = input.incompleteCount ?? 0;
@@ -177,6 +214,8 @@ export function buildKnockoutMatchExposure(input: {
     let homeHelpsCount = 0;
     let awayHelpsCount = 0;
     let neutralCount = 0;
+    const homeParticipantIds: string[] = [];
+    const awayParticipantIds: string[] = [];
 
     for (const bracket of input.completeParticipantBrackets) {
       const side = classifyParticipantKnockoutMatchExposure(
@@ -185,9 +224,15 @@ export function buildKnockoutMatchExposure(input: {
         input.teams,
         input.matches,
       );
-      if (side === "home") homeHelpsCount += 1;
-      else if (side === "away") awayHelpsCount += 1;
-      else neutralCount += 1;
+      if (side === "home") {
+        homeHelpsCount += 1;
+        homeParticipantIds.push(bracket.participantId);
+      } else if (side === "away") {
+        awayHelpsCount += 1;
+        awayParticipantIds.push(bracket.participantId);
+      } else {
+        neutralCount += 1;
+      }
     }
 
     fixtures.push(
@@ -196,6 +241,9 @@ export function buildKnockoutMatchExposure(input: {
         awayHelpsCount,
         neutralCount,
         totalCompletedBrackets,
+        homeParticipantIds,
+        awayParticipantIds,
+        nameContext: input.nameContext,
       }),
     );
   }
