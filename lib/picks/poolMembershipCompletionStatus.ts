@@ -116,7 +116,7 @@ function sectionComplete(
       return true;
     }
     if (knockoutProgress?.useMatchBased) {
-      return knockoutProgress.complete;
+      return knockoutProgress.missing === 0;
     }
     return filled === total;
   }
@@ -405,6 +405,8 @@ export type BuildCompletionFromPredictionsInput = {
   knockoutBracketPicksUnlocked?: boolean;
   teams?: import("../../src/types/domain").Team[];
   groupTeamCountryCodesByLetter?: Record<string, string[]>;
+  tournamentMatches?: TournamentMatchPublicRow[] | null;
+  officialRoundOf32Complete?: boolean;
 };
 
 export function buildPoolMembershipCompletionStatusFromPredictions(
@@ -420,6 +422,10 @@ export function buildPoolMembershipCompletionStatusFromPredictions(
   });
   return buildPoolMembershipCompletionStatus(slots, {
     knockoutBracketPicksUnlocked: input.knockoutBracketPicksUnlocked,
+    teams: input.teams,
+    tournamentMatches: input.tournamentMatches,
+    officialRoundOf32Complete:
+      input.officialRoundOf32Complete ?? input.knockoutBracketPicksUnlocked,
   });
 }
 

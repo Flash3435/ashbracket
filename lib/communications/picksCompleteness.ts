@@ -37,6 +37,7 @@ export type PicksCompletenessInputs = {
   teams: Team[];
   groupTeamCountryCodesByLetter: Record<string, string[]>;
   knockoutBracketPicksUnlocked: boolean;
+  tournamentMatches?: import("../../types/tournamentPublic").TournamentMatchPublicRow[] | null;
 };
 
 export type BracketCompletionDiagnosticRow = {
@@ -205,6 +206,8 @@ export function buildCompletionStatusForParticipant(
     knockoutBracketPicksUnlocked: inputs.knockoutBracketPicksUnlocked,
     teams: inputs.teams,
     groupTeamCountryCodesByLetter: inputs.groupTeamCountryCodesByLetter,
+    tournamentMatches: inputs.tournamentMatches,
+    officialRoundOf32Complete: inputs.knockoutBracketPicksUnlocked,
   });
 }
 
@@ -290,6 +293,9 @@ export async function loadParticipantIdsWithIncompletePicks(
     if (
       !participantPicksCompleteFromDrafts(slots, {
         knockoutBracketPicksUnlocked: inputs.knockoutBracketPicksUnlocked,
+        teams: inputs.teams,
+        tournamentMatches: inputs.tournamentMatches,
+        officialRoundOf32Complete: inputs.knockoutBracketPicksUnlocked,
       })
     ) {
       incomplete.add(pid);

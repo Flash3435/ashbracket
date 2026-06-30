@@ -482,6 +482,100 @@ function progressContext(slots: KnockoutPickSlotDraft[], overrides?: {
   );
 }
 
+// Participant with only locked missing (started R32) is actionably complete
+{
+  const startedMatches = [
+    tournamentMatch({
+      match_code: "M73",
+      stage_code: "round_of_32",
+      kickoff_at: "2026-06-28T19:00:00Z",
+      status: "live",
+      home_country_code: "RSA",
+      away_country_code: "CAN",
+      home_team_name: "South Africa",
+      away_team_name: "Canada",
+    }),
+    tournamentMatch({
+      match_code: "M74",
+      stage_code: "round_of_32",
+      kickoff_at: "2026-06-28T22:00:00Z",
+      status: "finished",
+      home_country_code: "GER",
+      away_country_code: "FRA",
+      home_team_name: "Germany",
+      away_team_name: "France",
+    }),
+    tournamentMatch({
+      match_code: "M75",
+      stage_code: "round_of_32",
+      kickoff_at: "2026-06-29T01:00:00Z",
+      status: "finished",
+      home_country_code: "NED",
+      away_country_code: "BRA",
+      home_team_name: "Netherlands",
+      away_team_name: "Brazil",
+    }),
+  ];
+  const status = buildAdminKnockoutParticipantStatus(
+    "p-locked-only",
+    "Ivy",
+    [r16Slot("1", "team-rsa")],
+    progressContext([r16Slot("1", "team-rsa")], {
+      tournamentMatches: startedMatches,
+      officialRoundOf32Complete: false,
+    }),
+    { teams },
+  );
+  assert.strictEqual(status.status, "complete");
+  assert.strictEqual(status.actionableMissingCount, 0);
+  assert.ok(status.lockedMissingLabels.includes("M74"));
+}
+
+// Caught up on all currently pickable gradual R32 picks is complete
+{
+  const gradualMatches = [
+    tournamentMatch({
+      match_code: "M73",
+      stage_code: "round_of_32",
+      kickoff_at: "2026-06-30T19:00:00Z",
+      home_country_code: "RSA",
+      away_country_code: "CAN",
+      home_team_name: "South Africa",
+      away_team_name: "Canada",
+    }),
+  ];
+  const slots = [r16Slot("1", "team-rsa")];
+  const status = buildAdminKnockoutParticipantStatus(
+    "p-caught-up",
+    "Jordan",
+    slots,
+    progressContext(slots, {
+      tournamentMatches: gradualMatches,
+      officialRoundOf32Complete: false,
+    }),
+    { teams },
+  );
+  assert.strictEqual(status.status, "complete");
+  assert.strictEqual(status.actionableMissingCount, 0);
+}
+
+// Pickable missing without kickoff does not produce next urgent match
+{
+  const slots = [
+    ...fullR16Slots(),
+    ...Array.from({ length: 8 }, (_, i) => qfSlot(String(i + 1))),
+  ];
+  const status = buildAdminKnockoutParticipantStatus(
+    "p-no-kickoff",
+    "Kelly",
+    slots,
+    progressContext(slots, { tournamentMatches: [] }),
+    { teams },
+  );
+  assert.ok(status.actionableMissingCount > 0);
+  assert.strictEqual(status.nextUrgentMatch, null);
+}
+
 // Reminder copy helpers
 {
   const generic = formatAdminKnockoutReminderCopy({

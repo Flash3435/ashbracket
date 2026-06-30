@@ -85,9 +85,9 @@ function ParticipantRow({
         >
           {formatAdminKnockoutStatusLabel(participant.status)}
         </span>
-        {participant.missingCount > 0 ? (
+        {participant.actionableMissingCount > 0 ? (
           <span className="text-xs tabular-nums text-ash-muted">
-            {participant.missingCount} missing
+            {participant.actionableMissingCount} missing
           </span>
         ) : null}
       </div>
@@ -109,9 +109,7 @@ function ParticipantRow({
       {participant.nextUrgentMatch ? (
         <p className="mt-2 text-xs text-amber-100">
           Next urgent: {participant.nextUrgentMatch.matchLabel}
-          {participant.nextUrgentMatch.kickoffLocal
-            ? ` · locks ${participant.nextUrgentMatch.kickoffLocal}`
-            : null}
+          {` · locks ${participant.nextUrgentMatch.kickoffLocal}`}
         </p>
       ) : null}
 

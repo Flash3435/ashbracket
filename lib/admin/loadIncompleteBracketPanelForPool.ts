@@ -15,6 +15,7 @@ import {
   loadAdminPicksCompletenessInputsForPool,
   type AdminCompletionSourceDiagnostics,
 } from "./trustedPoolPicksCompleteness";
+import { fetchPublicTournamentProgress } from "../tournament/fetchPublicTournamentProgress";
 
 export async function loadLastIncompleteBracketReminder(
   supabase: SupabaseClient,
@@ -96,17 +97,21 @@ export async function loadIncompleteBracketPanelForPool(
     process.env.INCOMPLETE_PANEL_COMPLETION_DEBUG === "1";
 
   if (participantIds.length > 0) {
-    const loaded = await loadAdminPicksCompletenessInputsForPool(
-      args.poolId,
-      participantIds,
-      { fallbackSupabase: supabase },
-    );
+    const [loaded, tournamentProgress] = await Promise.all([
+      loadAdminPicksCompletenessInputsForPool(args.poolId, participantIds, {
+        fallbackSupabase: supabase,
+      }),
+      fetchPublicTournamentProgress(),
+    ]);
     sourceDiagnostics = loaded.diagnostics;
     if (!loaded.ok) {
       statusAvailable = false;
       statusUnavailableReason = loaded.diagnostics.warningMessage;
     } else {
-      const inputs = loaded.inputs;
+      const inputs = {
+        ...loaded.inputs,
+        tournamentMatches: tournamentProgress.data?.matches ?? null,
+      };
       knockoutBracketPicksUnlocked = inputs.knockoutBracketPicksUnlocked;
       for (const row of participantRows) {
         const pid = row.id;

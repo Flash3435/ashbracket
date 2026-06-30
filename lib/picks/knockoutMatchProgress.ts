@@ -181,14 +181,16 @@ function matchPickStepProgress(
   });
   const pickable = rows.filter((r) => r.lockReason === "pickable");
   const filled = countKnockoutMatchupsFilled(rows, { onlyPickable: true });
+  const missingPickable = countPickableKnockoutMissing(rows);
+  const hasBlockedUpstream = rows.some((r) => r.lockReason === "incomplete");
   const mappedKind: KnockoutWizardBracketKindId =
     bracketKind === "finalist" ? "champion" : bracketKind;
   return {
     bracketKind: mappedKind,
     filled,
     total: pickable.length,
-    missing: Math.max(0, pickable.length - filled),
-    complete: knockoutMatchStepComplete(rows),
+    missing: missingPickable,
+    complete: hasBlockedUpstream ? false : missingPickable === 0,
   };
 }
 

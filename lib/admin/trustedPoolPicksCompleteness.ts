@@ -161,6 +161,9 @@ function countTrustedIncomplete(
     if (
       !participantPicksCompleteFromDrafts(slots, {
         knockoutBracketPicksUnlocked: inputs.knockoutBracketPicksUnlocked,
+        teams: inputs.teams,
+        tournamentMatches: inputs.tournamentMatches,
+        officialRoundOf32Complete: inputs.knockoutBracketPicksUnlocked,
       })
     ) {
       n += 1;
@@ -248,6 +251,9 @@ export async function loadAdminParticipantIdsWithIncompletePicks(
     if (
       !participantPicksCompleteFromDrafts(slots, {
         knockoutBracketPicksUnlocked: inputs.knockoutBracketPicksUnlocked,
+        teams: inputs.teams,
+        tournamentMatches: inputs.tournamentMatches,
+        officialRoundOf32Complete: inputs.knockoutBracketPicksUnlocked,
       })
     ) {
       incomplete.add(pid);
