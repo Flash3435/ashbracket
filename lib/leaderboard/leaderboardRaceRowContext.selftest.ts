@@ -1,11 +1,10 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
-import { join } from "node:path";
 import {
-  formatLeaderboardChampionDetail,
   formatLeaderboardRaceSummary,
+  formatTopRemainingPickLine,
   mapRaceOutlookByParticipantId,
   raceOutlookDetailExplanation,
+  raceOutlookExpandedFallbackCopy,
 } from "./leaderboardRaceRowContext";
 
 const outlookRow = {
@@ -17,7 +16,21 @@ const outlookRow = {
   championTeamCode: "FRA",
   championAlive: true,
   hasChampionPick: true,
-  liveKnockoutPicksRemaining: 53,
+  pathValidLivePickCount: 11,
+  topRemainingPicks: [
+    {
+      predictionKind: "champion" as const,
+      teamId: "team-fra",
+      teamName: "France",
+      shortLabel: "champion",
+    },
+    {
+      predictionKind: "finalist" as const,
+      teamId: "team-eng",
+      teamName: "England",
+      shortLabel: "finalist",
+    },
+  ],
   statusLabel: "Leading" as const,
 };
 
@@ -28,11 +41,11 @@ const outlookRow = {
   assert.equal(map.size, 1);
 }
 
-// Compact summary under participant names
+// Compact summary under participant names uses path-valid count
 {
   assert.equal(
     formatLeaderboardRaceSummary(outlookRow),
-    "62 pts · France champion alive · 53 live picks",
+    "62 pts · France champion alive · 11 live paths",
   );
   assert.equal(
     formatLeaderboardRaceSummary({
@@ -43,9 +56,9 @@ const outlookRow = {
       championTeamName: "Netherlands",
       championAlive: false,
       statusLabel: "Champion dead",
-      liveKnockoutPicksRemaining: 14,
+      pathValidLivePickCount: 2,
     }),
-    "59 pts · Champion dead · 14 live picks",
+    "59 pts · Champion dead · 2 live paths",
   );
   assert.equal(
     formatLeaderboardRaceSummary({
@@ -53,22 +66,21 @@ const outlookRow = {
       hasChampionPick: false,
       championAlive: false,
       championTeamName: null,
-      liveKnockoutPicksRemaining: 1,
+      pathValidLivePickCount: 1,
     }),
-    "62 pts · No champion pick · 1 live pick",
+    "62 pts · No champion pick · 1 live path",
   );
 }
 
-// Champion helper copy
+// Top remaining pick lines for expanded details
 {
-  assert.equal(formatLeaderboardChampionDetail(outlookRow), "Champion alive");
   assert.equal(
-    formatLeaderboardChampionDetail({ ...outlookRow, championAlive: false }),
-    "Champion dead",
+    formatTopRemainingPickLine(outlookRow.topRemainingPicks[0]!),
+    "France champion",
   );
   assert.equal(
-    formatLeaderboardChampionDetail({ ...outlookRow, hasChampionPick: false }),
-    "No champion pick",
+    formatTopRemainingPickLine(outlookRow.topRemainingPicks[1]!),
+    "England finalist",
   );
 }
 
@@ -79,14 +91,27 @@ const outlookRow = {
   assert.equal(formatLeaderboardRaceSummary(outlookRow).includes("pts"), true);
 }
 
-// Detail explanation for expanded rows
+// Expanded fallback when no top picks remain
+{
+  assert.equal(
+    raceOutlookExpandedFallbackCopy({
+      ...outlookRow,
+      topRemainingPicks: [],
+      pathValidLivePickCount: 0,
+      statusLabel: "Long shot",
+    }),
+    "No major live knockout paths remain.",
+  );
+}
+
+// Detail explanation for status labels
 {
   assert.match(
     raceOutlookDetailExplanation({
       ...outlookRow,
-      statusLabel: "Dangerous",
+      statusLabel: "In contention",
     }),
-    /many live knockout picks/i,
+    /striking distance/i,
   );
 }
 

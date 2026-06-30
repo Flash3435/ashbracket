@@ -36,13 +36,8 @@ export function shouldShowKnockoutMatchExposure(input: {
 export function shouldShowParticipantRaceOutlook(input: {
   picksLocked: boolean;
   outlook: ParticipantRaceOutlook;
-  totalCompletedBrackets: number;
 }): boolean {
-  return (
-    input.picksLocked &&
-    input.totalCompletedBrackets > 0 &&
-    input.outlook.rows.length > 0
-  );
+  return input.picksLocked && input.outlook.rows.length > 0;
 }
 
 /** Aggregate exposure payloads must not include per-participant identifiers. */

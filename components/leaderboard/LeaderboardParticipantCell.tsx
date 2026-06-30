@@ -2,9 +2,9 @@ import Link from "next/link";
 import type { ReactNode } from "react";
 import type { PublicPoolLeaderboardRowDisplay } from "@/lib/leaderboard/buildPublicPoolLeaderboardPresentation";
 import {
-  formatLeaderboardChampionDetail,
   formatLeaderboardRaceSummary,
-  raceOutlookDetailExplanation,
+  formatTopRemainingPickLine,
+  raceOutlookExpandedFallbackCopy,
   raceStatusBadgeClass,
 } from "@/lib/leaderboard/leaderboardRaceRowContext";
 import type { ParticipantRaceOutlookRow } from "@/lib/pool/buildParticipantRaceOutlook";
@@ -30,24 +30,28 @@ function RaceStatusBadge({ outlook }: { outlook: ParticipantRaceOutlookRow }) {
 }
 
 function RaceOutlookDetails({ outlook }: { outlook: ParticipantRaceOutlookRow }) {
-  const championLabel = outlook.hasChampionPick
-    ? `${outlook.championTeamName ?? "Champion"} — ${formatLeaderboardChampionDetail(outlook).toLowerCase()}`
-    : "No champion pick";
+  const topPicks = outlook.topRemainingPicks;
 
   return (
     <details className="mt-1.5">
       <summary className="cursor-pointer text-xs font-medium text-ash-accent hover:underline">
         Details
       </summary>
-      <div className="mt-2 space-y-1 text-xs leading-relaxed text-ash-muted">
-        <p>
-          <span className="font-medium text-ash-text">Champion pick:</span> {championLabel}
-        </p>
-        <p>
-          <span className="font-medium text-ash-text">Live knockout picks:</span>{" "}
-          {outlook.liveKnockoutPicksRemaining}
-        </p>
-        <p>{raceOutlookDetailExplanation(outlook)}</p>
+      <div className="mt-2 space-y-1.5 text-xs leading-relaxed text-ash-muted">
+        {topPicks.length > 0 ? (
+          <div>
+            <p className="font-medium text-ash-text">Top remaining picks</p>
+            <ul className="mt-1 list-inside list-disc space-y-0.5">
+              {topPicks.map((pick) => (
+                <li key={`${pick.predictionKind}-${pick.teamId}`}>
+                  {formatTopRemainingPickLine(pick)}
+                </li>
+              ))}
+            </ul>
+          </div>
+        ) : (
+          <p>{raceOutlookExpandedFallbackCopy(outlook)}</p>
+        )}
       </div>
     </details>
   );

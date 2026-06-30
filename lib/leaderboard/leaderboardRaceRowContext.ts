@@ -28,21 +28,19 @@ export function formatLeaderboardRaceSummary(
     parts.push(`${outlook.championTeamName ?? "Champion"} champion alive`);
   }
 
-  const liveLabel =
-    outlook.liveKnockoutPicksRemaining === 1
-      ? "1 live pick"
-      : `${outlook.liveKnockoutPicksRemaining} live picks`;
-  parts.push(liveLabel);
+  const pathLabel =
+    outlook.pathValidLivePickCount === 1
+      ? "1 live path"
+      : `${outlook.pathValidLivePickCount} live paths`;
+  parts.push(pathLabel);
 
   return parts.join(" · ");
 }
 
-export function formatLeaderboardChampionDetail(
-  outlook: ParticipantRaceOutlookRow,
+export function formatTopRemainingPickLine(
+  pick: ParticipantRaceOutlookRow["topRemainingPicks"][number],
 ): string {
-  if (!outlook.hasChampionPick) return "No champion pick";
-  if (!outlook.championAlive) return "Champion dead";
-  return "Champion alive";
+  return `${pick.teamName} ${pick.shortLabel}`;
 }
 
 export function raceOutlookDetailExplanation(
@@ -50,29 +48,36 @@ export function raceOutlookDetailExplanation(
 ): string {
   switch (outlook.statusLabel) {
     case "Leading":
-      return "Currently atop the standings with live knockout picks still in play.";
+      return "Currently atop the standings with path-valid knockout upside still in play.";
     case "Champion dead":
-      return "Champion pick is eliminated, limiting upside from the title.";
-    case "Low upside":
-      return "Few remaining live knockout picks compared with nearby entries.";
-    case "Dangerous":
-      return "Still has many live knockout picks compared with nearby entries.";
+      return "Champion path is eliminated, limiting title upside.";
+    case "In contention":
+      return "Within striking distance with meaningful path-valid knockout upside.";
     default:
-      return "Within striking distance with knockout picks still alive.";
+      return outlook.pathValidLivePickCount > 0
+        ? "Needs several results to break their way to catch the leader."
+        : "No major live knockout paths remain.";
   }
+}
+
+export function raceOutlookExpandedFallbackCopy(
+  outlook: ParticipantRaceOutlookRow,
+): string {
+  if (outlook.topRemainingPicks.length > 0) {
+    return raceOutlookDetailExplanation(outlook);
+  }
+  return "No major live knockout paths remain.";
 }
 
 export function raceStatusBadgeClass(status: RaceOutlookStatus): string {
   switch (status) {
     case "Leading":
       return "border-emerald-500/40 bg-emerald-950/30 text-emerald-100";
-    case "Dangerous":
+    case "In contention":
       return "border-amber-500/40 bg-amber-950/25 text-amber-100";
     case "Champion dead":
       return "border-red-500/40 bg-red-950/25 text-red-200";
-    case "Low upside":
-      return "border-ash-border/60 bg-ash-body/30 text-ash-muted";
     default:
-      return "border-sky-500/30 bg-sky-950/20 text-sky-100";
+      return "border-ash-border/60 bg-ash-body/30 text-ash-muted";
   }
 }

@@ -16,6 +16,8 @@ import { loadTournamentPublicMatches } from "./loadTournamentPublicMatches";
 export type PoolExposureContext = {
   picksLocked: boolean;
   knockoutBracketPicksUnlocked: boolean;
+  /** Brackets for every pool participant (complete or partial). */
+  allParticipantBrackets: ParticipantBracketForExposure[];
   completeParticipantBrackets: ParticipantBracketForExposure[];
   incompleteCount: number;
   matches: TournamentMatchPublicRow[];
@@ -85,24 +87,32 @@ export async function loadPoolExposureContext(
     return { ok: false, error: "Could not load pool picks." };
   }
 
+  const picksInputs = inputs;
+
   const incomplete = new Set<string>();
   for (const pid of participantIds) {
-    const status = buildCompletionStatusForParticipant(inputs, pid);
+    const status = buildCompletionStatusForParticipant(picksInputs, pid);
     if (!status.isComplete) incomplete.add(pid);
   }
 
   const completeParticipantIds = participantIds.filter((id) => !incomplete.has(id));
-  const completeParticipantBrackets = completeParticipantIds.map((participantId) => ({
-    participantId,
-    slots: buildAllParticipantPickDrafts({
-      stageByCode: inputs.stageByCode,
-      predictions: inputs.predictions,
+
+  function bracketForParticipant(participantId: string): ParticipantBracketForExposure {
+    return {
       participantId,
-      bonusKeys: inputs.bonusKeys,
-      teams: inputs.teams,
-      groupTeamCountryCodesByLetter: inputs.groupTeamCountryCodesByLetter,
-    }),
-  }));
+      slots: buildAllParticipantPickDrafts({
+        stageByCode: picksInputs.stageByCode,
+        predictions: picksInputs.predictions,
+        participantId,
+        bonusKeys: picksInputs.bonusKeys,
+        teams: picksInputs.teams,
+        groupTeamCountryCodesByLetter: picksInputs.groupTeamCountryCodesByLetter,
+      }),
+    };
+  }
+
+  const allParticipantBrackets = participantIds.map(bracketForParticipant);
+  const completeParticipantBrackets = completeParticipantIds.map(bracketForParticipant);
 
   let matches: TournamentMatchPublicRow[] = [];
   try {
@@ -112,17 +122,17 @@ export async function loadPoolExposureContext(
     return { ok: false, error: message };
   }
 
-  const eliminatedTeamIds = eliminatedTeamIdsFromMatches(matches, inputs.teams);
+  const eliminatedTeamIds = eliminatedTeamIdsFromMatches(matches, picksInputs.teams);
   const championPicks =
-    completeParticipantIds.length > 0
+    participantIds.length > 0
       ? resolvePoolChampionPickInputs({
-          completeParticipantIds,
-          predictions: inputs.predictions,
+          completeParticipantIds: participantIds,
+          predictions: picksInputs.predictions,
           participantRows,
-          teams: inputs.teams,
-          stageByCode: inputs.stageByCode,
-          bonusKeys: inputs.bonusKeys,
-          groupTeamCountryCodesByLetter: inputs.groupTeamCountryCodesByLetter,
+          teams: picksInputs.teams,
+          stageByCode: picksInputs.stageByCode,
+          bonusKeys: picksInputs.bonusKeys,
+          groupTeamCountryCodesByLetter: picksInputs.groupTeamCountryCodesByLetter,
         })
       : [];
 
@@ -130,11 +140,12 @@ export async function loadPoolExposureContext(
     ok: true,
     context: {
       picksLocked: locked,
-      knockoutBracketPicksUnlocked: inputs.knockoutBracketPicksUnlocked,
+      knockoutBracketPicksUnlocked: picksInputs.knockoutBracketPicksUnlocked,
+      allParticipantBrackets,
       completeParticipantBrackets,
       incompleteCount: incomplete.size,
       matches,
-      teams: inputs.teams,
+      teams: picksInputs.teams,
       eliminatedTeamIds,
       championPicks,
     },

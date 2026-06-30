@@ -45,16 +45,18 @@ export async function fetchParticipantRaceOutlookForPool(
   const { context } = loaded;
   const outlook = buildParticipantRaceOutlook({
     leaderboardRows: options.leaderboardRows,
-    completeParticipantBrackets: context.completeParticipantBrackets,
+    participantBrackets: context.allParticipantBrackets,
     championPicks: context.championPicks,
     eliminatedTeamIds: context.eliminatedTeamIds,
+    teams: context.teams,
+    tournamentMatches: context.matches,
+    knockoutBracketPicksUnlocked: context.knockoutBracketPicksUnlocked,
     viewerParticipantId: options.viewerParticipantId,
   });
 
   const showOutlook = shouldShowParticipantRaceOutlook({
     picksLocked: context.picksLocked,
     outlook,
-    totalCompletedBrackets: context.completeParticipantBrackets.length,
   });
 
   return {

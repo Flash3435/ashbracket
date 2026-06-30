@@ -108,7 +108,6 @@ import {
   assert.strictEqual(
     shouldShowParticipantRaceOutlook({
       picksLocked: true,
-      totalCompletedBrackets: 5,
       outlook: {
         rows: [
           {
@@ -120,7 +119,8 @@ import {
             championTeamCode: "FRA",
             championAlive: true,
             hasChampionPick: true,
-            liveKnockoutPicksRemaining: 9,
+            pathValidLivePickCount: 9,
+            topRemainingPicks: [],
             statusLabel: "Leading",
           },
         ],
@@ -131,7 +131,6 @@ import {
   assert.strictEqual(
     shouldShowParticipantRaceOutlook({
       picksLocked: false,
-      totalCompletedBrackets: 5,
       outlook: { rows: [] },
     }),
     false,

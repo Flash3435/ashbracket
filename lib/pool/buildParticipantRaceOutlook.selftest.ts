@@ -2,9 +2,12 @@ import assert from "node:assert";
 import type { ChampionPickInput } from "@/lib/account/buildPoolReveal";
 import type { KnockoutPickSlotDraft } from "../../types/adminKnockoutPicks";
 import type { LeaderboardPublicRow } from "../../types/leaderboard";
+import type { Team } from "../../src/types/domain";
+import type { TournamentMatchPublicRow } from "../../types/tournamentPublic";
 import {
   buildParticipantRaceOutlook,
   countLiveKnockoutPicksRemaining,
+  resolveChampionPickForParticipant,
   resolveRaceOutlookStatus,
   RACE_OUTLOOK_TOP_N,
 } from "./buildParticipantRaceOutlook";
@@ -41,27 +44,67 @@ function leaderboardRow(
   };
 }
 
-function championPick(
-  participantId: string,
-  teamId: string,
-  teamName: string,
-): ChampionPickInput {
+function team(id: string, name: string, code: string): Team {
   return {
-    participantId,
-    participantDisplayName: participantId,
-    teamId,
-    teamName,
-    teamCode: teamName.slice(0, 3).toUpperCase(),
+    id,
+    name,
+    countryCode: code,
+    fifaCode: code,
+    fifaRank: null,
+    fifaRankAsOf: null,
+    createdAt: "",
+    updatedAt: "",
   };
 }
 
-const eliminated = new Set(["team-dead"]);
+const teams = [
+  team("team-fra", "France", "FRA"),
+  team("team-bra", "Brazil", "BRA"),
+  team("team-dead", "Netherlands", "NED"),
+];
+
+const baseOutlookInput = {
+  teams,
+  tournamentMatches: [] as TournamentMatchPublicRow[],
+  knockoutBracketPicksUnlocked: false,
+  eliminatedTeamIds: new Set<string>(),
+  championPicks: [] as ChampionPickInput[],
+};
+
+// Champion fallback from bracket slot when championPicks entry is missing
+{
+  const resolved = resolveChampionPickForParticipant({
+    participantId: "p1",
+    championPicks: [],
+    bracketSlots: [slot({ predictionKind: "champion", teamId: "team-fra" })],
+    teams,
+  });
+  assert.strictEqual(resolved.hasChampionPick, true);
+  assert.strictEqual(resolved.teamName, "France");
+
+  const outlook = buildParticipantRaceOutlook({
+    ...baseOutlookInput,
+    leaderboardRows: [leaderboardRow("p1", "Emil", 1, 62)],
+    participantBrackets: [
+      {
+        participantId: "p1",
+        slots: [slot({ predictionKind: "champion", teamId: "team-fra" })],
+      },
+    ],
+  });
+
+  const row = outlook.rows[0];
+  assert(row);
+  assert.strictEqual(row.hasChampionPick, true);
+  assert.strictEqual(row.championTeamName, "France");
+}
 
 // Live champion marked alive
 {
   const outlook = buildParticipantRaceOutlook({
+    ...baseOutlookInput,
     leaderboardRows: [leaderboardRow("p1", "Emil", 1, 62)],
-    completeParticipantBrackets: [
+    participantBrackets: [
       {
         participantId: "p1",
         slots: [
@@ -70,8 +113,16 @@ const eliminated = new Set(["team-dead"]);
         ],
       },
     ],
-    championPicks: [championPick("p1", "team-fra", "France")],
-    eliminatedTeamIds: eliminated,
+    championPicks: [
+      {
+        participantId: "p1",
+        participantDisplayName: "Emil",
+        teamId: "team-fra",
+        teamName: "France",
+        teamCode: "FRA",
+      },
+    ],
+    eliminatedTeamIds: new Set(["team-dead"]),
   });
 
   const row = outlook.rows[0];
@@ -83,15 +134,24 @@ const eliminated = new Set(["team-dead"]);
 // Eliminated champion marked dead
 {
   const outlook = buildParticipantRaceOutlook({
+    ...baseOutlookInput,
     leaderboardRows: [leaderboardRow("p1", "Vinay", 3, 59)],
-    completeParticipantBrackets: [
+    participantBrackets: [
       {
         participantId: "p1",
         slots: [slot({ predictionKind: "champion", teamId: "team-dead" })],
       },
     ],
-    championPicks: [championPick("p1", "team-dead", "Netherlands")],
-    eliminatedTeamIds: eliminated,
+    championPicks: [
+      {
+        participantId: "p1",
+        participantDisplayName: "Vinay",
+        teamId: "team-dead",
+        teamName: "Netherlands",
+        teamCode: "NED",
+      },
+    ],
+    eliminatedTeamIds: new Set(["team-dead"]),
   });
 
   const row = outlook.rows[0];
@@ -100,35 +160,40 @@ const eliminated = new Set(["team-dead"]);
   assert.strictEqual(row.statusLabel, "Champion dead");
 }
 
-// Live knockout picks remaining counted correctly
-{
-  const slots = [
-    slot({ predictionKind: "round_of_32", teamId: "team-a", rowKey: "r32-a" }),
-    slot({ predictionKind: "round_of_16", teamId: "team-b", rowKey: "r16-b" }),
-    slot({ predictionKind: "quarterfinalist", teamId: "team-dead", rowKey: "qf-dead" }),
-    slot({ predictionKind: "semifinalist", teamId: "", rowKey: "sf-empty" }),
-    slot({ predictionKind: "group_winner", teamId: "team-x", rowKey: "grp" }),
-  ];
-  assert.strictEqual(countLiveKnockoutPicksRemaining(slots, eliminated), 2);
-}
-
-// Incomplete brackets ignored (only complete brackets passed in)
+// Top leaderboard rows included even when not bracket-complete
 {
   const leaderboardRows = [
     leaderboardRow("p1", "Emil", 1, 62),
     leaderboardRow("p2", "Ghost", 2, 60),
   ];
   const outlook = buildParticipantRaceOutlook({
+    ...baseOutlookInput,
     leaderboardRows,
-    completeParticipantBrackets: [
-      { participantId: "p1", slots: [slot({ predictionKind: "champion", teamId: "team-fra" })] },
+    participantBrackets: [
+      {
+        participantId: "p1",
+        slots: [slot({ predictionKind: "champion", teamId: "team-fra" })],
+      },
+      {
+        participantId: "p2",
+        slots: [],
+      },
     ],
-    championPicks: [championPick("p1", "team-fra", "France")],
-    eliminatedTeamIds: new Set(),
+    championPicks: [
+      {
+        participantId: "p1",
+        participantDisplayName: "Emil",
+        teamId: "team-fra",
+        teamName: "France",
+        teamCode: "FRA",
+      },
+    ],
   });
 
-  assert.strictEqual(outlook.rows.length, 1);
+  assert.strictEqual(outlook.rows.length, 2);
   assert.strictEqual(outlook.rows[0]?.participantId, "p1");
+  assert.strictEqual(outlook.rows[1]?.participantId, "p2");
+  assert.strictEqual(outlook.rows[1]?.hasChampionPick, false);
 }
 
 // Sorting follows leaderboard rank
@@ -139,15 +204,19 @@ const eliminated = new Set(["team-dead"]);
     leaderboardRow("p3", "Vinay", 3, 59),
   ];
   const outlook = buildParticipantRaceOutlook({
+    ...baseOutlookInput,
     leaderboardRows,
-    completeParticipantBrackets: leaderboardRows.map((row) => ({
+    participantBrackets: leaderboardRows.map((row) => ({
       participantId: row.participantId,
       slots: [slot({ predictionKind: "champion", teamId: "team-fra" })],
     })),
-    championPicks: leaderboardRows.map((row) =>
-      championPick(row.participantId, "team-fra", "France"),
-    ),
-    eliminatedTeamIds: new Set(),
+    championPicks: leaderboardRows.map((row) => ({
+      participantId: row.participantId,
+      participantDisplayName: row.displayName,
+      teamId: "team-fra",
+      teamName: "France",
+      teamCode: "FRA",
+    })),
   });
 
   assert.deepStrictEqual(
@@ -161,17 +230,21 @@ const eliminated = new Set(["team-dead"]);
   const leaderboardRows = Array.from({ length: 12 }, (_, index) =>
     leaderboardRow(`p${index + 1}`, `Player ${index + 1}`, index + 1, 100 - index),
   );
-  const completeParticipantBrackets = leaderboardRows.map((row) => ({
+  const participantBrackets = leaderboardRows.map((row) => ({
     participantId: row.participantId,
     slots: [slot({ predictionKind: "champion", teamId: "team-fra" })],
   }));
   const outlook = buildParticipantRaceOutlook({
+    ...baseOutlookInput,
     leaderboardRows,
-    completeParticipantBrackets,
-    championPicks: leaderboardRows.map((row) =>
-      championPick(row.participantId, "team-fra", "France"),
-    ),
-    eliminatedTeamIds: new Set(),
+    participantBrackets,
+    championPicks: leaderboardRows.map((row) => ({
+      participantId: row.participantId,
+      participantDisplayName: row.displayName,
+      teamId: "team-fra",
+      teamName: "France",
+      teamCode: "FRA",
+    })),
     viewerParticipantId: "p12",
   });
 
@@ -183,33 +256,68 @@ const eliminated = new Set(["team-dead"]);
 {
   assert.strictEqual(
     resolveRaceOutlookStatus({
-      rank: 2,
+      rank: 1,
       hasChampionPick: true,
-      championAlive: true,
-      liveKnockoutPicksRemaining: 9,
-      pointsBehindLeader: 2,
+      championPathDead: false,
+      pathValidLivePickCount: 9,
+      pointsBehindLeader: 0,
     }),
-    "Dangerous",
+    "Leading",
   );
   assert.strictEqual(
     resolveRaceOutlookStatus({
-      rank: 4,
+      rank: 2,
       hasChampionPick: true,
-      championAlive: true,
-      liveKnockoutPicksRemaining: 2,
-      pointsBehindLeader: 10,
+      championPathDead: true,
+      pathValidLivePickCount: 9,
+      pointsBehindLeader: 2,
     }),
-    "Low upside",
+    "Champion dead",
   );
   assert.strictEqual(
     resolveRaceOutlookStatus({
       rank: 3,
       hasChampionPick: true,
-      championAlive: true,
-      liveKnockoutPicksRemaining: 6,
-      pointsBehindLeader: 8,
+      championPathDead: false,
+      pathValidLivePickCount: 5,
+      pointsBehindLeader: 6,
     }),
-    "Chasing",
+    "In contention",
+  );
+  assert.strictEqual(
+    resolveRaceOutlookStatus({
+      rank: 4,
+      hasChampionPick: true,
+      championPathDead: false,
+      pathValidLivePickCount: 0,
+      pointsBehindLeader: 20,
+    }),
+    "Long shot",
+  );
+  assert.strictEqual(
+    resolveRaceOutlookStatus({
+      rank: 5,
+      hasChampionPick: true,
+      championPathDead: false,
+      pathValidLivePickCount: 0,
+      pointsBehindLeader: 6,
+    }),
+    "Long shot",
+  );
+}
+
+// Deprecated naive counter kept for regression only
+{
+  const slots = [
+    slot({ predictionKind: "round_of_32", teamId: "team-bra", rowKey: "r32-a" }),
+    slot({ predictionKind: "round_of_16", teamId: "team-fra", rowKey: "r16-b" }),
+    slot({ predictionKind: "quarterfinalist", teamId: "team-dead", rowKey: "qf-dead" }),
+    slot({ predictionKind: "semifinalist", teamId: "", rowKey: "sf-empty" }),
+    slot({ predictionKind: "group_winner", teamId: "team-fra", rowKey: "grp" }),
+  ];
+  assert.strictEqual(
+    countLiveKnockoutPicksRemaining(slots, new Set(["team-dead"])),
+    2,
   );
 }
 
