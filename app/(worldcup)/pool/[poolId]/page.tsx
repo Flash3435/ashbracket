@@ -11,7 +11,6 @@ import { createServiceRoleClient } from "@/lib/supabase/service";
 import { poolLocked } from "@/lib/pools/poolLocked";
 import { fetchBracketOutlookForPool } from "@/lib/leaderboard/fetchBracketOutlookForPool";
 import { fetchChampionPickExposureForPool } from "@/lib/pool/fetchChampionPickExposureForPool";
-import { fetchKnockoutMatchExposureForPool } from "@/lib/pool/fetchKnockoutMatchExposureForPool";
 import { fetchParticipantRaceOutlookForPool } from "@/lib/pool/fetchParticipantRaceOutlookForPool";
 import { computeBracketOutlookSummary } from "@/lib/leaderboard/bracketOutlookSeparation";
 import { TournamentStatLeadersPanel } from "@/components/tournament/TournamentStatLeadersPanel";
@@ -114,19 +113,9 @@ export default async function PublicPoolLeaderboardPage({ params }: PageProps) {
         viewerParticipantId,
       })
     : null;
-  const showParticipantRaceOutlook =
-    raceOutlookRes?.ok === true && raceOutlookRes.showOutlook;
   const participantRaceOutlook =
-    showParticipantRaceOutlook && raceOutlookRes?.ok ? raceOutlookRes.outlook : null;
-
-  const matchExposureRes = picksLocked
-    ? await fetchKnockoutMatchExposureForPool(poolIdTrimmed, { leaderboardRows: rows })
-    : null;
-  const showKnockoutMatchExposure =
-    matchExposureRes?.ok === true && matchExposureRes.showExposure;
-  const knockoutMatchExposure =
-    showKnockoutMatchExposure && matchExposureRes?.ok
-      ? matchExposureRes.exposure
+    raceOutlookRes?.ok === true && raceOutlookRes.showOutlook
+      ? raceOutlookRes.outlook
       : null;
 
   return (
@@ -158,9 +147,6 @@ export default async function PublicPoolLeaderboardPage({ params }: PageProps) {
         championPickExposure={championPickExposure}
         showChampionPickExposure={showChampionPickExposure}
         participantRaceOutlook={participantRaceOutlook}
-        showParticipantRaceOutlook={showParticipantRaceOutlook}
-        knockoutMatchExposure={knockoutMatchExposure}
-        showKnockoutMatchExposure={showKnockoutMatchExposure}
       />
     </PageContainer>
   );

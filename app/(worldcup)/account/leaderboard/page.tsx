@@ -8,7 +8,6 @@ import { loadAccountKnockoutSelection, poolLocked } from "@/lib/account/loadAcco
 import { fetchMemberPoolStandings } from "@/lib/leaderboard/fetchMemberPoolStandings";
 import { fetchBracketOutlookForPool } from "@/lib/leaderboard/fetchBracketOutlookForPool";
 import { fetchChampionPickExposureForPool } from "@/lib/pool/fetchChampionPickExposureForPool";
-import { fetchKnockoutMatchExposureForPool } from "@/lib/pool/fetchKnockoutMatchExposureForPool";
 import { fetchParticipantRaceOutlookForPool } from "@/lib/pool/fetchParticipantRaceOutlookForPool";
 import { computeBracketOutlookSummary } from "@/lib/leaderboard/bracketOutlookSeparation";
 import {
@@ -144,21 +143,9 @@ export default async function AccountLeaderboardPage({ searchParams }: PageProps
         viewerParticipantId: ctx.selectedId,
       })
     : null;
-  const showParticipantRaceOutlook =
-    raceOutlookRes?.ok === true && raceOutlookRes.showOutlook;
   const participantRaceOutlook =
-    showParticipantRaceOutlook && raceOutlookRes?.ok ? raceOutlookRes.outlook : null;
-
-  const matchExposureRes = standings.ok
-    ? await fetchKnockoutMatchExposureForPool(selectedPoolId, {
-        leaderboardRows: standingsRows,
-      })
-    : { ok: false as const, error: "Could not load standings." };
-  const showKnockoutMatchExposure =
-    matchExposureRes.ok && matchExposureRes.showExposure;
-  const knockoutMatchExposure =
-    showKnockoutMatchExposure && matchExposureRes.ok
-      ? matchExposureRes.exposure
+    raceOutlookRes?.ok === true && raceOutlookRes.showOutlook
+      ? raceOutlookRes.outlook
       : null;
 
   const revealHref = `/account/reveal?participant=${ctx.selectedId}`;
@@ -229,9 +216,6 @@ export default async function AccountLeaderboardPage({ searchParams }: PageProps
           championPickExposure={championPickExposure}
           showChampionPickExposure={showChampionPickExposure}
           participantRaceOutlook={participantRaceOutlook}
-          showParticipantRaceOutlook={showParticipantRaceOutlook}
-          knockoutMatchExposure={knockoutMatchExposure}
-          showKnockoutMatchExposure={showKnockoutMatchExposure}
         />
       )}
     </PageContainer>

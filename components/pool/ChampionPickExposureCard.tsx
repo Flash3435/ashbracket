@@ -3,6 +3,8 @@ import type { ChampionPickExposure } from "@/lib/pool/buildChampionPickExposure"
 
 type Props = {
   exposure: ChampionPickExposure;
+  /** When true, wrap content in a collapsed disclosure below the leaderboard. */
+  collapsible?: boolean;
 };
 
 function ExposureRow({
@@ -38,16 +40,13 @@ function ExposureRow({
   );
 }
 
-export function ChampionPickExposureCard({ exposure }: Props) {
+function ExposureBody({ exposure }: { exposure: ChampionPickExposure }) {
   const hasSurviving = exposure.surviving.length > 0;
   const showEliminated = exposure.eliminated.length > 0;
 
   return (
-    <section className="rounded-xl border border-ash-border/70 bg-ash-body/25 px-5 py-5 sm:px-6">
-      <h2 className="text-lg font-bold text-ash-text sm:text-xl">
-        Champion picks still alive
-      </h2>
-      <p className="mt-2 max-w-3xl text-sm leading-relaxed text-ash-muted">
+    <>
+      <p className="max-w-3xl text-sm leading-relaxed text-ash-muted">
         Shows how many pool brackets still have each champion pick alive.
       </p>
 
@@ -75,6 +74,30 @@ export function ChampionPickExposureCard({ exposure }: Props) {
           </ul>
         </div>
       ) : null}
+    </>
+  );
+}
+
+export function ChampionPickExposureCard({ exposure, collapsible = false }: Props) {
+  if (collapsible) {
+    return (
+      <details className="rounded-xl border border-ash-border/70 bg-ash-body/25">
+        <summary className="cursor-pointer list-none px-5 py-4 text-lg font-bold text-ash-text marker:content-none sm:px-6 sm:text-xl [&::-webkit-details-marker]:hidden">
+          Champion picks still alive
+        </summary>
+        <div className="border-t border-ash-border/50 px-5 pb-5 pt-4 sm:px-6">
+          <ExposureBody exposure={exposure} />
+        </div>
+      </details>
+    );
+  }
+
+  return (
+    <section className="rounded-xl border border-ash-border/70 bg-ash-body/25 px-5 py-5 sm:px-6">
+      <h2 className="text-lg font-bold text-ash-text sm:text-xl">
+        Champion picks still alive
+      </h2>
+      <ExposureBody exposure={exposure} />
     </section>
   );
 }

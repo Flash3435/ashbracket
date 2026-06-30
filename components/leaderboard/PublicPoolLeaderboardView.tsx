@@ -5,27 +5,23 @@ import {
   type PublicPoolLeaderboardRowDisplay,
 } from "@/lib/leaderboard/buildPublicPoolLeaderboardPresentation";
 import { buildViewerLeaderComparison } from "@/lib/leaderboard/buildViewerLeaderComparison";
+import { mapRaceOutlookByParticipantId } from "@/lib/leaderboard/leaderboardRaceRowContext";
 import { JumpToMyLeaderboardRowButton } from "./JumpToMyLeaderboardRowButton";
 import { ViewerLeaderComparisonSummary } from "./ViewerLeaderComparisonSummary";
+import { LeaderboardParticipantCell } from "./LeaderboardParticipantCell";
 import { LiveScoresUpdateNotice } from "../tournament/LiveScoresUpdateNotice";
 import type { LeaderboardPublicRow } from "../../types/leaderboard";
 import type { PoolPublicStats } from "../../lib/pool/fetchPoolPublicStats";
 import { PoolPublicStatsSummary } from "../pool/PoolPublicStatsSummary";
-import { ViewerYouChip } from "../ui/ViewerYouChip";
 import { formatUsdCents } from "@/lib/format/usdCents";
-import { LEADERBOARD_AWARDED_POINTS_NOTE } from "@/lib/leaderboard/buildPoolStandingsFromLedger";
 import { poolLeaderboardIsActiveFromRows } from "@/lib/leaderboard/poolLeaderboardIsActive";
 import { LeaderboardPostLockIntro } from "./LeaderboardPostLockIntro";
 import { BracketOutlookView } from "./BracketOutlookView";
 import type { BracketOutlookSummary } from "@/lib/leaderboard/bracketOutlookSeparation";
 import { TournamentStatLeadersPanel } from "@/components/tournament/TournamentStatLeadersPanel";
 import type { TournamentStatLeadersView } from "@/lib/tournament/matchTeamStats/buildTournamentStatLeadersView";
-import { participantPublicProfileHref } from "@/lib/participant/participantProfileRouting";
 import { ChampionPickExposureCard } from "@/components/pool/ChampionPickExposureCard";
 import type { ChampionPickExposure } from "@/lib/pool/buildChampionPickExposure";
-import { KnockoutMatchExposureSection } from "@/components/pool/KnockoutMatchExposureSection";
-import type { KnockoutMatchExposure } from "@/lib/pool/buildKnockoutMatchExposure";
-import { ParticipantRaceOutlookCard } from "@/components/pool/ParticipantRaceOutlookCard";
 import type { ParticipantRaceOutlook } from "@/lib/pool/buildParticipantRaceOutlook";
 
 function summaryCard(label: string, value: string, hint: string) {
@@ -110,90 +106,24 @@ function viewerRowScrollProps(isViewerRow: boolean): {
   };
 }
 
-function participantNameCell(
-  row: PublicPoolLeaderboardRowDisplay,
-  isViewerRow: boolean,
-) {
-  return (
-    <>
-      <span className="inline-flex max-w-full flex-wrap items-center gap-2">
-        <span className="font-medium text-ash-text">{row.displayName}</span>
-        {isViewerRow ? <ViewerYouChip /> : null}
-      </span>
-      {row.isTiedAtRank ? (
-        <p className="mt-0.5 text-xs text-ash-border-hover">Tied at rank {row.rank}</p>
-      ) : null}
-    </>
-  );
-}
-
-function participantProfileLink(
-  row: PublicPoolLeaderboardRowDisplay,
-  isViewerRow: boolean,
-  className: string,
-  wrapper?: "block" | "inline",
-) {
-  const href = participantPublicProfileHref(row.participantId);
-  const content =
-    wrapper === "block" ? (
-      <div className="flex items-start justify-between gap-3">
-        <div className="flex items-center gap-3">
-          {rankCell(row)}
-          <div className="min-w-0">
-            <div className="flex flex-wrap items-center gap-2">
-              <p className="font-semibold text-ash-text">{row.displayName}</p>
-              {isViewerRow ? <ViewerYouChip /> : null}
-            </div>
-            {row.isTiedAtRank ? (
-              <p className="text-xs text-ash-muted">Tied at rank {row.rank}</p>
-            ) : null}
-          </div>
-        </div>
-        <span className="text-xl font-bold tabular-nums text-ash-text">
-          {row.pointsLabel}
-        </span>
-      </div>
-    ) : (
-      participantNameCell(row, isViewerRow)
-    );
-
-  if (!href) {
-    return <div className={className}>{content}</div>;
-  }
-
-  return (
-    <Link href={href} className={className}>
-      {content}
-    </Link>
-  );
-}
-
 type Props = {
   poolName: string;
   rows: LeaderboardPublicRow[];
   stats: PoolPublicStats | null;
   statsError: string | null;
   leaderboardError: string | null;
-  /** Set when the signed-in user has a claimed participant row in this pool. */
   viewerParticipantId?: string | null;
-  /** Live pools only: last successful daily score update for the official tournament. */
   liveScoresLastUpdatedAt?: string | null;
-  /** When true, show post-lock intro with optional reveal link. */
   picksLocked?: boolean;
   revealHref?: string | null;
-  /** Public page vs signed-in member view for a private pool. */
   audience?: "public" | "member";
- bonusWatchView?: TournamentStatLeadersView | null;
-  /** Pre-points Bracket Outlook summary (display names + counts only). */
+  bonusWatchView?: TournamentStatLeadersView | null;
   bracketOutlookSummary?: BracketOutlookSummary | null;
   showBracketOutlook?: boolean;
   decisiveResultCount?: number;
   championPickExposure?: ChampionPickExposure | null;
   showChampionPickExposure?: boolean;
   participantRaceOutlook?: ParticipantRaceOutlook | null;
-  showParticipantRaceOutlook?: boolean;
-  knockoutMatchExposure?: KnockoutMatchExposure | null;
-  showKnockoutMatchExposure?: boolean;
 };
 
 export function PublicPoolLeaderboardView({
@@ -207,16 +137,13 @@ export function PublicPoolLeaderboardView({
   picksLocked = false,
   revealHref = null,
   audience = "public",
- bonusWatchView = null,
+  bonusWatchView = null,
   bracketOutlookSummary = null,
   showBracketOutlook = false,
   decisiveResultCount = 0,
   championPickExposure = null,
   showChampionPickExposure = false,
   participantRaceOutlook = null,
-  showParticipantRaceOutlook = false,
-  knockoutMatchExposure = null,
-  showKnockoutMatchExposure = false,
 }: Props) {
   if (leaderboardError) {
     return (
@@ -236,7 +163,10 @@ export function PublicPoolLeaderboardView({
   const hasViewerRow =
     viewerParticipantId != null &&
     presentation.rows.some((r) => r.participantId === viewerParticipantId);
-
+  const raceOutlookByParticipantId = mapRaceOutlookByParticipantId(participantRaceOutlook);
+  const leaderboardSubtitle = raceOutlookByParticipantId.size
+    ? "Ranked by awarded points. Tap a participant to see their picks and race outlook."
+    : `${presentation.participantCount} ${presentation.participantCount === 1 ? "entry" : "entries"} ranked by awarded points. Tied totals share the same rank.`;
 
   if (presentation.participantCount > 0 && !leaderboardActive) {
     return (
@@ -252,14 +182,8 @@ export function PublicPoolLeaderboardView({
           showOutlook={showBracketOutlook && bracketOutlookSummary != null}
           summary={bracketOutlookSummary}
         />
-        {showParticipantRaceOutlook && participantRaceOutlook ? (
-          <ParticipantRaceOutlookCard outlook={participantRaceOutlook} />
-        ) : null}
         {showChampionPickExposure && championPickExposure ? (
-          <ChampionPickExposureCard exposure={championPickExposure} />
-        ) : null}
-        {showKnockoutMatchExposure && knockoutMatchExposure ? (
-          <KnockoutMatchExposureSection exposure={knockoutMatchExposure} />
+          <ChampionPickExposureCard exposure={championPickExposure} collapsible />
         ) : null}
       </div>
     );
@@ -353,25 +277,7 @@ export function PublicPoolLeaderboardView({
         {summaryCard("Entries", cards.entriesLine, cards.entriesHint)}
       </section>
 
-      {showParticipantRaceOutlook && participantRaceOutlook ? (
-        <ParticipantRaceOutlookCard outlook={participantRaceOutlook} />
-      ) : null}
-
-      {showChampionPickExposure && championPickExposure ? (
-        <ChampionPickExposureCard exposure={championPickExposure} />
-      ) : null}
-
-      {showKnockoutMatchExposure && knockoutMatchExposure ? (
-        <KnockoutMatchExposureSection exposure={knockoutMatchExposure} />
-      ) : null}
-
-      <PoolPublicStatsSummary
-        poolLabel={poolName}
-        stats={stats}
-        errorMessage={statsError}
-      />
-
-      <section className="space-y-4 border-t border-ash-border/50 pt-2">
+      <section className="space-y-4">
         <div className="space-y-2">
           <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-ash-muted">
             Standings
@@ -380,9 +286,7 @@ export function PublicPoolLeaderboardView({
             Leaderboard
           </h2>
           <p className="max-w-3xl text-sm leading-relaxed text-ash-muted">
-            {presentation.participantCount}{" "}
-            {presentation.participantCount === 1 ? "entry" : "entries"} ranked by
-            awarded points. Tied totals share the same rank.
+            {leaderboardSubtitle}
           </p>
         </div>
 
@@ -400,31 +304,33 @@ export function PublicPoolLeaderboardView({
                 const isViewerRow =
                   viewerParticipantId != null &&
                   row.participantId === viewerParticipantId;
-
                 const scrollProps = viewerRowScrollProps(isViewerRow);
+                const raceOutlook =
+                  raceOutlookByParticipantId.get(row.participantId) ?? null;
 
                 return (
-                <tr
-                  key={row.participantId}
-                  className={`${rowSurfaceClass(row, isViewerRow)} ${scrollProps.className ?? ""}`.trim()}
-                  aria-current={isViewerRow ? "true" : undefined}
-                  data-viewer-leaderboard-entry={scrollProps["data-viewer-leaderboard-entry"]}
-                  tabIndex={scrollProps.tabIndex}
-                >
-                  <td className="px-4 py-3.5">{rankCell(row)}</td>
-                  <td className="px-4 py-3.5">
-                    {participantProfileLink(
-                      row,
-                      isViewerRow,
-                      "inline-block underline-offset-2 hover:text-ash-accent hover:underline",
-                    )}
-                  </td>
-                  <td className="px-4 py-3.5 text-right">
-                    <span className="text-lg font-bold tabular-nums text-ash-text">
-                      {row.pointsLabel}
-                    </span>
-                  </td>
-                </tr>
+                  <tr
+                    key={row.participantId}
+                    className={`${rowSurfaceClass(row, isViewerRow)} ${scrollProps.className ?? ""}`.trim()}
+                    aria-current={isViewerRow ? "true" : undefined}
+                    data-viewer-leaderboard-entry={scrollProps["data-viewer-leaderboard-entry"]}
+                    tabIndex={scrollProps.tabIndex}
+                  >
+                    <td className="px-4 py-3.5 align-top">{rankCell(row)}</td>
+                    <td className="px-4 py-3.5 align-top">
+                      <LeaderboardParticipantCell
+                        row={row}
+                        isViewerRow={isViewerRow}
+                        raceOutlook={raceOutlook}
+                        layout="table"
+                      />
+                    </td>
+                    <td className="px-4 py-3.5 text-right align-top">
+                      <span className="text-lg font-bold tabular-nums text-ash-text">
+                        {row.pointsLabel}
+                      </span>
+                    </td>
+                  </tr>
                 );
               })}
             </tbody>
@@ -436,28 +342,44 @@ export function PublicPoolLeaderboardView({
             const isViewerRow =
               viewerParticipantId != null &&
               row.participantId === viewerParticipantId;
-
             const scrollProps = viewerRowScrollProps(isViewerRow);
+            const raceOutlook =
+              raceOutlookByParticipantId.get(row.participantId) ?? null;
 
             return (
-            <li
-              key={row.participantId}
-              className={scrollProps.className}
-              data-viewer-leaderboard-entry={scrollProps["data-viewer-leaderboard-entry"]}
-              tabIndex={scrollProps.tabIndex}
-              aria-current={isViewerRow ? "true" : undefined}
-            >
-              {participantProfileLink(
-                row,
-                isViewerRow,
-                `block rounded-xl border border-ash-border/70 px-4 py-4 transition-colors hover:bg-ash-body/40 ${rowSurfaceClass(row, isViewerRow)}`,
-                "block",
-              )}
-            </li>
+              <li
+                key={row.participantId}
+                className={scrollProps.className}
+                data-viewer-leaderboard-entry={scrollProps["data-viewer-leaderboard-entry"]}
+                tabIndex={scrollProps.tabIndex}
+                aria-current={isViewerRow ? "true" : undefined}
+              >
+                <div
+                  className={`rounded-xl border border-ash-border/70 px-4 py-4 ${rowSurfaceClass(row, isViewerRow)}`}
+                >
+                  <LeaderboardParticipantCell
+                    row={row}
+                    isViewerRow={isViewerRow}
+                    raceOutlook={raceOutlook}
+                    layout="mobile"
+                    rankCell={rankCell(row)}
+                  />
+                </div>
+              </li>
             );
           })}
         </ul>
       </section>
+
+      <PoolPublicStatsSummary
+        poolLabel={poolName}
+        stats={stats}
+        errorMessage={statsError}
+      />
+
+      {showChampionPickExposure && championPickExposure ? (
+        <ChampionPickExposureCard exposure={championPickExposure} collapsible />
+      ) : null}
     </div>
   );
 }
