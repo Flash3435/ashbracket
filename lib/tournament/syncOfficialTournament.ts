@@ -14,6 +14,7 @@ import {
   computeGroupStandings,
   type FinishedGroupMatch,
 } from "./groupStandings";
+import { buildRoundOf32AdvancementResultInserts } from "./deriveRoundOf32AdvancementResults";
 import { winnerFromMatchScores } from "./matchOutcome";
 
 export type SyncOfficialTournamentSummary = {
@@ -479,6 +480,30 @@ export async function syncOfficialTournament(
     });
   }
 
+  const roundOf32StageId = stageMap.get("round_of_32");
+  const roundOf16StageId = stageMap.get("round_of_16");
+  if (roundOf32StageId && roundOf16StageId) {
+    const r32AdvancementRows = buildRoundOf32AdvancementResultInserts({
+      editionId,
+      matches,
+      roundOf32StageId,
+      roundOf16StageId,
+      resolvedAtIso: resolvedAt,
+      lockedKeys,
+      resultSlotKey,
+    });
+    for (const row of r32AdvancementRows) {
+      const k = resultSlotKey(
+        row.tournament_stage_id,
+        row.kind,
+        row.group_code,
+        row.slot_key,
+      );
+      if (lockedKeys.has(k)) continue;
+      insertByKey.set(k, row);
+    }
+  }
+
   const inserts = [...insertByKey.values()];
 
   logger?.log("sync.derived_results_rebuild_start", {
@@ -487,6 +512,17 @@ export async function syncOfficialTournament(
     ).length,
     knockoutResultsWithWinner: matches.filter(
       (m) => m.scoring_result_kind && m.scoring_stage_code && m.winner_team_id,
+    ).length,
+    roundOf32FinishedWithWinner: matches.filter(
+      (m) =>
+        m.stage_code === "round_of_32" &&
+        !m.scoring_result_kind &&
+        m.status === "finished" &&
+        m.winner_team_id,
+    ).length,
+    roundOf32AdvancementRows: inserts.filter((r) => r.kind === "round_of_32").length,
+    roundOf16FromR32AdvancementRows: inserts.filter(
+      (r) => r.kind === "round_of_16" && r.source === "sync",
     ).length,
   });
 

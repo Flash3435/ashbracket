@@ -297,3 +297,101 @@ assert.equal(thirdOutcome.ledgerLines.length, 1);
 assert.equal(thirdOutcome.ledgerLines[0]?.resultId, "res-tpq-slot3");
 
 console.log("scoring selftest third-place set match: ok");
+
+// Round of 32 pick scores when the team officially advances (via round_of_16 result from R32 win).
+const stageR32Pick = "stage-r32-pick-0001-0000-000000000001";
+const stageR16Adv = "stage-r16-adv-0001-0000-000000000001";
+const teamWinner = "team-winner-0001-0000-000000000001";
+const teamLoser = "team-loser-0001-0000-000000000001";
+const carol = "part-carol-0001-0000-0000-000000000001";
+
+const r32AdvanceRules: ScoringRule[] = [
+  {
+    id: "rule-r16",
+    poolId,
+    predictionKind: "round_of_16",
+    bonusKey: null,
+    points: 4,
+    createdAt: now,
+    updatedAt: now,
+  },
+];
+
+const r32AdvanceResults: Result[] = [
+  {
+    id: "res-r32-winner-slot",
+    tournamentStageId: stageR32Pick,
+    kind: "round_of_32",
+    teamId: teamWinner,
+    groupCode: null,
+    slotKey: "7",
+    valueText: null,
+    resolvedAt: now,
+    createdAt: now,
+  },
+  {
+    id: "res-r16-from-r32",
+    tournamentStageId: stageR16Adv,
+    kind: "round_of_16",
+    teamId: teamWinner,
+    groupCode: null,
+    slotKey: "4",
+    valueText: null,
+    resolvedAt: now,
+    createdAt: now,
+  },
+];
+
+const r32AdvancePreds: Prediction[] = [
+  {
+    id: "pred-carol-r32-winner",
+    poolId,
+    participantId: carol,
+    predictionKind: "round_of_32",
+    teamId: teamWinner,
+    tournamentStageId: stageR32Pick,
+    groupCode: null,
+    slotKey: "7",
+    bonusKey: null,
+    valueText: null,
+    createdAt: now,
+    updatedAt: now,
+  },
+  {
+    id: "pred-carol-r32-loser",
+    poolId,
+    participantId: carol,
+    predictionKind: "round_of_32",
+    teamId: teamLoser,
+    tournamentStageId: stageR32Pick,
+    groupCode: null,
+    slotKey: "8",
+    bonusKey: null,
+    valueText: null,
+    createdAt: now,
+    updatedAt: now,
+  },
+];
+
+const r32AdvanceOutcome = computePoolScores({
+  poolId,
+  predictions: r32AdvancePreds,
+  results: r32AdvanceResults,
+  scoringRules: r32AdvanceRules,
+});
+
+assert.equal(r32AdvanceOutcome.totalsByParticipantId[carol], 4);
+assert.equal(r32AdvanceOutcome.ledgerLines.length, 1);
+assert.equal(r32AdvanceOutcome.ledgerLines[0]?.predictionId, "pred-carol-r32-winner");
+assert.equal(r32AdvanceOutcome.ledgerLines[0]?.predictionKind, "round_of_16");
+
+// Duplicate sources: existing round_of_32 row + round_of_16 advancement still score once.
+const r32AdvanceAgain = computePoolScores({
+  poolId,
+  predictions: r32AdvancePreds,
+  results: r32AdvanceResults,
+  scoringRules: r32AdvanceRules,
+});
+assert.deepEqual(r32AdvanceAgain.ledgerLines, r32AdvanceOutcome.ledgerLines);
+
+console.log("scoring selftest r32 advancement via round_of_16 result: ok");
