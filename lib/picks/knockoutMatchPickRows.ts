@@ -381,19 +381,13 @@ export function readR32MatchWinnerForBracket(
 }
 
 /**
- * Confirmed R32 match winner for later-round bracket rows: canonical `round_of_16`
- * slot 1–16 when valid, otherwise a single known official `round_of_32` side.
+ * Participant's saved winner for an R32 matchup (ignores official results).
  */
-export function readConfirmedR32MatchWinner(
+export function readParticipantR32MatchWinnerPick(
   matchIndex: number,
   slots: KnockoutPickSlotDraft[],
   ctx?: ConfirmedR32WinnerContext,
 ): string {
-  const resultWinner = officialR32ResultWinner(matchIndex, ctx);
-  if (resultWinner) {
-    return resultWinner;
-  }
-
   const ms = ctx?.gradual?.matchStates[matchIndex];
   if (ms && ctx?.teams?.length) {
     const gradualWinner = readGradualR32MatchWinner(
@@ -422,11 +416,28 @@ export function readConfirmedR32MatchWinner(
     }
   }
 
-  // Legacy single-side winner before canonical `round_of_16` storage.
   if (topId && !botId) return topId;
   if (botId && !topId) return botId;
 
   return "";
+}
+
+/**
+ * Confirmed R32 match winner for later-round bracket rows: canonical `round_of_16`
+ * slot 1–16 when valid, otherwise a single known official `round_of_32` side.
+ * When an official result exists, that winner is returned.
+ */
+export function readConfirmedR32MatchWinner(
+  matchIndex: number,
+  slots: KnockoutPickSlotDraft[],
+  ctx?: ConfirmedR32WinnerContext,
+): string {
+  const resultWinner = officialR32ResultWinner(matchIndex, ctx);
+  if (resultWinner) {
+    return resultWinner;
+  }
+
+  return readParticipantR32MatchWinnerPick(matchIndex, slots, ctx);
 }
 
 /** Which upstream R32 fixtures still need a confirmed winner for this R16 row. */
