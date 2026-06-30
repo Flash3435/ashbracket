@@ -91,12 +91,18 @@ import {
   countPickableKnockoutMissing,
   FINAL_MATCH_INCOMPLETE_MSG,
   isKnockoutMatchDirectPickEligible,
-  knockoutMatchStepComplete,
   usesKnockoutMatchPickRows,
   validatedKnockoutMatchWinner,
   type KnockoutMatchPickRow,
   type KnockoutWizardBracketKind,
 } from "../../lib/picks/knockoutMatchPickRows";
+import {
+  getKnockoutStepCompletionFromDraftState,
+  getMissingFeederSummaryForStep,
+  isKnockoutWizardStepComplete,
+  resolveKnockoutProgressContext,
+  type KnockoutWizardBracketKindId,
+} from "../../lib/picks/knockoutMatchProgress";
 import { KnockoutMatchDirectTeamPick } from "./KnockoutMatchTeamPick";
 import { isKnockoutProgressionKind } from "../../lib/predictions/knockoutProgressionKinds";
 import { isKnockoutPickEditableForParticipant } from "../../lib/picks/knockoutPickEditability";
@@ -356,6 +362,14 @@ function stepRowsFor(
   return slots.filter((s) => s.predictionKind === def.bracketKind);
 }
 
+function wizardStepBracketKind(
+  def: WizardStepDef,
+): KnockoutWizardBracketKindId | null {
+  if (def.mode !== "bracket") return null;
+  if (def.bracketKind === "third_place_qualifier") return null;
+  return def.bracketKind === "champion" ? "champion" : def.bracketKind;
+}
+
 function stepComplete(
   slots: KnockoutPickSlotDraft[],
   stepIdx: number,
@@ -367,9 +381,24 @@ function stepComplete(
     fullBracketPicksUnlocked?: boolean;
     knockoutBracketPicksUnlocked?: boolean;
     tournamentMatches?: TournamentMatchPublicRow[] | null;
+    knockoutProgressCtx?: ReturnType<typeof resolveKnockoutProgressContext>;
   },
 ): boolean {
   const def = steps[stepIdx];
+  const bracketKind = def ? wizardStepBracketKind(def) : null;
+  const usesKnockoutProgressStatus =
+    bracketKind === "round_of_32" ||
+    bracketKind === "round_of_16" ||
+    bracketKind === "quarterfinalist" ||
+    bracketKind === "semifinalist" ||
+    bracketKind === "finalist" ||
+    bracketKind === "champion";
+  if (usesKnockoutProgressStatus && options?.knockoutProgressCtx) {
+    return isKnockoutWizardStepComplete(
+      bracketKind,
+      options.knockoutProgressCtx,
+    );
+  }
   if (
     def?.mode === "bracket" &&
     options?.fullBracketPicksUnlocked &&
@@ -384,7 +413,8 @@ function stepComplete(
       gradual: options.gradualKnockout,
       knockoutBracketPicksUnlocked: options.knockoutBracketPicksUnlocked,
     });
-    return knockoutMatchStepComplete(rows);
+    return countPickableKnockoutMissing(rows) === 0 &&
+      !rows.some((r) => r.lockReason === "incomplete");
   }
   if (
     def?.mode === "bracket" &&
@@ -400,7 +430,8 @@ function stepComplete(
       gradual: options.gradualKnockout,
       knockoutBracketPicksUnlocked: options.knockoutBracketPicksUnlocked,
     });
-    return knockoutMatchStepComplete(rows);
+    return countPickableKnockoutMissing(rows) === 0 &&
+      !rows.some((r) => r.lockReason === "incomplete");
   }
   if (
     def?.mode === "bracket" &&
@@ -901,6 +932,21 @@ export function KnockoutPicksWizard({
         : slots,
     [slots, knockoutPicksAccessible, r32WinnerContext],
   );
+  const knockoutProgressCtx = useMemo(
+    () =>
+      resolveKnockoutProgressContext({
+        slots: knockoutDisplaySlots,
+        teams,
+        tournamentMatches,
+        officialRoundOf32Complete: knockoutBracketPicksUnlocked,
+      }),
+    [
+      knockoutDisplaySlots,
+      teams,
+      tournamentMatches,
+      knockoutBracketPicksUnlocked,
+    ],
+  );
   const gradualR32MatchRowsByKey = useMemo(() => {
     if (!gradualR32MatchRows) return null;
     const rows = buildGradualR32MatchPickRows({
@@ -1281,6 +1327,7 @@ export function KnockoutPicksWizard({
       fullBracketPicksUnlocked,
       knockoutBracketPicksUnlocked,
       tournamentMatches,
+      knockoutProgressCtx,
     }),
     [
       gradualR32MatchRows,
@@ -1289,6 +1336,7 @@ export function KnockoutPicksWizard({
       fullBracketPicksUnlocked,
       knockoutBracketPicksUnlocked,
       tournamentMatches,
+      knockoutProgressCtx,
     ],
   );
   const stepRows = useMemo(
@@ -1653,7 +1701,7 @@ export function KnockoutPicksWizard({
     ? countKnockoutMatchupsFilled(
         buildKnockoutMatchPickRows({
           bracketKind: "round_of_16",
-          slots,
+          slots: knockoutDisplaySlots,
           teams,
           tournamentMatches,
           gradual: gradualKnockout,
@@ -1668,7 +1716,7 @@ export function KnockoutPicksWizard({
     ? countKnockoutMatchupsFilled(
         buildKnockoutMatchPickRows({
           bracketKind: "quarterfinalist",
-          slots,
+          slots: knockoutDisplaySlots,
           teams,
           tournamentMatches,
           gradual: gradualKnockout,
@@ -1679,6 +1727,27 @@ export function KnockoutPicksWizard({
     : slots.filter(
         (s) => s.predictionKind === "quarterfinalist" && s.teamId.trim(),
       ).length;
+  const currentKnockoutStepGateMessage = useMemo(() => {
+    if (currentStepDef?.mode !== "bracket" || !fullBracketPicksUnlocked) {
+      return null;
+    }
+    const bracketKind = wizardStepBracketKind(currentStepDef);
+    if (!bracketKind) return null;
+    if (
+      bracketKind !== "round_of_16" &&
+      bracketKind !== "quarterfinalist" &&
+      bracketKind !== "semifinalist" &&
+      bracketKind !== "finalist" &&
+      bracketKind !== "champion"
+    ) {
+      return null;
+    }
+    return getMissingFeederSummaryForStep(bracketKind, knockoutProgressCtx);
+  }, [
+    currentStepDef,
+    fullBracketPicksUnlocked,
+    knockoutProgressCtx,
+  ]);
 
   return (
     <form ref={formRef} onSubmit={onSubmit} className="space-y-6">
@@ -1913,46 +1982,45 @@ export function KnockoutPicksWizard({
       <nav aria-label="Tournament pick steps" className="flex flex-wrap gap-2">
         {wizardSteps.map((s, i) => {
           const active = i === step;
+          const bracketKind = wizardStepBracketKind(s);
+          const usesKnockoutProgressStatus =
+            bracketKind === "round_of_32" ||
+            bracketKind === "round_of_16" ||
+            bracketKind === "quarterfinalist" ||
+            bracketKind === "semifinalist" ||
+            bracketKind === "finalist" ||
+            bracketKind === "champion";
+          const knockoutStepStatus = usesKnockoutProgressStatus
+            ? getKnockoutStepCompletionFromDraftState(
+                bracketKind,
+                knockoutProgressCtx,
+              )
+            : null;
           const rows = stepRowsFor(slots, i, wizardSteps, stepRowOptions);
-          const matchRowsForStep =
-            s.mode === "bracket" &&
-            stepRowOptions.fullBracketPicksUnlocked &&
-            stepRowOptions.teams &&
-            (usesKnockoutMatchPickRows(s.bracketKind, true) ||
-              s.bracketKind === "champion")
-              ? buildKnockoutMatchPickRows({
-                  bracketKind:
-                    s.bracketKind === "champion"
-                      ? "finalist"
-                      : (s.bracketKind as KnockoutWizardBracketKind),
-                  slots,
-                  teams: stepRowOptions.teams,
-                  tournamentMatches: stepRowOptions.tournamentMatches,
-                  gradual: stepRowOptions.gradualKnockout,
-                  knockoutBracketPicksUnlocked:
-                    stepRowOptions.knockoutBracketPicksUnlocked,
-                })
-              : null;
           const missingInStep =
-            stepRowOptions.gradualR32MatchRows &&
-            s.mode === "bracket" &&
-            s.bracketKind === "round_of_32" &&
-            stepRowOptions.gradualKnockout &&
-            stepRowOptions.teams
-              ? Math.max(
-                  0,
-                  stepRowOptions.gradualKnockout.pickableCount -
-                    countGradualR32MatchupsFilled({
-                      slots,
-                      state: stepRowOptions.gradualKnockout,
-                      teams: stepRowOptions.teams,
-                      matchIndices: stepRowOptions.gradualKnockout.matchStates
-                        .filter((m) => m.pickable)
-                        .map((m) => m.matchIndex),
-                    }),
-                )
-              : matchRowsForStep
-                ? countPickableKnockoutMissing(matchRowsForStep)
+            knockoutStepStatus != null &&
+            (knockoutStepStatus.kind === "needs_pick" ||
+              knockoutStepStatus.kind === "complete" ||
+              knockoutStepStatus.kind === "locked_upstream" ||
+              knockoutStepStatus.kind === "locked")
+              ? knockoutStepStatus.missingPickable
+              : stepRowOptions.gradualR32MatchRows &&
+                  s.mode === "bracket" &&
+                  s.bracketKind === "round_of_32" &&
+                  stepRowOptions.gradualKnockout &&
+                  stepRowOptions.teams
+                ? Math.max(
+                    0,
+                    stepRowOptions.gradualKnockout.pickableCount -
+                      countGradualR32MatchupsFilled({
+                        slots,
+                        state: stepRowOptions.gradualKnockout,
+                        teams: stepRowOptions.teams,
+                        matchIndices: stepRowOptions.gradualKnockout.matchStates
+                          .filter((m) => m.pickable)
+                          .map((m) => m.matchIndex),
+                      }),
+                  )
                 : s.mode === "bracket" &&
                     s.bracketKind === "third_place_qualifier"
                   ? Math.max(
@@ -1961,12 +2029,11 @@ export function KnockoutPicksWizard({
                     )
                   : rows.filter((r) => !r.teamId.trim()).length;
           const stepBlocked =
-            matchRowsForStep != null &&
-            matchRowsForStep.filter((r) => r.lockReason === "pickable")
-              .length === 0;
+            knockoutStepStatus?.kind === "locked_upstream" ||
+            knockoutStepStatus?.kind === "locked";
           const done =
-            matchRowsForStep != null
-              ? !stepBlocked && missingInStep === 0
+            knockoutStepStatus != null
+              ? knockoutStepStatus.complete
               : stepComplete(slots, i, wizardSteps, stepRowOptions);
           return (
             <button
@@ -1977,7 +2044,8 @@ export function KnockoutPicksWizard({
                 done
                   ? `${s.title} — complete`
                   : stepBlocked
-                    ? `${s.title} — unlocks after earlier rounds`
+                    ? knockoutStepStatus?.gateMessage ??
+                      `${s.title} — unlocks after earlier rounds`
                     : missingInStep > 0
                       ? `${s.title} — ${missingInStep} missing`
                       : s.title
@@ -2121,6 +2189,13 @@ export function KnockoutPicksWizard({
             </div>
           ) : null}
           {currentStepDef.mode === "bracket" &&
+          fullBracketPicksUnlocked &&
+          currentKnockoutStepGateMessage ? (
+            <p className="mt-4 rounded-md border border-amber-700/40 bg-amber-950/25 px-3 py-2 text-sm text-amber-100">
+              {currentKnockoutStepGateMessage}
+            </p>
+          ) : null}
+          {currentStepDef.mode === "bracket" &&
           currentStepDef.bracketKind === "round_of_32" &&
           (gradualR32MatchRows
             ? r32Filled < r32MatchRowTargetCount
@@ -2133,46 +2208,27 @@ export function KnockoutPicksWizard({
           ) : null}
           {currentStepDef.mode === "bracket" &&
           currentStepDef.bracketKind === "round_of_16" &&
-          (fullBracketPicksUnlocked
-            ? r16MatchRowsFilled < 8
+          !fullBracketPicksUnlocked &&
+          (gradualR32MatchRows
+            ? r32Filled < r32MatchRowTargetCount
             : r16MatchRowsFilled < 16) ? (
             <p className="mt-4 rounded-md border border-amber-700/40 bg-amber-950/25 px-3 py-2 text-sm text-amber-100">
-              {fullBracketPicksUnlocked
-                ? `Pick all eight Round of 16 matchups. ${r16MatchRowsFilled} of 8 so far.`
-                : `Pick sixteen Round of 16 teams. ${r16MatchRowsFilled} of 16 so far.`}
+              {`Pick sixteen Round of 16 teams. ${r16MatchRowsFilled} of 16 so far.`}
             </p>
           ) : null}
           {currentStepDef.mode === "bracket" &&
           currentStepDef.bracketKind === "quarterfinalist" &&
-          (fullBracketPicksUnlocked
-            ? qfMatchRowsFilled < 4
-            : qfMatchRowsFilled < 8) ? (
+          !fullBracketPicksUnlocked &&
+          qfMatchRowsFilled < 8 ? (
             <p className="mt-4 rounded-md border border-amber-700/40 bg-amber-950/25 px-3 py-2 text-sm text-amber-100">
-              {fullBracketPicksUnlocked
-                ? `Pick all four quarter-final matchups. ${qfMatchRowsFilled} of 4 so far.`
-                : `Pick all eight quarter-finalists. ${qfMatchRowsFilled} of 8 so far.`}
-            </p>
-          ) : null}
-          {currentStepDef.mode === "bracket" &&
-          currentStepDef.bracketKind === "semifinalist" &&
-          slots.filter((s) => s.predictionKind === "semifinalist" && s.teamId.trim())
-            .length < 4 ? (
-            <p className="mt-4 rounded-md border border-amber-700/40 bg-amber-950/25 px-3 py-2 text-sm text-amber-100">
-              Choose four semi-finalists on the previous step first.
+              {`Pick all eight quarter-finalists. ${qfMatchRowsFilled} of 8 so far.`}
             </p>
           ) : null}
           {currentStepDef.mode === "bracket" &&
           currentStepDef.bracketKind === "finalist" &&
-          fullBracketPicksUnlocked &&
-          currentKnockoutMatchRows?.some((r) => r.lockReason === "incomplete") ? (
-            <p className="mt-4 rounded-md border border-amber-700/40 bg-amber-950/25 px-3 py-2 text-sm text-amber-100">
-              {FINAL_MATCH_INCOMPLETE_MSG}
-            </p>
-          ) : currentStepDef.mode === "bracket" &&
-            currentStepDef.bracketKind === "finalist" &&
-            !fullBracketPicksUnlocked &&
-            slots.filter((s) => s.predictionKind === "finalist" && s.teamId.trim())
-              .length < 2 ? (
+          !fullBracketPicksUnlocked &&
+          slots.filter((s) => s.predictionKind === "finalist" && s.teamId.trim())
+            .length < 2 ? (
             <p className="mt-4 rounded-md border border-amber-700/40 bg-amber-950/25 px-3 py-2 text-sm text-amber-100">
               {FINAL_MATCH_INCOMPLETE_MSG}
             </p>

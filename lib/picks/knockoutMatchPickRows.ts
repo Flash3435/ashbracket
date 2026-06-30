@@ -537,7 +537,7 @@ function slotStageForWizardKind(
   return null;
 }
 
-type BuildKnockoutMatchPickRowsInput = {
+export type BuildKnockoutMatchPickRowsInput = {
   bracketKind: KnockoutWizardBracketKind;
   slots: KnockoutPickSlotDraft[];
   teams: Team[];
@@ -546,6 +546,137 @@ type BuildKnockoutMatchPickRowsInput = {
   knockoutBracketPicksUnlocked?: boolean;
   nowMs?: number;
 };
+
+/** Friendly copy for a pickable or upstream-blocked knockout matchup. */
+export function formatMissingKnockoutDependencyLabel(
+  row: KnockoutMatchPickRow,
+): string {
+  if (row.lockReason === "pickable" && !validatedKnockoutMatchWinner(row)) {
+    const matchup = row.display.emptyPrimaryLine;
+    if (
+      matchup &&
+      matchup !== "Pick needed" &&
+      !matchup.startsWith("Complete ")
+    ) {
+      return `Pick a winner for ${matchup} first.`;
+    }
+  }
+  if (row.fifaMatchNo > 0) {
+    return `Complete M${row.fifaMatchNo} first.`;
+  }
+  return row.display.emptyPrimaryLine ?? INCOMPLETE_UPSTREAM_MSG;
+}
+
+function upstreamFeederRowsForMatch(
+  row: KnockoutMatchPickRow,
+  bracketKind: KnockoutWizardBracketKind,
+  upstreamRows: KnockoutMatchPickRow[],
+): KnockoutMatchPickRow[] {
+  const slotStage = slotStageForWizardKind(bracketKind);
+  if (!slotStage) return [];
+  const pair = knockoutParticipantSlotPair(slotStage, row.matchIndex);
+  if (!pair) return [];
+  return pair
+    .map((slotKey) => upstreamRows[parseInt(slotKey, 10) - 1])
+    .filter((r): r is KnockoutMatchPickRow => Boolean(r));
+}
+
+/**
+ * Deepest actionable blocker for a knockout wizard step — pickable gaps first,
+ * then upstream incomplete feeders (e.g. a missing QF winner blocking M101).
+ */
+export function findDeepestBlockingKnockoutDependency(
+  input: BuildKnockoutMatchPickRowsInput,
+): string | null {
+  return findBlockingInKnockoutStep(input.bracketKind, input, new Set());
+}
+
+function findBlockingInKnockoutStep(
+  bracketKind: KnockoutWizardBracketKind,
+  input: BuildKnockoutMatchPickRowsInput,
+  visited: Set<KnockoutWizardBracketKind>,
+): string | null {
+  if (visited.has(bracketKind)) return null;
+  visited.add(bracketKind);
+
+  const rows = buildKnockoutMatchPickRows({ ...input, bracketKind });
+  const pickableMissing = rows.filter(
+    (r) => r.lockReason === "pickable" && !validatedKnockoutMatchWinner(r),
+  );
+  if (pickableMissing.length === 1) {
+    return formatMissingKnockoutDependencyLabel(pickableMissing[0]!);
+  }
+  if (pickableMissing.length > 1) {
+    const stageLabel =
+      knockoutMatchStepDef(bracketKind)?.stageLabel ?? "match";
+    return `${pickableMissing.length} ${stageLabel.toLowerCase()} picks remain.`;
+  }
+
+  const incompleteRows = rows.filter((r) => r.lockReason === "incomplete");
+  if (incompleteRows.length === 0) return null;
+
+  const upstreamKind = upstreamWizardKindForMatchSides(bracketKind);
+  if (!upstreamKind) {
+    const first = incompleteRows[0]!;
+    if (bracketKind === "round_of_16") {
+      return incompleteR16MatchMessage(
+        first.matchIndex,
+        input.slots,
+        confirmedR32WinnerContextFromBuildInput(input),
+      );
+    }
+    return first.display.emptyPrimaryLine ?? INCOMPLETE_UPSTREAM_MSG;
+  }
+
+  const upstreamRows = buildKnockoutMatchPickRows({
+    ...input,
+    bracketKind: upstreamKind,
+  });
+
+  for (const row of incompleteRows) {
+    for (const feeder of upstreamFeederRowsForMatch(
+      row,
+      bracketKind,
+      upstreamRows,
+    )) {
+      if (
+        feeder.lockReason === "pickable" &&
+        !validatedKnockoutMatchWinner(feeder)
+      ) {
+        return formatMissingKnockoutDependencyLabel(feeder);
+      }
+      if (feeder.lockReason === "incomplete") {
+        const deeper = findBlockingInKnockoutStep(
+          upstreamKind,
+          input,
+          visited,
+        );
+        if (deeper) return deeper;
+      }
+    }
+  }
+
+  const missingFeeders: KnockoutMatchPickRow[] = [];
+  for (const row of incompleteRows) {
+    for (const feeder of upstreamFeederRowsForMatch(
+      row,
+      bracketKind,
+      upstreamRows,
+    )) {
+      if (
+        feeder.lockReason === "pickable" &&
+        !validatedKnockoutMatchWinner(feeder)
+      ) {
+        missingFeeders.push(feeder);
+      }
+    }
+  }
+  if (missingFeeders.length === 1) {
+    return formatMissingKnockoutDependencyLabel(missingFeeders[0]!);
+  }
+
+  return incompleteRows[0]?.display.emptyPrimaryLine ?? INCOMPLETE_UPSTREAM_MSG;
+}
 
 function readMatchSides(
   def: KnockoutMatchStepDef,

@@ -4,9 +4,12 @@ import type { KnockoutPickSlotDraft } from "../../types/adminKnockoutPicks";
 import {
   buildKnockoutMatchProgress,
   firstActionableIncompleteKnockoutWizardStep,
+  getKnockoutStepCompletionFromDraftState,
+  getMissingFeederSummaryForStep,
   isKnockoutWizardStepComplete,
   resolveKnockoutProgressContext,
 } from "./knockoutMatchProgress";
+import { pruneOfficialKnockoutPathPicks } from "../predictions/pruneOfficialKnockoutPathPicks";
 import type { GradualKnockoutSelectionState } from "./gradualKnockoutUnlock";
 
 const teams: Team[] = [
@@ -327,6 +330,83 @@ function assertStepComplete(
     }),
     "round_of_16",
   );
+}
+
+// Official-path repair clearing a QF pick: QF step no longer complete
+{
+  const slots: KnockoutPickSlotDraft[] = [
+    ...fullR16Slots(),
+    qfSlot("1", "team-bra"), // invalid for M97 — M89 is Canada vs Germany
+    qfSlot("2", "team-can"),
+    qfSlot("3", "team-bra"),
+    qfSlot("4", "team-ned"),
+    qfSlot("5", "team-fra"),
+    qfSlot("6", "team-ger"),
+    qfSlot("7", "team-ned"),
+    qfSlot("8", "team-can"),
+    sfSlot("1", "team-ger"),
+    sfSlot("2", "team-fra"),
+    sfSlot("3", "team-bra"),
+    sfSlot("4", "team-ned"),
+    finSlot("1", "team-ger"),
+    finSlot("2", "team-fra"),
+    champSlot("team-ger"),
+  ];
+  const { slots: repaired, cleared } = pruneOfficialKnockoutPathPicks(slots);
+  assert.ok(
+    cleared.some(
+      (c) => c.predictionKind === "quarterfinalist" && c.slotKey === "1",
+    ),
+    "invalid R16 winner slot must be cleared",
+  );
+  const ctx = progressCtx(repaired);
+
+  assertStepComplete(repaired, "quarterfinalist", false);
+  assertStepComplete(repaired, "semifinalist", false);
+
+  const qfStatus = getKnockoutStepCompletionFromDraftState("quarterfinalist", ctx);
+  assert.strictEqual(qfStatus.complete, false);
+  assert.ok(
+    qfStatus.missingPickable > 0 || qfStatus.kind === "locked_upstream",
+    "QF must not appear complete when repair cleared an upstream pick",
+  );
+
+  const sfGate = getMissingFeederSummaryForStep("semifinalist", ctx);
+  assert.ok(sfGate);
+  assert.doesNotMatch(sfGate, /four semi-finalists/i);
+  assert.match(sfGate, /first\.|M\d+| vs /i);
+}
+
+// Step completion uses repaired draft slots, not stale persisted downstream picks
+{
+  const persisted: KnockoutPickSlotDraft[] = [
+    ...fullR16Slots(),
+    qfSlot("1", "team-bra"), // cleared on repair — persisted DB still had it
+    qfSlot("2", "team-can"),
+    qfSlot("3", "team-bra"),
+    qfSlot("4", "team-ned"),
+    qfSlot("5", "team-fra"),
+    qfSlot("6", "team-ger"),
+    qfSlot("7", "team-ned"),
+    qfSlot("8", "team-can"),
+    sfSlot("1", "team-ger"),
+    sfSlot("2", "team-fra"),
+    sfSlot("3", "team-bra"),
+    sfSlot("4", "team-ned"),
+    finSlot("1", "team-ger"),
+    finSlot("2", "team-fra"),
+    champSlot("team-ger"),
+  ];
+  const { slots: repaired, cleared } = pruneOfficialKnockoutPathPicks(persisted);
+  assert.ok(cleared.length > 0, "repair must clear at least one stale pick");
+  assert.strictEqual(
+    repaired.find((s) => s.predictionKind === "quarterfinalist" && s.slotKey === "1")
+      ?.teamId,
+    "",
+  );
+  assertStepComplete(repaired, "round_of_16", false);
+  assertStepComplete(repaired, "quarterfinalist", false);
+  assertStepComplete(persisted, "round_of_16", false);
 }
 
 console.log("knockoutMatchProgress.selftest.ts: ok");

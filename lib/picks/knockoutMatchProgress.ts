@@ -13,7 +13,7 @@ import {
   buildKnockoutMatchPickRows,
   countKnockoutMatchupsFilled,
   countPickableKnockoutMissing,
-  knockoutMatchStepComplete,
+  findDeepestBlockingKnockoutDependency,
   usesKnockoutMatchPickRows,
   type KnockoutWizardBracketKind,
 } from "./knockoutMatchPickRows";
@@ -45,6 +45,21 @@ export type KnockoutStepProgress = {
   total: number;
   missing: number;
   complete: boolean;
+};
+
+export type KnockoutWizardStepStatusKind =
+  | "complete"
+  | "needs_pick"
+  | "locked_upstream"
+  | "locked"
+  | "not_applicable";
+
+export type KnockoutWizardStepStatus = {
+  kind: KnockoutWizardStepStatusKind;
+  complete: boolean;
+  missingPickable: number;
+  totalPickable: number;
+  gateMessage: string | null;
 };
 
 export type KnockoutMatchProgress = {
@@ -164,6 +179,142 @@ function legacyR32StepProgress(slots: KnockoutPickSlotDraft[]): KnockoutStepProg
   const rows = slots.filter((s) => s.predictionKind === "round_of_32");
   const filled = rows.filter((s) => s.teamId.trim()).length;
   return stepProgressFromCounts("round_of_32", filled, rows.length);
+}
+
+function matchPickRowsInput(
+  bracketKind: KnockoutWizardBracketKind,
+  ctx: ResolvedKnockoutProgressContext,
+) {
+  return {
+    bracketKind,
+    slots: ctx.slots,
+    teams: ctx.teams,
+    tournamentMatches: ctx.tournamentMatches,
+    gradual: ctx.gradual,
+    knockoutBracketPicksUnlocked: ctx.officialRoundOf32Complete,
+    nowMs: ctx.nowMs,
+  };
+}
+
+function matchPickStepStatus(
+  bracketKind: KnockoutWizardBracketKind,
+  ctx: ResolvedKnockoutProgressContext,
+): KnockoutWizardStepStatus {
+  const progress = matchPickStepProgress(bracketKind, ctx);
+  const input = matchPickRowsInput(bracketKind, ctx);
+  const rows = buildKnockoutMatchPickRows(input);
+  const pickable = rows.filter((r) => r.lockReason === "pickable");
+  const hasIncomplete = rows.some((r) => r.lockReason === "incomplete");
+  const gateMessage = progress.complete
+    ? null
+    : findDeepestBlockingKnockoutDependency(input);
+
+  if (progress.complete) {
+    return {
+      kind: "complete",
+      complete: true,
+      missingPickable: 0,
+      totalPickable: pickable.length,
+      gateMessage: null,
+    };
+  }
+
+  if (progress.missing > 0) {
+    return {
+      kind: "needs_pick",
+      complete: false,
+      missingPickable: progress.missing,
+      totalPickable: pickable.length,
+      gateMessage,
+    };
+  }
+
+  if (hasIncomplete) {
+    return {
+      kind: "locked_upstream",
+      complete: false,
+      missingPickable: 0,
+      totalPickable: pickable.length,
+      gateMessage,
+    };
+  }
+
+  return {
+    kind: pickable.length === 0 ? "locked" : "locked_upstream",
+    complete: false,
+    missingPickable: 0,
+    totalPickable: pickable.length,
+    gateMessage,
+  };
+}
+
+/** Step pill / gate status from the current repaired knockout draft state. */
+export function getKnockoutStepCompletionFromDraftState(
+  bracketKind: KnockoutWizardBracketKindId,
+  ctx: ResolvedKnockoutProgressContext,
+): KnockoutWizardStepStatus {
+  if (bracketKind === "round_of_32") {
+    const progress = ctx.gradualR32MatchRows
+      ? gradualR32StepProgress(ctx)
+      : r32WinnerStorageStepProgress(ctx);
+    return {
+      kind: progress.complete
+        ? "complete"
+        : progress.missing > 0
+          ? "needs_pick"
+          : "locked",
+      complete: progress.complete,
+      missingPickable: progress.missing,
+      totalPickable: progress.total,
+      gateMessage: progress.complete
+        ? null
+        : progress.missing > 0
+          ? `${progress.missing} confirmed matchup${progress.missing === 1 ? "" : "s"} still need picks.`
+          : "Waiting for confirmed Round of 32 matchups.",
+    };
+  }
+
+  if (bracketKind === "champion") {
+    if (!ctx.fullBracketPicksUnlocked) {
+      return {
+        kind: "not_applicable",
+        complete: true,
+        missingPickable: 0,
+        totalPickable: 0,
+        gateMessage: null,
+      };
+    }
+    return matchPickStepStatus("finalist", ctx);
+  }
+
+  if (
+    ctx.fullBracketPicksUnlocked &&
+    usesKnockoutMatchPickRows(bracketKind, true)
+  ) {
+    return matchPickStepStatus(bracketKind as KnockoutWizardBracketKind, ctx);
+  }
+
+  const rows = ctx.slots.filter((s) => s.predictionKind === bracketKind);
+  const missing = rows.filter((s) => !s.teamId.trim()).length;
+  const complete = rows.length > 0 && missing === 0;
+  return {
+    kind: complete ? "complete" : missing > 0 ? "needs_pick" : "locked",
+    complete,
+    missingPickable: missing,
+    totalPickable: rows.length,
+    gateMessage: complete
+      ? null
+      : `${missing} pick${missing === 1 ? "" : "s"} remain.`,
+  };
+}
+
+/** Section gate copy naming the first missing upstream feeder when possible. */
+export function getMissingFeederSummaryForStep(
+  bracketKind: KnockoutWizardBracketKindId,
+  ctx: ResolvedKnockoutProgressContext,
+): string | null {
+  const status = getKnockoutStepCompletionFromDraftState(bracketKind, ctx);
+  return status.complete ? null : status.gateMessage;
 }
 
 function matchPickStepProgress(
