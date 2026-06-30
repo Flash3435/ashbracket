@@ -627,7 +627,11 @@ function r32Side(slotKey: string, teamId = ""): KnockoutPickSlotDraft {
     gradual: emptyGradual,
   });
   assert.strictEqual(rows[0]!.lockReason, "incomplete");
-  assert.strictEqual(rows[0]!.display.statusLine, FINAL_MATCH_INCOMPLETE_MSG);
+  assert.match(
+    rows[0]!.display.statusLine!,
+    /M74|semi-final|Pick a winner/i,
+  );
+  assert.notStrictEqual(rows[0]!.display.statusLine, FINAL_MATCH_INCOMPLETE_MSG);
 }
 
 // Saving final winner writes champion slot only from finalists

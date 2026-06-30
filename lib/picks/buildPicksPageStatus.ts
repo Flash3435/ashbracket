@@ -1,11 +1,13 @@
 import type { KnockoutPickSlotDraft } from "../../types/adminKnockoutPicks";
 import type { Team } from "../../src/types/domain";
 import type { TournamentMatchPublicRow } from "../../types/tournamentPublic";
+import type { ClearedKnockoutPathPick } from "../predictions/pruneOfficialKnockoutPathPicks";
 import { buildParticipantDashboardMissingKnockoutPicks } from "../admin/adminKnockoutPickStatus";
 import { formatDashboardMissingKnockoutCopy } from "../dashboard/buildDashboardMissingPicks";
 import { getGradualKnockoutSelectionState } from "./gradualKnockoutUnlock";
 import type { KnockoutSelectionInstructionCardModel } from "./knockoutSelectionWindow";
 import { deriveKnockoutSelectionSchedule } from "./knockoutSelectionWindow";
+import { getKnockoutRepairActionSummary } from "./knockoutWizardAction";
 
 export type PicksPageStatusKind =
   | "path_reconciliation"
@@ -39,14 +41,24 @@ export function buildPicksPageStatusModel(input: {
   tournamentMatches?: TournamentMatchPublicRow[] | null;
   officialRoundOf32Complete: boolean;
   knockoutPathRepairUnsaved?: boolean;
+  knockoutPathClearedPicks?: ClearedKnockoutPathPick[];
   nowMs?: number;
 }): PicksPageStatusModel {
   if (input.knockoutPathRepairUnsaved) {
+    const repairSummary = getKnockoutRepairActionSummary(
+      {
+        slots: input.slots,
+        teams: input.teams,
+        tournamentMatches: input.tournamentMatches,
+        officialRoundOf32Complete: input.officialRoundOf32Complete,
+        nowMs: input.nowMs,
+      },
+      input.knockoutPathClearedPicks ?? [],
+    );
     return {
       kind: "path_reconciliation",
-      headline: "Review updated knockout picks",
-      detail:
-        "Some later-round picks no longer fit the official path and were cleared. Save your picks to confirm the updated bracket.",
+      headline: repairSummary.headline,
+      detail: repairSummary.detail,
       tone: "warning",
       ctaLabel: "Save picks",
       ctaAction: "save",

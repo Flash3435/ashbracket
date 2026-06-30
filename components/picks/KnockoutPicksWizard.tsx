@@ -1101,6 +1101,7 @@ export function KnockoutPicksWizard({
             tournamentMatches,
             officialRoundOf32Complete: knockoutBracketPicksUnlocked,
             knockoutPathRepairUnsaved,
+            knockoutPathClearedPicks: knockoutPathRepairOnLoad.cleared,
           })
         : null,
     [
@@ -1110,6 +1111,7 @@ export function KnockoutPicksWizard({
       tournamentMatches,
       knockoutBracketPicksUnlocked,
       knockoutPathRepairUnsaved,
+      knockoutPathRepairOnLoad.cleared,
     ],
   );
   const picksPageCompactLockNote = useMemo(

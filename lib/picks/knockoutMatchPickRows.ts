@@ -259,6 +259,22 @@ export function readOfficialR32MatchResultWinner(
   return officialR32ResultWinner(matchIndex, ctx);
 }
 
+/** Official knockout winner from a published M89–M104 fixture (not participant picks). */
+export function officialKnockoutMatchResultWinner(
+  fifaMatchNo: number,
+  stageCode: string,
+  teams: Team[],
+  tournamentMatches?: TournamentMatchPublicRow[] | null,
+): string | null {
+  if (!teams.length || fifaMatchNo <= 0) return null;
+  const stageMatches = (tournamentMatches ?? []).filter(
+    (m) => m.stage_code === stageCode,
+  );
+  const pub = publicMatchForFifaNo(stageMatches, stageCode, fifaMatchNo);
+  if (!pub?.winner_country_code?.trim()) return null;
+  return teamIdForCountryCode(teams, pub.winner_country_code);
+}
+
 function isTeamInR32Match(
   teamId: string,
   topId: string | null,
@@ -497,6 +513,44 @@ export function validatedKnockoutMatchWinner(
   return null;
 }
 
+/**
+ * Bracket progression winner: valid participant pick, otherwise the published
+ * fixture result when the row is locked by official feeders or kickoff.
+ */
+export function readConfirmedKnockoutMatchWinner(
+  row: KnockoutMatchPickRow,
+  bracketKind: KnockoutWizardBracketKind,
+  input: BuildKnockoutMatchPickRowsInput,
+): string | null {
+  const participant = validatedKnockoutMatchWinner(row);
+  if (participant) return participant;
+
+  const def = knockoutMatchStepDef(bracketKind);
+  if (!def) return null;
+
+  const official = officialKnockoutMatchResultWinner(
+    row.fifaMatchNo,
+    def.stageCode,
+    input.teams,
+    input.tournamentMatches,
+  );
+  if (!official) return null;
+  if (row.homeTeamId && row.awayTeamId) {
+    if (official === row.homeTeamId || official === row.awayTeamId) {
+      return official;
+    }
+    return null;
+  }
+  return official;
+}
+
+function buildInputForBracketKind(
+  input: BuildKnockoutMatchPickRowsInput,
+  bracketKind: KnockoutWizardBracketKind,
+): BuildKnockoutMatchPickRowsInput {
+  return { ...input, bracketKind };
+}
+
 export function isKnockoutMatchDirectPickEligible(
   row: KnockoutMatchPickRow,
 ): boolean {
@@ -550,6 +604,7 @@ export type BuildKnockoutMatchPickRowsInput = {
 /** Friendly copy for a pickable or upstream-blocked knockout matchup. */
 export function formatMissingKnockoutDependencyLabel(
   row: KnockoutMatchPickRow,
+  options?: { clearedByRepair?: boolean },
 ): string {
   if (row.lockReason === "pickable" && !validatedKnockoutMatchWinner(row)) {
     const matchup = row.display.emptyPrimaryLine;
@@ -558,12 +613,68 @@ export function formatMissingKnockoutDependencyLabel(
       matchup !== "Pick needed" &&
       !matchup.startsWith("Complete ")
     ) {
+      if (options?.clearedByRepair) {
+        return `This pick was cleared because it no longer fits the official path. Pick a winner for ${matchup}.`;
+      }
       return `Pick a winner for ${matchup} first.`;
+    }
+    if (options?.clearedByRepair) {
+      return "This pick was cleared because it no longer fits the official path.";
     }
   }
   if (row.fifaMatchNo > 0) {
     return `Complete M${row.fifaMatchNo} first.`;
   }
+  return row.display.emptyPrimaryLine ?? INCOMPLETE_UPSTREAM_MSG;
+}
+
+/** Row gate copy when sides are unknown — names the first unresolved upstream feeder. */
+export function upstreamIncompleteMessageForRow(
+  row: KnockoutMatchPickRow,
+  bracketKind: KnockoutWizardBracketKind,
+  input: BuildKnockoutMatchPickRowsInput,
+): string {
+  if (bracketKind === "round_of_16") {
+    return incompleteR16MatchMessage(
+      row.matchIndex,
+      input.slots,
+      confirmedR32WinnerContextFromBuildInput(input),
+    );
+  }
+
+  const upstreamKind = upstreamWizardKindForMatchSides(bracketKind);
+  if (!upstreamKind) {
+    return row.display.emptyPrimaryLine ?? INCOMPLETE_UPSTREAM_MSG;
+  }
+
+  const upstreamRows = buildKnockoutMatchPickRows(
+    buildInputForBracketKind(input, upstreamKind),
+  );
+  const upstreamInput = buildInputForBracketKind(input, upstreamKind);
+
+  for (const feeder of upstreamFeederRowsForMatch(
+    row,
+    bracketKind,
+    upstreamRows,
+  )) {
+    if (readConfirmedKnockoutMatchWinner(feeder, upstreamKind, upstreamInput)) {
+      continue;
+    }
+    if (feeder.lockReason === "pickable") {
+      return formatMissingKnockoutDependencyLabel(feeder);
+    }
+    if (feeder.lockReason === "incomplete") {
+      const deeper = upstreamIncompleteMessageForRow(
+        feeder,
+        upstreamKind,
+        input,
+      );
+      if (deeper && deeper !== INCOMPLETE_UPSTREAM_MSG) {
+        return deeper;
+      }
+    }
+  }
+
   return row.display.emptyPrimaryLine ?? INCOMPLETE_UPSTREAM_MSG;
 }
 
@@ -639,10 +750,11 @@ function findBlockingInKnockoutStep(
       bracketKind,
       upstreamRows,
     )) {
-      if (
-        feeder.lockReason === "pickable" &&
-        !validatedKnockoutMatchWinner(feeder)
-      ) {
+      const upstreamInput = buildInputForBracketKind(input, upstreamKind);
+      if (readConfirmedKnockoutMatchWinner(feeder, upstreamKind, upstreamInput)) {
+        continue;
+      }
+      if (feeder.lockReason === "pickable") {
         return formatMissingKnockoutDependencyLabel(feeder);
       }
       if (feeder.lockReason === "incomplete") {
@@ -663,10 +775,11 @@ function findBlockingInKnockoutStep(
       bracketKind,
       upstreamRows,
     )) {
-      if (
-        feeder.lockReason === "pickable" &&
-        !validatedKnockoutMatchWinner(feeder)
-      ) {
+      const upstreamInput = buildInputForBracketKind(input, upstreamKind);
+      if (readConfirmedKnockoutMatchWinner(feeder, upstreamKind, upstreamInput)) {
+        continue;
+      }
+      if (feeder.lockReason === "pickable") {
         missingFeeders.push(feeder);
       }
     }
@@ -675,7 +788,12 @@ function findBlockingInKnockoutStep(
     return formatMissingKnockoutDependencyLabel(missingFeeders[0]!);
   }
 
-  return incompleteRows[0]?.display.emptyPrimaryLine ?? INCOMPLETE_UPSTREAM_MSG;
+  const firstIncomplete = incompleteRows[0];
+  if (firstIncomplete) {
+    return upstreamIncompleteMessageForRow(firstIncomplete, bracketKind, input);
+  }
+
+  return INCOMPLETE_UPSTREAM_MSG;
 }
 
 function readMatchSides(
@@ -721,9 +839,16 @@ function readMatchSides(
   const rows = upstreamRows(upstreamKind);
   const homeIdx = parseInt(slotPair[0], 10) - 1;
   const awayIdx = parseInt(slotPair[1], 10) - 1;
+  const upstreamInput = buildInputForBracketKind(input, upstreamKind);
+  const homeRow = rows[homeIdx];
+  const awayRow = rows[awayIdx];
   return {
-    homeTeamId: validatedKnockoutMatchWinner(rows[homeIdx]),
-    awayTeamId: validatedKnockoutMatchWinner(rows[awayIdx]),
+    homeTeamId: homeRow
+      ? readConfirmedKnockoutMatchWinner(homeRow, upstreamKind, upstreamInput)
+      : null,
+    awayTeamId: awayRow
+      ? readConfirmedKnockoutMatchWinner(awayRow, upstreamKind, upstreamInput)
+      : null,
   };
 }
 
@@ -816,21 +941,37 @@ export function buildKnockoutMatchPickRows(
       lockReason = "frozen";
     }
 
-    const r32Ctx = confirmedR32WinnerContextFromBuildInput(input);
-    const incompleteMsg =
-      def.wizardBracketKind === "round_of_16" && lockReason === "incomplete"
-        ? incompleteR16MatchMessage(matchIndex, input.slots, r32Ctx)
-        : def.wizardBracketKind === "quarterfinalist" && lockReason === "incomplete"
-          ? "Complete Round of 16 picks first."
-          : def.wizardBracketKind === "semifinalist" && lockReason === "incomplete"
-            ? "Complete quarter-final picks first."
-            : def.wizardBracketKind === "finalist" && lockReason === "incomplete"
-              ? FINAL_MATCH_INCOMPLETE_MSG
-              : INCOMPLETE_UPSTREAM_MSG;
-
     const homeName = teamName(homeTeamId, input.teams);
     const awayName = teamName(awayTeamId, input.teams);
     const kickoffIso = publicMatch?.kickoff_at?.trim() || null;
+
+    const incompleteMsg =
+      lockReason === "incomplete"
+        ? upstreamIncompleteMessageForRow(
+            {
+              matchIndex,
+              fifaMatchNo,
+              rowKey: "",
+              saveRowKey: "",
+              savePredictionKind: def.resultKind,
+              saveSlotKey,
+              homeTeamId,
+              awayTeamId,
+              winnerTeamId,
+              lockReason,
+              display: matchRowDisplay(
+                def.stageLabel,
+                fifaMatchNo,
+                homeName,
+                awayName,
+                lockReason,
+              ),
+              kickoffIso,
+            },
+            def.wizardBracketKind,
+            input,
+          )
+        : INCOMPLETE_UPSTREAM_MSG;
 
     return {
       matchIndex,

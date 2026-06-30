@@ -9,8 +9,17 @@ import {
   isKnockoutWizardStepComplete,
   resolveKnockoutProgressContext,
 } from "./knockoutMatchProgress";
+import {
+  buildKnockoutMatchPickRows,
+  readConfirmedKnockoutMatchWinner,
+} from "./knockoutMatchPickRows";
+import {
+  findFirstKnockoutWizardActionNeeded,
+  getKnockoutRepairActionSummary,
+} from "./knockoutWizardAction";
 import { pruneOfficialKnockoutPathPicks } from "../predictions/pruneOfficialKnockoutPathPicks";
 import type { GradualKnockoutSelectionState } from "./gradualKnockoutUnlock";
+import type { TournamentMatchPublicRow } from "../../types/tournamentPublic";
 
 const teams: Team[] = [
   {
@@ -375,6 +384,311 @@ function assertStepComplete(
   assert.ok(sfGate);
   assert.doesNotMatch(sfGate, /four semi-finalists/i);
   assert.match(sfGate, /first\.|M\d+| vs /i);
+  assert.doesNotMatch(sfGate, /Complete Round of 16 picks first/i);
+}
+
+// Official R16 feeder result counts as resolved for QF availability
+{
+  const tournamentMatches: TournamentMatchPublicRow[] = [
+    {
+      match_id: "m74",
+      edition_id: "ed",
+      edition_code: "2026",
+      match_code: "M74",
+      stage_code: "round_of_32",
+      stage_label: "Round of 32",
+      stage_sort_order: 2,
+      group_code: null,
+      round_index: 1,
+      kickoff_at: "2026-07-01T18:00:00Z",
+      status: "finished",
+      home_goals: 2,
+      away_goals: 0,
+      home_penalties: null,
+      away_penalties: null,
+      home_team_name: "Germany",
+      home_country_code: "GER",
+      away_team_name: "France",
+      away_country_code: "FRA",
+      winner_team_name: "Germany",
+      winner_country_code: "GER",
+    },
+    {
+      match_id: "m77",
+      edition_id: "ed",
+      edition_code: "2026",
+      match_code: "M77",
+      stage_code: "round_of_32",
+      stage_label: "Round of 32",
+      stage_sort_order: 2,
+      group_code: null,
+      round_index: 4,
+      kickoff_at: "2026-07-01T21:00:00Z",
+      status: "finished",
+      home_goals: 1,
+      away_goals: 0,
+      home_penalties: null,
+      away_penalties: null,
+      home_team_name: "Canada",
+      home_country_code: "CAN",
+      away_team_name: "Mexico",
+      away_country_code: "MEX",
+      winner_team_name: "Canada",
+      winner_country_code: "CAN",
+    },
+    {
+      match_id: "m73",
+      edition_id: "ed",
+      edition_code: "2026",
+      match_code: "M73",
+      stage_code: "round_of_32",
+      stage_label: "Round of 32",
+      stage_sort_order: 2,
+      group_code: null,
+      round_index: 0,
+      kickoff_at: "2026-07-01T15:00:00Z",
+      status: "finished",
+      home_goals: 2,
+      away_goals: 1,
+      home_penalties: null,
+      away_penalties: null,
+      home_team_name: "Netherlands",
+      home_country_code: "NED",
+      away_team_name: "USA",
+      away_country_code: "USA",
+      winner_team_name: "Netherlands",
+      winner_country_code: "NED",
+    },
+    {
+      match_id: "m75",
+      edition_id: "ed",
+      edition_code: "2026",
+      match_code: "M75",
+      stage_code: "round_of_32",
+      stage_label: "Round of 32",
+      stage_sort_order: 2,
+      group_code: null,
+      round_index: 2,
+      kickoff_at: "2026-07-01T18:00:00Z",
+      status: "finished",
+      home_goals: 0,
+      away_goals: 1,
+      home_penalties: null,
+      away_penalties: null,
+      home_team_name: "Brazil",
+      home_country_code: "BRA",
+      away_team_name: "Japan",
+      away_country_code: "JPN",
+      winner_team_name: "Brazil",
+      winner_country_code: "BRA",
+    },
+    {
+      match_id: "m89",
+      edition_id: "ed",
+      edition_code: "2026",
+      match_code: "M89",
+      stage_code: "round_of_16",
+      stage_label: "Round of 16",
+      stage_sort_order: 3,
+      group_code: null,
+      round_index: 0,
+      kickoff_at: "2026-07-05T18:00:00Z",
+      status: "finished",
+      home_goals: 2,
+      away_goals: 1,
+      home_penalties: null,
+      away_penalties: null,
+      home_team_name: "Germany",
+      home_country_code: "GER",
+      away_team_name: "Canada",
+      away_country_code: "CAN",
+      winner_team_name: "Germany",
+      winner_country_code: "GER",
+    },
+    {
+      match_id: "m90",
+      edition_id: "ed",
+      edition_code: "2026",
+      match_code: "M90",
+      stage_code: "round_of_16",
+      stage_label: "Round of 16",
+      stage_sort_order: 3,
+      group_code: null,
+      round_index: 1,
+      kickoff_at: "2026-07-05T21:00:00Z",
+      status: "finished",
+      home_goals: 1,
+      away_goals: 0,
+      home_penalties: null,
+      away_penalties: null,
+      home_team_name: "Netherlands",
+      home_country_code: "NED",
+      away_team_name: "Brazil",
+      away_country_code: "BRA",
+      winner_team_name: "Netherlands",
+      winner_country_code: "NED",
+    },
+  ];
+  const slots: KnockoutPickSlotDraft[] = [
+    qfSlot("1", ""),
+    qfSlot("2", ""),
+    qfSlot("3", "team-bra"),
+    qfSlot("4", "team-ned"),
+    qfSlot("5", "team-fra"),
+    qfSlot("6", "team-ger"),
+    qfSlot("7", "team-ned"),
+    qfSlot("8", "team-can"),
+    sfSlot("1", ""),
+    sfSlot("2", "team-fra"),
+    sfSlot("3", "team-bra"),
+    sfSlot("4", "team-ned"),
+    finSlot("1", "team-ger"),
+    finSlot("2", "team-fra"),
+    champSlot("team-ger"),
+  ];
+  const ctx = resolveKnockoutProgressContext({
+    slots,
+    teams,
+    tournamentMatches,
+    officialRoundOf32Complete: true,
+  });
+  const qfRows = buildKnockoutMatchPickRows({
+    bracketKind: "quarterfinalist",
+    slots,
+    teams,
+    tournamentMatches,
+    gradual: emptyGradual,
+    knockoutBracketPicksUnlocked: true,
+  });
+  const m97 = qfRows.find((r) => r.fifaMatchNo === 97)!;
+  assert.strictEqual(m97.homeTeamId, "team-ger");
+  assert.strictEqual(m97.awayTeamId, "team-ned");
+  assert.notStrictEqual(m97.lockReason, "incomplete");
+  assert.ok(
+    m97.lockReason === "pickable" || m97.lockReason === "frozen",
+    `expected pickable or frozen, got ${m97.lockReason}`,
+  );
+
+  const r16Rows = buildKnockoutMatchPickRows({
+    bracketKind: "round_of_16",
+    slots,
+    teams,
+    tournamentMatches,
+    gradual: emptyGradual,
+    knockoutBracketPicksUnlocked: true,
+  });
+  const m89 = r16Rows.find((r) => r.fifaMatchNo === 89)!;
+  assert.strictEqual(
+    readConfirmedKnockoutMatchWinner(m89, "round_of_16", {
+      bracketKind: "round_of_16",
+      slots,
+      teams,
+      tournamentMatches,
+      knockoutBracketPicksUnlocked: true,
+    }),
+    "team-ger",
+  );
+
+  const qfGate = getMissingFeederSummaryForStep("quarterfinalist", ctx);
+  if (qfGate) {
+    assert.doesNotMatch(qfGate, /Complete Round of 16 picks first/i);
+  }
+  assert.doesNotMatch(
+    m97.display.emptyPrimaryLine ?? "",
+    /Complete Round of 16 picks first/i,
+  );
+}
+
+// Repair-cleared R16 winner is reported on the R16 step, not as generic upstream block
+{
+  const slots: KnockoutPickSlotDraft[] = [
+    ...fullR16Slots(),
+    qfSlot("1", "team-bra"),
+    qfSlot("2", "team-can"),
+    qfSlot("3", "team-bra"),
+    qfSlot("4", "team-ned"),
+    qfSlot("5", "team-fra"),
+    qfSlot("6", "team-ger"),
+    qfSlot("7", "team-ned"),
+    qfSlot("8", "team-can"),
+    sfSlot("1", "team-ger"),
+    sfSlot("2", "team-fra"),
+    sfSlot("3", "team-bra"),
+    sfSlot("4", "team-ned"),
+    finSlot("1", "team-ger"),
+    finSlot("2", "team-fra"),
+    champSlot("team-ger"),
+  ];
+  const { slots: repaired, cleared } = pruneOfficialKnockoutPathPicks(slots);
+  const progressInput = {
+    slots: repaired,
+    teams,
+    officialRoundOf32Complete: true,
+  };
+  const action = findFirstKnockoutWizardActionNeeded(progressInput, {
+    clearedPicks: cleared,
+  });
+  assert.ok(action);
+  assert.strictEqual(action!.bracketKind, "round_of_16");
+  assert.match(action!.statusCardDetail, /cleared|Pick a winner/i);
+  assert.doesNotMatch(
+    action!.sectionGateMessage,
+    /Complete Round of 16 picks first/i,
+  );
+
+  const repairSummary = getKnockoutRepairActionSummary(progressInput, cleared);
+  assert.match(repairSummary.detail, /Pick a winner|cleared/i);
+  assert.doesNotMatch(repairSummary.detail, /Complete Round of 16 picks first/i);
+}
+
+// Repair-cleared QF pick is reported as QF action, not R16 missing
+{
+  const slots: KnockoutPickSlotDraft[] = [
+    ...fullR16Slots(),
+    qfSlot("1", "team-ger"),
+    qfSlot("2", "team-can"),
+    qfSlot("3", "team-bra"),
+    qfSlot("4", "team-ned"),
+    qfSlot("5", "team-fra"),
+    qfSlot("6", "team-ger"),
+    qfSlot("7", "team-ned"),
+    qfSlot("8", "team-can"),
+    sfSlot("1", "team-bra"), // invalid for M97 when feeders are GER vs CAN
+    sfSlot("2", "team-fra"),
+    sfSlot("3", "team-bra"),
+    sfSlot("4", "team-ned"),
+    finSlot("1", "team-ger"),
+    finSlot("2", "team-fra"),
+    champSlot("team-ger"),
+  ];
+  const { slots: repaired, cleared } = pruneOfficialKnockoutPathPicks(slots);
+  assert.ok(
+    cleared.some(
+      (c) => c.predictionKind === "semifinalist" && c.slotKey === "1",
+    ),
+  );
+  const progressInput = {
+    slots: repaired,
+    teams,
+    officialRoundOf32Complete: true,
+  };
+  const action = findFirstKnockoutWizardActionNeeded(progressInput, {
+    clearedPicks: cleared,
+  });
+  assert.ok(action);
+  assert.strictEqual(action!.bracketKind, "quarterfinalist");
+  assert.match(action!.statusCardDetail, /cleared|Pick a winner/i);
+  assert.doesNotMatch(
+    action!.sectionGateMessage,
+    /Complete Round of 16 picks first/i,
+  );
+
+  const qfGate = getMissingFeederSummaryForStep(
+    "quarterfinalist",
+    progressCtx(repaired),
+  );
+  assert.ok(qfGate);
+  assert.doesNotMatch(qfGate, /Complete Round of 16 picks first/i);
 }
 
 // Step completion uses repaired draft slots, not stale persisted downstream picks

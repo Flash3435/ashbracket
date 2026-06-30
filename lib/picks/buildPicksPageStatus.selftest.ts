@@ -19,7 +19,7 @@ import {
   });
   assert.equal(model.kind, "path_reconciliation");
   assert.equal(model.headline, "Review updated knockout picks");
-  assert.match(model.detail, /cleared/);
+  assert.match(model.detail, /cleared|bracket|save/i);
   assert.equal(model.ctaLabel, "Save picks");
   assert.equal(model.ctaAction, "save");
 }
