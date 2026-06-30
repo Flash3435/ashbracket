@@ -91,6 +91,7 @@ import {
 } from "../../lib/picks/knockoutMatchPickRows";
 import { KnockoutMatchDirectTeamPick } from "./KnockoutMatchTeamPick";
 import { isKnockoutProgressionKind } from "../../lib/predictions/knockoutProgressionKinds";
+import { isKnockoutPickEditableForParticipant } from "../../lib/picks/knockoutPickEditability";
 import {
   applyKnockoutPickCorrection,
   resolveKnockoutPickCorrectionMatch,
@@ -1075,34 +1076,17 @@ export function KnockoutPicksWizard({
     if (coreDisabled || (preBracketActive && isPreBracketPickSlot(row))) {
       return true;
     }
-    if (isGradualR32WinnerPickRow(row, useLegacyR32SlotUi)) {
-      const gradualRow = gradualR32MatchRowsByKey?.get(row.rowKey);
-      return gradualRow?.lockReason !== "pickable";
-    }
-    if (row.predictionKind === "round_of_32" && !knockoutBracketPicksUnlocked) {
-      const reason = r32SlotLockReason(
-        row.slotKey,
-        gradualKnockout,
-        knockoutBracketPicksUnlocked,
-      );
-      return reason !== "pickable";
-    }
-    if (
-      isKnockoutProgressionKind(row.predictionKind) &&
-      !fullBracketPicksUnlocked
-    ) {
+    if (!knockoutPicksAccessible && isKnockoutProgressionKind(row.predictionKind)) {
       return true;
     }
-    if (
-      row.predictionKind === "round_of_32" &&
-      knockoutBracketPicksUnlocked
-    ) {
-      const reason = r32SlotLockReason(
-        row.slotKey,
-        gradualKnockout,
-        knockoutBracketPicksUnlocked,
-      );
-      return reason === "started";
+    if (isKnockoutProgressionKind(row.predictionKind)) {
+      return !isKnockoutPickEditableForParticipant({
+        predictionKind: row.predictionKind,
+        slotKey: row.slotKey,
+        tournamentMatches,
+        gradual: gradualKnockout,
+        fullRoundOf32Official: knockoutBracketPicksUnlocked,
+      });
     }
     return false;
   }
@@ -1316,6 +1300,7 @@ export function KnockoutPicksWizard({
         row &&
         isGradualR32WinnerPickRow(row, useLegacyR32SlotUi)
       ) {
+        if (pickRowDisabled(row)) return prev;
         const matchIndex = r32MatchIndexForR16SlotKey(row.slotKey);
         if (matchIndex < 0) return prev;
         return applyGradualR32MatchWinnerToSlots(
@@ -2413,6 +2398,19 @@ export function KnockoutPicksWizard({
                               }
                             >
                               {teamPickMetaLine(team, strength)}
+                            </p>
+                          ) : null}
+                          {gradualMatchRow?.participantPickEliminated ? (
+                            <p className="text-xs font-medium text-rose-300/90">
+                              Your pick is out
+                            </p>
+                          ) : null}
+                          {gradualMatchRow?.participantPickEliminated &&
+                          gradualMatchRow.officialResultTeamId ? (
+                            <p className="text-xs text-ash-muted">
+                              Official:{" "}
+                              {teamById.get(gradualMatchRow.officialResultTeamId)
+                                ?.name ?? "Winner"}
                             </p>
                           ) : null}
                         </div>

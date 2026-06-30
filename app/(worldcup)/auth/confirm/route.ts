@@ -16,10 +16,7 @@ export async function GET(request: NextRequest) {
   const loginPath =
     rawNext && (rawNext === "/nhl" || rawNext.startsWith("/nhl/"))
       ? "/nhl/login"
-      : rawNext &&
-          (rawNext === "/nhldraft26" || rawNext.startsWith("/nhldraft26/"))
-        ? "/nhldraft26/login"
-        : "/login";
+      : "/login";
 
   if (!code) {
     return NextResponse.redirect(

@@ -8,6 +8,9 @@ import {
 } from "../bracket/wc2026RoundOf32";
 import { isKnockoutProgressionKind } from "../predictions/knockoutProgressionKinds";
 import { kickoffSortMs } from "../tournament/sortTournamentMatches";
+import {
+  hasOfficialKnockoutMatchResult,
+} from "./knockoutPickEditability";
 import { isMatchStarted } from "./knockoutSelectionWindow";
 
 export const R32_MATCHUP_NOT_CONFIRMED = "Matchup not confirmed yet";
@@ -288,7 +291,12 @@ export type GradualR32MatchPickRow = {
   fifaMatchNo: number;
   rowKey: string;
   saveSlotKey: string;
+  /** Participant's saved winner for this matchup (never the official result). */
   winnerTeamId: string;
+  /** Official tournament winner when published; may differ from `winnerTeamId`. */
+  officialResultTeamId: string | null;
+  /** Saved participant pick lost vs the official result. */
+  participantPickEliminated: boolean;
   lockReason: R32SlotLockReason;
   display: R32SlotRowDisplay;
 };
@@ -315,17 +323,30 @@ export function buildGradualR32MatchPickRows(input: {
       ms,
       input.fullRoundOf32Official,
     );
+    const winnerTeamId = readGradualR32MatchWinner(
+      matchIndex,
+      input.slots,
+      input.teams,
+      ms,
+    );
+    const officialCode = ms.publicMatch?.winner_country_code?.trim();
+    const officialResultTeamId = officialCode
+      ? (teamIdByCountryCode(input.teams).get(normalizeCountryCode(officialCode)) ??
+        null)
+      : null;
+    const participantPickEliminated = Boolean(
+      winnerTeamId &&
+        officialResultTeamId &&
+        winnerTeamId !== officialResultTeamId,
+    );
     return {
       matchIndex,
       fifaMatchNo: ms.fifaMatchNo,
       rowKey: slotRow?.rowKey ?? `round_of_16|${matchIndex + 1}`,
       saveSlotKey: r16SlotKeyForR32MatchIndex(matchIndex),
-      winnerTeamId: readGradualR32MatchWinner(
-        matchIndex,
-        input.slots,
-        input.teams,
-        ms,
-      ),
+      winnerTeamId,
+      officialResultTeamId,
+      participantPickEliminated,
       lockReason,
       display: r32MatchRowDisplay(
         ms,
@@ -549,8 +570,8 @@ export function r32SlotLockReason(
 ): R32SlotLockReason {
   if (fullRoundOf32Official) {
     const ms = matchStateForR32Slot(slotKey, state);
-    if (ms?.started) return "started";
-    return "pickable";
+    if (!ms) return "pickable";
+    return gradualR32MatchLockReason(ms, fullRoundOf32Official);
   }
   const ms = matchStateForR32Slot(slotKey, state);
   return ms ? gradualR32MatchLockReason(ms, fullRoundOf32Official) : "unconfirmed";
@@ -560,6 +581,10 @@ export function gradualR32MatchLockReason(
   ms: R32MatchUnlockState,
   fullRoundOf32Official: boolean,
 ): R32SlotLockReason {
+  if (ms.started) return "started";
+  if (ms.publicMatch && hasOfficialKnockoutMatchResult(ms.publicMatch)) {
+    return "started";
+  }
   if (fullRoundOf32Official) {
     if (ms.started) return "started";
     return "pickable";
@@ -789,8 +814,14 @@ export function validateKnockoutMatchPick(
   if (!match.confirmed) {
     return R32_MATCHUP_NOT_CONFIRMED;
   }
-  if (isMatchStarted(match.publicMatch, nowMs)) {
+  if (match.started) {
     return "This match has already kicked off and can no longer be edited.";
+  }
+  if (
+    match.publicMatch &&
+    hasOfficialKnockoutMatchResult(match.publicMatch)
+  ) {
+    return "This match is locked because an official result is published.";
   }
 
   const allowed = allowedTeamsForGradualR32Slot(

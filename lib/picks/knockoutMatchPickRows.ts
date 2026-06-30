@@ -13,6 +13,7 @@ import {
   readGradualR32MatchWinner,
   r16SlotKeyForR32MatchIndex,
 } from "./gradualKnockoutUnlock";
+import { isKnockoutMatchLockedForParticipant } from "./knockoutPickEditability";
 import { isMatchStarted } from "./knockoutSelectionWindow";
 
 export type KnockoutWizardBracketKind =
@@ -245,6 +246,14 @@ function officialR32ResultWinner(
   const pub = r32PublicMatchForIndex(ctx.tournamentMatches, matchIndex);
   if (!pub?.winner_country_code?.trim()) return null;
   return teamIdForCountryCode(ctx.teams, pub.winner_country_code);
+}
+
+/** Official R32 winner from published fixture results (not participant picks). */
+export function readOfficialR32MatchResultWinner(
+  matchIndex: number,
+  ctx?: ConfirmedR32WinnerContext,
+): string | null {
+  return officialR32ResultWinner(matchIndex, ctx);
 }
 
 function isTeamInR32Match(
@@ -637,7 +646,10 @@ export function buildKnockoutMatchPickRows(
     let lockReason: KnockoutMatchLockReason = "pickable";
     if (!homeTeamId || !awayTeamId) {
       lockReason = "incomplete";
-    } else if (publicMatch && isMatchStarted(publicMatch, nowMs)) {
+    } else if (
+      publicMatch &&
+      isKnockoutMatchLockedForParticipant(publicMatch, nowMs)
+    ) {
       lockReason = "started";
     }
 

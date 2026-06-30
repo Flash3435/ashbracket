@@ -200,19 +200,17 @@ export async function saveMyKnockoutPicksAction(input: {
       mapPredictionRow(r as PredRow),
     );
 
-    if (!fullRoundOf32Official) {
-      const guarded = applyGradualKnockoutPickSaveGuards({
-        incoming: slots,
-        existing: predsBefore,
-        teams,
-        matches: tournamentFetch.data?.matches ?? [],
-        fullRoundOf32Official,
-      });
-      if (guarded.error) {
-        return savePicksValidationError(guarded.error);
-      }
-      slots = guarded.slots;
+    const guarded = applyGradualKnockoutPickSaveGuards({
+      incoming: slots,
+      existing: predsBefore,
+      teams,
+      matches: tournamentFetch.data?.matches ?? [],
+      fullRoundOf32Official,
+    });
+    if (guarded.error) {
+      return savePicksValidationError(guarded.error);
     }
+    slots = guarded.slots;
 
     const fpBefore = fingerprintPredictionsForParticipant(
       predsBefore,

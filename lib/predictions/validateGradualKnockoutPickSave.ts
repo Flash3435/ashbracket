@@ -9,6 +9,10 @@ import {
   r16SlotKeyForR32MatchIndex,
   validateKnockoutMatchPick,
 } from "../picks/gradualKnockoutUnlock";
+import {
+  isKnockoutPickFrozenForParticipant,
+  knockoutPickEditBlockedMessage,
+} from "../picks/knockoutPickEditability";
 import { isKnockoutProgressionKind } from "./knockoutProgressionKinds";
 import { mergeKnockoutProgressionSlotsFromPredictions } from "./mergeKnockoutProgressionFromExistingPredictions";
 
@@ -56,6 +60,49 @@ function gradualR32MatchPickError(
 }
 
 /**
+ * Reject participant edits to knockout slots that are locked at kickoff or by
+ * an official result. Applies regardless of gradual vs full-bracket unlock.
+ */
+export function validateKnockoutParticipantPickChanges(input: {
+  incoming: ParticipantPickSlotPayload[];
+  existing: Prediction[];
+  matches: TournamentMatchPublicRow[];
+  gradual: ReturnType<typeof getGradualKnockoutSelectionState>;
+  fullRoundOf32Official: boolean;
+  nowMs?: number;
+}): string | null {
+  const priorByKey = existingTeamIdByKey(input.existing);
+  for (const slot of input.incoming) {
+    if (!isKnockoutProgressionKind(slot.predictionKind)) continue;
+    const incomingId = slot.teamId.trim();
+    const k = progressionKey({
+      predictionKind: slot.predictionKind,
+      tournamentStageId: slot.tournamentStageId,
+      slotKey: slot.slotKey,
+    });
+    const keep = priorByKey.get(k) ?? "";
+    if (incomingId === keep) continue;
+
+    if (!isKnockoutPickFrozenForParticipant({
+      predictionKind: slot.predictionKind,
+      slotKey: slot.slotKey,
+      tournamentMatches: input.matches,
+      gradual: input.gradual,
+      nowMs: input.nowMs,
+    })) {
+      continue;
+    }
+    return knockoutPickEditBlockedMessage({
+      predictionKind: slot.predictionKind,
+      slotKey: slot.slotKey,
+      tournamentMatches: input.matches,
+      gradual: input.gradual,
+    });
+  }
+  return null;
+}
+
+/**
  * When knockout picks are only partially unlocked, freeze non-pickable progression
  * rows and validate pickable Round of 32 match winners against confirmed matchups.
  */
@@ -74,6 +121,18 @@ export function applyGradualKnockoutPickSaveGuards(input: {
     nowMs,
     fullRoundOf32Official: input.fullRoundOf32Official,
   });
+
+  const editErr = validateKnockoutParticipantPickChanges({
+    incoming: input.incoming,
+    existing: input.existing,
+    matches: input.matches,
+    gradual,
+    fullRoundOf32Official: input.fullRoundOf32Official,
+    nowMs,
+  });
+  if (editErr) {
+    return { slots: input.incoming, error: editErr };
+  }
 
   if (input.fullRoundOf32Official) {
     return { slots: input.incoming, error: null };
