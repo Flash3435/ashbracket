@@ -27,6 +27,7 @@ import type { PoolPublicStats } from "../../lib/pool/fetchPoolPublicStats";
 import { PoolPublicStatsSummary } from "../pool/PoolPublicStatsSummary";
 import { formatUsdCents } from "@/lib/format/usdCents";
 import { poolLeaderboardIsActiveFromRows } from "@/lib/leaderboard/poolLeaderboardIsActive";
+import { resolveLeaderboardStandingsSubtitle } from "@/lib/leaderboard/leaderboardPageCopy";
 import { LeaderboardPostLockIntro } from "./LeaderboardPostLockIntro";
 import { BracketOutlookView } from "./BracketOutlookView";
 import type { BracketOutlookSummary } from "@/lib/leaderboard/bracketOutlookSeparation";
@@ -192,11 +193,13 @@ export function PublicPoolLeaderboardView({
   const displayNameByParticipantId = new Map(
     presentation.rows.map((row) => [row.participantId, row.displayName]),
   );
-  const leaderboardSubtitle = raceOutlookByParticipantId.size
-    ? "Ranked by awarded points. Arrows show recent rank movement after the latest scoring update."
-    : momentumByParticipantId.size
-      ? `${presentation.participantCount} ${presentation.participantCount === 1 ? "entry" : "entries"} ranked by awarded points. Arrows show recent movement after the latest scoring update.`
-      : `${presentation.participantCount} ${presentation.participantCount === 1 ? "entry" : "entries"} ranked by awarded points. Tied totals share the same rank.`;
+  const hasMomentum = leaderboardMomentum?.hasPreviousSnapshot === true;
+  const hasRaceOutlook = raceOutlookByParticipantId.size > 0;
+  const leaderboardSubtitle = resolveLeaderboardStandingsSubtitle({
+    hasMomentum,
+    hasRaceOutlook,
+    participantCount: presentation.participantCount,
+  });
 
   if (presentation.participantCount > 0 && !leaderboardActive) {
     return (

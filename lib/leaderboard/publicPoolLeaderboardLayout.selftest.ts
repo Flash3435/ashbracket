@@ -27,6 +27,7 @@ const cellSrc = readFileSync(cellPath, "utf8");
 {
   assert.ok(viewSrc.includes("LeaderboardParticipantCell"));
   assert.ok(viewSrc.includes("mapRaceOutlookByParticipantId"));
+  assert.ok(viewSrc.includes("resolveLeaderboardStandingsSubtitle"));
 }
 
 // Expand/collapse details markup is present
