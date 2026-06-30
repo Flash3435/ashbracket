@@ -60,7 +60,7 @@ export function buildPicksPageStatusModel(input: {
       headline: repairSummary.headline,
       detail: repairSummary.detail,
       tone: "warning",
-      ctaLabel: "Save picks",
+      ctaLabel: repairSummary.ctaLabel,
       ctaAction: "save",
     };
   }

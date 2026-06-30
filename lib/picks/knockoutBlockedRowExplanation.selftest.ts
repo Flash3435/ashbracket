@@ -391,8 +391,9 @@ const r32OfficialResults: TournamentMatchPublicRow[] = [
   const m97 = buildKnockoutMatchPickRows(input).find((r) => r.fifaMatchNo === 97)!;
   assert.match(
     m97.display.statusLine!,
-    /M97 cannot be picked yet.*Germany vs Paraguay.*cleared.*locked by official results/i,
+    /M97 can't be picked yet because the Germany vs Paraguay pick was cleared and is now locked/i,
   );
+  assert.doesNotMatch(m97.display.statusLine!, /waiting for the winner/i);
 
   const repairSummary = getKnockoutRepairActionSummary(
     {
@@ -404,10 +405,109 @@ const r32OfficialResults: TournamentMatchPublicRow[] = [
     },
     cleared,
   );
+  assert.equal(repairSummary.headline, "One locked pick was cleared");
   assert.match(
     repairSummary.detail,
-    /cleared and is locked by official results/i,
+    /no longer fits the official bracket and can't be changed because that match is locked/i,
   );
+  assert.equal(repairSummary.ctaLabel, "Save changes");
+}
+
+// SF blocked indirectly by cleared locked QF feeder
+{
+  const tournamentMatches: TournamentMatchPublicRow[] = [
+    ...r32OfficialResults,
+    {
+      match_id: "m89",
+      edition_id: "ed",
+      edition_code: "2026",
+      match_code: "M89",
+      stage_code: "round_of_16",
+      stage_label: "Round of 16",
+      stage_sort_order: 3,
+      group_code: null,
+      round_index: 0,
+      kickoff_at: "2026-07-05T18:00:00Z",
+      status: "finished",
+      home_goals: 2,
+      away_goals: 1,
+      home_penalties: null,
+      away_penalties: null,
+      home_team_name: "Germany",
+      home_country_code: "GER",
+      away_team_name: "Paraguay",
+      away_country_code: "PAR",
+      winner_team_name: null,
+      winner_country_code: null,
+    },
+  ];
+  const before: KnockoutPickSlotDraft[] = [
+    r32Side("2", "team-ger"),
+    r32Side("5", "team-par"),
+    qfSlot("1", "team-can"),
+    qfSlot("2", "team-ned"),
+    qfSlot("3", "team-bra"),
+    qfSlot("4", "team-ned"),
+    qfSlot("5", "team-ger"),
+    qfSlot("6", "team-ger"),
+    qfSlot("7", "team-ned"),
+    qfSlot("8", "team-can"),
+    {
+      rowKey: "semifinalist|1",
+      sectionLabel: "Semi-finals",
+      slotLabel: "Semi-finals · pick 1",
+      predictionKind: "semifinalist",
+      tournamentStageId: "sf",
+      slotKey: "1",
+      groupCode: null,
+      bonusKey: null,
+      teamId: "team-ger",
+    },
+  ];
+  const { slots: repaired, cleared } = pruneOfficialKnockoutPathPicks(before);
+  const clearedKeys = clearedPickRowKeySet(cleared);
+  const sfInput = {
+    bracketKind: "semifinalist" as const,
+    slots: repaired,
+    teams,
+    tournamentMatches,
+    gradual: emptyGradual,
+    knockoutBracketPicksUnlocked: true,
+    clearedPickRowKeys: clearedKeys,
+  };
+  const m101 = buildKnockoutMatchPickRows(sfInput).find((r) => r.fifaMatchNo === 101)!;
+  assert.match(
+    m101.display.statusLine!,
+    /M101 is blocked by M97/i,
+  );
+  assert.doesNotMatch(m101.display.statusLine!, /waiting for the winner/i);
+  assert.doesNotMatch(m101.display.statusLine!, /Pick a winner for/i);
+
+  const r16Status = getKnockoutStepCompletionFromDraftState(
+    "round_of_16",
+    resolveKnockoutProgressContext({
+      slots: repaired,
+      teams,
+      tournamentMatches,
+      officialRoundOf32Complete: true,
+      clearedPickRowKeys: clearedKeys,
+    }),
+  );
+  assert.strictEqual(r16Status.kind, "needs_review");
+  assert.strictEqual(r16Status.complete, false);
+
+  const qfStatus = getKnockoutStepCompletionFromDraftState(
+    "quarterfinalist",
+    resolveKnockoutProgressContext({
+      slots: repaired,
+      teams,
+      tournamentMatches,
+      officialRoundOf32Complete: true,
+      clearedPickRowKeys: clearedKeys,
+    }),
+  );
+  assert.strictEqual(qfStatus.kind, "needs_review");
+  assert.strictEqual(qfStatus.complete, false);
 }
 
 // Green R16 pill + blocked QF never emits generic previous-round copy

@@ -41,6 +41,34 @@ export type ExplainBlockedKnockoutRowOptions = {
   clearedPickRowKeys?: ReadonlySet<string>;
 };
 
+export const LOCKED_CLEARED_REPAIR_HEADLINE = "One locked pick was cleared";
+
+export function lockedClearedRepairCardBody(
+  feederLabel: string | null,
+): string {
+  if (feederLabel) {
+    return `Your ${feederLabel} pick no longer fits the official bracket and can't be changed because that match is locked. Save to keep the rest of your valid picks.`;
+  }
+  return "A cleared pick no longer fits the official bracket and can't be changed because that match is locked. Save to keep the rest of your valid picks.";
+}
+
+function lockedClearedDirectBlockedCopy(
+  blockedRef: string,
+  feederLabel: string | null,
+): string {
+  if (feederLabel) {
+    return `${blockedRef} can't be picked yet because the ${feederLabel} pick was cleared and is now locked. Save your updated bracket.`;
+  }
+  return `${blockedRef} can't be picked yet because a cleared pick is now locked. Save your updated bracket.`;
+}
+
+function lockedClearedIndirectBlockedCopy(
+  blockedRef: string,
+  intermediateMatchNo: number,
+): string {
+  return `${blockedRef} is blocked by M${intermediateMatchNo}. Save your updated bracket first, then review this step.`;
+}
+
 export function clearedPickRowKeySet(
   cleared: ClearedKnockoutPathPick[],
 ): Set<string> {
@@ -130,6 +158,7 @@ function copyForBlockedDownstreamRow(
   feeder: KnockoutMatchPickRow,
   upstreamKind: KnockoutWizardBracketKind,
   explanation: Omit<BlockedKnockoutMatchExplanation, "blockedRowMatchNo">,
+  options?: ExplainBlockedKnockoutRowOptions,
 ): string {
   const blockedRef =
     blockedRow.fifaMatchNo > 0 ? `M${blockedRow.fifaMatchNo}` : "This matchup";
@@ -141,9 +170,20 @@ function copyForBlockedDownstreamRow(
         ? `Pick a winner for ${feederLabel} first.`
         : explanation.userFacingCopy;
     case "cleared_pick_locked":
-      return feederLabel
-        ? `${blockedRef} cannot be picked yet — the ${feederLabel} pick was cleared and is locked by official results. Save to confirm the rest of your bracket.`
-        : `${blockedRef} cannot be picked yet — a cleared pick is locked by official results. Save to confirm the rest of your bracket.`;
+      if (
+        feederWasCleared(feeder, options) &&
+        explanation.missingFeederMatchNo != null &&
+        feeder.fifaMatchNo === explanation.missingFeederMatchNo
+      ) {
+        return lockedClearedDirectBlockedCopy(blockedRef, feederLabel);
+      }
+      if (
+        feeder.fifaMatchNo > 0 &&
+        blockedRow.fifaMatchNo !== feeder.fifaMatchNo
+      ) {
+        return lockedClearedIndirectBlockedCopy(blockedRef, feeder.fifaMatchNo);
+      }
+      return lockedClearedDirectBlockedCopy(blockedRef, feederLabel);
     case "official_result_missing":
       return feederLabel
         ? `${blockedRef} is waiting for the winner of ${feederLabel}.`
@@ -236,8 +276,8 @@ function classifyUnresolvedFeeder(
         feederState: "cleared_pick_locked",
         userAction: "save_repaired_state",
         userFacingCopy: feederLabel
-          ? `The ${feederLabel} pick was cleared and is locked by official results. Save to confirm the rest of your bracket.`
-          : "This pick was cleared and is locked by official results. Save to confirm the rest of your bracket.",
+          ? `Your ${feederLabel} pick was cleared and is now locked. Save your updated bracket.`
+          : "This pick was cleared and is now locked. Save your updated bracket.",
       };
     }
 
@@ -278,8 +318,8 @@ export function explainLockedClearedPickRow(
     feederState: "cleared_pick_locked",
     userAction: "save_repaired_state",
     userFacingCopy: feederLabel
-      ? `The ${feederLabel} pick was cleared and is locked by official results. Save to confirm the rest of your bracket.`
-      : "This pick was cleared and is locked by official results. Save to confirm the rest of your bracket.",
+      ? `Your ${feederLabel} pick was cleared and is now locked. Save your updated bracket.`
+      : "This pick was cleared and is now locked. Save your updated bracket.",
   };
 }
 
@@ -342,6 +382,7 @@ export function explainBlockedKnockoutMatchRow(
         feeder,
         upstreamKind,
         feederExplanation,
+        options,
       ),
     };
   }
@@ -411,4 +452,30 @@ export function blockedKnockoutStepGateCopy(
     options,
   );
   return explanation?.userFacingCopy ?? null;
+}
+
+/** Locked cleared pick on this step, or downstream block requiring save. */
+export function stepLockedClearedPickIssue(
+  bracketKind: KnockoutWizardBracketKind,
+  input: BuildKnockoutMatchPickRowsInput,
+  options?: ExplainBlockedKnockoutRowOptions,
+): BlockedKnockoutMatchExplanation | null {
+  const rows = buildKnockoutMatchPickRows(input);
+
+  for (const row of rows) {
+    if (!feederWasCleared(row, options)) continue;
+    if (row.lockReason !== "frozen" && row.lockReason !== "started") continue;
+    if (readConfirmedKnockoutMatchWinner(row, bracketKind, input)) continue;
+    return explainLockedClearedPickRow(row, options);
+  }
+
+  const blocked = firstBlockedRowExplanationForStep(
+    bracketKind,
+    input,
+    options,
+  );
+  if (blocked?.userAction === "save_repaired_state") {
+    return blocked;
+  }
+  return null;
 }

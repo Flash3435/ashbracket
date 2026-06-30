@@ -17,6 +17,10 @@ import {
   usesKnockoutMatchPickRows,
   type KnockoutWizardBracketKind,
 } from "./knockoutMatchPickRows";
+import {
+  firstBlockedRowExplanationForStep,
+  stepLockedClearedPickIssue,
+} from "./knockoutBlockedRowExplanation";
 
 export const KNOCKOUT_WIZARD_BRACKET_KINDS = [
   "round_of_32",
@@ -52,6 +56,7 @@ export type KnockoutStepProgress = {
 export type KnockoutWizardStepStatusKind =
   | "complete"
   | "needs_pick"
+  | "needs_review"
   | "locked_upstream"
   | "locked"
   | "not_applicable";
@@ -199,6 +204,12 @@ function matchPickRowsInput(
   };
 }
 
+function rowExplanationOptions(ctx: ResolvedKnockoutProgressContext) {
+  return ctx.clearedPickRowKeys
+    ? { clearedPickRowKeys: ctx.clearedPickRowKeys }
+    : undefined;
+}
+
 function matchPickStepStatus(
   bracketKind: KnockoutWizardBracketKind,
   ctx: ResolvedKnockoutProgressContext,
@@ -208,9 +219,26 @@ function matchPickStepStatus(
   const rows = buildKnockoutMatchPickRows(input);
   const pickable = rows.filter((r) => r.lockReason === "pickable");
   const hasIncomplete = rows.some((r) => r.lockReason === "incomplete");
-  const gateMessage = progress.complete
-    ? null
-    : findDeepestBlockingKnockoutDependency(input);
+  const explanationOptions = rowExplanationOptions(ctx);
+  const lockedClearedIssue = stepLockedClearedPickIssue(
+    bracketKind,
+    input,
+    explanationOptions,
+  );
+  const gateMessage =
+    lockedClearedIssue || !progress.complete
+      ? findDeepestBlockingKnockoutDependency(input)
+      : null;
+
+  if (lockedClearedIssue) {
+    return {
+      kind: "needs_review",
+      complete: false,
+      missingPickable: 0,
+      totalPickable: pickable.length,
+      gateMessage,
+    };
+  }
 
   if (progress.complete) {
     return {
@@ -233,8 +261,16 @@ function matchPickStepStatus(
   }
 
   if (hasIncomplete) {
+    const blockedExplanation = firstBlockedRowExplanationForStep(
+      bracketKind,
+      input,
+      explanationOptions,
+    );
     return {
-      kind: "locked_upstream",
+      kind:
+        blockedExplanation?.userAction === "save_repaired_state"
+          ? "needs_review"
+          : "locked_upstream",
       complete: false,
       missingPickable: 0,
       totalPickable: pickable.length,

@@ -7,6 +7,8 @@ import {
   explainLockedClearedPickRow,
   feederMatchupLabel,
   firstBlockedRowExplanationForStep,
+  lockedClearedRepairCardBody,
+  LOCKED_CLEARED_REPAIR_HEADLINE,
 } from "./knockoutBlockedRowExplanation";
 import {
   buildKnockoutMatchPickRows,
@@ -244,9 +246,7 @@ function actionFromLockedClearedPick(
     : feederExplanation.userFacingCopy;
 
   const feederLabel = feederExplanation.missingFeederLabel;
-  const statusCardDetail = feederLabel
-    ? `The ${feederLabel} pick was cleared and is locked by official results. Save to confirm the remaining valid picks.`
-    : "Some cleared picks are locked by official results. Save to confirm the remaining valid picks.";
+  const statusCardDetail = lockedClearedRepairCardBody(feederLabel);
 
   return {
     bracketKind: targetStep,
@@ -401,19 +401,37 @@ export function findFirstKnockoutWizardActionNeeded(
   const pickableAction = findFirstPickableMissingAction(ctx);
   if (pickableAction) return pickableAction;
 
-  return findBlockedDownstreamAction(ctx);
+  if (ctx.clearedPickRowKeys?.size) {
+    return findBlockedDownstreamAction(ctx);
+  }
+
+  return null;
 }
 
 /** Status-card copy when official-path repair left unsaved draft changes. */
 export function getKnockoutRepairActionSummary(
   input: KnockoutProgressContext,
   clearedPicks: ClearedKnockoutPathPick[],
-): { headline: string; detail: string; action: KnockoutWizardActionNeeded | null } {
+): {
+  headline: string;
+  detail: string;
+  ctaLabel: string;
+  action: KnockoutWizardActionNeeded | null;
+} {
   const action = findFirstKnockoutWizardActionNeeded(input, { clearedPicks });
+  if (action?.reason === "locked_unfixable") {
+    return {
+      headline: LOCKED_CLEARED_REPAIR_HEADLINE,
+      detail: lockedClearedRepairCardBody(action.matchupLabel),
+      ctaLabel: "Save changes",
+      action,
+    };
+  }
   if (action) {
     return {
       headline: "Review updated knockout picks",
       detail: action.statusCardDetail,
+      ctaLabel: "Save picks",
       action,
     };
   }
@@ -421,6 +439,7 @@ export function getKnockoutRepairActionSummary(
     headline: "Review updated knockout picks",
     detail:
       "Some later-round picks no longer fit the official path and were cleared. Save your picks to confirm the updated bracket.",
+    ctaLabel: "Save picks",
     action: null,
   };
 }

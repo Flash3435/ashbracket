@@ -2009,6 +2009,7 @@ export function KnockoutPicksWizard({
           const missingInStep =
             knockoutStepStatus != null &&
             (knockoutStepStatus.kind === "needs_pick" ||
+              knockoutStepStatus.kind === "needs_review" ||
               knockoutStepStatus.kind === "complete" ||
               knockoutStepStatus.kind === "locked_upstream" ||
               knockoutStepStatus.kind === "locked")
@@ -2037,7 +2038,9 @@ export function KnockoutPicksWizard({
                       8 - rows.filter((r) => r.teamId.trim()).length,
                     )
                   : rows.filter((r) => !r.teamId.trim()).length;
+          const needsReview = knockoutStepStatus?.kind === "needs_review";
           const stepBlocked =
+            needsReview ||
             knockoutStepStatus?.kind === "locked_upstream" ||
             knockoutStepStatus?.kind === "locked";
           const done =
@@ -2052,12 +2055,15 @@ export function KnockoutPicksWizard({
               title={
                 done
                   ? `${s.title} — complete`
-                  : stepBlocked
+                  : needsReview
                     ? knockoutStepStatus?.gateMessage ??
-                      `${s.title} — unlocks after earlier rounds`
-                    : missingInStep > 0
-                      ? `${s.title} — ${missingInStep} missing`
-                      : s.title
+                      `${s.title} — save to confirm cleared locked pick`
+                    : stepBlocked
+                      ? knockoutStepStatus?.gateMessage ??
+                        `${s.title} — unlocks after earlier rounds`
+                      : missingInStep > 0
+                        ? `${s.title} — ${missingInStep} missing`
+                        : s.title
               }
               onClick={() => {
                 promoteGradualR32BeforeLaterKnockoutStep(i);
@@ -2070,13 +2076,19 @@ export function KnockoutPicksWizard({
                   ? "bg-ash-accent text-white"
                   : done
                     ? "bg-ash-accent/20 text-ash-accent hover:bg-ash-accent/30"
+                    : needsReview
+                      ? "bg-rose-950/35 text-rose-100 ring-1 ring-rose-700/45 hover:bg-rose-950/50"
                     : missingInStep > 0
                       ? "bg-amber-950/35 text-amber-100 ring-1 ring-amber-700/45 hover:bg-amber-950/50"
+                      : stepBlocked
+                        ? "bg-slate-900/50 text-slate-200 ring-1 ring-slate-600/45 hover:bg-slate-900/70"
                       : "bg-ash-surface text-ash-muted ring-1 ring-ash-border hover:bg-ash-border/30"
               } disabled:cursor-not-allowed disabled:opacity-50`}
             >
               {i + 1}. {s.title}
-              {!done && missingInStep > 0 ? (
+              {needsReview ? (
+                <span className="ml-1 opacity-80">(save)</span>
+              ) : !done && missingInStep > 0 ? (
                 <span className="ml-1 tabular-nums opacity-80">
                   ({missingInStep})
                 </span>
