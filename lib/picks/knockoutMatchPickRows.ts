@@ -18,6 +18,10 @@ import {
   isKnockoutSlotFrozenByOfficialFeeders,
 } from "./knockoutPickEditability";
 import { isMatchStarted } from "./knockoutSelectionWindow";
+import {
+  blockedKnockoutRowUserCopy,
+  blockedKnockoutStepGateCopy,
+} from "./knockoutBlockedRowExplanation";
 
 export type KnockoutWizardBracketKind =
   | "round_of_16"
@@ -599,6 +603,7 @@ export type BuildKnockoutMatchPickRowsInput = {
   gradual?: GradualKnockoutSelectionState;
   knockoutBracketPicksUnlocked?: boolean;
   nowMs?: number;
+  clearedPickRowKeys?: ReadonlySet<string>;
 };
 
 /** Friendly copy for a pickable or upstream-blocked knockout matchup. */
@@ -628,54 +633,24 @@ export function formatMissingKnockoutDependencyLabel(
   return row.display.emptyPrimaryLine ?? INCOMPLETE_UPSTREAM_MSG;
 }
 
+function buildRowExplanationOptions(input: BuildKnockoutMatchPickRowsInput) {
+  return input.clearedPickRowKeys
+    ? { clearedPickRowKeys: input.clearedPickRowKeys }
+    : undefined;
+}
+
 /** Row gate copy when sides are unknown — names the first unresolved upstream feeder. */
 export function upstreamIncompleteMessageForRow(
   row: KnockoutMatchPickRow,
   bracketKind: KnockoutWizardBracketKind,
   input: BuildKnockoutMatchPickRowsInput,
 ): string {
-  if (bracketKind === "round_of_16") {
-    return incompleteR16MatchMessage(
-      row.matchIndex,
-      input.slots,
-      confirmedR32WinnerContextFromBuildInput(input),
-    );
-  }
-
-  const upstreamKind = upstreamWizardKindForMatchSides(bracketKind);
-  if (!upstreamKind) {
-    return row.display.emptyPrimaryLine ?? INCOMPLETE_UPSTREAM_MSG;
-  }
-
-  const upstreamRows = buildKnockoutMatchPickRows(
-    buildInputForBracketKind(input, upstreamKind),
-  );
-  const upstreamInput = buildInputForBracketKind(input, upstreamKind);
-
-  for (const feeder of upstreamFeederRowsForMatch(
+  return blockedKnockoutRowUserCopy(
     row,
     bracketKind,
-    upstreamRows,
-  )) {
-    if (readConfirmedKnockoutMatchWinner(feeder, upstreamKind, upstreamInput)) {
-      continue;
-    }
-    if (feeder.lockReason === "pickable") {
-      return formatMissingKnockoutDependencyLabel(feeder);
-    }
-    if (feeder.lockReason === "incomplete") {
-      const deeper = upstreamIncompleteMessageForRow(
-        feeder,
-        upstreamKind,
-        input,
-      );
-      if (deeper && deeper !== INCOMPLETE_UPSTREAM_MSG) {
-        return deeper;
-      }
-    }
-  }
-
-  return row.display.emptyPrimaryLine ?? INCOMPLETE_UPSTREAM_MSG;
+    input,
+    buildRowExplanationOptions(input),
+  );
 }
 
 function upstreamFeederRowsForMatch(
@@ -699,101 +674,11 @@ function upstreamFeederRowsForMatch(
 export function findDeepestBlockingKnockoutDependency(
   input: BuildKnockoutMatchPickRowsInput,
 ): string | null {
-  return findBlockingInKnockoutStep(input.bracketKind, input, new Set());
-}
-
-function findBlockingInKnockoutStep(
-  bracketKind: KnockoutWizardBracketKind,
-  input: BuildKnockoutMatchPickRowsInput,
-  visited: Set<KnockoutWizardBracketKind>,
-): string | null {
-  if (visited.has(bracketKind)) return null;
-  visited.add(bracketKind);
-
-  const rows = buildKnockoutMatchPickRows({ ...input, bracketKind });
-  const pickableMissing = rows.filter(
-    (r) => r.lockReason === "pickable" && !validatedKnockoutMatchWinner(r),
+  return blockedKnockoutStepGateCopy(
+    input.bracketKind,
+    input,
+    buildRowExplanationOptions(input),
   );
-  if (pickableMissing.length === 1) {
-    return formatMissingKnockoutDependencyLabel(pickableMissing[0]!);
-  }
-  if (pickableMissing.length > 1) {
-    const stageLabel =
-      knockoutMatchStepDef(bracketKind)?.stageLabel ?? "match";
-    return `${pickableMissing.length} ${stageLabel.toLowerCase()} picks remain.`;
-  }
-
-  const incompleteRows = rows.filter((r) => r.lockReason === "incomplete");
-  if (incompleteRows.length === 0) return null;
-
-  const upstreamKind = upstreamWizardKindForMatchSides(bracketKind);
-  if (!upstreamKind) {
-    const first = incompleteRows[0]!;
-    if (bracketKind === "round_of_16") {
-      return incompleteR16MatchMessage(
-        first.matchIndex,
-        input.slots,
-        confirmedR32WinnerContextFromBuildInput(input),
-      );
-    }
-    return first.display.emptyPrimaryLine ?? INCOMPLETE_UPSTREAM_MSG;
-  }
-
-  const upstreamRows = buildKnockoutMatchPickRows({
-    ...input,
-    bracketKind: upstreamKind,
-  });
-
-  for (const row of incompleteRows) {
-    for (const feeder of upstreamFeederRowsForMatch(
-      row,
-      bracketKind,
-      upstreamRows,
-    )) {
-      const upstreamInput = buildInputForBracketKind(input, upstreamKind);
-      if (readConfirmedKnockoutMatchWinner(feeder, upstreamKind, upstreamInput)) {
-        continue;
-      }
-      if (feeder.lockReason === "pickable") {
-        return formatMissingKnockoutDependencyLabel(feeder);
-      }
-      if (feeder.lockReason === "incomplete") {
-        const deeper = findBlockingInKnockoutStep(
-          upstreamKind,
-          input,
-          visited,
-        );
-        if (deeper) return deeper;
-      }
-    }
-  }
-
-  const missingFeeders: KnockoutMatchPickRow[] = [];
-  for (const row of incompleteRows) {
-    for (const feeder of upstreamFeederRowsForMatch(
-      row,
-      bracketKind,
-      upstreamRows,
-    )) {
-      const upstreamInput = buildInputForBracketKind(input, upstreamKind);
-      if (readConfirmedKnockoutMatchWinner(feeder, upstreamKind, upstreamInput)) {
-        continue;
-      }
-      if (feeder.lockReason === "pickable") {
-        missingFeeders.push(feeder);
-      }
-    }
-  }
-  if (missingFeeders.length === 1) {
-    return formatMissingKnockoutDependencyLabel(missingFeeders[0]!);
-  }
-
-  const firstIncomplete = incompleteRows[0];
-  if (firstIncomplete) {
-    return upstreamIncompleteMessageForRow(firstIncomplete, bracketKind, input);
-  }
-
-  return INCOMPLETE_UPSTREAM_MSG;
 }
 
 function readMatchSides(

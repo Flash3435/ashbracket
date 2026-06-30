@@ -103,6 +103,7 @@ import {
   resolveKnockoutProgressContext,
   type KnockoutWizardBracketKindId,
 } from "../../lib/picks/knockoutMatchProgress";
+import { clearedPickRowKeySet } from "../../lib/picks/knockoutBlockedRowExplanation";
 import { KnockoutMatchDirectTeamPick } from "./KnockoutMatchTeamPick";
 import { isKnockoutProgressionKind } from "../../lib/predictions/knockoutProgressionKinds";
 import { isKnockoutPickEditableForParticipant } from "../../lib/picks/knockoutPickEditability";
@@ -932,6 +933,10 @@ export function KnockoutPicksWizard({
         : slots,
     [slots, knockoutPicksAccessible, r32WinnerContext],
   );
+  const knockoutPathClearedRowKeys = useMemo(
+    () => clearedPickRowKeySet(knockoutPathRepairOnLoad.cleared),
+    [knockoutPathRepairOnLoad.cleared],
+  );
   const knockoutProgressCtx = useMemo(
     () =>
       resolveKnockoutProgressContext({
@@ -939,12 +944,14 @@ export function KnockoutPicksWizard({
         teams,
         tournamentMatches,
         officialRoundOf32Complete: knockoutBracketPicksUnlocked,
+        clearedPickRowKeys: knockoutPathClearedRowKeys,
       }),
     [
       knockoutDisplaySlots,
       teams,
       tournamentMatches,
       knockoutBracketPicksUnlocked,
+      knockoutPathClearedRowKeys,
     ],
   );
   const gradualR32MatchRowsByKey = useMemo(() => {

@@ -37,6 +37,8 @@ export type KnockoutProgressContext = {
   /** Whether organizers published the official Round of 32 (all 32 teams). */
   officialRoundOf32Complete: boolean;
   nowMs?: number;
+  /** Repaired draft rows cleared on load — improves blocked-row copy. */
+  clearedPickRowKeys?: ReadonlySet<string>;
 };
 
 export type KnockoutStepProgress = {
@@ -193,6 +195,7 @@ function matchPickRowsInput(
     gradual: ctx.gradual,
     knockoutBracketPicksUnlocked: ctx.officialRoundOf32Complete,
     nowMs: ctx.nowMs,
+    clearedPickRowKeys: ctx.clearedPickRowKeys,
   };
 }
 

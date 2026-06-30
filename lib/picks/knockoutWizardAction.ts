@@ -1,6 +1,14 @@
 import type { KnockoutProgressionPredictionKind } from "../predictions/knockoutProgressionKinds";
 import type { ClearedKnockoutPathPick } from "../predictions/pruneOfficialKnockoutPathPicks";
 import {
+  blockedKnockoutStepGateCopy,
+  clearedPickRowKeySet,
+  explainBlockedKnockoutMatchRow,
+  explainLockedClearedPickRow,
+  feederMatchupLabel,
+  firstBlockedRowExplanationForStep,
+} from "./knockoutBlockedRowExplanation";
+import {
   buildKnockoutMatchPickRows,
   formatMissingKnockoutDependencyLabel,
   readConfirmedKnockoutMatchWinner,
@@ -38,6 +46,14 @@ const WIZARD_STEP_SHORT_LABEL: Partial<Record<KnockoutWizardBracketKindId, strin
     finalist: "final",
     champion: "champion",
   };
+
+const DOWNSTREAM_WIZARD_STEPS: KnockoutWizardBracketKindId[] = [
+  "round_of_16",
+  "quarterfinalist",
+  "semifinalist",
+  "finalist",
+  "champion",
+];
 
 function wizardBracketKindForSavedPick(
   kind: KnockoutProgressionPredictionKind,
@@ -78,17 +94,7 @@ function matchupLabelFromRow(
   row: ReturnType<typeof buildKnockoutMatchPickRows>[number] | undefined,
 ): string | null {
   if (!row) return null;
-  const line = row.display.emptyPrimaryLine;
-  if (
-    !line ||
-    line === "Pick needed" ||
-    line.startsWith("Complete ") ||
-    line.startsWith("This pick was cleared")
-  ) {
-    return row.fifaMatchNo > 0 ? `M${row.fifaMatchNo}` : null;
-  }
-  if (line.includes(" vs ")) return line;
-  return row.fifaMatchNo > 0 ? `M${row.fifaMatchNo}` : line;
+  return feederMatchupLabel(row);
 }
 
 function buildInputFromContext(ctx: ReturnType<typeof resolveKnockoutProgressContext>) {
@@ -99,7 +105,16 @@ function buildInputFromContext(ctx: ReturnType<typeof resolveKnockoutProgressCon
     gradual: ctx.gradual,
     knockoutBracketPicksUnlocked: ctx.officialRoundOf32Complete,
     nowMs: ctx.nowMs,
+    clearedPickRowKeys: ctx.clearedPickRowKeys,
   };
+}
+
+function buildRowExplanationOptions(
+  ctx: ReturnType<typeof resolveKnockoutProgressContext>,
+) {
+  return ctx.clearedPickRowKeys
+    ? { clearedPickRowKeys: ctx.clearedPickRowKeys }
+    : undefined;
 }
 
 function actionFromMatchRow(
@@ -107,13 +122,15 @@ function actionFromMatchRow(
   matchKind: KnockoutWizardBracketKind,
   row: ReturnType<typeof buildKnockoutMatchPickRows>[number],
   reason: KnockoutWizardActionReason,
+  ctx: ReturnType<typeof resolveKnockoutProgressContext>,
 ): KnockoutWizardActionNeeded {
   const matchup = matchupLabelFromRow(row);
   const stepLabel = WIZARD_STEP_SHORT_LABEL[bracketKind] ?? "knockout";
+  const input = { ...buildInputFromContext(ctx), bracketKind: matchKind };
   const gateMessage =
     reason === "repaired_cleared_pick"
       ? formatMissingKnockoutDependencyLabel(row, { clearedByRepair: true })
-      : formatMissingKnockoutDependencyLabel(row);
+      : blockedKnockoutRowUserCopyFromRow(row, matchKind, input, ctx);
 
   let statusCardDetail: string;
   if (reason === "repaired_cleared_pick") {
@@ -135,6 +152,114 @@ function actionFromMatchRow(
     reason,
     statusCardDetail,
     sectionGateMessage: gateMessage,
+  };
+}
+
+function blockedKnockoutRowUserCopyFromRow(
+  row: ReturnType<typeof buildKnockoutMatchPickRows>[number],
+  matchKind: KnockoutWizardBracketKind,
+  input: ReturnType<typeof buildInputFromContext> & {
+    bracketKind: KnockoutWizardBracketKind;
+  },
+  ctx: ReturnType<typeof resolveKnockoutProgressContext>,
+): string {
+  if (row.lockReason === "incomplete") {
+    return explainBlockedKnockoutMatchRow(
+      row,
+      matchKind,
+      input,
+      buildRowExplanationOptions(ctx),
+    ).userFacingCopy;
+  }
+  return formatMissingKnockoutDependencyLabel(row);
+}
+
+function downstreamStepBlockedByClearedFeeder(
+  ctx: ReturnType<typeof resolveKnockoutProgressContext>,
+  clearedFeederMatchKind: KnockoutWizardBracketKind,
+  clearedFeederIndex: number,
+): {
+  wizardStep: KnockoutWizardBracketKindId;
+  matchKind: KnockoutWizardBracketKind;
+  row: ReturnType<typeof buildKnockoutMatchPickRows>[number];
+} | null {
+  const baseInput = buildInputFromContext(ctx);
+  const clearedFeederMatchNo =
+    (clearedFeederMatchKind === "round_of_16"
+      ? 89
+      : clearedFeederMatchKind === "quarterfinalist"
+        ? 97
+        : clearedFeederMatchKind === "semifinalist"
+          ? 101
+          : 104) + clearedFeederIndex;
+
+  for (const wizardStep of DOWNSTREAM_WIZARD_STEPS) {
+    const matchKind = matchBracketKindForWizardStep(wizardStep);
+    if (!matchKind) continue;
+    const rows = buildKnockoutMatchPickRows({
+      ...baseInput,
+      bracketKind: matchKind,
+    });
+    for (const row of rows) {
+      if (row.lockReason !== "incomplete") continue;
+      const explanation = explainBlockedKnockoutMatchRow(
+        row,
+        matchKind,
+        { ...baseInput, bracketKind: matchKind },
+        buildRowExplanationOptions(ctx),
+      );
+      if (explanation.missingFeederMatchNo === clearedFeederMatchNo) {
+        return { wizardStep, matchKind, row };
+      }
+    }
+  }
+  return null;
+}
+
+function actionFromLockedClearedPick(
+  ctx: ReturnType<typeof resolveKnockoutProgressContext>,
+  pick: ClearedKnockoutPathPick,
+  row: ReturnType<typeof buildKnockoutMatchPickRows>[number],
+  matchKind: KnockoutWizardBracketKind,
+): KnockoutWizardActionNeeded {
+  const explanationOptions = buildRowExplanationOptions(ctx);
+  const feederExplanation = explainLockedClearedPickRow(row, explanationOptions);
+  const downstream = downstreamStepBlockedByClearedFeeder(
+    ctx,
+    matchKind,
+    matchIndexForSavedPick(pick),
+  );
+  const targetStep =
+    downstream?.wizardStep ??
+    wizardBracketKindForSavedPick(pick.predictionKind)!;
+  const targetRow = downstream?.row ?? row;
+  const targetMatchKind = downstream?.matchKind ?? matchKind;
+  const blockedCopy = downstream
+    ? explainBlockedKnockoutMatchRow(
+        targetRow,
+        targetMatchKind,
+        { ...buildInputFromContext(ctx), bracketKind: targetMatchKind },
+        explanationOptions,
+      ).userFacingCopy
+    : feederExplanation.userFacingCopy;
+
+  const feederLabel = feederExplanation.missingFeederLabel;
+  const statusCardDetail = feederLabel
+    ? `The ${feederLabel} pick was cleared and is locked by official results. Save to confirm the remaining valid picks.`
+    : "Some cleared picks are locked by official results. Save to confirm the remaining valid picks.";
+
+  return {
+    bracketKind: targetStep,
+    fifaMatchNo:
+      targetRow.fifaMatchNo > 0
+        ? targetRow.fifaMatchNo
+        : row.fifaMatchNo > 0
+          ? row.fifaMatchNo
+          : null,
+    matchupLabel: feederLabel ?? matchupLabelFromRow(targetRow),
+    reason: "locked_unfixable",
+    statusCardDetail,
+    sectionGateMessage: blockedCopy,
   };
 }
 
@@ -169,6 +294,7 @@ function findClearedPickAction(
         matchKind,
         row,
         "repaired_cleared_pick",
+        ctx,
       );
     }
 
@@ -179,17 +305,7 @@ function findClearedPickAction(
           bracketKind: matchKind,
         })
       ) {
-        return {
-          bracketKind,
-          fifaMatchNo: row.fifaMatchNo > 0 ? row.fifaMatchNo : null,
-          matchupLabel: matchupLabelFromRow(row),
-          reason: "locked_unfixable",
-          statusCardDetail:
-            "Some cleared picks are locked by official results. Save to confirm the rest of your bracket.",
-          sectionGateMessage:
-            row.display.statusLine ??
-            "This pick is locked because feeder match results are official.",
-        };
+        return actionFromLockedClearedPick(ctx, pick, row, matchKind);
       }
     }
   }
@@ -207,6 +323,7 @@ function findFirstPickableMissingAction(
     tournamentMatches: ctx.tournamentMatches,
     officialRoundOf32Complete: ctx.officialRoundOf32Complete,
     nowMs: ctx.nowMs,
+    clearedPickRowKeys: ctx.clearedPickRowKeys,
   });
   if (!targetStep) return null;
 
@@ -224,7 +341,42 @@ function findFirstPickableMissingAction(
   if (missing.length === 0) return null;
 
   const row = missing[0]!;
-  return actionFromMatchRow(targetStep, matchKind, row, "missing_pick");
+  return actionFromMatchRow(targetStep, matchKind, row, "missing_pick", ctx);
+}
+
+function findBlockedDownstreamAction(
+  ctx: ReturnType<typeof resolveKnockoutProgressContext>,
+): KnockoutWizardActionNeeded | null {
+  const baseInput = buildInputFromContext(ctx);
+  for (const wizardStep of DOWNSTREAM_WIZARD_STEPS) {
+    const matchKind = matchBracketKindForWizardStep(wizardStep);
+    if (!matchKind) continue;
+    const input = { ...baseInput, bracketKind: matchKind };
+    const explanation = firstBlockedRowExplanationForStep(
+      matchKind,
+      input,
+      buildRowExplanationOptions(ctx),
+    );
+    if (!explanation) continue;
+    const row = buildKnockoutMatchPickRows(input).find(
+      (r) => r.fifaMatchNo === explanation.blockedRowMatchNo,
+    );
+    if (!row) continue;
+    return {
+      bracketKind: wizardStep,
+      fifaMatchNo: explanation.blockedRowMatchNo || null,
+      matchupLabel: explanation.missingFeederLabel,
+      reason:
+        explanation.userAction === "save_repaired_state"
+          ? "locked_unfixable"
+          : explanation.userAction === "pick_upstream"
+            ? "upstream_missing"
+            : "missing_pick",
+      statusCardDetail: explanation.userFacingCopy,
+      sectionGateMessage: explanation.userFacingCopy,
+    };
+  }
+  return null;
 }
 
 /** First user-facing knockout action from repaired draft state. */
@@ -232,14 +384,24 @@ export function findFirstKnockoutWizardActionNeeded(
   input: KnockoutProgressContext,
   options?: { clearedPicks?: ClearedKnockoutPathPick[] },
 ): KnockoutWizardActionNeeded | null {
-  const ctx = resolveKnockoutProgressContext(input);
+  const ctx = resolveKnockoutProgressContext({
+    ...input,
+    clearedPickRowKeys:
+      input.clearedPickRowKeys ??
+      (options?.clearedPicks?.length
+        ? clearedPickRowKeySet(options.clearedPicks)
+        : undefined),
+  });
 
   if (options?.clearedPicks?.length) {
     const clearedAction = findClearedPickAction(ctx, options.clearedPicks);
     if (clearedAction) return clearedAction;
   }
 
-  return findFirstPickableMissingAction(ctx);
+  const pickableAction = findFirstPickableMissingAction(ctx);
+  if (pickableAction) return pickableAction;
+
+  return findBlockedDownstreamAction(ctx);
 }
 
 /** Status-card copy when official-path repair left unsaved draft changes. */
@@ -269,4 +431,20 @@ export function getMissingOrClearedKnockoutPickSummary(
   options?: { clearedPicks?: ClearedKnockoutPathPick[] },
 ): string | null {
   return findFirstKnockoutWizardActionNeeded(input, options)?.statusCardDetail ?? null;
+}
+
+export function blockedKnockoutWizardStepGateCopy(
+  bracketKind: KnockoutWizardBracketKindId,
+  ctx: ReturnType<typeof resolveKnockoutProgressContext>,
+): string | null {
+  const matchKind = matchBracketKindForWizardStep(bracketKind);
+  if (!matchKind) return null;
+  return blockedKnockoutStepGateCopy(
+    matchKind,
+    {
+      ...buildInputFromContext(ctx),
+      bracketKind: matchKind,
+    },
+    buildRowExplanationOptions(ctx),
+  );
 }
