@@ -5,6 +5,7 @@ import {
   type LiveBracketMatch,
   type LiveBracketTrackerModel,
 } from "../../lib/bracket/liveBracketTracker";
+import { shouldUseLiveBracketTracker } from "../../lib/bracket/resolveLiveBracketTrackerMode";
 import type { ParticipantBracketModel } from "../../lib/bracket/types";
 import type { KnockoutPickSlotDraft } from "../../types/adminKnockoutPicks";
 import type { Team } from "../../src/types/domain";
@@ -193,7 +194,12 @@ export function ParticipantBracketView({
     knockoutBracketPicksUnlocked,
   });
   const teamById = new Map(teams.map((t) => [t.id, t]));
-  const liveTracker = knockoutBracketPicksUnlocked
+  const useLiveTracker = shouldUseLiveBracketTracker({
+    knockoutBracketPicksUnlocked,
+    tournamentMatches,
+    slots,
+  });
+  const liveTracker = useLiveTracker
     ? buildLiveBracketTracker({
         slots,
         teams,
@@ -217,7 +223,7 @@ export function ParticipantBracketView({
     );
   }
 
-  if (!knockoutBracketPicksUnlocked) {
+  if (!useLiveTracker) {
     return (
       <div className="space-y-4">
         <PreRoundOf32BracketBanner
@@ -257,11 +263,15 @@ export function ParticipantBracketView({
 
   return (
     <div className="space-y-4">
-      <p className="max-w-3xl text-xs leading-relaxed text-ash-muted">
-        Official fixtures and results are shown where available. Your saved picks are
-        highlighted; eliminated picks stay visible so you can see where your bracket path
-        ended.
-      </p>
+      <div>
+        <p className="text-xs font-semibold uppercase tracking-wide text-ash-muted">
+          Knockout bracket tracker
+        </p>
+        <p className="mt-1 max-w-3xl text-xs leading-relaxed text-ash-muted">
+          Follow your saved knockout picks against the live tournament results. Completed
+          matches show who advanced, who was eliminated, and whether your pick is still alive.
+        </p>
+      </div>
       <div
         className="overflow-x-auto rounded-xl border border-ash-border bg-ash-body/20 p-2 sm:p-4"
         role="region"

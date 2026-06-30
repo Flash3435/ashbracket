@@ -2,11 +2,18 @@ import type { Team } from "../../src/types/domain";
 import type { KnockoutPickSlotDraft } from "../../types/adminKnockoutPicks";
 import type { TournamentMatchPublicRow } from "../../types/tournamentPublic";
 import { buildEliminatedTeamIdSet } from "./bracketTeamDisplay";
+import { deriveParticipantBracket } from "./deriveParticipantBracket";
+import { resolveFullBracketUnlockedForTracker } from "./resolveLiveBracketTrackerMode";
+import type { BracketMatchResolved } from "./types";
 import { WC2026_R32_MATCH_DEFS } from "./wc2026RoundOf32";
 import {
   getGradualKnockoutSelectionState,
   type GradualKnockoutSelectionState,
 } from "../picks/gradualKnockoutUnlock";
+import {
+  knockoutParticipantSlotPair,
+  r16R32ParticipantPair,
+} from "./wc2026KnockoutPairings";
 import {
   buildKnockoutMatchPickRows,
   knockoutMatchStepDef,
@@ -355,16 +362,6 @@ function buildR32Matches(
     );
     const participantPick =
       readParticipantR32MatchWinnerPick(matchIndex, input.slots, ctx) || null;
-    const pickInMatch =
-      participantPick &&
-      (participantPick === topId ||
-        participantPick === bottomId ||
-        participantPick ===
-          teamIdForCountry(teamByCountry, pub?.home_country_code) ||
-        participantPick ===
-          teamIdForCountry(teamByCountry, pub?.away_country_code))
-        ? participantPick
-        : null;
 
     return buildLiveMatchFromFixture({
       matchKey: `M${def.fifaMatchNo}`,
@@ -374,7 +371,7 @@ function buildR32Matches(
       officialMatch: pub,
       participantHomeId: topId,
       participantAwayId: bottomId,
-      participantPickedWinnerId: pickInMatch,
+      participantPickedWinnerId: participantPick,
       teamById,
       teamByCountry,
       eliminatedTeamIds,
@@ -431,9 +428,152 @@ function buildLaterRoundMatches(
   });
 }
 
+function pickTeamId(
+  slots: KnockoutPickSlotDraft[],
+  kind: KnockoutPickSlotDraft["predictionKind"],
+  slotKey: string,
+): string | null {
+  const id =
+    slots
+      .find((s) => s.predictionKind === kind && s.slotKey === slotKey)
+      ?.teamId.trim() ?? "";
+  return id || null;
+}
+
+function participantPathForLaterMatch(
+  bracketKind: KnockoutWizardBracketKind,
+  matchIndex: number,
+  slots: KnockoutPickSlotDraft[],
+  ctx: ConfirmedR32WinnerContext,
+): {
+  homeId: string | null;
+  awayId: string | null;
+  pickId: string | null;
+} {
+  const def = knockoutMatchStepDef(bracketKind);
+  if (!def) return { homeId: null, awayId: null, pickId: null };
+
+  const saveSlotKey = def.resultKind === "champion" ? null : String(matchIndex + 1);
+  const pickId =
+    def.resultKind === "champion"
+      ? (slots.find((s) => s.predictionKind === "champion")?.teamId.trim() || null)
+      : saveSlotKey
+        ? pickTeamId(slots, def.resultKind, saveSlotKey)
+        : null;
+
+  if (bracketKind === "round_of_16") {
+    const pair = r16R32ParticipantPair(matchIndex);
+    if (!pair) return { homeId: null, awayId: null, pickId };
+    const [homeR32, awayR32] = pair;
+    return {
+      homeId: readConfirmedR32MatchWinner(homeR32, slots, ctx) || null,
+      awayId: readConfirmedR32MatchWinner(awayR32, slots, ctx) || null,
+      pickId,
+    };
+  }
+
+  const stage =
+    bracketKind === "quarterfinalist"
+      ? "quarterfinal"
+      : bracketKind === "semifinalist"
+        ? "semifinal"
+        : bracketKind === "finalist"
+          ? "final"
+          : null;
+  if (!stage) return { homeId: null, awayId: null, pickId };
+
+  const slotPair = knockoutParticipantSlotPair(stage, matchIndex);
+  if (!slotPair) return { homeId: null, awayId: null, pickId };
+
+  const upstreamKind =
+    bracketKind === "quarterfinalist"
+      ? "round_of_16"
+      : bracketKind === "semifinalist"
+        ? "quarterfinalist"
+        : "semifinalist";
+
+  const [homeSlot, awaySlot] = slotPair;
+  return {
+    homeId: pickTeamId(slots, upstreamKind, homeSlot),
+    awayId: pickTeamId(slots, upstreamKind, awaySlot),
+    pickId,
+  };
+}
+
+function enrichLiveRound(
+  liveMatches: LiveBracketMatch[],
+  participantMatches: BracketMatchResolved[],
+  bracketKind: KnockoutWizardBracketKind,
+  slots: KnockoutPickSlotDraft[],
+  ctx: ConfirmedR32WinnerContext,
+  teamById: Map<string, Team>,
+  teamByCountry: Map<string, Team>,
+  eliminatedTeamIds: Set<string>,
+  tournamentMatches: TournamentMatchPublicRow[] | null | undefined,
+): LiveBracketMatch[] {
+  return liveMatches.map((live, index) => {
+    const participant = participantMatches[index];
+    const pathFallback = participantPathForLaterMatch(
+      bracketKind,
+      index,
+      slots,
+      ctx,
+    );
+
+    const stageMatches = (tournamentMatches ?? []).filter(
+      (m) => m.stage_code === live.stageCode,
+    );
+    const pub = publicMatchForFifaNo(stageMatches, live.stageCode, live.fifaMatchNo);
+
+    const homeId =
+      live.home.teamId ?? participant?.home.teamId ?? pathFallback.homeId;
+    const awayId =
+      live.away.teamId ?? participant?.away.teamId ?? pathFallback.awayId;
+    const participantPick =
+      live.participantPickedWinnerId ??
+      participant?.winnerTeamId ??
+      pathFallback.pickId ??
+      null;
+
+    if (
+      homeId === live.home.teamId &&
+      awayId === live.away.teamId &&
+      participantPick === live.participantPickedWinnerId
+    ) {
+      return live;
+    }
+
+    return buildLiveMatchFromFixture({
+      matchKey: live.matchKey,
+      fifaMatchNo: live.fifaMatchNo,
+      stageCode: live.stageCode,
+      stageLabel: live.stageLabel,
+      officialMatch: pub,
+      participantHomeId: homeId,
+      participantAwayId: awayId,
+      participantPickedWinnerId: participantPick,
+      teamById,
+      teamByCountry,
+      eliminatedTeamIds,
+    });
+  });
+}
+
 export function buildLiveBracketTracker(
   input: BuildLiveBracketTrackerInput,
 ): LiveBracketTrackerModel {
+  const fullBracketUnlocked = resolveFullBracketUnlockedForTracker(input);
+  const trackerInput: BuildLiveBracketTrackerInput = {
+    ...input,
+    knockoutBracketPicksUnlocked: fullBracketUnlocked,
+  };
+
+  const participantBracket = deriveParticipantBracket({
+    slots: input.slots,
+    teams: input.teams,
+    knockoutBracketPicksUnlocked: fullBracketUnlocked,
+  });
+
   const { teamById, teamByCountry } = teamByMaps(input.teams);
   const eliminatedTeamIds = buildEliminatedTeamIdSet(
     input.tournamentMatches,
@@ -441,18 +581,29 @@ export function buildLiveBracketTracker(
   );
   const gradual = getGradualKnockoutSelectionState({
     matches: input.tournamentMatches ?? null,
-    fullRoundOf32Official: input.knockoutBracketPicksUnlocked,
+    fullRoundOf32Official: fullBracketUnlocked,
   });
 
+  const pathCtx = r32Ctx(trackerInput, gradual);
   const champRow = input.slots.find((s) => s.predictionKind === "champion");
   const champId = champRow?.teamId.trim() || null;
-  const finalMatches = buildLaterRoundMatches(
+  const finalMatches = enrichLiveRound(
+    buildLaterRoundMatches(
+      "finalist",
+      trackerInput,
+      gradual,
+      teamById,
+      teamByCountry,
+      eliminatedTeamIds,
+    ),
+    participantBracket.final,
     "finalist",
-    input,
-    gradual,
+    input.slots,
+    pathCtx,
     teamById,
     teamByCountry,
     eliminatedTeamIds,
+    input.tournamentMatches,
   );
   const finalMatch = finalMatches[0] ?? null;
   const finalFinished = finalMatch?.status === "finished";
@@ -484,35 +635,65 @@ export function buildLiveBracketTracker(
 
   return {
     roundOf32: buildR32Matches(
-      input,
+      trackerInput,
       gradual,
       teamById,
       teamByCountry,
       eliminatedTeamIds,
     ),
-    roundOf16: buildLaterRoundMatches(
+    roundOf16: enrichLiveRound(
+      buildLaterRoundMatches(
+        "round_of_16",
+        trackerInput,
+        gradual,
+        teamById,
+        teamByCountry,
+        eliminatedTeamIds,
+      ),
+      participantBracket.roundOf16,
       "round_of_16",
-      input,
-      gradual,
+      input.slots,
+      pathCtx,
       teamById,
       teamByCountry,
       eliminatedTeamIds,
+      input.tournamentMatches,
     ),
-    quarterfinals: buildLaterRoundMatches(
+    quarterfinals: enrichLiveRound(
+      buildLaterRoundMatches(
+        "quarterfinalist",
+        trackerInput,
+        gradual,
+        teamById,
+        teamByCountry,
+        eliminatedTeamIds,
+      ),
+      participantBracket.quarterfinals,
       "quarterfinalist",
-      input,
-      gradual,
+      input.slots,
+      pathCtx,
       teamById,
       teamByCountry,
       eliminatedTeamIds,
+      input.tournamentMatches,
     ),
-    semifinals: buildLaterRoundMatches(
+    semifinals: enrichLiveRound(
+      buildLaterRoundMatches(
+        "semifinalist",
+        trackerInput,
+        gradual,
+        teamById,
+        teamByCountry,
+        eliminatedTeamIds,
+      ),
+      participantBracket.semifinals,
       "semifinalist",
-      input,
-      gradual,
+      input.slots,
+      pathCtx,
       teamById,
       teamByCountry,
       eliminatedTeamIds,
+      input.tournamentMatches,
     ),
     final: finalMatches,
     champion: {
