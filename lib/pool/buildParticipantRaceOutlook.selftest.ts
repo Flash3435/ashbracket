@@ -276,6 +276,16 @@ const baseOutlookInput = {
   );
   assert.strictEqual(
     resolveRaceOutlookStatus({
+      rank: 2,
+      hasChampionPick: true,
+      championPathDead: false,
+      pathValidLivePickCount: 5,
+      pointsBehindLeader: 2,
+    }),
+    "Close behind",
+  );
+  assert.strictEqual(
+    resolveRaceOutlookStatus({
       rank: 3,
       hasChampionPick: true,
       championPathDead: false,
@@ -304,6 +314,52 @@ const baseOutlookInput = {
     }),
     "Long shot",
   );
+  assert.strictEqual(
+    resolveRaceOutlookStatus({
+      rank: 2,
+      hasChampionPick: true,
+      championPathDead: false,
+      pathValidLivePickCount: 5,
+      pointsBehindLeader: 4,
+    }),
+    "In contention",
+  );
+}
+
+// Leader context attached to each row
+{
+  const leaderboardRows = [
+    leaderboardRow("p1", "Emil", 1, 62),
+    leaderboardRow("p2", "Fraser", 2, 60),
+  ];
+  const outlook = buildParticipantRaceOutlook({
+    ...baseOutlookInput,
+    leaderboardRows,
+    participantBrackets: leaderboardRows.map((row) => ({
+      participantId: row.participantId,
+      slots: [
+        slot({ predictionKind: "champion", teamId: "team-fra" }),
+        slot({ predictionKind: "finalist", teamId: "team-bra", rowKey: "fin-bra" }),
+      ],
+    })),
+    championPicks: leaderboardRows.map((row) => ({
+      participantId: row.participantId,
+      participantDisplayName: row.displayName,
+      teamId: "team-fra",
+      teamName: "France",
+      teamCode: "FRA",
+    })),
+  });
+
+  const leader = outlook.rows[0];
+  const trailer = outlook.rows[1];
+  assert(leader);
+  assert(trailer);
+  assert.strictEqual(leader.leaderDisplayName, "Emil");
+  assert.strictEqual(leader.pointsBehindLeader, 0);
+  assert.strictEqual(trailer.leaderDisplayName, "Emil");
+  assert.strictEqual(trailer.pointsBehindLeader, 2);
+  assert.strictEqual(trailer.leaderLivePathCount, leader.pathValidLivePickCount);
 }
 
 // Deprecated naive counter kept for regression only

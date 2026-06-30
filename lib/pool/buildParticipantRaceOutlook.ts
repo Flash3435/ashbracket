@@ -12,6 +12,7 @@ import {
 
 export type RaceOutlookStatus =
   | "Leading"
+  | "Close behind"
   | "In contention"
   | "Long shot"
   | "Champion dead";
@@ -28,6 +29,9 @@ export type ParticipantRaceOutlookRow = {
   pathValidLivePickCount: number;
   topRemainingPicks: PathValidRemainingPick[];
   statusLabel: RaceOutlookStatus;
+  leaderDisplayName: string;
+  leaderLivePathCount: number | null;
+  pointsBehindLeader: number;
 };
 
 export type ParticipantRaceOutlook = {
@@ -42,6 +46,7 @@ export type ResolvedChampionPick = {
 };
 
 export const RACE_OUTLOOK_TOP_N = 10;
+export const CLOSE_BEHIND_POINTS_BEHIND = 3;
 export const IN_CONTENTION_POINTS_BEHIND = 8;
 export const MEANINGFUL_PATH_VALID_PICKS_MIN = 1;
 
@@ -110,11 +115,17 @@ export function resolveRaceOutlookStatus(input: {
   pathValidLivePickCount: number;
   pointsBehindLeader: number;
 }): RaceOutlookStatus {
-  if (input.hasChampionPick && input.championPathDead) return "Champion dead";
   if (input.rank === 1) return "Leading";
+  if (input.hasChampionPick && input.championPathDead) return "Champion dead";
   if (
-    input.pointsBehindLeader <= IN_CONTENTION_POINTS_BEHIND &&
-    input.pathValidLivePickCount >= MEANINGFUL_PATH_VALID_PICKS_MIN
+    input.pathValidLivePickCount >= MEANINGFUL_PATH_VALID_PICKS_MIN &&
+    input.pointsBehindLeader <= CLOSE_BEHIND_POINTS_BEHIND
+  ) {
+    return "Close behind";
+  }
+  if (
+    input.pathValidLivePickCount >= MEANINGFUL_PATH_VALID_PICKS_MIN &&
+    input.pointsBehindLeader <= IN_CONTENTION_POINTS_BEHIND
   ) {
     return "In contention";
   }
@@ -179,7 +190,30 @@ export function buildParticipantRaceOutlook(input: {
   );
 
   const sortedLeaderboard = sortLeaderboardRows(input.leaderboardRows);
-  const leaderPoints = sortedLeaderboard[0]?.totalPoints ?? 0;
+  const leaderLeaderboardRow = sortedLeaderboard[0];
+  const leaderPoints = leaderLeaderboardRow?.totalPoints ?? 0;
+  const leaderDisplayName = leaderLeaderboardRow?.displayName ?? "";
+
+  let leaderLivePathCount: number | null = null;
+  if (leaderLeaderboardRow) {
+    const leaderBracket = bracketByParticipantId.get(leaderLeaderboardRow.participantId);
+    if (leaderBracket) {
+      const leaderChampion = resolveChampionPickForParticipant({
+        participantId: leaderLeaderboardRow.participantId,
+        championPicks: input.championPicks,
+        bracketSlots: leaderBracket.slots,
+        teams: input.teams,
+      });
+      const leaderPathOutlook = buildPathValidRaceOutlookForParticipant({
+        slots: leaderBracket.slots,
+        teams: input.teams,
+        tournamentMatches: input.tournamentMatches,
+        knockoutBracketPicksUnlocked: input.knockoutBracketPicksUnlocked,
+        championTeamId: leaderChampion.hasChampionPick ? leaderChampion.teamId : null,
+      });
+      leaderLivePathCount = leaderPathOutlook.pathValidLivePickCount;
+    }
+  }
 
   const participantIds = selectRaceOutlookParticipantIds({
     leaderboardRows: input.leaderboardRows,
@@ -216,6 +250,8 @@ export function buildParticipantRaceOutlook(input: {
         input.eliminatedTeamIds.has(champion.teamId));
     const championAlive = hasChampionPick && !championPathDead;
 
+    const pointsBehindLeader = leaderPoints - leaderboardRow.totalPoints;
+
     rows.push({
       participantId,
       displayName: leaderboardRow.displayName,
@@ -227,12 +263,15 @@ export function buildParticipantRaceOutlook(input: {
       hasChampionPick,
       pathValidLivePickCount: pathOutlook.pathValidLivePickCount,
       topRemainingPicks: pathOutlook.topRemainingPicks,
+      leaderDisplayName,
+      leaderLivePathCount,
+      pointsBehindLeader,
       statusLabel: resolveRaceOutlookStatus({
         rank: leaderboardRow.rank,
         hasChampionPick,
         championPathDead,
         pathValidLivePickCount: pathOutlook.pathValidLivePickCount,
-        pointsBehindLeader: leaderPoints - leaderboardRow.totalPoints,
+        pointsBehindLeader,
       }),
     });
   }

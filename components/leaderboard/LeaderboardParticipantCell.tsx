@@ -2,7 +2,10 @@ import Link from "next/link";
 import type { ReactNode } from "react";
 import type { PublicPoolLeaderboardRowDisplay } from "@/lib/leaderboard/buildPublicPoolLeaderboardPresentation";
 import {
+  expandedTopRemainingPicks,
+  formatExpandedRemainingPicksMoreLine,
   formatLeaderboardRaceSummary,
+  formatRaceOutlookLeaderComparison,
   formatTopRemainingPickLine,
   raceOutlookExpandedFallbackCopy,
   raceStatusBadgeClass,
@@ -30,7 +33,9 @@ function RaceStatusBadge({ outlook }: { outlook: ParticipantRaceOutlookRow }) {
 }
 
 function RaceOutlookDetails({ outlook }: { outlook: ParticipantRaceOutlookRow }) {
-  const topPicks = outlook.topRemainingPicks;
+  const topPicks = expandedTopRemainingPicks(outlook);
+  const moreLine = formatExpandedRemainingPicksMoreLine(outlook);
+  const leaderComparison = formatRaceOutlookLeaderComparison(outlook);
 
   return (
     <details className="mt-1.5">
@@ -40,7 +45,7 @@ function RaceOutlookDetails({ outlook }: { outlook: ParticipantRaceOutlookRow })
       <div className="mt-2 space-y-1.5 text-xs leading-relaxed text-ash-muted">
         {topPicks.length > 0 ? (
           <div>
-            <p className="font-medium text-ash-text">Top remaining picks</p>
+            <p className="font-medium text-ash-text">Most important remaining</p>
             <ul className="mt-1 list-inside list-disc space-y-0.5">
               {topPicks.map((pick) => (
                 <li key={`${pick.predictionKind}-${pick.teamId}`}>
@@ -48,10 +53,12 @@ function RaceOutlookDetails({ outlook }: { outlook: ParticipantRaceOutlookRow })
                 </li>
               ))}
             </ul>
+            {moreLine ? <p className="mt-1">{moreLine}</p> : null}
           </div>
         ) : (
           <p>{raceOutlookExpandedFallbackCopy(outlook)}</p>
         )}
+        <p>{leaderComparison}</p>
       </div>
     </details>
   );
