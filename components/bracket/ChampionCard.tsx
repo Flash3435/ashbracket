@@ -41,9 +41,10 @@ export function ChampionCard({ champion, teamById }: Props) {
         )}
       </span>
       <p
-        className={`mt-2 text-sm font-semibold ${
+        className={`mt-2 truncate text-sm font-semibold ${
           muted ? "text-ash-muted" : picked ? "text-ash-text" : "text-ash-muted"
         }`}
+        title={picked ? team!.name : undefined}
       >
         {picked ? team!.name : "TBD"}
       </p>

@@ -109,7 +109,7 @@ void (async function main() {
     PosterBracketTracker({ tracker, teamById, matchEditHref: null }),
   );
 
-  assert(html.includes("Knockout Bracket Tracker"), "renders central title");
+  assert(!html.includes("Follow your saved picks against live results."), "omits duplicate center subtitle");
   assert(html.includes("M73"), "renders match number");
   assert(html.includes("2 – 1"), "renders final score");
   assert(html.includes("Final"), "renders status label");

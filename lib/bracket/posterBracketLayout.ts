@@ -44,6 +44,9 @@ export const POSTER_RIGHT_HALF: PosterHalfLayout = {
 /** Number of grid rows used to align bracket rounds vertically. */
 export const POSTER_BRACKET_ROWS = 8;
 
+/** Reserved center lane width (px) for Final + Champion on desktop poster layout. */
+export const POSTER_CENTER_MIN_WIDTH_PX = 280;
+
 function orderR32ForHalf(start: number, end: number): readonly number[] {
   const halfStart = start === 0 ? 0 : 4;
   const halfEnd = start === 0 ? 4 : 8;

@@ -2,6 +2,7 @@ import type { LiveBracketMatch, LiveBracketTrackerModel } from "../../lib/bracke
 import {
   connectorShouldHighlight,
   POSTER_BRACKET_ROWS,
+  POSTER_CENTER_MIN_WIDTH_PX,
   POSTER_LEFT_HALF,
   POSTER_RIGHT_HALF,
   qfFeederR16Indices,
@@ -167,7 +168,7 @@ function PosterHalf({
 
   if (side === "left") {
     return (
-      <div className="flex min-w-0 flex-1 items-stretch">
+      <div className="flex min-w-0 shrink-0 items-stretch">
         <PosterRoundColumn
           round="r32"
           indices={layout.r32}
@@ -194,7 +195,12 @@ function PosterHalf({
           teamById={teamById}
           matchEditHref={matchEditHref}
         />
-        <BracketConnector pairCount={1} side="left" highlightPairs={sfHighlights} />
+        <BracketConnector
+          pairCount={1}
+          side="left"
+          highlightPairs={sfHighlights}
+          terminal="inner"
+        />
         <PosterRoundColumn
           round="sf"
           indices={[layout.sf]}
@@ -208,7 +214,7 @@ function PosterHalf({
   }
 
   return (
-    <div className="flex min-w-0 flex-1 items-stretch">
+    <div className="flex min-w-0 shrink-0 items-stretch">
       <PosterRoundColumn
         round="sf"
         indices={[layout.sf]}
@@ -217,7 +223,12 @@ function PosterHalf({
         teamById={teamById}
         matchEditHref={matchEditHref}
       />
-      <BracketConnector pairCount={1} side="right" highlightPairs={sfHighlights} />
+      <BracketConnector
+        pairCount={1}
+        side="right"
+        highlightPairs={sfHighlights}
+        terminal="inner"
+      />
       <PosterRoundColumn
         round="qf"
         indices={layout.qf}
@@ -261,26 +272,47 @@ function PosterCenter({
   const showChampion = Boolean(tracker.champion.teamId);
 
   return (
-    <div className="flex w-[168px] shrink-0 flex-col items-center justify-center gap-4 px-2">
-      <div className="text-center">
-        <h2 className="text-sm font-semibold text-ash-text">Knockout Bracket Tracker</h2>
-        <p className="mt-1 text-[10px] leading-relaxed text-ash-muted">
-          Follow your saved picks against live results.
+    <div
+      className="relative z-10 flex shrink-0 flex-col items-center px-4"
+      style={{ width: POSTER_CENTER_MIN_WIDTH_PX, minWidth: POSTER_CENTER_MIN_WIDTH_PX }}
+    >
+      <div className="flex w-full max-w-[152px] flex-col">
+        <p
+          className="mb-1 shrink-0 text-center text-[9px] font-semibold uppercase tracking-wide text-transparent"
+          aria-hidden
+        >
+          Final
         </p>
+        <div
+          className="grid gap-y-1"
+          style={{
+            gridTemplateRows: `repeat(${POSTER_BRACKET_ROWS}, minmax(2.25rem, auto))`,
+          }}
+        >
+          {finalMatch ? (
+            <div
+              className="flex items-center justify-center"
+              style={{ gridRow: "3 / 7" }}
+            >
+              <div className="w-full">
+                <p className="mb-1 text-center text-[9px] font-semibold uppercase tracking-wide text-ash-muted">
+                  Final
+                </p>
+                <PosterBracketMatchCard
+                  match={finalMatch}
+                  teamById={teamById}
+                  matchEditHref={matchEditHref}
+                />
+              </div>
+            </div>
+          ) : null}
+        </div>
       </div>
-      {finalMatch ? (
-        <div className="w-full">
-          <p className="mb-1 text-center text-[9px] font-semibold uppercase tracking-wide text-ash-muted">
-            Final
-          </p>
-          <PosterBracketMatchCard
-            match={finalMatch}
-            teamById={teamById}
-            matchEditHref={matchEditHref}
-          />
+      {showChampion ? (
+        <div className="mt-6 w-full max-w-[152px] shrink-0">
+          <ChampionCard champion={tracker.champion} teamById={teamById} />
         </div>
       ) : null}
-      {showChampion ? <ChampionCard champion={tracker.champion} teamById={teamById} /> : null}
     </div>
   );
 }
@@ -352,7 +384,7 @@ export function PosterBracketTracker({ tracker, teamById, matchEditHref }: Props
         role="region"
         aria-label="Live participant bracket tracker"
       >
-        <div className="hidden min-w-[1180px] items-stretch justify-center gap-1 lg:flex">
+        <div className="hidden min-w-[1540px] grid-cols-[auto_280px_auto] items-start justify-center gap-x-3 lg:grid">
           <PosterHalf
             layout={POSTER_LEFT_HALF}
             side="left"
