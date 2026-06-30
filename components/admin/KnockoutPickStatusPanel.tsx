@@ -3,11 +3,11 @@
 import Link from "next/link";
 import { useState } from "react";
 import {
+  formatAdminKnockoutParticipantStatusLabel,
   formatAdminKnockoutReminderCopy,
-  formatAdminKnockoutStatusLabel,
+  shouldShowAdminKnockoutReminder,
   type AdminKnockoutPickStatusPanelData,
   type AdminKnockoutParticipantStatus,
-  type AdminKnockoutStageBreakdown,
 } from "@/lib/admin/adminKnockoutPickStatus";
 
 type Props = {
@@ -15,37 +15,22 @@ type Props = {
   className?: string;
 };
 
-function stageBreakdownLines(breakdown: AdminKnockoutStageBreakdown): string[] {
-  const lines: string[] = [];
-  if (breakdown.roundOf32 > 0) {
-    lines.push(`Round of 32: ${breakdown.roundOf32}`);
-  }
-  if (breakdown.roundOf16 > 0) {
-    lines.push(`Round of 16: ${breakdown.roundOf16}`);
-  }
-  if (breakdown.quarterFinals > 0) {
-    lines.push(`Quarter-finals: ${breakdown.quarterFinals}`);
-  }
-  if (breakdown.semiFinals > 0) {
-    lines.push(`Semi-finals: ${breakdown.semiFinals}`);
-  }
-  if (breakdown.finalChampion > 0) {
-    lines.push(`Final / Champion: ${breakdown.finalChampion}`);
-  }
-  return lines;
-}
-
-function statusBadgeClass(status: AdminKnockoutParticipantStatus["status"]): string {
-  switch (status) {
-    case "complete":
-      return "border-emerald-800/60 bg-emerald-950/40 text-emerald-200";
-    case "missing_next_matchday":
+function participantStatusBadgeClass(
+  participant: AdminKnockoutParticipantStatus,
+): string {
+  if (participant.actionableMissingCount > 0) {
+    if (participant.status === "missing_next_matchday") {
       return "border-red-800/60 bg-red-950/40 text-red-200";
-    case "not_started":
-      return "border-ash-border/60 bg-ash-body/30 text-ash-muted";
-    default:
-      return "border-amber-800/60 bg-amber-950/40 text-amber-100";
+    }
+    return "border-amber-800/60 bg-amber-950/40 text-amber-100";
   }
+  if (participant.lockedMissingCount > 0) {
+    return "border-red-900/50 bg-red-950/30 text-red-200";
+  }
+  if (participant.status === "not_started") {
+    return "border-ash-border/60 bg-ash-body/30 text-ash-muted";
+  }
+  return "border-emerald-800/60 bg-emerald-950/40 text-emerald-200";
 }
 
 function ParticipantRow({
@@ -59,7 +44,7 @@ function ParticipantRow({
 }) {
   const [copied, setCopied] = useState(false);
   const picksBase = `/admin/pools/${poolId}/picks?participant=${participant.participantId}`;
-  const breakdownLines = stageBreakdownLines(participant.stageBreakdown);
+  const showReminder = shouldShowAdminKnockoutReminder(participant);
 
   async function copyReminder() {
     const text = formatAdminKnockoutReminderCopy({
@@ -81,29 +66,32 @@ function ParticipantRow({
       <div className="flex flex-wrap items-center gap-2">
         <span className="font-medium text-ash-text">{participant.displayName}</span>
         <span
-          className={`inline-flex rounded-full border px-2 py-0.5 text-[11px] font-semibold ${statusBadgeClass(participant.status)}`}
+          className={`inline-flex rounded-full border px-2 py-0.5 text-[11px] font-semibold ${participantStatusBadgeClass(participant)}`}
         >
-          {formatAdminKnockoutStatusLabel(participant.status)}
+          {formatAdminKnockoutParticipantStatusLabel(participant)}
         </span>
-        {participant.actionableMissingCount > 0 ? (
-          <span className="text-xs tabular-nums text-ash-muted">
-            {participant.actionableMissingCount} missing
-          </span>
-        ) : null}
       </div>
 
-      {breakdownLines.length > 0 ? (
-        <ul className="mt-2 space-y-0.5 text-xs text-ash-muted">
-          {breakdownLines.map((line) => (
-            <li key={line}>{line}</li>
-          ))}
-        </ul>
+      {participant.actionableMissingSummaryLines.length > 0 ? (
+        <div className="mt-2 text-xs text-ash-muted">
+          <p className="font-medium text-ash-text">Missing:</p>
+          <ul className="mt-1 list-inside list-disc space-y-0.5">
+            {participant.actionableMissingSummaryLines.map((line) => (
+              <li key={line}>{line}</li>
+            ))}
+          </ul>
+        </div>
       ) : null}
 
-      {participant.lockedMissingLabels.length > 0 ? (
-        <p className="mt-2 text-xs text-red-200">
-          Locked missing: {participant.lockedMissingLabels.join(", ")}
-        </p>
+      {participant.lockedMissingSummaryLines.length > 0 ? (
+        <div className="mt-2 text-xs text-red-200">
+          <p className="font-medium">Locked:</p>
+          <ul className="mt-1 list-inside list-disc space-y-0.5">
+            {participant.lockedMissingSummaryLines.map((line) => (
+              <li key={line}>{line}</li>
+            ))}
+          </ul>
+        </div>
       ) : null}
 
       {participant.nextUrgentMatch ? (
@@ -120,15 +108,48 @@ function ParticipantRow({
         <Link href={picksBase} className="ash-link font-medium">
           Edit picks
         </Link>
-        <button
-          type="button"
-          onClick={() => void copyReminder()}
-          className="font-medium text-ash-accent hover:underline"
-        >
-          {copied ? "Copied!" : "Copy reminder"}
-        </button>
+        {showReminder ? (
+          <button
+            type="button"
+            onClick={() => void copyReminder()}
+            className="font-medium text-ash-accent hover:underline"
+          >
+            {copied ? "Copied!" : "Copy reminder"}
+          </button>
+        ) : null}
       </div>
     </li>
+  );
+}
+
+function ParticipantSection({
+  title,
+  participants,
+  poolId,
+  poolName,
+}: {
+  title: string;
+  participants: AdminKnockoutParticipantStatus[];
+  poolId: string;
+  poolName: string;
+}) {
+  if (participants.length === 0) return null;
+  return (
+    <div className="mt-4">
+      <p className="text-xs font-semibold uppercase tracking-wide text-ash-muted">
+        {title}
+      </p>
+      <ul className="mt-2 space-y-2 text-sm">
+        {participants.map((p) => (
+          <ParticipantRow
+            key={p.participantId}
+            participant={p}
+            poolId={poolId}
+            poolName={poolName}
+          />
+        ))}
+      </ul>
+    </div>
   );
 }
 
@@ -171,27 +192,26 @@ export function KnockoutPickStatusPanel({ data, className = "" }: Props) {
             <p className="mt-1 text-sm text-ash-muted">{data.nextLockingMatchLabel}</p>
           ) : null}
 
-          {data.incompleteParticipants.length > 0 ? (
-            <div className="mt-4">
-              <p className="text-xs font-semibold uppercase tracking-wide text-ash-muted">
-                Incomplete knockout picks
-              </p>
-              <ul className="mt-2 space-y-2 text-sm">
-                {data.incompleteParticipants.map((p) => (
-                  <ParticipantRow
-                    key={p.participantId}
-                    participant={p}
-                    poolId={data.poolId}
-                    poolName={data.poolName}
-                  />
-                ))}
-              </ul>
-            </div>
-          ) : (
+          <ParticipantSection
+            title="Needs action"
+            participants={data.needsActionParticipants}
+            poolId={data.poolId}
+            poolName={data.poolName}
+          />
+
+          <ParticipantSection
+            title="Missed locked picks"
+            participants={data.missedLockedParticipants}
+            poolId={data.poolId}
+            poolName={data.poolName}
+          />
+
+          {data.needsActionParticipants.length === 0 &&
+          data.missedLockedParticipants.length === 0 ? (
             <p className="mt-3 text-sm text-emerald-200">
               Everyone has complete knockout picks for currently pickable matches.
             </p>
-          )}
+          ) : null}
 
           {data.completeParticipants.length > 0 ? (
             <div className="mt-4">

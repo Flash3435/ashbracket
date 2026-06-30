@@ -5,7 +5,11 @@ import type { TournamentMatchPublicRow } from "../../types/tournamentPublic";
 import {
   buildAdminKnockoutParticipantStatus,
   buildAdminKnockoutPickStatusPanelData,
+  formatAdminKnockoutParticipantStatusLabel,
+  formatAdminKnockoutPickCategoryLine,
   formatAdminKnockoutReminderCopy,
+  formatLockedMissingSummaryLines,
+  shouldShowAdminKnockoutReminder,
   sortAdminKnockoutParticipants,
 } from "./adminKnockoutPickStatus";
 
@@ -574,6 +578,166 @@ function progressContext(slots: KnockoutPickSlotDraft[], overrides?: {
   );
   assert.ok(status.actionableMissingCount > 0);
   assert.strictEqual(status.nextUrgentMatch, null);
+}
+
+// Participant with only locked missing shows Missed picks with friendly locked lines
+{
+  const startedMatches = [
+    tournamentMatch({
+      match_code: "M74",
+      stage_code: "round_of_32",
+      kickoff_at: "2026-06-28T22:00:00Z",
+      status: "finished",
+      home_country_code: "GER",
+      away_country_code: "FRA",
+      home_team_name: "Germany",
+      away_team_name: "France",
+    }),
+  ];
+  const status = buildAdminKnockoutParticipantStatus(
+    "p-locked-friendly",
+    "Ivy",
+    [],
+    progressContext([], {
+      tournamentMatches: startedMatches,
+      officialRoundOf32Complete: false,
+    }),
+    { teams },
+  );
+  assert.strictEqual(
+    formatAdminKnockoutParticipantStatusLabel(status),
+    "Missed picks",
+  );
+  assert.strictEqual(status.actionableMissingSummaryLines.length, 0);
+  assert.ok(status.lockedMissingSummaryLines.includes("Germany vs France"));
+  assert.ok(
+    !status.lockedMissingSummaryLines.some((line) => /M\d+/.test(line)),
+    "locked summary must not expose internal match IDs",
+  );
+  assert.strictEqual(shouldShowAdminKnockoutReminder(status), false);
+}
+
+// Actionable missing summary labels
+{
+  assert.strictEqual(
+    formatAdminKnockoutPickCategoryLine(3, "quarterfinalist"),
+    "3 Quarter-final picks",
+  );
+  assert.strictEqual(
+    formatAdminKnockoutPickCategoryLine(1, "semifinalist"),
+    "1 Semi-final pick",
+  );
+  assert.strictEqual(
+    formatAdminKnockoutPickCategoryLine(1, "champion"),
+    "1 Champion pick",
+  );
+}
+
+// Needs picks label when actionable missing exists
+{
+  const gradualMatches = [
+    tournamentMatch({
+      match_code: "M73",
+      stage_code: "round_of_32",
+      kickoff_at: "2026-06-30T19:00:00Z",
+      home_country_code: "RSA",
+      away_country_code: "CAN",
+      home_team_name: "South Africa",
+      away_team_name: "Canada",
+    }),
+  ];
+  const status = buildAdminKnockoutParticipantStatus(
+    "p-needs",
+    "Lee",
+    [],
+    progressContext([], {
+      tournamentMatches: gradualMatches,
+      officialRoundOf32Complete: false,
+    }),
+    { teams },
+  );
+  assert.strictEqual(
+    formatAdminKnockoutParticipantStatusLabel(status),
+    "Needs picks",
+  );
+  assert.deepStrictEqual(status.actionableMissingSummaryLines, [
+    "1 Round of 32 pick",
+  ]);
+  assert.strictEqual(shouldShowAdminKnockoutReminder(status), true);
+}
+
+// Locked-only fallback count when matchup context unavailable
+{
+  const lines = formatLockedMissingSummaryLines([
+    {
+      stage: "roundOf16",
+      pickCategory: "round_of_16",
+      fifaMatchNo: 89,
+      matchLabel: "M89",
+      displayMatchup: null,
+      kickoffIso: null,
+      lockReason: "started",
+    },
+    {
+      stage: "roundOf16",
+      pickCategory: "round_of_16",
+      fifaMatchNo: 90,
+      matchLabel: "M90",
+      displayMatchup: null,
+      kickoffIso: null,
+      lockReason: "started",
+    },
+  ]);
+  assert.deepStrictEqual(lines, ["2 picks now locked"]);
+  assert.ok(!lines.some((line) => /M\d+/.test(line)));
+}
+
+// Panel section split: needs action vs missed locked
+{
+  const gradualMatches = [
+    tournamentMatch({
+      match_code: "M73",
+      stage_code: "round_of_32",
+      kickoff_at: "2026-06-30T19:00:00Z",
+      home_country_code: "RSA",
+      away_country_code: "CAN",
+      home_team_name: "South Africa",
+      away_team_name: "Canada",
+    }),
+  ];
+  const startedMatch = tournamentMatch({
+    match_code: "M74",
+    stage_code: "round_of_32",
+    kickoff_at: "2026-06-28T22:00:00Z",
+    status: "finished",
+    home_country_code: "GER",
+    away_country_code: "FRA",
+    home_team_name: "Germany",
+    away_team_name: "France",
+  });
+  const panel = buildAdminKnockoutPickStatusPanelData({
+    poolId: "pool-1",
+    poolName: "Test Pool",
+    participants: [
+      { id: "p-needs", displayName: "Needs User" },
+      { id: "p-missed", displayName: "Missed User" },
+    ],
+    slotsByParticipantId: new Map([
+      ["p-needs", []],
+      ["p-missed", [r16Slot("1", "team-rsa")]],
+    ]),
+    teams,
+    tournamentMatches: [gradualMatches[0]!, startedMatch],
+    officialRoundOf32Complete: false,
+    nowMs,
+  });
+  assert.strictEqual(panel.needsActionParticipants.length, 1);
+  assert.strictEqual(panel.missedLockedParticipants.length, 1);
+  assert.strictEqual(panel.needsActionParticipants[0]?.displayName, "Needs User");
+  assert.strictEqual(
+    panel.missedLockedParticipants[0]?.displayName,
+    "Missed User",
+  );
 }
 
 // Reminder copy helpers

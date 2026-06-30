@@ -57,7 +57,12 @@ export type AdminKnockoutParticipantStatus = {
   /** Started or feeder-frozen matchups missed before lock. */
   lockedMissingCount: number;
   stageBreakdown: AdminKnockoutStageBreakdown;
+  /** @deprecated Prefer actionableMissingSummaryLines in UI */
   lockedMissingLabels: string[];
+  /** Human-readable actionable missing lines, e.g. "3 Quarter-final picks". */
+  actionableMissingSummaryLines: string[];
+  /** Human-readable locked missed lines, e.g. "Spain vs Colombia" or "3 picks now locked". */
+  lockedMissingSummaryLines: string[];
   nextUrgentMatch: AdminKnockoutUrgentMatch | null;
   /** Earliest kickoff among pickable missing matches (for sorting). */
   urgentKickoffMs: number | null;
@@ -80,6 +85,10 @@ export type AdminKnockoutPickStatusPanelData = {
   firstMatchLockLabel: string | null;
   nextLockingMatchLabel: string | null;
   incompleteParticipants: AdminKnockoutParticipantStatus[];
+  /** Participants with editable missing picks. */
+  needsActionParticipants: AdminKnockoutParticipantStatus[];
+  /** Participants who only missed picks that are now locked. */
+  missedLockedParticipants: AdminKnockoutParticipantStatus[];
   completeParticipants: AdminKnockoutParticipantStatus[];
   knockoutBracketPicksUnlocked: boolean;
   statusUnavailableReason: string | null;
@@ -98,13 +107,169 @@ export type BuildAdminKnockoutPickStatusInput = {
   statusUnavailableReason?: string | null;
 };
 
+export type AdminKnockoutPickCategory =
+  | "round_of_32"
+  | "round_of_16"
+  | "quarterfinalist"
+  | "semifinalist"
+  | "finalist"
+  | "champion";
+
 type MissingMatchRef = {
   stage: keyof AdminKnockoutStageBreakdown;
+  pickCategory: AdminKnockoutPickCategory;
   fifaMatchNo: number;
   matchLabel: string;
+  displayMatchup: string | null;
   kickoffIso: string | null;
   lockReason: "pickable" | "started" | "frozen";
 };
+
+const PICK_CATEGORY_LABELS: Record<
+  AdminKnockoutPickCategory,
+  { singular: string; plural: string }
+> = {
+  round_of_32: { singular: "Round of 32 pick", plural: "Round of 32 picks" },
+  round_of_16: { singular: "Round of 16 pick", plural: "Round of 16 picks" },
+  quarterfinalist: {
+    singular: "Quarter-final pick",
+    plural: "Quarter-final picks",
+  },
+  semifinalist: { singular: "Semi-final pick", plural: "Semi-final picks" },
+  finalist: { singular: "Final pick", plural: "Final picks" },
+  champion: { singular: "Champion pick", plural: "Champion picks" },
+};
+
+const PICK_CATEGORY_ORDER: AdminKnockoutPickCategory[] = [
+  "round_of_32",
+  "round_of_16",
+  "quarterfinalist",
+  "semifinalist",
+  "finalist",
+  "champion",
+];
+
+function pickCategoryForBracketKind(
+  bracketKind: KnockoutWizardBracketKind | "round_of_32",
+): AdminKnockoutPickCategory {
+  if (bracketKind === "finalist") return "champion";
+  return bracketKind;
+}
+
+function displayMatchupFromParts(
+  homeTeamId: string | null,
+  awayTeamId: string | null,
+  teams: Team[],
+  fallbackLine?: string | null,
+): string | null {
+  const home = teamName(homeTeamId, teams);
+  const away = teamName(awayTeamId, teams);
+  if (home && away) return `${home} vs ${away}`;
+  const line = fallbackLine?.trim();
+  if (line && line.includes(" vs ") && !line.toLowerCase().includes("complete")) {
+    return line;
+  }
+  return null;
+}
+
+function buildMissingMatchRef(input: {
+  stage: keyof AdminKnockoutStageBreakdown;
+  pickCategory: AdminKnockoutPickCategory;
+  fifaMatchNo: number;
+  homeTeamId: string | null;
+  awayTeamId: string | null;
+  teams: Team[];
+  fallbackLine?: string | null;
+  kickoffIso: string | null;
+  lockReason: MissingMatchRef["lockReason"];
+}): MissingMatchRef {
+  const displayMatchup = displayMatchupFromParts(
+    input.homeTeamId,
+    input.awayTeamId,
+    input.teams,
+    input.fallbackLine,
+  );
+  return {
+    stage: input.stage,
+    pickCategory: input.pickCategory,
+    fifaMatchNo: input.fifaMatchNo,
+    matchLabel: matchLabelFromParts(
+      input.fifaMatchNo,
+      input.homeTeamId,
+      input.awayTeamId,
+      input.teams,
+      input.fallbackLine,
+    ),
+    displayMatchup,
+    kickoffIso: input.kickoffIso,
+    lockReason: input.lockReason,
+  };
+}
+
+export function formatAdminKnockoutPickCategoryLine(
+  count: number,
+  category: AdminKnockoutPickCategory,
+): string {
+  const n = Math.max(0, Math.floor(count));
+  if (n === 0) return "";
+  const labels = PICK_CATEGORY_LABELS[category];
+  const label = n === 1 ? labels.singular : labels.plural;
+  return `${n} ${label}`;
+}
+
+export function formatActionableMissingSummaryLines(
+  pickableMissing: MissingMatchRef[],
+): string[] {
+  const counts = new Map<AdminKnockoutPickCategory, number>();
+  for (const ref of pickableMissing) {
+    counts.set(ref.pickCategory, (counts.get(ref.pickCategory) ?? 0) + 1);
+  }
+  return PICK_CATEGORY_ORDER.flatMap((category) => {
+    const count = counts.get(category) ?? 0;
+    if (count === 0) return [];
+    return [formatAdminKnockoutPickCategoryLine(count, category)];
+  });
+}
+
+export function formatLockedMissingSummaryLines(
+  lockedMissing: MissingMatchRef[],
+): string[] {
+  if (lockedMissing.length === 0) return [];
+  const matchups = lockedMissing
+    .map((ref) => ref.displayMatchup)
+    .filter((line): line is string => Boolean(line?.trim()));
+  if (matchups.length === lockedMissing.length) {
+    return matchups;
+  }
+  const count = lockedMissing.length;
+  return [`${count} pick${count === 1 ? "" : "s"} now locked`];
+}
+
+export function formatAdminKnockoutParticipantStatusLabel(input: {
+  actionableMissingCount: number;
+  lockedMissingCount: number;
+  status: AdminKnockoutCompletionStatus;
+}): string {
+  if (input.actionableMissingCount > 0) {
+    if (input.status === "missing_next_matchday") {
+      return "Needs picks for next matchday";
+    }
+    return "Needs picks";
+  }
+  if (input.lockedMissingCount > 0) {
+    return "Missed picks";
+  }
+  if (input.status === "not_started") {
+    return "Not started";
+  }
+  return "Complete";
+}
+
+export function shouldShowAdminKnockoutReminder(input: {
+  actionableMissingCount: number;
+}): boolean {
+  return input.actionableMissingCount > 0;
+}
 
 const STAGE_KEY_FOR_BRACKET: Record<string, keyof AdminKnockoutStageBreakdown> = {
   round_of_32: "roundOf32",
@@ -185,19 +350,21 @@ function analyzeGradualR32Missing(
   for (const row of rows) {
     if (row.lockReason !== "pickable" && row.lockReason !== "started") continue;
     if (gradualRowHasWinner(row)) continue;
-    missing.push({
-      stage: "roundOf32",
-      fifaMatchNo: row.fifaMatchNo,
-      matchLabel: matchLabelFromParts(
-        row.fifaMatchNo,
-        ctx.gradual.matchStates[row.matchIndex]?.homeTeamId ?? null,
-        ctx.gradual.matchStates[row.matchIndex]?.awayTeamId ?? null,
+    missing.push(
+      buildMissingMatchRef({
+        stage: "roundOf32",
+        pickCategory: "round_of_32",
+        fifaMatchNo: row.fifaMatchNo,
+        homeTeamId:
+          ctx.gradual.matchStates[row.matchIndex]?.homeTeamId ?? null,
+        awayTeamId:
+          ctx.gradual.matchStates[row.matchIndex]?.awayTeamId ?? null,
         teams,
-        row.display.emptyPrimaryLine,
-      ),
-      kickoffIso: row.display.kickoffIso,
-      lockReason: row.lockReason === "started" ? "started" : "pickable",
-    });
+        fallbackLine: row.display.emptyPrimaryLine,
+        kickoffIso: row.display.kickoffIso,
+        lockReason: row.lockReason === "started" ? "started" : "pickable",
+      }),
+    );
   }
   return missing;
 }
@@ -223,24 +390,37 @@ function analyzeLaterRoundMissing(
       if (validatedKnockoutMatchWinner(row)) continue;
       const stage =
         STAGE_KEY_FOR_BRACKET[bracketKind] ?? "roundOf16";
+      const pickCategory = pickCategoryForBracketKind(bracketKind);
       if (row.lockReason === "pickable") {
-        missing.push({
-          stage,
-          fifaMatchNo: row.fifaMatchNo,
-          matchLabel: matchLabelFromRow(row, teams),
-          kickoffIso: row.kickoffIso,
-          lockReason: "pickable",
-        });
+        missing.push(
+          buildMissingMatchRef({
+            stage,
+            pickCategory,
+            fifaMatchNo: row.fifaMatchNo,
+            homeTeamId: row.homeTeamId,
+            awayTeamId: row.awayTeamId,
+            teams,
+            fallbackLine: row.display.emptyPrimaryLine,
+            kickoffIso: row.kickoffIso,
+            lockReason: "pickable",
+          }),
+        );
         continue;
       }
       if (row.lockReason === "started" || row.lockReason === "frozen") {
-        missing.push({
-          stage,
-          fifaMatchNo: row.fifaMatchNo,
-          matchLabel: matchLabelFromRow(row, teams),
-          kickoffIso: row.kickoffIso,
-          lockReason: row.lockReason,
-        });
+        missing.push(
+          buildMissingMatchRef({
+            stage,
+            pickCategory,
+            fifaMatchNo: row.fifaMatchNo,
+            homeTeamId: row.homeTeamId,
+            awayTeamId: row.awayTeamId,
+            teams,
+            fallbackLine: row.display.emptyPrimaryLine,
+            kickoffIso: row.kickoffIso,
+            lockReason: row.lockReason,
+          }),
+        );
       }
     }
   }
@@ -353,6 +533,9 @@ export function buildAdminKnockoutParticipantStatus(
     lockedMissingCount: lockedMissing.length,
     stageBreakdown,
     lockedMissingLabels: lockedMissing.map((m) => `M${m.fifaMatchNo}`),
+    actionableMissingSummaryLines:
+      formatActionableMissingSummaryLines(pickableMissing),
+    lockedMissingSummaryLines: formatLockedMissingSummaryLines(lockedMissing),
     nextUrgentMatch: earliestUrgentMatch(pickableMissing),
     urgentKickoffMs: normalizedUrgentKickoffMs,
     hasR32PickableMissing: pickableMissing.some((m) => m.stage === "roundOf32"),
@@ -532,6 +715,8 @@ export function buildAdminKnockoutPickStatusPanelData(
       firstMatchLockLabel: null,
       nextLockingMatchLabel: null,
       incompleteParticipants: [],
+      needsActionParticipants: [],
+      missedLockedParticipants: [],
       completeParticipants: [],
       knockoutBracketPicksUnlocked: input.officialRoundOf32Complete,
       statusUnavailableReason:
@@ -551,6 +736,8 @@ export function buildAdminKnockoutPickStatusPanelData(
       firstMatchLockLabel: null,
       nextLockingMatchLabel: null,
       incompleteParticipants: [],
+      needsActionParticipants: [],
+      missedLockedParticipants: [],
       completeParticipants: [],
       knockoutBracketPicksUnlocked: input.officialRoundOf32Complete,
       statusUnavailableReason: null,
@@ -575,6 +762,8 @@ export function buildAdminKnockoutPickStatusPanelData(
       firstMatchLockLabel: null,
       nextLockingMatchLabel: null,
       incompleteParticipants: [],
+      needsActionParticipants: [],
+      missedLockedParticipants: [],
       completeParticipants: [],
       knockoutBracketPicksUnlocked: input.officialRoundOf32Complete,
       statusUnavailableReason: null,
@@ -612,16 +801,32 @@ export function buildAdminKnockoutPickStatusPanelData(
     ),
   );
 
-  const incomplete = sortAdminKnockoutParticipants(
-    allStatuses.filter((s) => s.status !== "complete"),
+  const needsAction = sortAdminKnockoutParticipants(
+    allStatuses.filter((s) => s.actionableMissingCount > 0),
   );
+  const missedLocked = allStatuses
+    .filter(
+      (s) => s.actionableMissingCount === 0 && s.lockedMissingCount > 0,
+    )
+    .sort((a, b) => a.displayName.localeCompare(b.displayName));
   const complete = allStatuses
-    .filter((s) => s.status === "complete")
+    .filter(
+      (s) => s.actionableMissingCount === 0 && s.lockedMissingCount === 0,
+    )
     .sort((a, b) => a.displayName.localeCompare(b.displayName));
 
   const completeCount = complete.length;
-  const incompleteCount = incomplete.length;
-  const summaryLine = `${completeCount} complete · ${incompleteCount} incomplete`;
+  const needsActionCount = needsAction.length;
+  const missedLockedCount = missedLocked.length;
+  const incompleteCount = needsActionCount + missedLockedCount;
+  const summaryParts = [`${completeCount} complete`];
+  if (needsActionCount > 0) {
+    summaryParts.push(`${needsActionCount} need picks`);
+  }
+  if (missedLockedCount > 0) {
+    summaryParts.push(`${missedLockedCount} missed locked picks`);
+  }
+  const summaryLine = summaryParts.join(" · ");
 
   const firstMatchLockLabel = earliestKickoff
     ? `First match locks in: ${formatKnockoutSelectionCountdown(earliestKickoff, nowMs)}`
@@ -639,7 +844,9 @@ export function buildAdminKnockoutPickStatusPanelData(
     summaryLine,
     firstMatchLockLabel,
     nextLockingMatchLabel,
-    incompleteParticipants: incomplete,
+    incompleteParticipants: needsAction,
+    needsActionParticipants: needsAction,
+    missedLockedParticipants: missedLocked,
     completeParticipants: complete,
     knockoutBracketPicksUnlocked: input.officialRoundOf32Complete,
     statusUnavailableReason: null,
