@@ -3,12 +3,15 @@ import type { Team } from "../../src/types/domain";
 import type { KnockoutPickSlotDraft } from "../../types/adminKnockoutPicks";
 import type { TournamentMatchPublicRow } from "../../types/tournamentPublic";
 import {
+  buildAdminKnockoutParticipantDisplaySections,
   buildAdminKnockoutParticipantStatus,
   buildAdminKnockoutPickStatusPanelData,
   formatAdminKnockoutParticipantStatusLabel,
   formatAdminKnockoutPickCategoryLine,
   formatAdminKnockoutReminderCopy,
-  formatLockedMissingSummaryLines,
+  formatLockedMatchSummaries,
+  formatLockedMissingCategorySummaryLines,
+  formatMissingCategorySummaryLines,
   shouldShowAdminKnockoutReminder,
   sortAdminKnockoutParticipants,
 } from "./adminKnockoutPickStatus";
@@ -609,10 +612,19 @@ function progressContext(slots: KnockoutPickSlotDraft[], overrides?: {
     "Missed picks",
   );
   assert.strictEqual(status.actionableMissingSummaryLines.length, 0);
-  assert.ok(status.lockedMissingSummaryLines.includes("Germany vs France"));
+  assert.deepStrictEqual(status.lockedMissingCategorySummaryLines, [
+    "1 Round of 32 pick",
+  ]);
+  assert.deepStrictEqual(status.lockedMatchSummaries, ["Germany vs France"]);
+  const display = buildAdminKnockoutParticipantDisplaySections(status);
+  assert.strictEqual(display.stillNeeded, null);
+  assert.deepStrictEqual(display.alreadyMissed?.lines, ["1 Round of 32 pick"]);
+  assert.deepStrictEqual(display.lockedMatches?.lines, ["Germany vs France"]);
   assert.ok(
-    !status.lockedMissingSummaryLines.some((line) => /M\d+/.test(line)),
-    "locked summary must not expose internal match IDs",
+    ![...(display.alreadyMissed?.lines ?? []), ...(display.lockedMatches?.lines ?? [])].some(
+      (line) => /M\d+/.test(line),
+    ),
+    "display must not expose internal match IDs",
   );
   assert.strictEqual(shouldShowAdminKnockoutReminder(status), false);
 }
@@ -663,33 +675,157 @@ function progressContext(slots: KnockoutPickSlotDraft[], overrides?: {
   assert.deepStrictEqual(status.actionableMissingSummaryLines, [
     "1 Round of 32 pick",
   ]);
+  assert.strictEqual(status.lockedMissingCategorySummaryLines.length, 0);
+  assert.strictEqual(status.lockedMatchSummaries.length, 0);
+  const display = buildAdminKnockoutParticipantDisplaySections(status);
+  assert.deepStrictEqual(display.stillNeeded?.lines, ["1 Round of 32 pick"]);
+  assert.strictEqual(display.alreadyMissed, null);
+  assert.strictEqual(display.lockedMatches, null);
   assert.strictEqual(shouldShowAdminKnockoutReminder(status), true);
+}
+
+// Mixed actionable and locked: still needed vs already missed are separate
+{
+  const mixedStatus = {
+    participantId: "p-mixed",
+    displayName: "Khyan",
+    status: "incomplete" as const,
+    actionableMissingCount: 2,
+    missingCount: 2,
+    lockedMissingCount: 3,
+    stageBreakdown: {
+      roundOf32: 0,
+      roundOf16: 2,
+      quarterFinals: 0,
+      semiFinals: 0,
+      finalChampion: 0,
+    },
+    lockedMissingLabels: ["M89", "M90", "M91"],
+    actionableMissingSummaryLines: ["2 Round of 16 picks"],
+    lockedMissingCategorySummaryLines: ["3 Round of 16 picks"],
+    lockedMatchSummaries: [
+      "Paraguay vs France",
+      "Canada vs Morocco",
+      "Brazil vs Norway",
+    ],
+    lockedMissingSummaryLines: [
+      "Paraguay vs France",
+      "Canada vs Morocco",
+      "Brazil vs Norway",
+    ],
+    nextUrgentMatch: null,
+    urgentKickoffMs: null,
+    hasR32PickableMissing: false,
+  };
+  assert.strictEqual(
+    formatAdminKnockoutParticipantStatusLabel(mixedStatus),
+    "Needs picks",
+  );
+  const display = buildAdminKnockoutParticipantDisplaySections(mixedStatus);
+  assert.deepStrictEqual(display.stillNeeded?.lines, ["2 Round of 16 picks"]);
+  assert.deepStrictEqual(display.alreadyMissed?.lines, [
+    "Paraguay vs France",
+    "Canada vs Morocco",
+    "Brazil vs Norway",
+  ]);
+  assert.strictEqual(display.lockedMatches, null);
+  assert.strictEqual(shouldShowAdminKnockoutReminder(mixedStatus), true);
+  const reminder = formatAdminKnockoutReminderCopy({
+    participantName: "Khyan",
+    poolName: "Test Pool",
+    actionableMissingSummaryLines: mixedStatus.actionableMissingSummaryLines,
+  });
+  assert.ok(reminder.includes("2 Round of 16 picks"));
+  assert.ok(!reminder.includes("Paraguay"));
+  assert.ok(!reminder.includes("M89"));
+}
+
+// Locked-only with category and matchup sections
+{
+  const lockedOnlyStatus = {
+    participantId: "p-locked-only",
+    displayName: "Sam",
+    status: "complete" as const,
+    actionableMissingCount: 0,
+    missingCount: 0,
+    lockedMissingCount: 5,
+    stageBreakdown: {
+      roundOf32: 0,
+      roundOf16: 0,
+      quarterFinals: 0,
+      semiFinals: 0,
+      finalChampion: 0,
+    },
+    lockedMissingLabels: ["M89", "M90", "M91", "M92", "M93"],
+    actionableMissingSummaryLines: [],
+    lockedMissingCategorySummaryLines: ["5 Round of 16 picks"],
+    lockedMatchSummaries: [
+      "Paraguay vs France",
+      "Canada vs Morocco",
+      "Brazil vs Norway",
+    ],
+    lockedMissingSummaryLines: [
+      "Paraguay vs France",
+      "Canada vs Morocco",
+      "Brazil vs Norway",
+    ],
+    nextUrgentMatch: null,
+    urgentKickoffMs: null,
+    hasR32PickableMissing: false,
+  };
+  assert.strictEqual(
+    formatAdminKnockoutParticipantStatusLabel(lockedOnlyStatus),
+    "Missed picks",
+  );
+  const display = buildAdminKnockoutParticipantDisplaySections(lockedOnlyStatus);
+  assert.strictEqual(display.stillNeeded, null);
+  assert.deepStrictEqual(display.alreadyMissed?.lines, ["5 Round of 16 picks"]);
+  assert.deepStrictEqual(display.lockedMatches?.lines, [
+    "Paraguay vs France",
+    "Canada vs Morocco",
+    "Brazil vs Norway",
+  ]);
+  assert.strictEqual(shouldShowAdminKnockoutReminder(lockedOnlyStatus), false);
 }
 
 // Locked-only fallback count when matchup context unavailable
 {
-  const lines = formatLockedMissingSummaryLines([
+  const refs = [
     {
-      stage: "roundOf16",
-      pickCategory: "round_of_16",
+      stage: "roundOf16" as const,
+      pickCategory: "round_of_16" as const,
       fifaMatchNo: 89,
       matchLabel: "M89",
       displayMatchup: null,
       kickoffIso: null,
-      lockReason: "started",
+      lockReason: "started" as const,
     },
     {
-      stage: "roundOf16",
-      pickCategory: "round_of_16",
+      stage: "roundOf16" as const,
+      pickCategory: "round_of_16" as const,
       fifaMatchNo: 90,
       matchLabel: "M90",
       displayMatchup: null,
       kickoffIso: null,
-      lockReason: "started",
+      lockReason: "started" as const,
     },
+  ];
+  assert.deepStrictEqual(formatLockedMissingCategorySummaryLines(refs), [
+    "2 Round of 16 picks",
   ]);
-  assert.deepStrictEqual(lines, ["2 picks now locked"]);
-  assert.ok(!lines.some((line) => /M\d+/.test(line)));
+  assert.deepStrictEqual(formatLockedMatchSummaries(refs), []);
+  const display = buildAdminKnockoutParticipantDisplaySections({
+    actionableMissingCount: 0,
+    lockedMissingCount: 2,
+    actionableMissingSummaryLines: [],
+    lockedMissingCategorySummaryLines: formatLockedMissingCategorySummaryLines(refs),
+    lockedMatchSummaries: formatLockedMatchSummaries(refs),
+  });
+  assert.deepStrictEqual(display.alreadyMissed?.lines, ["2 Round of 16 picks"]);
+  assert.strictEqual(display.lockedMatches, null);
+  assert.ok(
+    !formatMissingCategorySummaryLines(refs).some((line) => /M\d+/.test(line)),
+  );
 }
 
 // Panel section split: needs action vs missed locked
@@ -742,6 +878,16 @@ function progressContext(slots: KnockoutPickSlotDraft[], overrides?: {
 
 // Reminder copy helpers
 {
+  const actionableReminder = formatAdminKnockoutReminderCopy({
+    participantName: "Khyan",
+    poolName: "AshBracket 2026",
+    actionableMissingSummaryLines: ["2 Round of 16 picks"],
+  });
+  assert.ok(actionableReminder.includes("Khyan"));
+  assert.ok(actionableReminder.includes("2 Round of 16 picks"));
+  assert.ok(actionableReminder.includes("before the next matches lock"));
+  assert.ok(!actionableReminder.includes("M89"));
+
   const generic = formatAdminKnockoutReminderCopy({
     participantName: "Jamie",
     poolName: "AshBracket 2026",
@@ -759,8 +905,8 @@ function progressContext(slots: KnockoutPickSlotDraft[], overrides?: {
       kickoffLocal: "Mon, Jun 30, 2026, 3:00 p.m. EDT",
     },
   });
-  assert.ok(urgent.includes("M73 South Africa vs Canada"));
-  assert.ok(urgent.includes("before kickoff"));
+  assert.ok(urgent.includes("South Africa vs Canada"));
+  assert.ok(!urgent.includes("M73"));
 }
 
 console.log("adminKnockoutPickStatus.selftest.ts: ok");

@@ -3,10 +3,12 @@
 import Link from "next/link";
 import { useState } from "react";
 import {
+  buildAdminKnockoutParticipantDisplaySections,
   formatAdminKnockoutParticipantStatusLabel,
   formatAdminKnockoutReminderCopy,
   shouldShowAdminKnockoutReminder,
   type AdminKnockoutPickStatusPanelData,
+  type AdminKnockoutParticipantDisplaySection,
   type AdminKnockoutParticipantStatus,
 } from "@/lib/admin/adminKnockoutPickStatus";
 
@@ -33,6 +35,29 @@ function participantStatusBadgeClass(
   return "border-emerald-800/60 bg-emerald-950/40 text-emerald-200";
 }
 
+function SummarySection({
+  section,
+  tone = "muted",
+}: {
+  section: AdminKnockoutParticipantDisplaySection;
+  tone?: "muted" | "missed";
+}) {
+  return (
+    <div
+      className={`mt-2 text-xs ${tone === "missed" ? "text-red-200" : "text-ash-muted"}`}
+    >
+      <p className={`font-medium ${tone === "missed" ? "" : "text-ash-text"}`}>
+        {section.title}:
+      </p>
+      <ul className="mt-1 list-inside list-disc space-y-0.5">
+        {section.lines.map((line) => (
+          <li key={`${section.title}-${line}`}>{line}</li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
 function ParticipantRow({
   participant,
   poolId,
@@ -45,11 +70,13 @@ function ParticipantRow({
   const [copied, setCopied] = useState(false);
   const picksBase = `/admin/pools/${poolId}/picks?participant=${participant.participantId}`;
   const showReminder = shouldShowAdminKnockoutReminder(participant);
+  const sections = buildAdminKnockoutParticipantDisplaySections(participant);
 
   async function copyReminder() {
     const text = formatAdminKnockoutReminderCopy({
       participantName: participant.displayName,
       poolName,
+      actionableMissingSummaryLines: participant.actionableMissingSummaryLines,
       urgentMatch: participant.nextUrgentMatch,
     });
     try {
@@ -72,31 +99,21 @@ function ParticipantRow({
         </span>
       </div>
 
-      {participant.actionableMissingSummaryLines.length > 0 ? (
-        <div className="mt-2 text-xs text-ash-muted">
-          <p className="font-medium text-ash-text">Missing:</p>
-          <ul className="mt-1 list-inside list-disc space-y-0.5">
-            {participant.actionableMissingSummaryLines.map((line) => (
-              <li key={line}>{line}</li>
-            ))}
-          </ul>
-        </div>
+      {sections.stillNeeded ? (
+        <SummarySection section={sections.stillNeeded} tone="muted" />
       ) : null}
 
-      {participant.lockedMissingSummaryLines.length > 0 ? (
-        <div className="mt-2 text-xs text-red-200">
-          <p className="font-medium">Locked:</p>
-          <ul className="mt-1 list-inside list-disc space-y-0.5">
-            {participant.lockedMissingSummaryLines.map((line) => (
-              <li key={line}>{line}</li>
-            ))}
-          </ul>
-        </div>
+      {sections.alreadyMissed ? (
+        <SummarySection section={sections.alreadyMissed} tone="missed" />
+      ) : null}
+
+      {sections.lockedMatches ? (
+        <SummarySection section={sections.lockedMatches} tone="missed" />
       ) : null}
 
       {participant.nextUrgentMatch ? (
         <p className="mt-2 text-xs text-amber-100">
-          Next urgent: {participant.nextUrgentMatch.matchLabel}
+          Next urgent: {participant.nextUrgentMatch.matchLabel.replace(/^M\d+\s+/, "")}
           {` · locks ${participant.nextUrgentMatch.kickoffLocal}`}
         </p>
       ) : null}

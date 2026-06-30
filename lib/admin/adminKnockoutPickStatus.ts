@@ -59,9 +59,13 @@ export type AdminKnockoutParticipantStatus = {
   stageBreakdown: AdminKnockoutStageBreakdown;
   /** @deprecated Prefer actionableMissingSummaryLines in UI */
   lockedMissingLabels: string[];
-  /** Human-readable actionable missing lines, e.g. "3 Quarter-final picks". */
+  /** Human-readable still-needed lines, e.g. "2 Round of 16 picks". */
   actionableMissingSummaryLines: string[];
-  /** Human-readable locked missed lines, e.g. "Spain vs Colombia" or "3 picks now locked". */
+  /** Locked missed picks grouped by round/kind, e.g. "5 Round of 16 picks". */
+  lockedMissingCategorySummaryLines: string[];
+  /** Locked missed matchup names when available, e.g. "Spain vs Colombia". */
+  lockedMatchSummaries: string[];
+  /** @deprecated Use lockedMissingCategorySummaryLines or lockedMatchSummaries */
   lockedMissingSummaryLines: string[];
   nextUrgentMatch: AdminKnockoutUrgentMatch | null;
   /** Earliest kickoff among pickable missing matches (for sorting). */
@@ -217,11 +221,11 @@ export function formatAdminKnockoutPickCategoryLine(
   return `${n} ${label}`;
 }
 
-export function formatActionableMissingSummaryLines(
-  pickableMissing: MissingMatchRef[],
+export function formatMissingCategorySummaryLines(
+  missing: Array<{ pickCategory: AdminKnockoutPickCategory }>,
 ): string[] {
   const counts = new Map<AdminKnockoutPickCategory, number>();
-  for (const ref of pickableMissing) {
+  for (const ref of missing) {
     counts.set(ref.pickCategory, (counts.get(ref.pickCategory) ?? 0) + 1);
   }
   return PICK_CATEGORY_ORDER.flatMap((category) => {
@@ -231,18 +235,110 @@ export function formatActionableMissingSummaryLines(
   });
 }
 
+/** @deprecated Use formatMissingCategorySummaryLines */
+export function formatActionableMissingSummaryLines(
+  pickableMissing: MissingMatchRef[],
+): string[] {
+  return formatMissingCategorySummaryLines(pickableMissing);
+}
+
+export function formatLockedMissingCategorySummaryLines(
+  lockedMissing: MissingMatchRef[],
+): string[] {
+  return formatMissingCategorySummaryLines(lockedMissing);
+}
+
+export function formatLockedMatchSummaries(
+  lockedMissing: MissingMatchRef[],
+): string[] {
+  return lockedMissing
+    .map((ref) => ref.displayMatchup)
+    .filter((line): line is string => Boolean(line?.trim()));
+}
+
+/** @deprecated Use formatLockedMissingCategorySummaryLines or formatLockedMatchSummaries */
 export function formatLockedMissingSummaryLines(
   lockedMissing: MissingMatchRef[],
 ): string[] {
-  if (lockedMissing.length === 0) return [];
-  const matchups = lockedMissing
-    .map((ref) => ref.displayMatchup)
-    .filter((line): line is string => Boolean(line?.trim()));
-  if (matchups.length === lockedMissing.length) {
+  const matchups = formatLockedMatchSummaries(lockedMissing);
+  if (matchups.length === lockedMissing.length && matchups.length > 0) {
     return matchups;
   }
-  const count = lockedMissing.length;
-  return [`${count} pick${count === 1 ? "" : "s"} now locked`];
+  return formatLockedMissingCategorySummaryLines(lockedMissing);
+}
+
+export type AdminKnockoutParticipantDisplaySection = {
+  title: "Still needed" | "Already missed" | "Locked";
+  lines: string[];
+};
+
+export function buildAdminKnockoutParticipantDisplaySections(input: {
+  actionableMissingCount: number;
+  lockedMissingCount: number;
+  actionableMissingSummaryLines: string[];
+  lockedMissingCategorySummaryLines: string[];
+  lockedMatchSummaries: string[];
+}): {
+  stillNeeded: AdminKnockoutParticipantDisplaySection | null;
+  alreadyMissed: AdminKnockoutParticipantDisplaySection | null;
+  lockedMatches: AdminKnockoutParticipantDisplaySection | null;
+} {
+  const stillNeeded =
+    input.actionableMissingSummaryLines.length > 0
+      ? {
+          title: "Still needed" as const,
+          lines: input.actionableMissingSummaryLines,
+        }
+      : null;
+
+  let alreadyMissed: AdminKnockoutParticipantDisplaySection | null = null;
+  let lockedMatches: AdminKnockoutParticipantDisplaySection | null = null;
+
+  if (input.actionableMissingCount > 0 && input.lockedMissingCount > 0) {
+    if (input.lockedMatchSummaries.length > 0) {
+      alreadyMissed = {
+        title: "Already missed",
+        lines: input.lockedMatchSummaries,
+      };
+    } else if (input.lockedMissingCategorySummaryLines.length > 0) {
+      alreadyMissed = {
+        title: "Already missed",
+        lines: input.lockedMissingCategorySummaryLines,
+      };
+    }
+  } else if (
+    input.actionableMissingCount === 0 &&
+    input.lockedMissingCount > 0
+  ) {
+    if (input.lockedMissingCategorySummaryLines.length > 0) {
+      alreadyMissed = {
+        title: "Already missed",
+        lines: input.lockedMissingCategorySummaryLines,
+      };
+    }
+    if (input.lockedMatchSummaries.length > 0) {
+      lockedMatches = {
+        title: "Locked",
+        lines: input.lockedMatchSummaries,
+      };
+    }
+  }
+
+  return { stillNeeded, alreadyMissed, lockedMatches };
+}
+
+function formatReminderPicksPhrase(summaryLines: string[]): string {
+  if (summaryLines.length === 0) return "your remaining knockout picks";
+  if (summaryLines.length === 1) return summaryLines[0]!;
+  if (summaryLines.length === 2) {
+    return `${summaryLines[0]} and ${summaryLines[1]}`;
+  }
+  return `${summaryLines.slice(0, -1).join(", ")}, and ${summaryLines[summaryLines.length - 1]}`;
+}
+
+function friendlyUrgentMatchLabel(matchLabel: string): string {
+  const stripped = matchLabel.replace(/^M\d+\s+/, "").trim();
+  return stripped || matchLabel;
 }
 
 export function formatAdminKnockoutParticipantStatusLabel(input: {
@@ -533,9 +629,13 @@ export function buildAdminKnockoutParticipantStatus(
     lockedMissingCount: lockedMissing.length,
     stageBreakdown,
     lockedMissingLabels: lockedMissing.map((m) => `M${m.fifaMatchNo}`),
-    actionableMissingSummaryLines:
-      formatActionableMissingSummaryLines(pickableMissing),
-    lockedMissingSummaryLines: formatLockedMissingSummaryLines(lockedMissing),
+    actionableMissingSummaryLines: formatMissingCategorySummaryLines(
+      pickableMissing,
+    ),
+    lockedMissingCategorySummaryLines:
+      formatLockedMissingCategorySummaryLines(lockedMissing),
+    lockedMatchSummaries: formatLockedMatchSummaries(lockedMissing),
+    lockedMissingSummaryLines: formatLockedMatchSummaries(lockedMissing),
     nextUrgentMatch: earliestUrgentMatch(pickableMissing),
     urgentKickoffMs: normalizedUrgentKickoffMs,
     hasR32PickableMissing: pickableMissing.some((m) => m.stage === "roundOf32"),
@@ -675,10 +775,14 @@ export function formatAdminKnockoutStatusLabel(
 export function formatAdminKnockoutReminderCopy(input: {
   participantName: string;
   poolName: string;
+  actionableMissingSummaryLines?: string[];
   urgentMatch?: AdminKnockoutUrgentMatch | null;
 }): string {
+  if (input.actionableMissingSummaryLines?.length) {
+    return `Hi ${input.participantName} — you still need to submit ${formatReminderPicksPhrase(input.actionableMissingSummaryLines)} before the next matches lock.`;
+  }
   if (input.urgentMatch) {
-    return `Hi ${input.participantName}, you still need to pick ${input.urgentMatch.matchLabel}. It locks at ${input.urgentMatch.kickoffLocal}. Please update your AshBracket picks before kickoff.`;
+    return `Hi ${input.participantName} — you still need to pick ${friendlyUrgentMatchLabel(input.urgentMatch.matchLabel)} before it locks at ${input.urgentMatch.kickoffLocal}.`;
   }
   return `Hi ${input.participantName}, you still have knockout picks to complete in ${input.poolName}. Some matches lock at kickoff, so please update your AshBracket picks as soon as possible.`;
 }
