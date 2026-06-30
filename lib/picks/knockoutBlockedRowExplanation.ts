@@ -25,7 +25,7 @@ export type KnockoutBlockedUserAction =
   | "pick_upstream"
   | "pick_this_row"
   | "wait_for_result"
-  | "save_repaired_state"
+  | "locked_out"
   | "contact_admin";
 
 export type BlockedKnockoutMatchExplanation = {
@@ -41,32 +41,39 @@ export type ExplainBlockedKnockoutRowOptions = {
   clearedPickRowKeys?: ReadonlySet<string>;
 };
 
-export const LOCKED_CLEARED_REPAIR_HEADLINE = "One locked pick was cleared";
+export const LOCKED_OUT_PICK_HEADLINE = "One pick is out";
 
-export function lockedClearedRepairCardBody(
-  feederLabel: string | null,
-): string {
+/** @deprecated Use LOCKED_OUT_PICK_HEADLINE */
+export const LOCKED_CLEARED_REPAIR_HEADLINE = LOCKED_OUT_PICK_HEADLINE;
+
+export function lockedOutPickCardBody(feederLabel: string | null): string {
   if (feederLabel) {
-    return `Your ${feederLabel} pick no longer fits the official bracket and can't be changed because that match is locked. Save to keep the rest of your valid picks.`;
+    return `Your ${feederLabel} pick is locked and can no longer advance. No action is needed.`;
   }
-  return "A cleared pick no longer fits the official bracket and can't be changed because that match is locked. Save to keep the rest of your valid picks.";
+  return "One of your picks is locked and can no longer advance. No action is needed.";
 }
 
-function lockedClearedDirectBlockedCopy(
+/** @deprecated Use lockedOutPickCardBody */
+export const lockedClearedRepairCardBody = lockedOutPickCardBody;
+
+function lockedOutDirectBlockedCopy(
   blockedRef: string,
   feederLabel: string | null,
 ): string {
   if (feederLabel) {
-    return `${blockedRef} can't be picked yet because the ${feederLabel} pick was cleared and is now locked. Save your updated bracket.`;
+    return `This path depended on ${feederLabel} and is no longer alive.`;
   }
-  return `${blockedRef} can't be picked yet because a cleared pick is now locked. Save your updated bracket.`;
+  return "This path is no longer alive.";
 }
 
-function lockedClearedIndirectBlockedCopy(
+function lockedOutIndirectBlockedCopy(
   blockedRef: string,
-  intermediateMatchNo: number,
+  feederLabel: string | null,
 ): string {
-  return `${blockedRef} is blocked by M${intermediateMatchNo}. Save your updated bracket first, then review this step.`;
+  if (feederLabel) {
+    return `This pick is out because the ${feederLabel} feeder pick was eliminated.`;
+  }
+  return "This pick is out because the feeder pick was eliminated.";
 }
 
 export function clearedPickRowKeySet(
@@ -175,15 +182,15 @@ function copyForBlockedDownstreamRow(
         explanation.missingFeederMatchNo != null &&
         feeder.fifaMatchNo === explanation.missingFeederMatchNo
       ) {
-        return lockedClearedDirectBlockedCopy(blockedRef, feederLabel);
+        return lockedOutDirectBlockedCopy(blockedRef, feederLabel);
       }
       if (
         feeder.fifaMatchNo > 0 &&
         blockedRow.fifaMatchNo !== feeder.fifaMatchNo
       ) {
-        return lockedClearedIndirectBlockedCopy(blockedRef, feeder.fifaMatchNo);
+        return lockedOutIndirectBlockedCopy(blockedRef, feederLabel);
       }
-      return lockedClearedDirectBlockedCopy(blockedRef, feederLabel);
+      return lockedOutDirectBlockedCopy(blockedRef, feederLabel);
     case "official_result_missing":
       return feederLabel
         ? `${blockedRef} is waiting for the winner of ${feederLabel}.`
@@ -274,10 +281,10 @@ function classifyUnresolvedFeeder(
         missingFeederMatchNo,
         missingFeederLabel: feederLabel,
         feederState: "cleared_pick_locked",
-        userAction: "save_repaired_state",
+        userAction: "locked_out",
         userFacingCopy: feederLabel
-          ? `Your ${feederLabel} pick was cleared and is now locked. Save your updated bracket.`
-          : "This pick was cleared and is now locked. Save your updated bracket.",
+          ? `Your ${feederLabel} pick is locked and can no longer advance.`
+          : "This pick is locked and can no longer advance.",
       };
     }
 
@@ -316,10 +323,10 @@ export function explainLockedClearedPickRow(
     missingFeederMatchNo,
     missingFeederLabel: feederLabel,
     feederState: "cleared_pick_locked",
-    userAction: "save_repaired_state",
+    userAction: "locked_out",
     userFacingCopy: feederLabel
-      ? `Your ${feederLabel} pick was cleared and is now locked. Save your updated bracket.`
-      : "This pick was cleared and is now locked. Save your updated bracket.",
+      ? `Your ${feederLabel} pick is locked and can no longer advance.`
+      : "This pick is locked and can no longer advance.",
   };
 }
 
@@ -474,7 +481,7 @@ export function stepLockedClearedPickIssue(
     input,
     options,
   );
-  if (blocked?.userAction === "save_repaired_state") {
+  if (blocked?.userAction === "locked_out") {
     return blocked;
   }
   return null;

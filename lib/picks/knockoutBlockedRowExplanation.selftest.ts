@@ -391,9 +391,10 @@ const r32OfficialResults: TournamentMatchPublicRow[] = [
   const m97 = buildKnockoutMatchPickRows(input).find((r) => r.fifaMatchNo === 97)!;
   assert.match(
     m97.display.statusLine!,
-    /M97 can't be picked yet because the Germany vs Paraguay pick was cleared and is now locked/i,
+    /This path depended on Germany vs Paraguay and is no longer alive/i,
   );
   assert.doesNotMatch(m97.display.statusLine!, /waiting for the winner/i);
+  assert.doesNotMatch(m97.display.statusLine!, /Save/i);
 
   const repairSummary = getKnockoutRepairActionSummary(
     {
@@ -405,12 +406,13 @@ const r32OfficialResults: TournamentMatchPublicRow[] = [
     },
     cleared,
   );
-  assert.equal(repairSummary.headline, "One locked pick was cleared");
+  assert.equal(repairSummary.headline, "One pick is out");
   assert.match(
     repairSummary.detail,
-    /no longer fits the official bracket and can't be changed because that match is locked/i,
+    /locked and can no longer advance/i,
   );
-  assert.equal(repairSummary.ctaLabel, "Save changes");
+  assert.match(repairSummary.detail, /No action is needed/i);
+  assert.equal(repairSummary.ctaLabel, null);
 }
 
 // SF blocked indirectly by cleared locked QF feeder
@@ -478,10 +480,11 @@ const r32OfficialResults: TournamentMatchPublicRow[] = [
   const m101 = buildKnockoutMatchPickRows(sfInput).find((r) => r.fifaMatchNo === 101)!;
   assert.match(
     m101.display.statusLine!,
-    /M101 is blocked by M97/i,
+    /This pick is out because the Germany vs Paraguay feeder pick was eliminated/i,
   );
   assert.doesNotMatch(m101.display.statusLine!, /waiting for the winner/i);
   assert.doesNotMatch(m101.display.statusLine!, /Pick a winner for/i);
+  assert.doesNotMatch(m101.display.statusLine!, /Save/i);
 
   const r16Status = getKnockoutStepCompletionFromDraftState(
     "round_of_16",
@@ -493,7 +496,7 @@ const r32OfficialResults: TournamentMatchPublicRow[] = [
       clearedPickRowKeys: clearedKeys,
     }),
   );
-  assert.strictEqual(r16Status.kind, "needs_review");
+  assert.strictEqual(r16Status.kind, "locked_out");
   assert.strictEqual(r16Status.complete, false);
 
   const qfStatus = getKnockoutStepCompletionFromDraftState(
@@ -506,7 +509,7 @@ const r32OfficialResults: TournamentMatchPublicRow[] = [
       clearedPickRowKeys: clearedKeys,
     }),
   );
-  assert.strictEqual(qfStatus.kind, "needs_review");
+  assert.strictEqual(qfStatus.kind, "locked_out");
   assert.strictEqual(qfStatus.complete, false);
 }
 

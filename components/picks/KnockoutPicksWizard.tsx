@@ -104,6 +104,7 @@ import {
   type KnockoutWizardBracketKindId,
 } from "../../lib/picks/knockoutMatchProgress";
 import { clearedPickRowKeySet } from "../../lib/picks/knockoutBlockedRowExplanation";
+import { requiresParticipantKnockoutRepairSave } from "../../lib/picks/knockoutWizardAction";
 import { KnockoutMatchDirectTeamPick } from "./KnockoutMatchTeamPick";
 import { isKnockoutProgressionKind } from "../../lib/predictions/knockoutProgressionKinds";
 import { isKnockoutPickEditableForParticipant } from "../../lib/picks/knockoutPickEditability";
@@ -918,6 +919,25 @@ export function KnockoutPicksWizard({
     showKnockoutPathReviewBanner,
     normalizedInitialSlots,
     initialSlots,
+  ]);
+  const knockoutPathRepairNeedsSave = useMemo(() => {
+    if (!knockoutPathRepairUnsaved) return false;
+    return requiresParticipantKnockoutRepairSave(
+      {
+        slots: normalizedInitialSlots,
+        teams,
+        tournamentMatches,
+        officialRoundOf32Complete: knockoutBracketPicksUnlocked,
+      },
+      knockoutPathRepairOnLoad.cleared,
+    );
+  }, [
+    knockoutPathRepairUnsaved,
+    normalizedInitialSlots,
+    teams,
+    tournamentMatches,
+    knockoutBracketPicksUnlocked,
+    knockoutPathRepairOnLoad.cleared,
   ]);
   const initialSignature = useMemo(
     () => picksDraftSignature(normalizedInitialSlots),
@@ -1793,7 +1813,7 @@ export function KnockoutPicksWizard({
         </p>
       ) : null}
 
-      {!picksPageLayout && knockoutPathRepairUnsaved ? (
+      {!picksPageLayout && knockoutPathRepairNeedsSave ? (
         <KnockoutBracketPathReviewBanner unsavedRepair />
       ) : null}
 
@@ -1805,7 +1825,8 @@ export function KnockoutPicksWizard({
             saveDisabled={coreDisabled || picksSaveButtonDisabled(saveUiState)}
           />
           {picksPageSecondaryNote &&
-          picksPageStatus.kind !== "path_reconciliation" ? (
+          picksPageStatus.kind !== "path_reconciliation" &&
+          picksPageStatus.kind !== "locked_out_picks" ? (
             <p className="text-xs leading-relaxed text-ash-muted">
               {picksPageSecondaryNote}
             </p>
@@ -2009,7 +2030,7 @@ export function KnockoutPicksWizard({
           const missingInStep =
             knockoutStepStatus != null &&
             (knockoutStepStatus.kind === "needs_pick" ||
-              knockoutStepStatus.kind === "needs_review" ||
+              knockoutStepStatus.kind === "locked_out" ||
               knockoutStepStatus.kind === "complete" ||
               knockoutStepStatus.kind === "locked_upstream" ||
               knockoutStepStatus.kind === "locked")
@@ -2038,9 +2059,9 @@ export function KnockoutPicksWizard({
                       8 - rows.filter((r) => r.teamId.trim()).length,
                     )
                   : rows.filter((r) => !r.teamId.trim()).length;
-          const needsReview = knockoutStepStatus?.kind === "needs_review";
+          const lockedOut = knockoutStepStatus?.kind === "locked_out";
           const stepBlocked =
-            needsReview ||
+            lockedOut ||
             knockoutStepStatus?.kind === "locked_upstream" ||
             knockoutStepStatus?.kind === "locked";
           const done =
@@ -2055,9 +2076,9 @@ export function KnockoutPicksWizard({
               title={
                 done
                   ? `${s.title} — complete`
-                  : needsReview
+                  : lockedOut
                     ? knockoutStepStatus?.gateMessage ??
-                      `${s.title} — save to confirm cleared locked pick`
+                      `${s.title} — pick is out`
                     : stepBlocked
                       ? knockoutStepStatus?.gateMessage ??
                         `${s.title} — unlocks after earlier rounds`
@@ -2076,7 +2097,7 @@ export function KnockoutPicksWizard({
                   ? "bg-ash-accent text-white"
                   : done
                     ? "bg-ash-accent/20 text-ash-accent hover:bg-ash-accent/30"
-                    : needsReview
+                    : lockedOut
                       ? "bg-rose-950/35 text-rose-100 ring-1 ring-rose-700/45 hover:bg-rose-950/50"
                     : missingInStep > 0
                       ? "bg-amber-950/35 text-amber-100 ring-1 ring-amber-700/45 hover:bg-amber-950/50"
@@ -2086,8 +2107,8 @@ export function KnockoutPicksWizard({
               } disabled:cursor-not-allowed disabled:opacity-50`}
             >
               {i + 1}. {s.title}
-              {needsReview ? (
-                <span className="ml-1 opacity-80">(save)</span>
+              {lockedOut ? (
+                <span className="ml-1 opacity-80">(out)</span>
               ) : !done && missingInStep > 0 ? (
                 <span className="ml-1 tabular-nums opacity-80">
                   ({missingInStep})

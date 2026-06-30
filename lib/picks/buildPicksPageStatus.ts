@@ -7,11 +7,16 @@ import { formatDashboardMissingKnockoutCopy } from "../dashboard/buildDashboardM
 import { getGradualKnockoutSelectionState } from "./gradualKnockoutUnlock";
 import type { KnockoutSelectionInstructionCardModel } from "./knockoutSelectionWindow";
 import { deriveKnockoutSelectionSchedule } from "./knockoutSelectionWindow";
-import { getKnockoutRepairActionSummary } from "./knockoutWizardAction";
+import {
+  getKnockoutRepairActionSummary,
+  hasLockedOutKnockoutPicks,
+  requiresParticipantKnockoutRepairSave,
+} from "./knockoutWizardAction";
 
 export type PicksPageStatusKind =
   | "path_reconciliation"
   | "missing_picks"
+  | "locked_out_picks"
   | "complete";
 
 export type PicksPageStatusCtaAction = "jump_missing" | "save";
@@ -34,7 +39,7 @@ export const PICKS_PAGE_GROUP_BONUS_LOCKED_NOTE =
 export const PICKS_PAGE_COMPACT_LOCK_NOTE =
   "Picks lock at kickoff. You can still edit future matches until they start.";
 
-/** Primary picks-page status card (path reconciliation → missing picks → complete). */
+/** Primary picks-page status card (missing picks → editable repair → locked out → complete). */
 export function buildPicksPageStatusModel(input: {
   slots: KnockoutPickSlotDraft[];
   teams: Team[];
@@ -44,26 +49,14 @@ export function buildPicksPageStatusModel(input: {
   knockoutPathClearedPicks?: ClearedKnockoutPathPick[];
   nowMs?: number;
 }): PicksPageStatusModel {
-  if (input.knockoutPathRepairUnsaved) {
-    const repairSummary = getKnockoutRepairActionSummary(
-      {
-        slots: input.slots,
-        teams: input.teams,
-        tournamentMatches: input.tournamentMatches,
-        officialRoundOf32Complete: input.officialRoundOf32Complete,
-        nowMs: input.nowMs,
-      },
-      input.knockoutPathClearedPicks ?? [],
-    );
-    return {
-      kind: "path_reconciliation",
-      headline: repairSummary.headline,
-      detail: repairSummary.detail,
-      tone: "warning",
-      ctaLabel: repairSummary.ctaLabel,
-      ctaAction: "save",
-    };
-  }
+  const progressInput = {
+    slots: input.slots,
+    teams: input.teams,
+    tournamentMatches: input.tournamentMatches,
+    officialRoundOf32Complete: input.officialRoundOf32Complete,
+    nowMs: input.nowMs,
+  };
+  const clearedPicks = input.knockoutPathClearedPicks ?? [];
 
   const missing = buildParticipantDashboardMissingKnockoutPicks({
     slots: input.slots,
@@ -82,6 +75,43 @@ export function buildPicksPageStatusModel(input: {
       tone: "action",
       ctaLabel: "Jump to missing picks",
       ctaAction: "jump_missing",
+    };
+  }
+
+  if (
+    input.knockoutPathRepairUnsaved &&
+    clearedPicks.length > 0 &&
+    requiresParticipantKnockoutRepairSave(progressInput, clearedPicks)
+  ) {
+    const repairSummary = getKnockoutRepairActionSummary(
+      progressInput,
+      clearedPicks,
+    );
+    return {
+      kind: "path_reconciliation",
+      headline: repairSummary.headline,
+      detail: repairSummary.detail,
+      tone: "warning",
+      ctaLabel: repairSummary.ctaLabel,
+      ctaAction: repairSummary.ctaLabel ? "save" : null,
+    };
+  }
+
+  if (
+    clearedPicks.length > 0 &&
+    hasLockedOutKnockoutPicks(progressInput, clearedPicks)
+  ) {
+    const lockedOutSummary = getKnockoutRepairActionSummary(
+      progressInput,
+      clearedPicks,
+    );
+    return {
+      kind: "locked_out_picks",
+      headline: lockedOutSummary.headline,
+      detail: lockedOutSummary.detail,
+      tone: "warning",
+      ctaLabel: null,
+      ctaAction: null,
     };
   }
 

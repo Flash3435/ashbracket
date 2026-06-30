@@ -7,8 +7,8 @@ import {
   explainLockedClearedPickRow,
   feederMatchupLabel,
   firstBlockedRowExplanationForStep,
-  lockedClearedRepairCardBody,
-  LOCKED_CLEARED_REPAIR_HEADLINE,
+  lockedOutPickCardBody,
+  LOCKED_OUT_PICK_HEADLINE,
 } from "./knockoutBlockedRowExplanation";
 import {
   buildKnockoutMatchPickRows,
@@ -246,7 +246,7 @@ function actionFromLockedClearedPick(
     : feederExplanation.userFacingCopy;
 
   const feederLabel = feederExplanation.missingFeederLabel;
-  const statusCardDetail = lockedClearedRepairCardBody(feederLabel);
+  const statusCardDetail = lockedOutPickCardBody(feederLabel);
 
   return {
     bracketKind: targetStep,
@@ -367,7 +367,7 @@ function findBlockedDownstreamAction(
       fifaMatchNo: explanation.blockedRowMatchNo || null,
       matchupLabel: explanation.missingFeederLabel,
       reason:
-        explanation.userAction === "save_repaired_state"
+        explanation.userAction === "locked_out"
           ? "locked_unfixable"
           : explanation.userAction === "pick_upstream"
             ? "upstream_missing"
@@ -415,15 +415,15 @@ export function getKnockoutRepairActionSummary(
 ): {
   headline: string;
   detail: string;
-  ctaLabel: string;
+  ctaLabel: string | null;
   action: KnockoutWizardActionNeeded | null;
 } {
   const action = findFirstKnockoutWizardActionNeeded(input, { clearedPicks });
   if (action?.reason === "locked_unfixable") {
     return {
-      headline: LOCKED_CLEARED_REPAIR_HEADLINE,
-      detail: lockedClearedRepairCardBody(action.matchupLabel),
-      ctaLabel: "Save changes",
+      headline: LOCKED_OUT_PICK_HEADLINE,
+      detail: lockedOutPickCardBody(action.matchupLabel),
+      ctaLabel: null,
       action,
     };
   }
@@ -442,6 +442,24 @@ export function getKnockoutRepairActionSummary(
     ctaLabel: "Save picks",
     action: null,
   };
+}
+
+/** True when cleared picks include at least one locked-out pick with no participant action. */
+export function hasLockedOutKnockoutPicks(
+  input: KnockoutProgressContext,
+  clearedPicks: ClearedKnockoutPathPick[],
+): boolean {
+  const action = findFirstKnockoutWizardActionNeeded(input, { clearedPicks });
+  return action?.reason === "locked_unfixable";
+}
+
+/** True when path repair requires the participant to pick or save (unlocked editable gaps). */
+export function requiresParticipantKnockoutRepairSave(
+  input: KnockoutProgressContext,
+  clearedPicks: ClearedKnockoutPathPick[],
+): boolean {
+  const action = findFirstKnockoutWizardActionNeeded(input, { clearedPicks });
+  return Boolean(action && action.reason !== "locked_unfixable");
 }
 
 /** Friendly summary for a cleared or missing pick (status card / gates). */

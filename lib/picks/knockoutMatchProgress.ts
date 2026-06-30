@@ -56,7 +56,7 @@ export type KnockoutStepProgress = {
 export type KnockoutWizardStepStatusKind =
   | "complete"
   | "needs_pick"
-  | "needs_review"
+  | "locked_out"
   | "locked_upstream"
   | "locked"
   | "not_applicable";
@@ -232,7 +232,7 @@ function matchPickStepStatus(
 
   if (lockedClearedIssue) {
     return {
-      kind: "needs_review",
+      kind: "locked_out",
       complete: false,
       missingPickable: 0,
       totalPickable: pickable.length,
@@ -268,8 +268,8 @@ function matchPickStepStatus(
     );
     return {
       kind:
-        blockedExplanation?.userAction === "save_repaired_state"
-          ? "needs_review"
+        blockedExplanation?.userAction === "locked_out"
+          ? "locked_out"
           : "locked_upstream",
       complete: false,
       missingPickable: 0,
