@@ -23,6 +23,8 @@ type Props = {
   listViewHref?: string | null;
   /** Hide edit links on read-only snapshots. */
   readOnly?: boolean;
+  /** Hide the built-in section intro when a parent card already provides a heading. */
+  showIntro?: boolean;
 };
 
 function RoundColumn({
@@ -72,6 +74,7 @@ export function ParticipantBracketView({
   editPicksHref = null,
   listViewHref = null,
   readOnly = false,
+  showIntro = true,
 }: Props) {
   const bracket = deriveParticipantBracket({
     slots,
@@ -148,15 +151,17 @@ export function ParticipantBracketView({
 
   return (
     <div className="space-y-4">
-      <div>
-        <p className="text-xs font-semibold uppercase tracking-wide text-ash-muted">
-          Knockout Bracket Tracker
-        </p>
-        <p className="mt-1 max-w-3xl text-xs leading-relaxed text-ash-muted">
-          Follow your saved knockout picks against live tournament results. Completed matches
-          show who advanced, who was eliminated, and whether your pick is still alive.
-        </p>
-      </div>
+      {showIntro ? (
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-wide text-ash-muted">
+            Knockout Bracket Tracker
+          </p>
+          <p className="mt-1 max-w-3xl text-xs leading-relaxed text-ash-muted">
+            Follow your saved knockout picks against live tournament results. Completed matches
+            show who advanced, who was eliminated, and whether your pick is still alive.
+          </p>
+        </div>
+      ) : null}
       <PosterBracketTracker
         tracker={liveTracker!}
         teamById={teamById}

@@ -47,6 +47,10 @@ export const POSTER_BRACKET_ROWS = 8;
 /** Reserved center lane width (px) for Final + Champion on desktop poster layout. */
 export const POSTER_CENTER_MIN_WIDTH_PX = 280;
 
+/** Intrinsic desktop poster width: both halves, center lane, connectors, and gaps. */
+export const POSTER_DESKTOP_MIN_WIDTH_PX =
+  2 * (4 * 140 + 3 * 20) + POSTER_CENTER_MIN_WIDTH_PX + 2 * 12;
+
 function orderR32ForHalf(start: number, end: number): readonly number[] {
   const halfStart = start === 0 ? 0 : 4;
   const halfEnd = start === 0 ? 4 : 8;

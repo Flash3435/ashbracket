@@ -3,6 +3,7 @@ import {
   connectorShouldHighlight,
   POSTER_BRACKET_ROWS,
   POSTER_CENTER_MIN_WIDTH_PX,
+  POSTER_DESKTOP_MIN_WIDTH_PX,
   POSTER_LEFT_HALF,
   POSTER_RIGHT_HALF,
   qfFeederR16Indices,
@@ -380,11 +381,14 @@ export function PosterBracketTracker({ tracker, teamById, matchEditHref }: Props
         Scroll to see full bracket →
       </p>
       <div
-        className="overflow-x-auto rounded-xl border border-ash-border bg-ash-body/20 p-2 sm:p-4"
+        className="overflow-x-auto rounded-xl border border-ash-border bg-ash-body/20 p-2 sm:p-4 lg:overflow-x-visible"
         role="region"
         aria-label="Live participant bracket tracker"
       >
-        <div className="hidden min-w-[1540px] grid-cols-[auto_280px_auto] items-start justify-center gap-x-3 lg:grid">
+        <div
+          className="mx-auto hidden w-fit grid-cols-[auto_280px_auto] items-start justify-center gap-x-3 lg:grid"
+          style={{ minWidth: `min(100%, ${POSTER_DESKTOP_MIN_WIDTH_PX}px)` }}
+        >
           <PosterHalf
             layout={POSTER_LEFT_HALF}
             side="left"
