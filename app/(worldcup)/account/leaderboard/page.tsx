@@ -130,17 +130,13 @@ export default async function AccountLeaderboardPage({ searchParams }: PageProps
     showBracketOutlook,
   });
 
-  const exposureRes = await fetchChampionPickExposureForPool(selectedPoolId, {
-    supabase,
-  });
+  const exposureRes = await fetchChampionPickExposureForPool(selectedPoolId);
   const showChampionPickExposure =
     exposureRes.ok && exposureRes.showExposure;
   const championPickExposure =
     showChampionPickExposure && exposureRes.ok ? exposureRes.exposure : null;
 
-  const matchExposureRes = await fetchKnockoutMatchExposureForPool(selectedPoolId, {
-    supabase,
-  });
+  const matchExposureRes = await fetchKnockoutMatchExposureForPool(selectedPoolId);
   const showKnockoutMatchExposure =
     matchExposureRes.ok && matchExposureRes.showExposure;
   const knockoutMatchExposure =

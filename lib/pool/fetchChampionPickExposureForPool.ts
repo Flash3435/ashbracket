@@ -1,4 +1,3 @@
-import type { SupabaseClient } from "@supabase/supabase-js";
 import {
   buildCompletionStatusForParticipant,
   loadPicksCompletenessInputsForPool,
@@ -12,6 +11,7 @@ import {
   buildChampionPickExposure,
   type ChampionPickExposure,
 } from "./buildChampionPickExposure";
+import { shouldShowChampionPickExposure } from "./poolExposureDisplay";
 
 export type FetchChampionPickExposureResult =
   | {
@@ -23,12 +23,20 @@ export type FetchChampionPickExposureResult =
     }
   | { ok: false; error: string };
 
+const EMPTY_EXPOSURE: ChampionPickExposure = {
+  surviving: [],
+  eliminated: [],
+  totalCompletedChampionPicks: 0,
+  incompleteCount: 0,
+};
+
 /**
  * Read-only pool champion exposure for participant-facing pages.
+ * Uses service role for picks aggregation so public leaderboard works for anonymous visitors.
+ * Returns aggregate team counts only — no per-participant pick rows.
  */
 export async function fetchChampionPickExposureForPool(
   poolId: string,
-  options?: { supabase?: SupabaseClient },
 ): Promise<FetchChampionPickExposureResult> {
   const trimmedPoolId = poolId.trim();
   if (!trimmedPoolId) {
@@ -50,12 +58,7 @@ export async function fetchChampionPickExposureForPool(
   if (!locked) {
     return {
       ok: true,
-      exposure: {
-        surviving: [],
-        eliminated: [],
-        totalCompletedChampionPicks: 0,
-        incompleteCount: 0,
-      },
+      exposure: EMPTY_EXPOSURE,
       showExposure: false,
       knockoutBracketPicksUnlocked: false,
       picksLocked: false,
@@ -66,19 +69,12 @@ export async function fetchChampionPickExposureForPool(
   if (!editionId) {
     return {
       ok: true,
-      exposure: {
-        surviving: [],
-        eliminated: [],
-        totalCompletedChampionPicks: 0,
-        incompleteCount: 0,
-      },
+      exposure: EMPTY_EXPOSURE,
       showExposure: false,
       knockoutBracketPicksUnlocked: false,
       picksLocked: true,
     };
   }
-
-  const supabase = options?.supabase ?? service;
 
   const { data: parRows, error: parErr } = await service
     .from("participants")
@@ -96,7 +92,7 @@ export async function fetchChampionPickExposureForPool(
   const participantIds = participantRows.map((r) => r.id);
 
   const inputs = await loadPicksCompletenessInputsForPool(
-    supabase,
+    service,
     trimmedPoolId,
     participantIds,
   );
@@ -127,7 +123,7 @@ export async function fetchChampionPickExposureForPool(
 
   let matches: Awaited<ReturnType<typeof loadTournamentPublicMatches>> = [];
   try {
-    matches = await loadTournamentPublicMatches(supabase, editionId);
+    matches = await loadTournamentPublicMatches(service, editionId);
   } catch (err) {
     const message = err instanceof Error ? err.message : "Could not load tournament matches.";
     return { ok: false, error: message };
@@ -141,8 +137,10 @@ export async function fetchChampionPickExposureForPool(
   });
 
   const knockoutBracketPicksUnlocked = inputs.knockoutBracketPicksUnlocked;
-  const showExposure =
-    knockoutBracketPicksUnlocked && exposure.totalCompletedChampionPicks > 0;
+  const showExposure = shouldShowChampionPickExposure({
+    picksLocked: locked,
+    exposure,
+  });
 
   return {
     ok: true,

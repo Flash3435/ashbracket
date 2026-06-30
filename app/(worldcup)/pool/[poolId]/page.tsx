@@ -100,7 +100,7 @@ export default async function PublicPoolLeaderboardPage({ params }: PageProps) {
     outlookRes?.ok ? outlookRes.completedMatchCount : 0;
 
   const exposureRes = picksLocked
-    ? await fetchChampionPickExposureForPool(poolIdTrimmed, { supabase })
+    ? await fetchChampionPickExposureForPool(poolIdTrimmed)
     : null;
   const showChampionPickExposure =
     exposureRes?.ok === true && exposureRes.showExposure;
@@ -108,7 +108,7 @@ export default async function PublicPoolLeaderboardPage({ params }: PageProps) {
     showChampionPickExposure && exposureRes?.ok ? exposureRes.exposure : null;
 
   const matchExposureRes = picksLocked
-    ? await fetchKnockoutMatchExposureForPool(poolIdTrimmed, { supabase })
+    ? await fetchKnockoutMatchExposureForPool(poolIdTrimmed)
     : null;
   const showKnockoutMatchExposure =
     matchExposureRes?.ok === true && matchExposureRes.showExposure;

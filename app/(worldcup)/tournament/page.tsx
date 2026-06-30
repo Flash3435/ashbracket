@@ -51,7 +51,6 @@ export default async function TournamentProgressPage() {
       if (ctx.selectedPoolId && poolLocked(ctx.selectedLockAt)) {
         const matchExposureRes = await fetchKnockoutMatchExposureForPool(
           ctx.selectedPoolId,
-          { supabase },
         );
         if (matchExposureRes.ok && matchExposureRes.showExposure) {
           knockoutMatchExposure = matchExposureRes.exposure;

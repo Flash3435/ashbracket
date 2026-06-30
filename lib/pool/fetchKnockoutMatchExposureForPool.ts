@@ -1,4 +1,3 @@
-import type { SupabaseClient } from "@supabase/supabase-js";
 import {
   buildCompletionStatusForParticipant,
   loadPicksCompletenessInputsForPool,
@@ -11,6 +10,7 @@ import {
   type KnockoutMatchExposure,
 } from "./buildKnockoutMatchExposure";
 import { loadTournamentPublicMatches } from "./loadTournamentPublicMatches";
+import { shouldShowKnockoutMatchExposure } from "./poolExposureDisplay";
 
 export type FetchKnockoutMatchExposureResult =
   | {
@@ -22,12 +22,19 @@ export type FetchKnockoutMatchExposureResult =
     }
   | { ok: false; error: string };
 
+const EMPTY_EXPOSURE: KnockoutMatchExposure = {
+  fixtures: [],
+  totalCompletedBrackets: 0,
+  incompleteCount: 0,
+};
+
 /**
  * Read-only knockout match exposure for participant-facing pages.
+ * Uses service role for picks aggregation so public leaderboard works for anonymous visitors.
+ * Returns aggregate bracket counts per fixture only — no per-participant pick rows.
  */
 export async function fetchKnockoutMatchExposureForPool(
   poolId: string,
-  options?: { supabase?: SupabaseClient },
 ): Promise<FetchKnockoutMatchExposureResult> {
   const trimmedPoolId = poolId.trim();
   if (!trimmedPoolId) {
@@ -49,7 +56,7 @@ export async function fetchKnockoutMatchExposureForPool(
   if (!locked) {
     return {
       ok: true,
-      exposure: { fixtures: [], totalCompletedBrackets: 0, incompleteCount: 0 },
+      exposure: EMPTY_EXPOSURE,
       showExposure: false,
       knockoutBracketPicksUnlocked: false,
       picksLocked: false,
@@ -60,14 +67,12 @@ export async function fetchKnockoutMatchExposureForPool(
   if (!editionId) {
     return {
       ok: true,
-      exposure: { fixtures: [], totalCompletedBrackets: 0, incompleteCount: 0 },
+      exposure: EMPTY_EXPOSURE,
       showExposure: false,
       knockoutBracketPicksUnlocked: false,
       picksLocked: true,
     };
   }
-
-  const supabase = options?.supabase ?? service;
 
   const { data: parRows, error: parErr } = await service
     .from("participants")
@@ -81,7 +86,7 @@ export async function fetchKnockoutMatchExposureForPool(
   const participantIds = (parRows ?? []).map((r) => r.id as string);
 
   const inputs = await loadPicksCompletenessInputsForPool(
-    supabase,
+    service,
     trimmedPoolId,
     participantIds,
   );
@@ -111,7 +116,7 @@ export async function fetchKnockoutMatchExposureForPool(
 
   let matches: Awaited<ReturnType<typeof loadTournamentPublicMatches>> = [];
   try {
-    matches = await loadTournamentPublicMatches(supabase, editionId);
+    matches = await loadTournamentPublicMatches(service, editionId);
   } catch (err) {
     const message = err instanceof Error ? err.message : "Could not load tournament matches.";
     return { ok: false, error: message };
@@ -125,10 +130,10 @@ export async function fetchKnockoutMatchExposureForPool(
   });
 
   const knockoutBracketPicksUnlocked = inputs.knockoutBracketPicksUnlocked;
-  const showExposure =
-    knockoutBracketPicksUnlocked &&
-    exposure.totalCompletedBrackets > 0 &&
-    exposure.fixtures.length > 0;
+  const showExposure = shouldShowKnockoutMatchExposure({
+    picksLocked: locked,
+    exposure,
+  });
 
   return {
     ok: true,

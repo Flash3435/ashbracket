@@ -214,7 +214,6 @@ export default async function AccountPage({ searchParams }: PageProps) {
 
       const matchExposureRes = await fetchKnockoutMatchExposureForPool(
         picksCtx.selectedPoolId,
-        { supabase },
       );
       if (matchExposureRes.ok && matchExposureRes.showExposure) {
         knockoutMatchExposure = matchExposureRes.exposure;
