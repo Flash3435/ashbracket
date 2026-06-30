@@ -50,6 +50,9 @@ import { shouldShowStandingsWarmingNote } from "../../../lib/leaderboard/bracket
 import { STANDINGS_WARMING_UP_DASHBOARD_NOTE, STANDINGS_WARMING_UP_HEADLINE, computeBracketOutlookSummary, type BracketOutlookSummary } from "../../../lib/leaderboard/bracketOutlookSeparation";
 import { BracketOutlookDashboardCard } from "@/components/leaderboard/BracketOutlookDashboardCard";
 import { fetchPublicTournamentProgress } from "../../../lib/tournament/fetchPublicTournamentProgress";
+import { fetchKnockoutMatchExposureForPool } from "@/lib/pool/fetchKnockoutMatchExposureForPool";
+import { KnockoutMatchExposureSection } from "@/components/pool/KnockoutMatchExposureSection";
+import type { KnockoutMatchExposure } from "@/lib/pool/buildKnockoutMatchExposure";
 import { buildPicksViewHrefs, resolvePicksViewMode } from "../../../lib/picks/picksViewMode";
 import type { TournamentMatchPublicRow } from "../../../types/tournamentPublic";
 import { TournamentStatLeadersPanel } from "@/components/tournament/TournamentStatLeadersPanel";
@@ -179,6 +182,8 @@ export default async function AccountPage({ searchParams }: PageProps) {
     null;
   let tournamentMatches: TournamentMatchPublicRow[] | null = null;
   let tournamentErr: string | null = null;
+  let knockoutMatchExposure: KnockoutMatchExposure | null = null;
+  let showKnockoutMatchExposure = false;
 
   if (picksCtx && !picksCtx.loadError && picksCtx.initialSlots.length > 0) {
     const { data: tp, error: te } = await fetchPublicTournamentProgress();
@@ -205,6 +210,15 @@ export default async function AccountPage({ searchParams }: PageProps) {
         );
       } catch {
         recentScoreImpact = [];
+      }
+
+      const matchExposureRes = await fetchKnockoutMatchExposureForPool(
+        picksCtx.selectedPoolId,
+        { supabase },
+      );
+      if (matchExposureRes.ok && matchExposureRes.showExposure) {
+        knockoutMatchExposure = matchExposureRes.exposure;
+        showKnockoutMatchExposure = true;
       }
     }
   }
@@ -643,6 +657,10 @@ export default async function AccountPage({ searchParams }: PageProps) {
                   teams={picksCtx.teams}
                   allMatches={tournamentMatches ?? undefined}
                 />
+              ) : null}
+
+              {showKnockoutMatchExposure && knockoutMatchExposure ? (
+                <KnockoutMatchExposureSection exposure={knockoutMatchExposure} />
               ) : null}
 
               {showBracketOutlookDashboard && bracketOutlookDashboardSummary ? (

@@ -21,6 +21,10 @@ import type { BracketOutlookSummary } from "@/lib/leaderboard/bracketOutlookSepa
 import { TournamentStatLeadersPanel } from "@/components/tournament/TournamentStatLeadersPanel";
 import type { TournamentStatLeadersView } from "@/lib/tournament/matchTeamStats/buildTournamentStatLeadersView";
 import { participantPublicProfileHref } from "@/lib/participant/participantProfileRouting";
+import { ChampionPickExposureCard } from "@/components/pool/ChampionPickExposureCard";
+import type { ChampionPickExposure } from "@/lib/pool/buildChampionPickExposure";
+import { KnockoutMatchExposureSection } from "@/components/pool/KnockoutMatchExposureSection";
+import type { KnockoutMatchExposure } from "@/lib/pool/buildKnockoutMatchExposure";
 
 function summaryCard(label: string, value: string, hint: string) {
   return (
@@ -182,6 +186,10 @@ type Props = {
   bracketOutlookSummary?: BracketOutlookSummary | null;
   showBracketOutlook?: boolean;
   decisiveResultCount?: number;
+  championPickExposure?: ChampionPickExposure | null;
+  showChampionPickExposure?: boolean;
+  knockoutMatchExposure?: KnockoutMatchExposure | null;
+  showKnockoutMatchExposure?: boolean;
 };
 
 export function PublicPoolLeaderboardView({
@@ -199,6 +207,10 @@ export function PublicPoolLeaderboardView({
   bracketOutlookSummary = null,
   showBracketOutlook = false,
   decisiveResultCount = 0,
+  championPickExposure = null,
+  showChampionPickExposure = false,
+  knockoutMatchExposure = null,
+  showKnockoutMatchExposure = false,
 }: Props) {
   if (leaderboardError) {
     return (
@@ -234,6 +246,12 @@ export function PublicPoolLeaderboardView({
           showOutlook={showBracketOutlook && bracketOutlookSummary != null}
           summary={bracketOutlookSummary}
         />
+        {showChampionPickExposure && championPickExposure ? (
+          <ChampionPickExposureCard exposure={championPickExposure} />
+        ) : null}
+        {showKnockoutMatchExposure && knockoutMatchExposure ? (
+          <KnockoutMatchExposureSection exposure={knockoutMatchExposure} />
+        ) : null}
       </div>
     );
   }
@@ -325,6 +343,14 @@ export function PublicPoolLeaderboardView({
         {summaryCard("On the board", cards.progressLine, cards.progressHint)}
         {summaryCard("Entries", cards.entriesLine, cards.entriesHint)}
       </section>
+
+      {showChampionPickExposure && championPickExposure ? (
+        <ChampionPickExposureCard exposure={championPickExposure} />
+      ) : null}
+
+      {showKnockoutMatchExposure && knockoutMatchExposure ? (
+        <KnockoutMatchExposureSection exposure={knockoutMatchExposure} />
+      ) : null}
 
       <PoolPublicStatsSummary
         poolLabel={poolName}

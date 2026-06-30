@@ -10,6 +10,8 @@ import { createClient } from "@/lib/supabase/server";
 import { createServiceRoleClient } from "@/lib/supabase/service";
 import { poolLocked } from "@/lib/pools/poolLocked";
 import { fetchBracketOutlookForPool } from "@/lib/leaderboard/fetchBracketOutlookForPool";
+import { fetchChampionPickExposureForPool } from "@/lib/pool/fetchChampionPickExposureForPool";
+import { fetchKnockoutMatchExposureForPool } from "@/lib/pool/fetchKnockoutMatchExposureForPool";
 import { computeBracketOutlookSummary } from "@/lib/leaderboard/bracketOutlookSeparation";
 import { TournamentStatLeadersPanel } from "@/components/tournament/TournamentStatLeadersPanel";
 import { loadTournamentTeamStatLeaders } from "@/lib/tournament/matchTeamStats/loadTournamentTeamStatLeaders";
@@ -97,6 +99,24 @@ export default async function PublicPoolLeaderboardPage({ params }: PageProps) {
   const decisiveResultCount =
     outlookRes?.ok ? outlookRes.completedMatchCount : 0;
 
+  const exposureRes = picksLocked
+    ? await fetchChampionPickExposureForPool(poolIdTrimmed, { supabase })
+    : null;
+  const showChampionPickExposure =
+    exposureRes?.ok === true && exposureRes.showExposure;
+  const championPickExposure =
+    showChampionPickExposure && exposureRes?.ok ? exposureRes.exposure : null;
+
+  const matchExposureRes = picksLocked
+    ? await fetchKnockoutMatchExposureForPool(poolIdTrimmed, { supabase })
+    : null;
+  const showKnockoutMatchExposure =
+    matchExposureRes?.ok === true && matchExposureRes.showExposure;
+  const knockoutMatchExposure =
+    showKnockoutMatchExposure && matchExposureRes?.ok
+      ? matchExposureRes.exposure
+      : null;
+
   return (
     <PageContainer>
       <PicksDeadlineBannerFromPool poolId={poolIdTrimmed} className="mb-6" />
@@ -123,6 +143,10 @@ export default async function PublicPoolLeaderboardPage({ params }: PageProps) {
         bracketOutlookSummary={bracketOutlookSummary}
         showBracketOutlook={showBracketOutlook}
         decisiveResultCount={decisiveResultCount}
+        championPickExposure={championPickExposure}
+        showChampionPickExposure={showChampionPickExposure}
+        knockoutMatchExposure={knockoutMatchExposure}
+        showKnockoutMatchExposure={showKnockoutMatchExposure}
       />
     </PageContainer>
   );

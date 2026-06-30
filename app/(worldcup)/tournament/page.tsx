@@ -3,8 +3,11 @@ import { TournamentProgressView } from "@/components/tournament/TournamentProgre
 import { PageContainer } from "@/components/ui/PageContainer";
 import { PageTitle } from "@/components/ui/PageTitle";
 import { loadAccountKnockoutSelection } from "../../../lib/account/loadAccountKnockoutSelection";
+import { poolLocked } from "../../../lib/pools/poolLocked";
 import { resolveAccountParticipantId } from "../../../lib/account/resolveAccountParticipantId";
 import { fetchPublicTournamentProgress } from "../../../lib/tournament/fetchPublicTournamentProgress";
+import { fetchKnockoutMatchExposureForPool } from "@/lib/pool/fetchKnockoutMatchExposureForPool";
+import type { KnockoutMatchExposure } from "@/lib/pool/buildKnockoutMatchExposure";
 import { OFFICIAL_EDITION_CODE } from "../../../lib/config/officialTournament";
 import { createClient } from "@/lib/supabase/server";
 import type { KnockoutPickSlotDraft } from "../../../types/adminKnockoutPicks";
@@ -24,6 +27,8 @@ export default async function TournamentProgressPage() {
     slots: KnockoutPickSlotDraft[];
     teams: Team[];
   } | null = null;
+  let knockoutMatchExposure: KnockoutMatchExposure | null = null;
+  let showKnockoutMatchExposure = false;
 
   if (user) {
     const { data: partRows } = await supabase
@@ -42,6 +47,16 @@ export default async function TournamentProgressPage() {
           slots: ctx.initialSlots,
           teams: ctx.teams,
         };
+      }
+      if (ctx.selectedPoolId && poolLocked(ctx.selectedLockAt)) {
+        const matchExposureRes = await fetchKnockoutMatchExposureForPool(
+          ctx.selectedPoolId,
+          { supabase },
+        );
+        if (matchExposureRes.ok && matchExposureRes.showExposure) {
+          knockoutMatchExposure = matchExposureRes.exposure;
+          showKnockoutMatchExposure = true;
+        }
       }
     }
   }
@@ -91,6 +106,8 @@ export default async function TournamentProgressPage() {
         <TournamentProgressView
           payload={data}
           schedulePickContext={schedulePickContext}
+          knockoutMatchExposure={knockoutMatchExposure}
+          showKnockoutMatchExposure={showKnockoutMatchExposure}
         />
       ) : null}
 

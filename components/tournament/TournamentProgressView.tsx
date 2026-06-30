@@ -18,6 +18,8 @@ import { GroupStandingsGrid } from "./GroupStandingsGrid";
 import { ScheduleMatchPickTeams } from "./ScheduleMatchPickTeams";
 import { UpcomingMatchesSchedule } from "./UpcomingMatchesSchedule";
 import { sortMatchesByKickoffChronological } from "../../lib/tournament/sortTournamentMatches";
+import { KnockoutMatchExposureSection } from "../pool/KnockoutMatchExposureSection";
+import type { KnockoutMatchExposure } from "../../lib/pool/buildKnockoutMatchExposure";
 
 function scoreLine(m: TournamentMatchPublicRow): string {
   if (m.status !== "finished" && m.status !== "live") return "—";
@@ -107,9 +109,16 @@ type Props = {
     slots: KnockoutPickSlotDraft[];
     teams: Team[];
   } | null;
+  knockoutMatchExposure?: KnockoutMatchExposure | null;
+  showKnockoutMatchExposure?: boolean;
 };
 
-export function TournamentProgressView({ payload, schedulePickContext }: Props) {
+export function TournamentProgressView({
+  payload,
+  schedulePickContext,
+  knockoutMatchExposure = null,
+  showKnockoutMatchExposure = false,
+}: Props) {
   const { edition, matches } = payload;
   const narrative = summarizeTournamentStage(matches);
 
@@ -265,6 +274,10 @@ export function TournamentProgressView({ payload, schedulePickContext }: Props) 
           </p>
         ) : null}
       </section>
+
+      {showKnockoutMatchExposure && knockoutMatchExposure ? (
+        <KnockoutMatchExposureSection exposure={knockoutMatchExposure} />
+      ) : null}
 
       <section className="ash-surface p-4">
         <h2 className="mb-2 text-base font-bold text-ash-text">

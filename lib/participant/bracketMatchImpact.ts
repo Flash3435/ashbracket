@@ -581,6 +581,52 @@ export function pickSideHighlightForMatch(
   return side === "home" ? guidance.homeHighlight : guidance.awayHighlight;
 }
 
+export type ParticipantKnockoutMatchExposureSide = "home" | "away" | "neutral";
+
+/**
+ * Pool exposure classification for one participant on an upcoming/live knockout match.
+ * Reuses the same cheer / bracket guidance path as matchday cards.
+ */
+export function classifyParticipantKnockoutMatchExposure(
+  m: TournamentMatchPublicRow,
+  slots: KnockoutPickSlotDraft[],
+  teams: Team[],
+  allMatches: TournamentMatchPublicRow[],
+): ParticipantKnockoutMatchExposureSide {
+  if (!isKnockoutStageMatch(m) || isFinishedMatchWithScores(m)) {
+    return "neutral";
+  }
+
+  const { teamByCountry } = teamByMaps(teams);
+  const importanceByTeamId = buildTeamImportanceById(slots);
+  const home = resolveSide(m, "home", teamByCountry);
+  const away = resolveSide(m, "away", teamByCountry);
+  const decision = decideCheerForMatchSides(home, away, importanceByTeamId);
+  const upcoming = buildUpcomingKnockoutExplanation(
+    home,
+    away,
+    decision,
+    importanceByTeamId,
+  );
+
+  if (upcoming.impact !== "helped") return "neutral";
+
+  if (decision.cheerForTeamId && home.teamId && decision.cheerForTeamId === home.teamId) {
+    return "home";
+  }
+  if (decision.cheerForTeamId && away.teamId && decision.cheerForTeamId === away.teamId) {
+    return "away";
+  }
+
+  const wanted = upcoming.wantedTeamName?.trim().toLowerCase();
+  if (wanted) {
+    if (wanted === home.name.trim().toLowerCase()) return "home";
+    if (wanted === away.name.trim().toLowerCase()) return "away";
+  }
+
+  return "neutral";
+}
+
 export function matchdayBracketWantsFromGuidance(
   guidance: MatchBracketGuidance,
 ): BracketWantsLabel {
