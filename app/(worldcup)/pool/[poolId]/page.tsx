@@ -12,6 +12,7 @@ import { poolLocked } from "@/lib/pools/poolLocked";
 import { fetchBracketOutlookForPool } from "@/lib/leaderboard/fetchBracketOutlookForPool";
 import { fetchChampionPickExposureForPool } from "@/lib/pool/fetchChampionPickExposureForPool";
 import { fetchParticipantRaceOutlookForPool } from "@/lib/pool/fetchParticipantRaceOutlookForPool";
+import { fetchLeaderboardMomentumForPool } from "@/lib/leaderboard/fetchLeaderboardMomentumForPool";
 import { computeBracketOutlookSummary } from "@/lib/leaderboard/bracketOutlookSeparation";
 import { TournamentStatLeadersPanel } from "@/components/tournament/TournamentStatLeadersPanel";
 import { loadTournamentTeamStatLeaders } from "@/lib/tournament/matchTeamStats/loadTournamentTeamStatLeaders";
@@ -118,6 +119,13 @@ export default async function PublicPoolLeaderboardPage({ params }: PageProps) {
       ? raceOutlookRes.outlook
       : null;
 
+  const leaderboardMomentum =
+    picksLocked && rows.length > 0
+      ? await fetchLeaderboardMomentumForPool(service, poolIdTrimmed, rows).catch(
+          () => null,
+        )
+      : null;
+
   return (
     <PageContainer>
       <PicksDeadlineBannerFromPool poolId={poolIdTrimmed} className="mb-6" />
@@ -147,6 +155,7 @@ export default async function PublicPoolLeaderboardPage({ params }: PageProps) {
         championPickExposure={championPickExposure}
         showChampionPickExposure={showChampionPickExposure}
         participantRaceOutlook={participantRaceOutlook}
+        leaderboardMomentum={leaderboardMomentum}
       />
     </PageContainer>
   );

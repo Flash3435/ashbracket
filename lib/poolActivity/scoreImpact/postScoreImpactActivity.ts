@@ -181,6 +181,8 @@ export async function postScoreImpactActivityForPool(input: {
 
   const metadata = buildScoreImpactMetadata({
     analysis,
+    beforeRows: input.before.rows,
+    afterRows: input.after.rows,
     matchResults,
     participantNames,
     trigger: input.trigger,

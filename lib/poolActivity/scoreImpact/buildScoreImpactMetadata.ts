@@ -1,3 +1,5 @@
+import type { PilotStandingsRow } from "@/lib/admin/pilotStandingsSnapshot";
+import { buildLeaderboardMomentum } from "@/lib/leaderboard/buildLeaderboardMomentum";
 import { formatBiggestMover } from "./detectScoreImpact";
 import type {
   ScoreImpactActivityMetadata,
@@ -42,6 +44,8 @@ function pointGainersForRecap(
 
 export function buildScoreImpactMetadata(input: {
   analysis: ScoreImpactAnalysis;
+  beforeRows: PilotStandingsRow[];
+  afterRows: PilotStandingsRow[];
   matchResults: ScoreImpactMatchResult[];
   participantNames: ReadonlyMap<string, string>;
   trigger: string;
@@ -83,6 +87,34 @@ export function buildScoreImpactMetadata(input: {
         to_rank: analysis.movers[0].newRank,
       },
     ];
+  }
+
+  const momentum = buildLeaderboardMomentum({
+    currentRows: input.afterRows.map((row) => ({
+      participantId: row.participantId,
+      totalPoints: row.totalPoints,
+      rank: row.rank,
+    })),
+    previousRows: input.beforeRows.map((row) => ({
+      participantId: row.participantId,
+      totalPoints: row.totalPoints,
+    })),
+  });
+
+  if (momentum.hasPreviousSnapshot) {
+    metadata.has_previous_snapshot = true;
+    metadata.previous_standings = input.beforeRows.map((row) => ({
+      participant_id: row.participantId,
+      total_points: row.totalPoints,
+    }));
+    metadata.leaderboard_momentum = momentum.rows.map((row) => ({
+      participant_id: row.participantId,
+      previous_rank: row.previousRank,
+      previous_points: row.previousPoints,
+      rank_change: row.rankChange,
+      points_gained: row.recentPointsGained,
+      is_new_entry: row.isNewEntry,
+    }));
   }
 
   if (

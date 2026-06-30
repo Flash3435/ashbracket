@@ -1,6 +1,7 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
 import type { PublicPoolLeaderboardRowDisplay } from "@/lib/leaderboard/buildPublicPoolLeaderboardPresentation";
+import type { LeaderboardMomentumRow } from "@/lib/leaderboard/buildLeaderboardMomentum";
 import {
   expandedTopRemainingPicks,
   formatExpandedRemainingPicksMoreLine,
@@ -10,6 +11,10 @@ import {
   raceOutlookExpandedFallbackCopy,
   raceStatusBadgeClass,
 } from "@/lib/leaderboard/leaderboardRaceRowContext";
+import {
+  formatExpandedMomentumContext,
+  formatPointsWithRecentDelta,
+} from "@/lib/leaderboard/leaderboardMomentumDisplay";
 import type { ParticipantRaceOutlookRow } from "@/lib/pool/buildParticipantRaceOutlook";
 import { participantPublicProfileHref } from "@/lib/participant/participantProfileRouting";
 import { ViewerYouChip } from "../ui/ViewerYouChip";
@@ -18,6 +23,7 @@ type Props = {
   row: PublicPoolLeaderboardRowDisplay;
   isViewerRow: boolean;
   raceOutlook?: ParticipantRaceOutlookRow | null;
+  momentum?: LeaderboardMomentumRow | null;
   layout: "table" | "mobile";
   rankCell?: ReactNode;
 };
@@ -32,10 +38,17 @@ function RaceStatusBadge({ outlook }: { outlook: ParticipantRaceOutlookRow }) {
   );
 }
 
-function RaceOutlookDetails({ outlook }: { outlook: ParticipantRaceOutlookRow }) {
+function RaceOutlookDetails({
+  outlook,
+  momentum = null,
+}: {
+  outlook: ParticipantRaceOutlookRow;
+  momentum?: LeaderboardMomentumRow | null;
+}) {
   const topPicks = expandedTopRemainingPicks(outlook);
   const moreLine = formatExpandedRemainingPicksMoreLine(outlook);
   const leaderComparison = formatRaceOutlookLeaderComparison(outlook);
+  const momentumLine = formatExpandedMomentumContext(momentum);
 
   return (
     <details className="mt-1.5">
@@ -58,6 +71,7 @@ function RaceOutlookDetails({ outlook }: { outlook: ParticipantRaceOutlookRow })
         ) : (
           <p>{raceOutlookExpandedFallbackCopy(outlook)}</p>
         )}
+        {momentumLine ? <p>{momentumLine}</p> : null}
         <p>{leaderComparison}</p>
       </div>
     </details>
@@ -103,6 +117,7 @@ export function LeaderboardParticipantCell({
   row,
   isViewerRow,
   raceOutlook = null,
+  momentum = null,
   layout,
   rankCell = null,
 }: Props) {
@@ -110,12 +125,16 @@ export function LeaderboardParticipantCell({
     <p className="text-xs text-ash-muted">Tied at rank {row.rank}</p>
   ) : null;
 
+  const pointsLabel = formatPointsWithRecentDelta(row.totalPoints, momentum, {
+    showZero: true,
+  });
+
   const raceContext = raceOutlook ? (
     <div className="mt-1 space-y-1">
       <p className="text-xs leading-relaxed text-ash-muted">
-        {formatLeaderboardRaceSummary(raceOutlook)}
+        {formatLeaderboardRaceSummary(raceOutlook, momentum)}
       </p>
-      <RaceOutlookDetails outlook={raceOutlook} />
+      <RaceOutlookDetails outlook={raceOutlook} momentum={momentum} />
     </div>
   ) : null;
 
@@ -136,7 +155,7 @@ export function LeaderboardParticipantCell({
           </div>
         </div>
         <span className="shrink-0 text-xl font-bold tabular-nums text-ash-text">
-          {row.pointsLabel}
+          {pointsLabel}
         </span>
       </div>
     );

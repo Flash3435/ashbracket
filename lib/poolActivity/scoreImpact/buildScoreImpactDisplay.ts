@@ -310,8 +310,16 @@ export function buildScoreImpactDisplayLines(
 export function clientSafeScoreImpactMetadata(
   metadata: Record<string, unknown>,
 ): Record<string, unknown> {
-  const { point_gainers: _pg, soft_impact: rawSoftImpact, ...rest } = metadata;
+  const {
+    point_gainers: _pg,
+    leaderboard_momentum: _lm,
+    previous_standings: _ps,
+    soft_impact: rawSoftImpact,
+    ...rest
+  } = metadata;
   void _pg;
+  void _lm;
+  void _ps;
 
   if (rawSoftImpact == null || typeof rawSoftImpact !== "object") {
     return rest;

@@ -3,6 +3,8 @@ import type {
   ParticipantRaceOutlookRow,
   RaceOutlookStatus,
 } from "@/lib/pool/buildParticipantRaceOutlook";
+import type { LeaderboardMomentumRow } from "./buildLeaderboardMomentum";
+import { formatPointsWithRecentDelta } from "./leaderboardMomentumDisplay";
 
 export const EXPANDED_TOP_REMAINING_PICKS_LIMIT = 3;
 
@@ -19,8 +21,11 @@ export function mapRaceOutlookByParticipantId(
 
 export function formatLeaderboardRaceSummary(
   outlook: ParticipantRaceOutlookRow,
+  momentum?: LeaderboardMomentumRow | null,
 ): string {
-  const parts: string[] = [`${outlook.totalPoints} pts`];
+  const parts: string[] = [
+    formatPointsWithRecentDelta(outlook.totalPoints, momentum, { showZero: true }),
+  ];
 
   if (outlook.hasChampionPick) {
     if (!outlook.championAlive) {

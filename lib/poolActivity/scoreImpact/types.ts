@@ -114,6 +114,20 @@ export type ScoreImpactActivityMetadata = {
   /** Server-side only — used by participant recap; stripped from client display parse. */
   point_gainers?: ScoreImpactPointGainerMetadata[];
   leaderboard_movement?: ScoreImpactLeaderboardMovementMetadata[];
+  /** Full per-participant momentum from the last scoring snapshot comparison. */
+  has_previous_snapshot?: boolean;
+  previous_standings?: Array<{
+    participant_id: string;
+    total_points: number;
+  }>;
+  leaderboard_momentum?: Array<{
+    participant_id: string;
+    previous_rank: number | null;
+    previous_points: number | null;
+    rank_change: number;
+    points_gained: number;
+    is_new_entry?: boolean;
+  }>;
   reason: ScoreImpactReason;
   soft_impact?: ScoreImpactSoftImpactMetadata;
 };

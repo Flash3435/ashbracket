@@ -1,14 +1,26 @@
 import Link from "next/link";
+import type { ReactNode } from "react";
 import {
   buildPublicPoolLeaderboardPresentation,
   poolLeaderboardSummaryCards,
   type PublicPoolLeaderboardRowDisplay,
 } from "@/lib/leaderboard/buildPublicPoolLeaderboardPresentation";
 import { buildViewerLeaderComparison } from "@/lib/leaderboard/buildViewerLeaderComparison";
-import { mapRaceOutlookByParticipantId } from "@/lib/leaderboard/leaderboardRaceRowContext";
+import {
+  mapRaceOutlookByParticipantId,
+} from "@/lib/leaderboard/leaderboardRaceRowContext";
+import {
+  mapLeaderboardMomentumByParticipantId,
+  pickBiggestMovers,
+  type LeaderboardMomentumResult,
+  type LeaderboardMomentumRow,
+} from "@/lib/leaderboard/buildLeaderboardMomentum";
+import { formatPointsWithRecentDelta } from "@/lib/leaderboard/leaderboardMomentumDisplay";
 import { JumpToMyLeaderboardRowButton } from "./JumpToMyLeaderboardRowButton";
 import { ViewerLeaderComparisonSummary } from "./ViewerLeaderComparisonSummary";
 import { LeaderboardParticipantCell } from "./LeaderboardParticipantCell";
+import { LeaderboardRankMovementIndicator } from "./LeaderboardRankMovementIndicator";
+import { LeaderboardBiggestMoversCard } from "./LeaderboardBiggestMoversCard";
 import { LiveScoresUpdateNotice } from "../tournament/LiveScoresUpdateNotice";
 import type { LeaderboardPublicRow } from "../../types/leaderboard";
 import type { PoolPublicStats } from "../../lib/pool/fetchPoolPublicStats";
@@ -38,35 +50,44 @@ function summaryCard(label: string, value: string, hint: string) {
   );
 }
 
-function rankCell(row: PublicPoolLeaderboardRowDisplay) {
+function rankCell(
+  row: PublicPoolLeaderboardRowDisplay,
+  momentum: LeaderboardMomentumRow | null = null,
+) {
   const base =
     "inline-flex min-w-[2.25rem] items-center justify-center rounded-full px-2 py-0.5 text-sm font-bold tabular-nums";
 
+  let badge: ReactNode;
   if (row.podium === "gold") {
-    return (
+    badge = (
       <span className={`${base} border border-amber-500/50 bg-amber-500/20 text-amber-100`}>
         {row.rank}
       </span>
     );
-  }
-  if (row.podium === "silver") {
-    return (
+  } else if (row.podium === "silver") {
+    badge = (
       <span className={`${base} border border-slate-400/40 bg-slate-500/15 text-slate-200`}>
         {row.rank}
       </span>
     );
-  }
-  if (row.podium === "bronze") {
-    return (
+  } else if (row.podium === "bronze") {
+    badge = (
       <span className={`${base} border border-orange-500/40 bg-orange-600/15 text-orange-100`}>
+        {row.rank}
+      </span>
+    );
+  } else {
+    badge = (
+      <span className={`${base} border border-ash-border/60 bg-ash-body/40 text-ash-muted`}>
         {row.rank}
       </span>
     );
   }
 
   return (
-    <span className={`${base} border border-ash-border/60 bg-ash-body/40 text-ash-muted`}>
-      {row.rank}
+    <span className="inline-flex items-center gap-1.5">
+      {badge}
+      <LeaderboardRankMovementIndicator momentum={momentum} />
     </span>
   );
 }
@@ -124,6 +145,7 @@ type Props = {
   championPickExposure?: ChampionPickExposure | null;
   showChampionPickExposure?: boolean;
   participantRaceOutlook?: ParticipantRaceOutlook | null;
+  leaderboardMomentum?: LeaderboardMomentumResult | null;
 };
 
 export function PublicPoolLeaderboardView({
@@ -144,6 +166,7 @@ export function PublicPoolLeaderboardView({
   championPickExposure = null,
   showChampionPickExposure = false,
   participantRaceOutlook = null,
+  leaderboardMomentum = null,
 }: Props) {
   if (leaderboardError) {
     return (
@@ -164,9 +187,16 @@ export function PublicPoolLeaderboardView({
     viewerParticipantId != null &&
     presentation.rows.some((r) => r.participantId === viewerParticipantId);
   const raceOutlookByParticipantId = mapRaceOutlookByParticipantId(participantRaceOutlook);
+  const momentumByParticipantId = mapLeaderboardMomentumByParticipantId(leaderboardMomentum);
+  const biggestMovers = pickBiggestMovers(leaderboardMomentum ?? { hasPreviousSnapshot: false, rows: [] });
+  const displayNameByParticipantId = new Map(
+    presentation.rows.map((row) => [row.participantId, row.displayName]),
+  );
   const leaderboardSubtitle = raceOutlookByParticipantId.size
-    ? "Ranked by awarded points. Tap a participant to see their picks and race outlook."
-    : `${presentation.participantCount} ${presentation.participantCount === 1 ? "entry" : "entries"} ranked by awarded points. Tied totals share the same rank.`;
+    ? "Ranked by awarded points. Arrows show recent rank movement after the latest scoring update."
+    : momentumByParticipantId.size
+      ? `${presentation.participantCount} ${presentation.participantCount === 1 ? "entry" : "entries"} ranked by awarded points. Arrows show recent movement after the latest scoring update.`
+      : `${presentation.participantCount} ${presentation.participantCount === 1 ? "entry" : "entries"} ranked by awarded points. Tied totals share the same rank.`;
 
   if (presentation.participantCount > 0 && !leaderboardActive) {
     return (
@@ -290,6 +320,13 @@ export function PublicPoolLeaderboardView({
           </p>
         </div>
 
+        {biggestMovers.length > 0 ? (
+          <LeaderboardBiggestMoversCard
+            movers={biggestMovers}
+            displayNameByParticipantId={displayNameByParticipantId}
+          />
+        ) : null}
+
         <div className="hidden overflow-hidden rounded-xl border border-ash-border/70 md:block">
           <table className="w-full text-left text-sm">
             <thead className="border-b border-ash-border bg-ash-body/50 text-xs font-medium uppercase tracking-wide text-ash-muted">
@@ -307,6 +344,8 @@ export function PublicPoolLeaderboardView({
                 const scrollProps = viewerRowScrollProps(isViewerRow);
                 const raceOutlook =
                   raceOutlookByParticipantId.get(row.participantId) ?? null;
+                const momentum =
+                  momentumByParticipantId.get(row.participantId) ?? null;
 
                 return (
                   <tr
@@ -316,18 +355,21 @@ export function PublicPoolLeaderboardView({
                     data-viewer-leaderboard-entry={scrollProps["data-viewer-leaderboard-entry"]}
                     tabIndex={scrollProps.tabIndex}
                   >
-                    <td className="px-4 py-3.5 align-top">{rankCell(row)}</td>
+                    <td className="px-4 py-3.5 align-top">{rankCell(row, momentum)}</td>
                     <td className="px-4 py-3.5 align-top">
                       <LeaderboardParticipantCell
                         row={row}
                         isViewerRow={isViewerRow}
                         raceOutlook={raceOutlook}
+                        momentum={momentum}
                         layout="table"
                       />
                     </td>
                     <td className="px-4 py-3.5 text-right align-top">
                       <span className="text-lg font-bold tabular-nums text-ash-text">
-                        {row.pointsLabel}
+                        {formatPointsWithRecentDelta(row.totalPoints, momentum, {
+                          showZero: true,
+                        })}
                       </span>
                     </td>
                   </tr>
@@ -345,6 +387,8 @@ export function PublicPoolLeaderboardView({
             const scrollProps = viewerRowScrollProps(isViewerRow);
             const raceOutlook =
               raceOutlookByParticipantId.get(row.participantId) ?? null;
+            const momentum =
+              momentumByParticipantId.get(row.participantId) ?? null;
 
             return (
               <li
@@ -361,8 +405,9 @@ export function PublicPoolLeaderboardView({
                     row={row}
                     isViewerRow={isViewerRow}
                     raceOutlook={raceOutlook}
+                    momentum={momentum}
                     layout="mobile"
-                    rankCell={rankCell(row)}
+                    rankCell={rankCell(row, momentum)}
                   />
                 </div>
               </li>

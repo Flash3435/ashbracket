@@ -153,6 +153,8 @@ const manyGainersAnalysis = detectScoreImpact({
 });
 const metadata = buildScoreImpactMetadata({
   analysis: manyGainersAnalysis,
+  beforeRows: unchangedBefore,
+  afterRows: afterManyPoints,
   matchResults: [
     {
       matchCode: "WC2026-G-B-01",
@@ -178,6 +180,11 @@ t(
 t(
   metadata.point_gainers?.every((g) => g.participant_id.startsWith("p")) === true,
   "server point_gainers retain participant_id for recap",
+);
+t(metadata.has_previous_snapshot === true, "metadata includes previous snapshot flag");
+t(
+  (metadata.leaderboard_momentum?.length ?? 0) === unchangedBefore.length,
+  "metadata includes momentum for every participant",
 );
 
 const displayLocked = buildScoreImpactDisplayLines(metadata, {
@@ -207,6 +214,8 @@ t(
 
 const noPointsMeta = buildScoreImpactMetadata({
   analysis: noPointsAnalysis,
+  beforeRows: unchangedBefore,
+  afterRows: unchangedAfter,
   matchResults: [matchNoPoints],
   participantNames,
   trigger: "tournament_sync",
@@ -524,6 +533,8 @@ const noPointsWithSoftAnalysis = detectScoreImpact({
 });
 const noPointsWithSoftMeta = buildScoreImpactMetadata({
   analysis: noPointsWithSoftAnalysis,
+  beforeRows: unchangedBefore,
+  afterRows: unchangedAfter,
   matchResults: [usaWinMatch],
   participantNames: softImpactNames,
   trigger: "tournament_sync",
@@ -587,6 +598,8 @@ t(
 
 const pointsWithSoftMeta = buildScoreImpactMetadata({
   analysis: manyGainersAnalysis,
+  beforeRows: unchangedBefore,
+  afterRows: afterManyPoints,
   matchResults: [
     {
       matchCode: "WC2026-G-B-01",
