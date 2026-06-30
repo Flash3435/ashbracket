@@ -273,7 +273,7 @@ async function main(): Promise<void> {
   console.log(`Match: ${summary.matchCode}`);
   console.log(`Old pick: ${summary.oldTeamLabel}`);
   console.log(`New pick: ${summary.newTeamLabel}`);
-  console.log(`Changed slots: ${applied.changedPayloads.length}`);
+  console.log(`Changed slots: ${applied.writePayloads.length}`);
   if (summary.clearedLabels.length > 0) {
     console.log("Downstream clears:");
     for (const line of summary.clearedLabels) {
@@ -291,7 +291,7 @@ async function main(): Promise<void> {
   const writeResult = await applyParticipantPickSlots(supabase, {
     poolId,
     participantId,
-    slots: applied.changedPayloads,
+    slots: applied.writePayloads,
   });
   if (!writeResult.ok) {
     console.error(writeResult.error);

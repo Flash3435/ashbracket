@@ -4,6 +4,7 @@ import type { CheerSuggestion } from "@/lib/account/buildWhoToCheerFor";
 import { DASHBOARD_MATCH_LIMIT } from "@/lib/account/buildWhoToCheerFor";
 import type { KnockoutPickSlotDraft } from "../../types/adminKnockoutPicks";
 import type { Team } from "../../src/types/domain";
+import type { TournamentMatchPublicRow } from "../../types/tournamentPublic";
 import { ScheduleMatchPickTeams } from "@/components/tournament/ScheduleMatchPickTeams";
 
 type Props = {
@@ -15,6 +16,7 @@ type Props = {
   picksHref: string;
   initialSlots?: KnockoutPickSlotDraft[];
   teams?: Team[];
+  allMatches?: TournamentMatchPublicRow[];
 };
 
 function statusBadgeClass(status: string): string {
@@ -87,6 +89,7 @@ export function WhoToCheerForCard({
   picksHref,
   initialSlots,
   teams,
+  allMatches,
 }: Props) {
   const pickContext =
     hasAnyPick &&
@@ -94,7 +97,7 @@ export function WhoToCheerForCard({
     teams &&
     initialSlots.length > 0 &&
     teams.length > 0
-      ? { slots: initialSlots, teams }
+      ? { slots: initialSlots, teams, allMatches }
       : null;
 
   const displaySuggestions = suggestions.slice(0, DASHBOARD_MATCH_LIMIT);

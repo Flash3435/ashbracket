@@ -10,6 +10,7 @@ import {
   LATEST_RECAP_DASHBOARD_LIMIT,
   pointsByMatchCodeFromScoreImpactActivities,
   recapBadgeKind,
+  recapBadgeAlignsWithExplanation,
   recentCompletedOfficialMatches,
   selectBestRecapItem,
   selectRecentRecapItemsForDashboard,
@@ -444,6 +445,54 @@ function finishedMatch(
   );
   assert.equal(map.get("M-NEW"), 3);
   assert.equal(map.get("M-OTHER"), undefined);
+}
+
+// knockout completed match — mixed when one path helped and one eliminated
+{
+  const bra = {
+    id: "team-bra",
+    name: "Brazil",
+    countryCode: "BRA",
+    fifaCode: "BRA",
+    fifaRank: 1,
+    fifaRankAsOf: null,
+    createdAt: "",
+    updatedAt: "",
+  };
+  const jpn = {
+    id: "team-jpn",
+    name: "Japan",
+    countryCode: "JPN",
+    fifaCode: "JPN",
+    fifaRank: 2,
+    fifaRankAsOf: null,
+    createdAt: "",
+    updatedAt: "",
+  };
+  const koTeams = [bra, jpn] satisfies Team[];
+  const koMatch = finishedMatch({
+    match_id: "r32-bra-jpn",
+    match_code: "R32-BRA-JPN",
+    stage_code: "round_of_32",
+    stage_label: "Round of 32",
+    group_code: null,
+    home_team_name: "Brazil",
+    home_country_code: "BRA",
+    away_team_name: "Japan",
+    away_country_code: "JPN",
+    winner_team_name: "Brazil",
+    winner_country_code: "BRA",
+  });
+  const koSlots = [
+    slot({ predictionKind: "champion", teamId: "team-bra", groupCode: null }),
+    slot({ predictionKind: "round_of_32", teamId: "team-jpn", groupCode: null }),
+  ];
+  const item = buildRecapItemForMatch(koMatch, koSlots, koTeams, undefined, [koMatch]);
+  assert.equal(item.impact, "mixed");
+  assert.equal(recapBadgeKind(item), "mixed");
+  assert.ok(item.explanation.includes("Brazil advancing keeps your champion pick alive"));
+  assert.ok(item.explanation.includes("Japan is now eliminated"));
+  assert.ok(recapBadgeAlignsWithExplanation(item));
 }
 
 console.log("buildParticipantLatestRecap.selftest.ts: ok");

@@ -4,6 +4,7 @@ import { assertCanManagePool } from "@/lib/admin/assertCanManagePool";
 import { logAdminRiskAction } from "@/lib/admin/adminRiskAuditLog";
 import {
   applyKnockoutPickCorrection,
+  KNOCKOUT_PICK_CORRECTION_ALREADY_MATCHES_SAVED,
   resolveKnockoutPickCorrectionMatch,
   resolveKnockoutPickCorrectionTeamId,
   summarizeKnockoutPickCorrectionDryRun,
@@ -278,6 +279,11 @@ export async function correctParticipantKnockoutPickAction(input: {
     });
     if ("error" in teamResolved) return savePicksValidationError(teamResolved.error);
 
+    const savedWinnerId = resolved.match.oldTeamId.trim();
+    if (savedWinnerId && savedWinnerId === teamResolved.teamId) {
+      return savePicksValidationError(KNOCKOUT_PICK_CORRECTION_ALREADY_MATCHES_SAVED);
+    }
+
     const applied = applyKnockoutPickCorrection({
       slots: initialSlots,
       match: resolved.match,
@@ -287,14 +293,14 @@ export async function correctParticipantKnockoutPickAction(input: {
       fullRoundOf32Official,
     });
 
-    if (applied.changedPayloads.length === 0) {
+    if (applied.writePayloads.length === 0) {
       return savePicksValidationError("No pick changes were produced.");
     }
 
     const writeResult = await applyParticipantPickSlots(supabase, {
       poolId,
       participantId,
-      slots: applied.changedPayloads,
+      slots: applied.writePayloads,
     });
     if (!writeResult.ok) return savePicksUnexpectedError(writeResult.error);
 

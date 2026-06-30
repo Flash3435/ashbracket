@@ -262,15 +262,18 @@ export function applyGradualR32MatchWinnerToSlots(
   matchIndex: number,
   teamId: string,
   state: GradualKnockoutSelectionState,
+  options?: { preserveR32ParticipantSlots?: boolean },
 ): KnockoutPickSlotDraft[] {
   const ms = state.matchStates[matchIndex];
   if (!ms) return slots;
   const r16Key = r16SlotKeyForR32MatchIndex(matchIndex);
+  const preserveR32 = options?.preserveR32ParticipantSlots === true;
   return slots.map((s) => {
     if (s.predictionKind === "round_of_16" && s.slotKey === r16Key) {
       return { ...s, teamId };
     }
     if (
+      !preserveR32 &&
       s.predictionKind === "round_of_32" &&
       (s.slotKey === ms.topSlotKey || s.slotKey === ms.bottomSlotKey)
     ) {

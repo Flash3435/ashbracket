@@ -7,6 +7,7 @@ import {
   DASHBOARD_MATCH_LIMIT,
   type CheerSuggestion,
 } from "./buildWhoToCheerFor";
+import { matchdayBracketWantsFromGuidance } from "../participant/bracketMatchImpact";
 
 export const MATCHDAY_DASHBOARD_LIMIT = DASHBOARD_MATCH_LIMIT;
 
@@ -129,7 +130,7 @@ export function buildMatchday(input: MatchdayBuildInput): MatchdayResult {
   );
 
   const suggestions = selected.map((m) =>
-    buildCheerSuggestionForMatch(m, input.slots, input.teams),
+    buildCheerSuggestionForMatch(m, input.slots, input.teams, undefined, input.matches),
   );
 
   return {
@@ -144,6 +145,9 @@ export function matchdayBracketWantsLabel(s: CheerSuggestion): {
   primary: string;
   muted: boolean;
 } {
+  if (s.bracketGuidance) {
+    return matchdayBracketWantsFromGuidance(s.bracketGuidance);
+  }
   if (s.cheerForLabel === "Both teams are in your bracket") {
     return { primary: "Mixed impact", muted: false };
   }

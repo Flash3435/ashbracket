@@ -181,14 +181,29 @@ function officialFinalSides(slots: KnockoutPickSlotDraft[]): {
  * Clears knockout progression picks that cannot be valid under FIFA's official
  * bracket path (M89–M104). Does not touch group, third-place, or bonus rows.
  */
+export type PruneOfficialKnockoutPathOptions = ConfirmedR32WinnerContext & {
+  /** Skip R32 winner-slot validation for these match indices (admin corrections). */
+  exemptR32MatchIndices?: ReadonlySet<number> | readonly number[];
+};
+
+function isExemptR32MatchIndex(
+  matchIndex: number,
+  exempt: PruneOfficialKnockoutPathOptions["exemptR32MatchIndices"],
+): boolean {
+  if (!exempt) return false;
+  if (exempt instanceof Set) return exempt.has(matchIndex);
+  return (exempt as readonly number[]).includes(matchIndex);
+}
+
 export function pruneOfficialKnockoutPathPicks(
   slots: KnockoutPickSlotDraft[],
-  ctx?: ConfirmedR32WinnerContext,
+  ctx?: PruneOfficialKnockoutPathOptions,
 ): PruneOfficialKnockoutPathResult {
   const cleared: ClearedKnockoutPathPick[] = [];
   let result = slots;
 
   for (let matchIndex = 0; matchIndex < WC2026_R32_MATCH_DEFS.length; matchIndex++) {
+    if (isExemptR32MatchIndex(matchIndex, ctx?.exemptR32MatchIndices)) continue;
     const slotKey = r16SlotKeyForR32MatchIndex(matchIndex);
     const row = result.find(
       (s) => s.predictionKind === "round_of_16" && s.slotKey === slotKey,

@@ -2,6 +2,10 @@ import type { KnockoutPickSlotDraft } from "../../types/adminKnockoutPicks";
 import type { Team } from "../../src/types/domain";
 import type { TournamentMatchPublicRow } from "../../types/tournamentPublic";
 import {
+  pickSideHighlightForMatch,
+  type PickSideHighlightKind,
+} from "../../lib/participant/bracketMatchImpact";
+import {
   PICK_HIGHLIGHT_HELP,
   pickHighlightForSide,
   type PickHighlightLevel,
@@ -13,19 +17,36 @@ function teamLabel(name: string | null, code: string | null): string {
   return "TBD";
 }
 
-function HighlightBadge({ level }: { level: PickHighlightLevel }) {
-  if (level === "none") return null;
-  const isRound = level === "round";
+const HIGHLIGHT_HELP: Record<Exclude<PickSideHighlightKind, "none">, string> = {
+  needed: "Your bracket needs this team to win this match.",
+  in_bracket: PICK_HIGHLIGHT_HELP.bracket,
+  eliminated: "This team was eliminated — related picks can no longer help your bracket.",
+};
+
+function legacyLevelToKind(level: PickHighlightLevel): PickSideHighlightKind {
+  if (level === "round") return "needed";
+  if (level === "bracket") return "in_bracket";
+  return "none";
+}
+
+function HighlightBadge({ kind }: { kind: Exclude<PickSideHighlightKind, "none"> }) {
+  const label =
+    kind === "needed"
+      ? "Bracket wants"
+      : kind === "eliminated"
+        ? "Eliminated pick"
+        : "In your bracket";
+
+  const className =
+    kind === "needed"
+      ? "shrink-0 rounded bg-ash-accent/25 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-ash-accent"
+      : kind === "eliminated"
+        ? "shrink-0 rounded bg-red-950/50 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-red-200"
+        : "shrink-0 rounded bg-ash-body px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-ash-muted";
+
   return (
-    <span
-      className={
-        isRound
-          ? "shrink-0 rounded bg-ash-accent/25 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-ash-accent"
-          : "shrink-0 rounded bg-ash-body px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-ash-muted"
-      }
-      title={isRound ? PICK_HIGHLIGHT_HELP.round : PICK_HIGHLIGHT_HELP.bracket}
-    >
-      {isRound ? "Your pick" : "In your bracket"}
+    <span className={className} title={HIGHLIGHT_HELP[kind]}>
+      {label}
     </span>
   );
 }
@@ -33,28 +54,31 @@ function HighlightBadge({ level }: { level: PickHighlightLevel }) {
 function TeamWithHighlight({
   name,
   code,
-  level,
+  kind,
 }: {
   name: string | null;
   code: string | null;
-  level: PickHighlightLevel;
+  kind: PickSideHighlightKind;
 }) {
   const label = teamLabel(name, code);
-  if (level === "none") {
+  if (kind === "none") {
     return <span className="text-sm font-medium text-ash-text">{label}</span>;
   }
-  const isRound = level === "round";
+
+  const borderClass =
+    kind === "needed"
+      ? "border-ash-accent/45 bg-ash-accent/12 text-ash-accent"
+      : kind === "eliminated"
+        ? "border-red-900/50 bg-red-950/25 text-red-100"
+        : "border-ash-border/80 bg-ash-body/55 text-ash-text";
+
   return (
     <span
-      className={`inline-flex max-w-full flex-wrap items-center gap-1.5 rounded-md border px-2 py-1 ${
-        isRound
-          ? "border-ash-accent/45 bg-ash-accent/12 text-ash-accent"
-          : "border-ash-border/80 bg-ash-body/55 text-ash-text"
-      }`}
-      title={isRound ? PICK_HIGHLIGHT_HELP.round : PICK_HIGHLIGHT_HELP.bracket}
+      className={`inline-flex max-w-full flex-wrap items-center gap-1.5 rounded-md border px-2 py-1 ${borderClass}`}
+      title={HIGHLIGHT_HELP[kind]}
     >
       <span className="min-w-0 font-medium">{label}</span>
-      <HighlightBadge level={level} />
+      <HighlightBadge kind={kind} />
     </span>
   );
 }
@@ -62,6 +86,8 @@ function TeamWithHighlight({
 type PickContext = {
   slots: KnockoutPickSlotDraft[];
   teams: Team[];
+  /** Full schedule — enables elimination-aware highlights. */
+  allMatches?: TournamentMatchPublicRow[];
 };
 
 type Props = {
@@ -69,6 +95,26 @@ type Props = {
   pickContext: PickContext | null | undefined;
   className?: string;
 };
+
+function sideHighlight(
+  m: TournamentMatchPublicRow,
+  side: "home" | "away",
+  pickContext: PickContext,
+  teamById: Map<string, Team>,
+): PickSideHighlightKind {
+  if (pickContext.allMatches && pickContext.allMatches.length > 0) {
+    return pickSideHighlightForMatch(
+      m,
+      side,
+      pickContext.slots,
+      pickContext.teams,
+      pickContext.allMatches,
+    );
+  }
+  return legacyLevelToKind(
+    pickHighlightForSide(m, side, pickContext.slots, teamById),
+  );
+}
 
 /**
  * Home vs away line with optional per-side highlight for the signed-in user’s saved picks.
@@ -85,11 +131,11 @@ export function ScheduleMatchPickTeams({
 
   const homeLevel =
     teamById && pickContext
-      ? pickHighlightForSide(m, "home", pickContext.slots, teamById)
+      ? sideHighlight(m, "home", pickContext, teamById)
       : "none";
   const awayLevel =
     teamById && pickContext
-      ? pickHighlightForSide(m, "away", pickContext.slots, teamById)
+      ? sideHighlight(m, "away", pickContext, teamById)
       : "none";
 
   return (
@@ -97,7 +143,7 @@ export function ScheduleMatchPickTeams({
       <TeamWithHighlight
         name={m.home_team_name}
         code={m.home_country_code}
-        level={homeLevel}
+        kind={homeLevel}
       />
       <span className="hidden text-ash-border-hover sm:inline">vs</span>
       <span className="text-center text-xs text-ash-border-hover sm:hidden">
@@ -106,7 +152,7 @@ export function ScheduleMatchPickTeams({
       <TeamWithHighlight
         name={m.away_team_name}
         code={m.away_country_code}
-        level={awayLevel}
+        kind={awayLevel}
       />
     </div>
   );

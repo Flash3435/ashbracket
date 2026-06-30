@@ -1,4 +1,5 @@
 import { countryCodesFromKnockoutSlots } from "../participant/nextMatchesForPickedTeams";
+import { buildMatchBracketGuidance, type MatchBracketGuidance } from "../participant/bracketMatchImpact";
 import { participantPicksCompleteFromDrafts } from "../predictions/participantPicksCompletenessRules";
 import { sortUpcomingMatchesLiveFirst } from "../tournament/sortTournamentMatches";
 import type { PredictionKind, Team } from "../../src/types/domain";
@@ -31,6 +32,8 @@ export type CheerSuggestion = {
   isAwayInUserBracket: boolean;
   involvesPickedTeam: boolean;
   dashboardPriority: number;
+  /** Unified bracket impact for badges, labels, and copy. */
+  bracketGuidance: MatchBracketGuidance | null;
 };
 
 export type WhoToCheerForBuildInput = {
@@ -313,6 +316,7 @@ export function buildCheerSuggestionForMatch(
   slots: KnockoutPickSlotDraft[],
   teams: Team[],
   pickedCodes?: Set<string>,
+  allMatches?: TournamentMatchPublicRow[],
 ): CheerSuggestion {
   const teamByCountry = new Map<string, Team>();
   const teamById = new Map<string, Team>();
@@ -334,6 +338,8 @@ export function buildCheerSuggestionForMatch(
     away.countryCode && codes.has(away.countryCode),
   );
   const involvesPickedTeam = matchInvolvesPickedCodes(m, codes);
+  const schedule = allMatches ?? [m];
+  const bracketGuidance = buildMatchBracketGuidance(m, slots, teams, schedule);
 
   const base = {
     matchId: m.match_id,
@@ -345,12 +351,13 @@ export function buildCheerSuggestionForMatch(
     away,
     cheerForTeamId: decision.cheerForTeamId,
     cheerForLabel: decision.cheerForLabel,
-    reason: decision.reason,
+    reason: bracketGuidance.explanation,
     confidence: decision.confidence,
     match: m,
     isHomeInUserBracket,
     isAwayInUserBracket,
     involvesPickedTeam,
+    bracketGuidance,
   };
 
   return {
@@ -384,7 +391,7 @@ export function buildWhoToCheerFor(input: WhoToCheerForBuildInput): WhoToCheerFo
   });
 
   const allSuggestions = candidates.map((m) =>
-    buildCheerSuggestionForMatch(m, input.slots, input.teams, pickedCodes),
+    buildCheerSuggestionForMatch(m, input.slots, input.teams, pickedCodes, input.matches),
   );
 
   const ranked = [...allSuggestions].sort(sortSuggestionsForDashboard);

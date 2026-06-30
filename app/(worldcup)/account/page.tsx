@@ -641,6 +641,7 @@ export default async function AccountPage({ searchParams }: PageProps) {
                   recentScoreImpact={recentScoreImpact}
                   initialSlots={picksCtx.initialSlots}
                   teams={picksCtx.teams}
+                  allMatches={tournamentMatches ?? undefined}
                 />
               ) : null}
 
@@ -730,6 +731,7 @@ export default async function AccountPage({ searchParams }: PageProps) {
                   picksHref={editPicksFromDashboardHref}
                   initialSlots={picksCtx.initialSlots}
                   teams={picksCtx.teams}
+                  allMatches={tournamentMatches ?? undefined}
                 />
               ) : null}
             </div>

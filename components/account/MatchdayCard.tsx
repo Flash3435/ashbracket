@@ -6,6 +6,7 @@ import type { RecentScoreImpactItem } from "@/lib/account/loadRecentScoreImpactF
 import { formatTournamentMatchScoreLine } from "@/lib/tournament/matchScoreDisplay";
 import type { KnockoutPickSlotDraft } from "../../types/adminKnockoutPicks";
 import type { Team } from "../../src/types/domain";
+import type { TournamentMatchPublicRow } from "../../types/tournamentPublic";
 import { ScheduleMatchPickTeams } from "@/components/tournament/ScheduleMatchPickTeams";
 
 type Props = {
@@ -25,6 +26,7 @@ type Props = {
   recentScoreImpact: RecentScoreImpactItem[];
   initialSlots?: KnockoutPickSlotDraft[];
   teams?: Team[];
+  allMatches?: TournamentMatchPublicRow[];
 };
 
 function statusBadgeClass(status: string): string {
@@ -132,6 +134,7 @@ export function MatchdayCard({
   recentScoreImpact,
   initialSlots,
   teams,
+  allMatches,
 }: Props) {
   const pickContext =
     hasAnyPick &&
@@ -139,7 +142,7 @@ export function MatchdayCard({
     teams &&
     initialSlots.length > 0 &&
     teams.length > 0
-      ? { slots: initialSlots, teams }
+      ? { slots: initialSlots, teams, allMatches }
       : null;
 
   const showMatches = !tournamentErr && suggestions.length > 0;

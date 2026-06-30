@@ -242,10 +242,12 @@ function matchRow(
 
 // TBD / missing country codes do not throw
 {
+  const now = Date.now();
   const built = buildWhoToCheerFor({
     matches: [
       matchRow({
         match_id: "tbd",
+        kickoff_at: new Date(now + 3600_000).toISOString(),
         home_country_code: null,
         away_country_code: null,
         home_team_name: "TBD",
@@ -254,6 +256,7 @@ function matchRow(
     ],
     slots: [slot({ rowKey: "c", predictionKind: "champion", teamId: "t-br" })],
     teams: [team("t-br", "Brazil", "BRA")],
+    nowMs: now,
   });
   assert.strictEqual(built.suggestions[0]?.home.name, "TBD");
 }

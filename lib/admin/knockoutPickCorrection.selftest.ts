@@ -4,14 +4,19 @@ import type { KnockoutPickSlotDraft } from "../../types/adminKnockoutPicks";
 import type { TournamentMatchPublicRow } from "../../types/tournamentPublic";
 import {
   applyKnockoutPickCorrection,
+  KNOCKOUT_PICK_CORRECTION_ALREADY_MATCHES_SAVED,
   resolveKnockoutPickCorrectionMatch,
   resolveKnockoutPickCorrectionTeamId,
   validateKnockoutPickCorrectionReason,
 } from "./knockoutPickCorrection";
-import { buildKnockoutMatchPickRows } from "../picks/knockoutMatchPickRows";
+import {
+  buildKnockoutMatchPickRows,
+  readConfirmedR32MatchWinner,
+} from "../picks/knockoutMatchPickRows";
 import { applyGradualKnockoutPickSaveGuards } from "../predictions/validateGradualKnockoutPickSave";
 import { validateKnockoutMatchPick } from "../picks/gradualKnockoutUnlock";
 import {
+  buildGradualR32MatchPickRows,
   getGradualKnockoutSelectionState,
   matchStateForR16GradualWinnerSlot,
   r16SlotKeyForR32MatchIndex,
@@ -103,6 +108,26 @@ const teams: Team[] = [
     countryCode: "RSA",
     fifaCode: "RSA",
     fifaRank: 60,
+    fifaRankAsOf: null,
+    createdAt: "",
+    updatedAt: "",
+  },
+  {
+    id: "team-bra",
+    name: "Brazil",
+    countryCode: "BRA",
+    fifaCode: "BRA",
+    fifaRank: 5,
+    fifaRankAsOf: null,
+    createdAt: "",
+    updatedAt: "",
+  },
+  {
+    id: "team-jpn",
+    name: "Japan",
+    countryCode: "JPN",
+    fifaCode: "JPN",
+    fifaRank: 18,
     fifaRankAsOf: null,
     createdAt: "",
     updatedAt: "",
@@ -422,6 +447,253 @@ const nowAfterKickoff = new Date("2026-06-28T19:00:00Z").getTime();
   assert.strictEqual(m90.homeTeamId, "team-can");
   assert.strictEqual(m90.awayTeamId, "team-mar");
   assert.strictEqual(m90.lockReason, "pickable");
+}
+
+const m76Started = match({
+  match_code: "M76",
+  stage_code: "round_of_32",
+  kickoff_at: "2026-06-28T19:00:00Z",
+  status: "live",
+  home_country_code: "BRA",
+  home_team_name: "Brazil",
+  away_country_code: "JPN",
+  away_team_name: "Japan",
+});
+
+const m76FinishedBrazil = match({
+  match_code: "M76",
+  stage_code: "round_of_32",
+  kickoff_at: "2026-06-28T19:00:00Z",
+  status: "finished",
+  home_country_code: "BRA",
+  home_team_name: "Brazil",
+  away_country_code: "JPN",
+  away_team_name: "Japan",
+  winner_country_code: "BRA",
+  winner_team_name: "Brazil",
+});
+
+function m76GradualSlots(input?: {
+  r16Winner?: string;
+  r32Top?: string;
+  r32Bottom?: string;
+}): KnockoutPickSlotDraft[] {
+  const r16Winner = input?.r16Winner ?? "";
+  const r32Top = input?.r32Top ?? "";
+  const r32Bottom = input?.r32Bottom ?? "";
+  return [
+    ...Array.from({ length: 16 }, (_, i) =>
+      r16SlotDraft(String(i + 1), i === 3 ? r16Winner : ""),
+    ),
+    ...Array.from({ length: 32 }, (_, i) => {
+      const key = String(i + 1);
+      const teamId =
+        key === "7" ? r32Top : key === "8" ? r32Bottom : "";
+      return r32SlotDraft(key, teamId);
+    }),
+  ];
+}
+
+// Locked M76 with no existing pick -> admin correction saves to round_of_16 slot 4
+{
+  const slots = m76GradualSlots();
+  const resolved = resolveKnockoutPickCorrectionMatch({
+    matchCode: "M76",
+    slots,
+    teams,
+    tournamentMatches: [m76Started],
+    fullRoundOf32Official: true,
+    nowMs: nowAfterKickoff,
+  });
+  assert.ok(!("error" in resolved));
+  assert.strictEqual(resolved.match.oldTeamId, "");
+  const applied = applyKnockoutPickCorrection({
+    slots,
+    match: resolved.match,
+    newTeamId: "team-bra",
+    teams,
+    tournamentMatches: [m76Started],
+    fullRoundOf32Official: true,
+    nowMs: nowAfterKickoff,
+  });
+  assert.ok(applied.writePayloads.length >= 1);
+  assert.strictEqual(
+    applied.slots.find(
+      (s) => s.predictionKind === "round_of_16" && s.slotKey === "4",
+    )?.teamId,
+    "team-bra",
+  );
+  const gradual = getGradualKnockoutSelectionState({
+    matches: [m76Started],
+    teams,
+    nowMs: nowAfterKickoff,
+    fullRoundOf32Official: true,
+  });
+  const uiRows = buildGradualR32MatchPickRows({
+    slots: applied.slots,
+    state: gradual,
+    teams,
+    fullRoundOf32Official: true,
+  });
+  assert.strictEqual(uiRows[3]!.winnerTeamId, "team-bra");
+  assert.strictEqual(
+    readConfirmedR32MatchWinner(3, applied.slots, {
+      teams,
+      tournamentMatches: [m76Started],
+      gradual,
+      knockoutBracketPicksUnlocked: true,
+    }),
+    "team-bra",
+  );
+}
+
+// Locked M76 with existing different pick -> admin correction updates
+{
+  const slots = m76GradualSlots({ r16Winner: "team-jpn" });
+  const resolved = resolveKnockoutPickCorrectionMatch({
+    matchCode: "M76",
+    slots,
+    teams,
+    tournamentMatches: [m76Started],
+    fullRoundOf32Official: true,
+    nowMs: nowAfterKickoff,
+  });
+  assert.ok(!("error" in resolved));
+  assert.strictEqual(resolved.match.oldTeamId, "team-jpn");
+  const applied = applyKnockoutPickCorrection({
+    slots,
+    match: resolved.match,
+    newTeamId: "team-bra",
+    teams,
+    tournamentMatches: [m76Started],
+    fullRoundOf32Official: true,
+    nowMs: nowAfterKickoff,
+  });
+  assert.ok(applied.writePayloads.length >= 1);
+  assert.strictEqual(
+    applied.slots.find(
+      (s) => s.predictionKind === "round_of_16" && s.slotKey === "4",
+    )?.teamId,
+    "team-bra",
+  );
+}
+
+// Locked M76 with same pick -> write payloads empty (action shows friendly message)
+{
+  const slots = m76GradualSlots({ r16Winner: "team-bra" });
+  const resolved = resolveKnockoutPickCorrectionMatch({
+    matchCode: "M76",
+    slots,
+    teams,
+    tournamentMatches: [m76Started],
+    fullRoundOf32Official: true,
+    nowMs: nowAfterKickoff,
+  });
+  assert.ok(!("error" in resolved));
+  assert.strictEqual(resolved.match.oldTeamId, "team-bra");
+  assert.strictEqual(
+    KNOCKOUT_PICK_CORRECTION_ALREADY_MATCHES_SAVED,
+    "This correction already matches the saved pick.",
+  );
+  const applied = applyKnockoutPickCorrection({
+    slots,
+    match: resolved.match,
+    newTeamId: "team-bra",
+    teams,
+    tournamentMatches: [m76Started],
+    fullRoundOf32Official: true,
+    nowMs: nowAfterKickoff,
+  });
+  assert.strictEqual(applied.writePayloads.length, 0);
+}
+
+// Official full R32 keeps participant round_of_32 side assignments when correcting
+{
+  const slots = m76GradualSlots({
+    r32Top: "team-bra",
+    r32Bottom: "team-jpn",
+  });
+  const resolved = resolveKnockoutPickCorrectionMatch({
+    matchCode: "M76",
+    slots,
+    teams,
+    tournamentMatches: [m76Started],
+    fullRoundOf32Official: true,
+    nowMs: nowAfterKickoff,
+  });
+  assert.ok(!("error" in resolved));
+  const applied = applyKnockoutPickCorrection({
+    slots,
+    match: resolved.match,
+    newTeamId: "team-bra",
+    teams,
+    tournamentMatches: [m76Started],
+    fullRoundOf32Official: true,
+    nowMs: nowAfterKickoff,
+  });
+  assert.strictEqual(
+    applied.slots.find(
+      (s) => s.predictionKind === "round_of_32" && s.slotKey === "7",
+    )?.teamId,
+    "team-bra",
+  );
+  assert.strictEqual(
+    applied.slots.find(
+      (s) => s.predictionKind === "round_of_32" && s.slotKey === "8",
+    )?.teamId,
+    "team-jpn",
+  );
+}
+
+// Admin correction can persist a pick that differs from the published result winner
+{
+  const slots = m76GradualSlots();
+  const resolved = resolveKnockoutPickCorrectionMatch({
+    matchCode: "M76",
+    slots,
+    teams,
+    tournamentMatches: [m76FinishedBrazil],
+    fullRoundOf32Official: true,
+    nowMs: nowAfterKickoff,
+  });
+  assert.ok(!("error" in resolved));
+  const applied = applyKnockoutPickCorrection({
+    slots,
+    match: resolved.match,
+    newTeamId: "team-jpn",
+    teams,
+    tournamentMatches: [m76FinishedBrazil],
+    fullRoundOf32Official: true,
+    nowMs: nowAfterKickoff,
+  });
+  assert.ok(applied.writePayloads.length >= 1);
+  assert.strictEqual(
+    applied.slots.find(
+      (s) => s.predictionKind === "round_of_16" && s.slotKey === "4",
+    )?.teamId,
+    "team-jpn",
+  );
+}
+
+// Invalid team outside matchup is rejected
+{
+  const slots = m76GradualSlots();
+  const resolved = resolveKnockoutPickCorrectionMatch({
+    matchCode: "M76",
+    slots,
+    teams,
+    tournamentMatches: [m76Started],
+    fullRoundOf32Official: true,
+    nowMs: nowAfterKickoff,
+  });
+  assert.ok(!("error" in resolved));
+  const wrong = resolveKnockoutPickCorrectionTeamId({
+    teamId: "team-usa",
+    teams,
+    allowedTeamIds: resolved.match.allowedTeamIds,
+  });
+  assert.ok("error" in wrong);
+  assert.match(wrong.error, /not in this matchup/i);
 }
 
 console.log("knockoutPickCorrection.selftest.ts: ok");

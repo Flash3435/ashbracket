@@ -23,6 +23,9 @@ import {
 export const KNOCKOUT_PICK_CORRECTION_REASON_REQUIRED =
   "A reason is required for admin pick corrections.";
 
+export const KNOCKOUT_PICK_CORRECTION_ALREADY_MATCHES_SAVED =
+  "This correction already matches the saved pick.";
+
 export type KnockoutPickCorrectionMatch = {
   matchCode: string;
   fifaMatchNo: number;
@@ -41,6 +44,9 @@ export type KnockoutPickCorrectionMatch = {
 export type KnockoutPickCorrectionApplyResult = {
   slots: KnockoutPickSlotDraft[];
   cleared: ReturnType<typeof pruneOfficialKnockoutPathPicks>["cleared"];
+  /** Material DB writes for this admin correction (not a participant pick diff). */
+  writePayloads: ParticipantPickSlotPayload[];
+  /** @deprecated Prefer `writePayloads`. Kept for dry-run scripts. */
   changedPayloads: ParticipantPickSlotPayload[];
 };
 
@@ -326,6 +332,7 @@ export function resolveKnockoutPickCorrectionTeamId(input: {
 
 function slotPayloadFromDraft(
   row: KnockoutPickSlotDraft,
+  teamIdOverride?: string,
 ): ParticipantPickSlotPayload {
   return {
     predictionKind: row.predictionKind,
@@ -333,8 +340,79 @@ function slotPayloadFromDraft(
     slotKey: row.slotKey,
     groupCode: row.groupCode,
     bonusKey: row.bonusKey,
-    teamId: row.teamId,
+    teamId: teamIdOverride ?? row.teamId,
   };
+}
+
+function progressionPayloadKey(payload: ParticipantPickSlotPayload): string {
+  return `${payload.predictionKind}\0${payload.tournamentStageId}\0${payload.slotKey ?? ""}\0${payload.groupCode ?? ""}\0${payload.bonusKey ?? ""}`;
+}
+
+function dedupePickPayloads(
+  payloads: ParticipantPickSlotPayload[],
+): ParticipantPickSlotPayload[] {
+  const seen = new Set<string>();
+  const out: ParticipantPickSlotPayload[] = [];
+  for (const payload of payloads) {
+    const key = progressionPayloadKey(payload);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(payload);
+  }
+  return out;
+}
+
+/**
+ * Builds explicit admin correction writes. Unlike participant save diffs, these
+ * always include the corrected slot when `newTeamId` differs from the saved winner.
+ */
+export function buildAdminKnockoutPickCorrectionWritePayloads(input: {
+  before: KnockoutPickSlotDraft[];
+  after: KnockoutPickSlotDraft[];
+  match: KnockoutPickCorrectionMatch;
+  newTeamId: string;
+  pruneCleared: ReturnType<typeof pruneOfficialKnockoutPathPicks>["cleared"];
+  fullRoundOf32Official: boolean;
+  gradual: GradualKnockoutSelectionState;
+}): ParticipantPickSlotPayload[] {
+  const newId = input.newTeamId.trim();
+  const payloads: ParticipantPickSlotPayload[] = [];
+
+  const correctionRow = input.after.find(
+    (s) =>
+      s.predictionKind === input.match.predictionKind &&
+      s.slotKey === input.match.slotKey,
+  );
+  if (correctionRow) {
+    payloads.push(slotPayloadFromDraft(correctionRow, newId));
+  }
+
+  for (const clear of input.pruneCleared) {
+    const row = input.after.find((s) => s.rowKey === clear.rowKey);
+    if (row) payloads.push(slotPayloadFromDraft(row));
+  }
+
+  if (!input.fullRoundOf32Official && !input.match.knockoutMatchRow) {
+    const matchIndex = input.match.fifaMatchNo - R32_FIRST;
+    const ms = input.gradual.matchStates[matchIndex];
+    if (ms) {
+      for (const sk of [ms.topSlotKey, ms.bottomSlotKey]) {
+        const beforeId =
+          input.before.find(
+            (s) => s.predictionKind === "round_of_32" && s.slotKey === sk,
+          )?.teamId.trim() ?? "";
+        const afterRow = input.after.find(
+          (s) => s.predictionKind === "round_of_32" && s.slotKey === sk,
+        );
+        const afterId = afterRow?.teamId.trim() ?? "";
+        if (beforeId !== afterId && afterRow) {
+          payloads.push(slotPayloadFromDraft(afterRow));
+        }
+      }
+    }
+  }
+
+  return dedupePickPayloads(payloads);
 }
 
 function changedKnockoutPayloads(
@@ -365,27 +443,41 @@ export function applyKnockoutPickCorrection(input: {
   nowMs?: number;
 }): KnockoutPickCorrectionApplyResult {
   const nowMs = input.nowMs ?? Date.now();
+  const newTeamId = input.newTeamId.trim();
+  const savedWinnerId = input.match.oldTeamId.trim();
+  if (savedWinnerId && savedWinnerId === newTeamId) {
+    return {
+      slots: input.slots,
+      cleared: [],
+      writePayloads: [],
+      changedPayloads: [],
+    };
+  }
+
   const gradual = getGradualKnockoutSelectionState({
     matches: input.tournamentMatches,
     teams: input.teams,
     nowMs,
     fullRoundOf32Official: input.fullRoundOf32Official,
   });
+  const r32MatchIndex = input.match.knockoutMatchRow
+    ? null
+    : input.match.fifaMatchNo - R32_FIRST;
 
   let next = input.slots;
   if (input.match.knockoutMatchRow) {
     next = applyKnockoutMatchWinnerToSlots(
       next,
       input.match.knockoutMatchRow,
-      input.newTeamId.trim(),
+      newTeamId,
     );
-  } else {
-    const matchIndex = input.match.fifaMatchNo - R32_FIRST;
+  } else if (r32MatchIndex != null && r32MatchIndex >= 0) {
     next = applyGradualR32MatchWinnerToSlots(
       next,
-      matchIndex,
-      input.newTeamId.trim(),
+      r32MatchIndex,
+      newTeamId,
       gradual,
+      { preserveR32ParticipantSlots: input.fullRoundOf32Official },
     );
   }
 
@@ -397,12 +489,45 @@ export function applyKnockoutPickCorrection(input: {
       officialRoundOf32Complete: input.fullRoundOf32Official,
       gradual,
     }),
+    exemptR32MatchIndices:
+      r32MatchIndex != null && r32MatchIndex >= 0 ? [r32MatchIndex] : undefined,
   });
-  const changedPayloads = changedKnockoutPayloads(input.slots, pruned.slots);
+
+  let finalSlots = pruned.slots;
+  if (
+    r32MatchIndex != null &&
+    r32MatchIndex >= 0 &&
+    input.match.predictionKind === "round_of_16" &&
+    input.match.slotKey
+  ) {
+    finalSlots = finalSlots.map((s) =>
+      s.predictionKind === "round_of_16" && s.slotKey === input.match.slotKey
+        ? { ...s, teamId: newTeamId }
+        : s,
+    );
+  } else if (input.match.knockoutMatchRow) {
+    finalSlots = finalSlots.map((s) =>
+      s.rowKey === input.match.knockoutMatchRow!.saveRowKey
+        ? { ...s, teamId: newTeamId }
+        : s,
+    );
+  }
+
+  const writePayloads = buildAdminKnockoutPickCorrectionWritePayloads({
+    before: input.slots,
+    after: finalSlots,
+    match: input.match,
+    newTeamId,
+    pruneCleared: pruned.cleared,
+    fullRoundOf32Official: input.fullRoundOf32Official,
+    gradual,
+  });
+  const changedPayloads = changedKnockoutPayloads(input.slots, finalSlots);
 
   return {
-    slots: pruned.slots,
+    slots: finalSlots,
     cleared: pruned.cleared,
+    writePayloads,
     changedPayloads,
   };
 }

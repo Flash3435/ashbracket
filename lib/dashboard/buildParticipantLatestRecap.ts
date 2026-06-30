@@ -1,9 +1,13 @@
 import {
   buildTeamImportanceById,
-  importanceScoreForKind,
   participantHasAnyPick,
-  reasonForTeamPick,
 } from "../account/buildWhoToCheerFor";
+import {
+  buildMatchBracketGuidance,
+  groupExplanationForPick,
+  groupSentimentForPick,
+  type BracketMatchImpact,
+} from "../participant/bracketMatchImpact";
 import { countryCodesFromKnockoutSlots } from "../participant/nextMatchesForPickedTeams";
 import { recapCalendarDateYmdEdmonton } from "../poolActivity/recapCalendarDate";
 import {
@@ -19,7 +23,7 @@ export const RECAP_MATCH_LIMIT = 3;
 
 export const LATEST_RECAP_DASHBOARD_LIMIT = 4;
 
-export type RecapImpact = "helped" | "mixed" | "hurt" | "neutral";
+export type RecapImpact = BracketMatchImpact;
 
 export type RecapBadgeKind =
   | "helped"
@@ -129,6 +133,17 @@ export function recapBadgeKind(item: ParticipantRecapMatchItem): RecapBadgeKind 
   return "no_strong_angle";
 }
 
+/** True when badge label and explanation describe the same impact tier. */
+export function recapBadgeAlignsWithExplanation(item: ParticipantRecapMatchItem): boolean {
+  const badge = recapBadgeKind(item);
+  const copy = item.explanation.toLowerCase();
+  const isNeutralCopy = copy.includes("no strong angle");
+  if (badge === "no_strong_angle") return isNeutralCopy;
+  if (isNeutralCopy) return false;
+  if (badge === "mixed") return item.impact === "mixed";
+  return badge === item.impact;
+}
+
 export function formatRecapMatchHeadline(m: TournamentMatchPublicRow): string {
   const home = m.home_team_name?.trim() || "TBD";
   const away = m.away_team_name?.trim() || "TBD";
@@ -234,44 +249,12 @@ function outcomeForCountryCode(
       : "lost";
 }
 
-function isKnockoutStageMatch(m: TournamentMatchPublicRow): boolean {
-  return m.stage_code !== "group";
-}
-
 function sentimentForRelevantPick(
   slot: KnockoutPickSlotDraft,
   outcome: MatchOutcome,
   m: TournamentMatchPublicRow,
 ): PickSentiment {
-  const kind = slot.predictionKind;
-
-  if (kind === "bonus_pick") return "neutral";
-
-  if (
-    kind === "group_winner" ||
-    kind === "group_runner_up" ||
-    kind === "third_place_qualifier"
-  ) {
-    if (m.stage_code !== "group") return "neutral";
-    if (outcome === "won") return "positive";
-    if (outcome === "drew") return "neutral";
-    if (kind === "third_place_qualifier") return "neutral";
-    return "negative";
-  }
-
-  if (isKnockoutStageMatch(m)) {
-    if (outcome === "won") return "positive";
-    if (outcome === "lost") return "negative";
-    return "neutral";
-  }
-
-  return "neutral";
-}
-
-function groupLabel(slot: KnockoutPickSlotDraft, m: TournamentMatchPublicRow): string | null {
-  const g = slot.groupCode ?? m.group_code;
-  if (!g) return null;
-  return g.trim().toUpperCase();
+  return groupSentimentForPick(slot, outcome, m);
 }
 
 function explanationForPrimaryPick(
@@ -279,51 +262,15 @@ function explanationForPrimaryPick(
   m: TournamentMatchPublicRow,
   impact: RecapImpact,
 ): string {
-  const { slot, teamName, sentiment } = assessment;
-  const kind = slot.predictionKind;
-  const group = groupLabel(slot, m);
-
-  if (impact === "neutral" || sentiment === "neutral") {
-    if (kind === "third_place_qualifier") {
-      return `You picked ${teamName} as a third-place qualifier. This result keeps that path alive.`;
-    }
-    if (m.stage_code === "group" && group) {
-      return `No pool points yet — Group ${group} points settle after the group finishes.`;
-    }
-    return "No strong angle for your bracket.";
-  }
-
-  if (impact === "mixed") {
-    return "Both teams connect to your bracket path.";
-  }
-
-  if (kind === "group_winner" && group) {
-    const verb = impact === "helped" ? "helped" : "hurt";
-    return `You picked ${teamName} to win Group ${group}. This result ${verb} your bracket.`;
-  }
-
-  if (kind === "group_runner_up" && group) {
-    const verb = impact === "helped" ? "helped" : "hurt";
-    return `You picked ${teamName} as Group ${group} runner-up. This result ${verb} your bracket.`;
-  }
-
-  if (kind === "third_place_qualifier") {
-    if (sentiment === "positive") {
-      return `You picked ${teamName} as a third-place qualifier. This result helped your bracket.`;
-    }
-    return `You picked ${teamName} as a third-place qualifier. This result keeps that path alive.`;
-  }
-
-  if (isKnockoutStageMatch(m)) {
-    const verb = impact === "helped" ? "helped" : "hurt";
-    return `${reasonForTeamPick(teamName, {
-      score: importanceScoreForKind(kind),
-      kind,
-    })} This result ${verb} your bracket.`;
-  }
-
-  const verb = impact === "helped" ? "helped" : "hurt";
-  return `You picked ${teamName} in your bracket. This result ${verb} your bracket.`;
+  return groupExplanationForPick(
+    {
+      slot: assessment.slot,
+      teamName: assessment.teamName,
+      sentiment: assessment.sentiment,
+    },
+    m,
+    impact,
+  );
 }
 
 function aggregateImpact(sentiments: PickSentiment[]): RecapImpact {
@@ -393,7 +340,32 @@ export function buildRecapItemForMatch(
   slots: KnockoutPickSlotDraft[],
   teams: Team[],
   pointsByMatchCode?: ReadonlyMap<string, number>,
+  allMatches?: TournamentMatchPublicRow[],
 ): ParticipantRecapMatchItem {
+  const schedule = allMatches ?? [m];
+
+  if (m.stage_code !== "group") {
+    const guidance = buildMatchBracketGuidance(m, slots, teams, schedule);
+    const rawPoints = pointsByMatchCode?.get(m.match_code);
+    const pointsEarned =
+      rawPoints != null && rawPoints > 0 ? rawPoints : null;
+
+    return {
+      matchId: m.match_id,
+      matchCode: m.match_code,
+      kickoffAt: m.kickoff_at,
+      stageLabel: m.stage_label,
+      groupCode: m.group_code,
+      scoreLine: formatTournamentMatchScoreLine(m),
+      match: m,
+      impact: guidance.impact,
+      explanation: guidance.explanation,
+      pointsEarned,
+      rankMovement: null,
+      hasRelevantPick: guidance.hasRelevantPick,
+    };
+  }
+
   const teamById = new Map(teams.map((t) => [t.id, t]));
   const teamByCountry = new Map<string, Team>();
   for (const t of teams) {
@@ -451,7 +423,14 @@ export function buildParticipantLatestRecap(
 
   const { items, matchDayYmd } = selectRecentRecapItemsForDashboard(
     input.matches,
-    (m) => buildRecapItemForMatch(m, input.slots, input.teams, input.pointsByMatchCode),
+    (m) =>
+      buildRecapItemForMatch(
+        m,
+        input.slots,
+        input.teams,
+        input.pointsByMatchCode,
+        input.matches,
+      ),
     { limit: input.limit ?? LATEST_RECAP_DASHBOARD_LIMIT },
   );
 
