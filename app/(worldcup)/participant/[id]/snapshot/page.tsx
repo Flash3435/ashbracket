@@ -12,6 +12,7 @@ import {
   nextMatchesForTeamCountryCodes,
 } from "@/lib/participant/nextMatchesForPickedTeams";
 import { fetchPublicTournamentProgress } from "@/lib/tournament/fetchPublicTournamentProgress";
+import { buildPicksViewHrefs, resolvePicksViewMode } from "@/lib/picks/picksViewMode";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 
@@ -35,7 +36,7 @@ export default async function ParticipantBracketSnapshotPage({
   const sp = await searchParams;
   const fromRaw = (sp.from ?? "").trim();
   const from = fromRaw.toLowerCase();
-  const view = sp.view === "bracket" ? "bracket" : "list";
+  const view = resolvePicksViewMode(sp.view);
 
   const result = await loadParticipantBracketSnapshot(id);
 
@@ -84,12 +85,10 @@ export default async function ParticipantBracketSnapshotPage({
 
   const snapshotListQs = new URLSearchParams();
   if (fromRaw) snapshotListQs.set("from", fromRaw);
-  const snapshotBracketQs = new URLSearchParams(snapshotListQs);
-  snapshotBracketQs.set("view", "bracket");
-  const snapshotListHref = `/participant/${result.participantId}/snapshot${
-    snapshotListQs.toString() ? `?${snapshotListQs}` : ""
-  }`;
-  const snapshotBracketHref = `/participant/${result.participantId}/snapshot?${snapshotBracketQs}`;
+  const { listHref: snapshotListHref, bracketHref: snapshotBracketHref } = buildPicksViewHrefs(
+    `/participant/${result.participantId}/snapshot`,
+    snapshotListQs,
+  );
   const snapshotEditPicksHref = `/account/picks?participant=${result.participantId}`;
 
   return (
@@ -147,6 +146,7 @@ export default async function ParticipantBracketSnapshotPage({
               listHref={snapshotListHref}
               bracketHref={snapshotBracketHref}
               knockoutBracketPicksUnlocked={result.knockoutBracketPicksUnlocked}
+              picksLocked={locked}
             />
           </div>
 
@@ -183,6 +183,7 @@ export default async function ParticipantBracketSnapshotPage({
                   slots={result.initialSlots}
                   teams={result.teams}
                   knockoutBracketPicksUnlocked={result.knockoutBracketPicksUnlocked}
+                  tournamentMatches={tournamentPayload?.matches ?? null}
                   editPicksHref={isSelf ? snapshotEditPicksHref : null}
                   listViewHref={isSelf ? snapshotListHref : null}
                   readOnly={!isSelf}

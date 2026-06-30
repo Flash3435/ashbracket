@@ -1,8 +1,10 @@
 import Link from "next/link";
 import { deriveParticipantBracket } from "../../lib/bracket/deriveParticipantBracket";
+import { buildEliminatedTeamIdSet } from "../../lib/bracket/bracketTeamDisplay";
 import type { ParticipantBracketModel } from "../../lib/bracket/types";
 import type { KnockoutPickSlotDraft } from "../../types/adminKnockoutPicks";
 import type { Team } from "../../src/types/domain";
+import type { TournamentMatchPublicRow } from "../../types/tournamentPublic";
 import { BracketMatchCard } from "./BracketMatchCard";
 import { LockedLaterRoundsPanel } from "./LockedLaterRoundsPanel";
 import { CountryFlagIcon } from "../tournament/Flag";
@@ -12,6 +14,8 @@ type Props = {
   slots: KnockoutPickSlotDraft[];
   teams: Team[];
   knockoutBracketPicksUnlocked: boolean;
+  /** Official schedule — grays out teams eliminated in completed knockout matches. */
+  tournamentMatches?: TournamentMatchPublicRow[] | null;
   /** Optional: link to `/account/picks?participant=…` for the owner. */
   editPicksHref?: string | null;
   /** Optional: list view on summary / snapshot pages. */
@@ -26,12 +30,14 @@ function RoundColumn({
   matches,
   teamById,
   matchEditHref,
+  eliminatedTeamIds,
 }: {
   title: string;
   shortTitle: string;
   matches: ParticipantBracketModel["roundOf32"];
   teamById: Map<string, Team>;
   matchEditHref?: string | null;
+  eliminatedTeamIds: Set<string>;
 }) {
   return (
     <div className="flex min-w-[168px] shrink-0 flex-col border-r border-ash-border/40 pr-2 last:border-r-0 last:pr-0">
@@ -49,6 +55,7 @@ function RoundColumn({
             match={m}
             teamById={teamById}
             matchEditHref={matchEditHref ?? undefined}
+            eliminatedTeamIds={eliminatedTeamIds}
           />
         ))}
       </div>
@@ -63,38 +70,58 @@ function ChampionCell({
   champion,
   teamById,
   knockoutBracketPicksUnlocked,
+  eliminatedTeamIds,
 }: {
   champion: ParticipantBracketModel["champion"];
   teamById: Map<string, Team>;
   knockoutBracketPicksUnlocked: boolean;
+  eliminatedTeamIds: Set<string>;
 }) {
   const tid = champion.teamId?.trim() || null;
   const team = tid ? teamById.get(tid) : undefined;
   const picked = Boolean(tid && team);
+  const eliminated = Boolean(tid && eliminatedTeamIds.has(tid));
   const stage3Placeholder = !picked && !knockoutBracketPicksUnlocked;
 
   return (
     <div
       className={`rounded-lg border p-3 text-center ${
-        picked
-          ? "border-ash-accent/50 bg-ash-accent/15 ring-1 ring-ash-accent/30"
-          : "border-ash-border/70 bg-ash-body/30"
+        eliminated
+          ? "border-ash-border/50 bg-ash-body/15 opacity-75"
+          : picked
+            ? "border-ash-accent/50 bg-ash-accent/15 ring-1 ring-ash-accent/30"
+            : "border-ash-border/70 bg-ash-body/30"
       }`}
     >
       <span className="inline-flex justify-center" aria-hidden>
         {picked ? (
-          <CountryFlagIcon countryCode={team!.countryCode} size="lg" />
+          <CountryFlagIcon
+            countryCode={team!.countryCode}
+            size="lg"
+            className={eliminated ? "opacity-60 grayscale" : undefined}
+          />
         ) : (
           <span className="text-2xl leading-none">🏆</span>
         )}
       </span>
       <p
-        className={`mt-2 text-sm font-semibold ${picked ? "text-ash-text" : "text-ash-muted"}`}
+        className={`mt-2 text-sm font-semibold ${
+          eliminated ? "text-ash-muted" : picked ? "text-ash-text" : "text-ash-muted"
+        }`}
       >
         {picked ? team!.name : stage3Placeholder ? CHAMPION_STAGE3_LABEL : "TBD"}
       </p>
       {picked ? (
-        <p className="text-[11px] text-ash-muted">{team!.countryCode}</p>
+        <>
+          <p className={`text-[11px] ${eliminated ? "text-ash-muted/80" : "text-ash-muted"}`}>
+            {team!.countryCode}
+          </p>
+          {eliminated ? (
+            <p className="mt-1 text-[10px] font-semibold uppercase tracking-wide text-ash-muted">
+              Eliminated
+            </p>
+          ) : null}
+        </>
       ) : stage3Placeholder ? (
         <p className="mt-1 text-[10px] leading-snug text-ash-muted/90">{CHAMPION_STAGE3_SUB}</p>
       ) : null}
@@ -106,6 +133,7 @@ export function ParticipantBracketView({
   slots,
   teams,
   knockoutBracketPicksUnlocked,
+  tournamentMatches = null,
   editPicksHref = null,
   listViewHref = null,
   readOnly = false,
@@ -116,6 +144,7 @@ export function ParticipantBracketView({
     knockoutBracketPicksUnlocked,
   });
   const teamById = new Map(teams.map((t) => [t.id, t]));
+  const eliminatedTeamIds = buildEliminatedTeamIdSet(tournamentMatches, teams);
   const matchEditHref = !readOnly && editPicksHref ? editPicksHref : null;
 
   if (!bracket.meta.hasAnyPicks) {
@@ -160,6 +189,7 @@ export function ParticipantBracketView({
               matches={bracket.roundOf32}
               teamById={teamById}
               matchEditHref={matchEditHref}
+              eliminatedTeamIds={eliminatedTeamIds}
             />
             <LockedLaterRoundsPanel />
           </div>
@@ -182,6 +212,7 @@ export function ParticipantBracketView({
             matches={bracket.roundOf32}
             teamById={teamById}
             matchEditHref={matchEditHref}
+            eliminatedTeamIds={eliminatedTeamIds}
           />
           <RoundColumn
             title="Round of 16"
@@ -189,6 +220,7 @@ export function ParticipantBracketView({
             matches={bracket.roundOf16}
             teamById={teamById}
             matchEditHref={matchEditHref}
+            eliminatedTeamIds={eliminatedTeamIds}
           />
           <RoundColumn
             title="Quarter-finals"
@@ -196,6 +228,7 @@ export function ParticipantBracketView({
             matches={bracket.quarterfinals}
             teamById={teamById}
             matchEditHref={matchEditHref}
+            eliminatedTeamIds={eliminatedTeamIds}
           />
           <RoundColumn
             title="Semi-finals"
@@ -203,6 +236,7 @@ export function ParticipantBracketView({
             matches={bracket.semifinals}
             teamById={teamById}
             matchEditHref={matchEditHref}
+            eliminatedTeamIds={eliminatedTeamIds}
           />
           <RoundColumn
             title="Final"
@@ -210,6 +244,7 @@ export function ParticipantBracketView({
             matches={bracket.final}
             teamById={teamById}
             matchEditHref={matchEditHref}
+            eliminatedTeamIds={eliminatedTeamIds}
           />
           <div className="flex min-w-[120px] shrink-0 flex-col justify-start border-l border-ash-border/40 pl-2 sm:border-l-0 sm:pl-0 lg:border-l lg:pl-2">
             <h3 className="mb-2 text-center text-[10px] font-semibold uppercase tracking-wide text-ash-muted sm:text-xs">
@@ -219,6 +254,7 @@ export function ParticipantBracketView({
               champion={bracket.champion}
               teamById={teamById}
               knockoutBracketPicksUnlocked={knockoutBracketPicksUnlocked}
+              eliminatedTeamIds={eliminatedTeamIds}
             />
           </div>
         </div>

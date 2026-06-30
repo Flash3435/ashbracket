@@ -329,10 +329,8 @@ export function computeBracketOutlookSummary(
   };
 }
 
-export const STANDINGS_WARMING_UP_HEADLINE = "Standings are warming up";
-
-export const STANDINGS_WARMING_UP_BODY =
-  "Official points have not landed yet. Group-stage advancement points are awarded after each group is complete. Early match results are still tightly clustered, so this page will open up once there is a meaningful race.";
-
-export const STANDINGS_WARMING_UP_DASHBOARD_NOTE =
-  "Official points have not landed yet. Group-stage points are awarded after each group is complete. Early match results are still tightly clustered, so standings will appear once there is a meaningful race.";
+export {
+  STANDINGS_WARMING_UP_BODY,
+  STANDINGS_WARMING_UP_DASHBOARD_NOTE,
+  STANDINGS_WARMING_UP_HEADLINE,
+} from "./leaderboardPageCopy";

@@ -207,11 +207,57 @@ function teamPathsInMatch(
   return out;
 }
 
-function aggregateImpact(helped: boolean, hurt: boolean): BracketMatchImpact {
-  if (helped && hurt) return "mixed";
-  if (helped) return "helped";
-  if (hurt) return "hurt";
-  return "neutral";
+/** Who the bracket needed to win this fixture (importance-weighted). */
+function preferredWinnerForKnockoutMatch(
+  home: CheerTeamSummary,
+  away: CheerTeamSummary,
+  importanceByTeamId: Map<string, TeamPickImportance>,
+): CheerTeamSummary | null {
+  const decision = decideCheerForMatchSides(home, away, importanceByTeamId);
+  if (decision.confidence === "none" || !decision.cheerForTeamId) return null;
+  if (decision.cheerForLabel === "Both teams are in your bracket") return null;
+  return decision.cheerForTeamId === home.teamId ? home : away;
+}
+
+function actualWinnerSide(
+  m: TournamentMatchPublicRow,
+  home: CheerTeamSummary,
+  away: CheerTeamSummary,
+): CheerTeamSummary | null {
+  const winner = normCode(m.winner_country_code);
+  if (!winner) return null;
+  if (home.countryCode === winner) return home;
+  if (away.countryCode === winner) return away;
+  return null;
+}
+
+/** True when helped and hurt picks are different knockout rounds (not the same stage pick). */
+function hasCrossRoundHelpedAndHurt(
+  helpedPaths: TeamPathView[],
+  hurtPaths: TeamPathView[],
+): boolean {
+  if (helpedPaths.length === 0 || hurtPaths.length === 0) return false;
+  for (const h of helpedPaths) {
+    if (!h.importance) continue;
+    for (const hurt of hurtPaths) {
+      if (!hurt.importance) continue;
+      if (h.importance.kind !== hurt.importance.kind) return true;
+    }
+  }
+  return false;
+}
+
+function wantsLabelForCompleted(
+  impact: BracketMatchImpact,
+  wantedTeamName: string | null,
+): BracketWantsLabel {
+  if (impact === "mixed") {
+    return { primary: "Mixed impact", muted: false };
+  }
+  if (impact === "neutral" || !wantedTeamName) {
+    return { primary: "No strong angle", muted: true };
+  }
+  return { primary: wantedTeamName, muted: false };
 }
 
 function wantsLabelFromImpact(
@@ -249,6 +295,7 @@ function sideHighlightForCompleted(
   codesInBracket: Set<string>,
   eliminatedTeamIds: Set<string>,
   m: TournamentMatchPublicRow,
+  preferredTeamId: string | null,
 ): PickSideHighlightKind {
   const code = side.countryCode;
   if (!code || !codesInBracket.has(code)) return "none";
@@ -259,10 +306,17 @@ function sideHighlightForCompleted(
   ) {
     return "eliminated";
   }
+  if (preferredTeamId && side.teamId === preferredTeamId) return "needed";
   return "in_bracket";
 }
 
-function buildCompletedKnockoutExplanation(paths: TeamPathView[]): {
+function buildCompletedKnockoutExplanation(
+  m: TournamentMatchPublicRow,
+  home: CheerTeamSummary,
+  away: CheerTeamSummary,
+  paths: TeamPathView[],
+  importanceByTeamId: Map<string, TeamPickImportance>,
+): {
   explanation: string;
   impact: BracketMatchImpact;
   wantedTeamName: string | null;
@@ -274,9 +328,30 @@ function buildCompletedKnockoutExplanation(paths: TeamPathView[]): {
     (p) => p.eliminated && p.importance && p.importance.kind !== "bonus_pick",
   );
 
-  const impact = aggregateImpact(helpedPaths.length > 0, hurtPaths.length > 0);
-  const parts: string[] = [];
+  const preferred = preferredWinnerForKnockoutMatch(home, away, importanceByTeamId);
+  const winner = actualWinnerSide(m, home, away);
+  const crossRoundMixed = hasCrossRoundHelpedAndHurt(helpedPaths, hurtPaths);
+  const decision = decideCheerForMatchSides(home, away, importanceByTeamId);
+  const ambiguousPreferred = decision.cheerForLabel === "Both teams are in your bracket";
 
+  let impact: BracketMatchImpact;
+  let wantedTeamName: string | null = preferred?.name ?? null;
+
+  if (preferred && winner) {
+    impact =
+      preferred.teamId === winner.teamId
+        ? "helped"
+        : preferred.teamId !== winner.teamId
+          ? "hurt"
+          : "neutral";
+  } else if (ambiguousPreferred && crossRoundMixed) {
+    impact = "mixed";
+    wantedTeamName = null;
+  } else {
+    impact = paths.length === 0 ? "neutral" : "neutral";
+  }
+
+  const parts: string[] = [];
   for (const p of helpedPaths) {
     if (p.importance) parts.push(alivePhrase(p.teamName, p.importance));
   }
@@ -287,24 +362,40 @@ function buildCompletedKnockoutExplanation(paths: TeamPathView[]): {
   let explanation: string;
   if (parts.length > 0) {
     explanation = `${parts.join(". ")}.`;
-  } else if (paths.length === 0) {
-    explanation = "No strong angle for your bracket.";
   } else {
     explanation = "No strong angle for your bracket.";
   }
 
-  if (impact === "hurt" && hurtPaths.length === 1 && helpedPaths.length === 0) {
-    explanation = `${hurtPaths[0]!.teamName} was eliminated, so this hurts your bracket.`;
+  if (impact === "helped" && preferred && winner?.teamId === preferred.teamId) {
+    const preferredHelped = helpedPaths.find((p) => p.teamId === preferred.teamId);
+    const otherHurt = hurtPaths.filter((p) => p.teamId !== preferred.teamId);
+    if (preferredHelped?.importance) {
+      explanation = `${alivePhrase(preferred.name, preferredHelped.importance)}.`;
+      if (otherHurt.length > 0) {
+        explanation = `${explanation.slice(0, -1)}. ${eliminatedPhrase(
+          otherHurt[0]!.teamName,
+          otherHurt[0]!.importance,
+        )}.`;
+      }
+    }
   }
 
-  const wantedTeamName =
-    impact === "helped" && helpedPaths[0]
-      ? helpedPaths[0].teamName
-      : impact === "hurt" && hurtPaths[0]
-        ? hurtPaths[0].teamName
-        : impact === "mixed" && helpedPaths[0]
-          ? helpedPaths[0].teamName
-          : null;
+  if (impact === "hurt" && preferred) {
+    explanation = `${preferred.name} was eliminated, so this hurts your bracket.`;
+    if (crossRoundMixed) {
+      const otherHelped = helpedPaths.find((p) => p.teamId !== preferred.teamId);
+      if (otherHelped?.importance) {
+        explanation = `${explanation.slice(0, -1)}, but ${alivePhrase(
+          otherHelped.teamName,
+          otherHelped.importance,
+        ).toLowerCase()}.`;
+      }
+    }
+  }
+
+  if (impact === "mixed" && ambiguousPreferred && crossRoundMixed) {
+    explanation = parts.length > 0 ? `${parts.join(". ")}.` : explanation;
+  }
 
   return { explanation, impact, wantedTeamName };
 }
@@ -334,6 +425,14 @@ function buildUpcomingKnockoutExplanation(
   }
 
   if (isMixedUpcoming && homeImp && awayImp) {
+    if (homeImp.kind === awayImp.kind) {
+      return {
+        explanation: decision.reason,
+        impact: "neutral",
+        wantedTeamName: null,
+        isMixedUpcoming: false,
+      };
+    }
     return {
       explanation: `${pathHelpPhrase(home.name, homeImp)}; ${pathHelpPhrase(away.name, awayImp)}.`,
       impact: "mixed",
@@ -406,8 +505,14 @@ export function buildMatchBracketGuidance(
 
   if (isFinishedMatchWithScores(m)) {
     const paths = teamPathsInMatch(m, slots, teams, eliminatedTeamIds);
-    const { explanation, impact, wantedTeamName } =
-      buildCompletedKnockoutExplanation(paths);
+    const preferred = preferredWinnerForKnockoutMatch(home, away, importanceByTeamId);
+    const { explanation, impact, wantedTeamName } = buildCompletedKnockoutExplanation(
+      m,
+      home,
+      away,
+      paths,
+      importanceByTeamId,
+    );
 
     return {
       homeHighlight: sideHighlightForCompleted(
@@ -415,14 +520,16 @@ export function buildMatchBracketGuidance(
         codesInBracket,
         eliminatedTeamIds,
         m,
+        preferred?.teamId ?? null,
       ),
       awayHighlight: sideHighlightForCompleted(
         away,
         codesInBracket,
         eliminatedTeamIds,
         m,
+        preferred?.teamId ?? null,
       ),
-      wantsLabel: wantsLabelFromImpact(impact, wantedTeamName, false),
+      wantsLabel: wantsLabelForCompleted(impact, wantedTeamName),
       explanation,
       impact,
       wantedTeamName,

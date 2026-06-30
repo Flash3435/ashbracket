@@ -71,6 +71,10 @@ const rows = buildPoolStandingsFromLedger({
 t(rows[0]?.participantId === "a" && rows[0]?.totalPoints === 10, "ranks by ledger totals");
 t(rows[0]?.rank === 1 && rows[1]?.rank === 2, "assigns ranks from awarded points");
 t(LEADERBOARD_AWARDED_POINTS_NOTE.includes("points awarded"), "helper copy mentions awarded points");
+t(
+  LEADERBOARD_AWARDED_POINTS_NOTE.includes("Knockout results"),
+  "helper copy mentions knockout swings once points are live",
+);
 
 t(typeof loadSiteHeaderLeaderboardNav === "function", "site header loader exported");
 

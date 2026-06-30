@@ -7,14 +7,11 @@ import { PageTitle } from "@/components/ui/PageTitle";
 import { loadAccountKnockoutSelection, poolLocked } from "@/lib/account/loadAccountKnockoutSelection";
 import { fetchMemberPoolStandings } from "@/lib/leaderboard/fetchMemberPoolStandings";
 import { fetchBracketOutlookForPool } from "@/lib/leaderboard/fetchBracketOutlookForPool";
+import { computeBracketOutlookSummary } from "@/lib/leaderboard/bracketOutlookSeparation";
 import {
-  BRACKET_OUTLOOK_HEADLINE,
-} from "@/lib/leaderboard/buildBracketOutlook";
-import {
-  STANDINGS_WARMING_UP_HEADLINE,
-  computeBracketOutlookSummary,
-} from "@/lib/leaderboard/bracketOutlookSeparation";
-import { LEADERBOARD_AWARDED_POINTS_NOTE } from "@/lib/leaderboard/buildPoolStandingsFromLedger";
+  leaderboardHasAwardedPoints,
+  resolveLeaderboardPageCopy,
+} from "@/lib/leaderboard/resolveLeaderboardPageCopy";
 import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
 
@@ -121,12 +118,15 @@ export default async function AccountLeaderboardPage({ searchParams }: PageProps
   const decisiveResultCount =
     outlookRes.ok ? outlookRes.completedMatchCount : 0;
 
-  const pageTitle = showBracketOutlook
-    ? BRACKET_OUTLOOK_HEADLINE
-    : STANDINGS_WARMING_UP_HEADLINE;
-  const pageDescription = showBracketOutlook
-    ? "Unofficial early read before official pool points are awarded."
-    : "Official points have not landed yet. Standings will open up once there is a meaningful race.";
+  const hasAwardedPoints = leaderboardHasAwardedPoints({
+    hasAwardedPointsFlag: outlookRes.ok ? outlookRes.hasAwardedPoints : false,
+    standingsRows: standings.ok ? standings.rows : [],
+  });
+  const { title: pageTitle, description: pageDescription } = resolveLeaderboardPageCopy({
+    picksLocked: locked,
+    hasAwardedPoints,
+    showBracketOutlook,
+  });
 
   const revealHref = `/account/reveal?participant=${ctx.selectedId}`;
   const activityHref = `/account/activity?participant=${ctx.selectedId}`;

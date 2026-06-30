@@ -447,7 +447,7 @@ function finishedMatch(
   assert.equal(map.get("M-OTHER"), undefined);
 }
 
-// knockout completed match — mixed when one path helped and one eliminated
+// knockout completed match — helped when preferred winner wins despite other path eliminated
 {
   const bra = {
     id: "team-bra",
@@ -488,8 +488,8 @@ function finishedMatch(
     slot({ predictionKind: "round_of_32", teamId: "team-jpn", groupCode: null }),
   ];
   const item = buildRecapItemForMatch(koMatch, koSlots, koTeams, undefined, [koMatch]);
-  assert.equal(item.impact, "mixed");
-  assert.equal(recapBadgeKind(item), "mixed");
+  assert.equal(item.impact, "helped");
+  assert.equal(recapBadgeKind(item), "helped");
   assert.ok(item.explanation.includes("Brazil advancing keeps your champion pick alive"));
   assert.ok(item.explanation.includes("Japan is now eliminated"));
   assert.ok(recapBadgeAlignsWithExplanation(item));

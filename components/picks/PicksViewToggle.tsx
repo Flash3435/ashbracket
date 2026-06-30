@@ -11,6 +11,8 @@ type Props = {
   bracketLabel?: string;
   /** When false, show pre-R32 preview guidance under the toggle. */
   knockoutBracketPicksUnlocked?: boolean;
+  /** Pool picks locked — bracket view is the primary follow-the-pool experience. */
+  picksLocked?: boolean;
 };
 
 /**
@@ -23,6 +25,7 @@ export function PicksViewToggle({
   listLabel = "List view",
   bracketLabel = "Bracket view",
   knockoutBracketPicksUnlocked = true,
+  picksLocked = false,
 }: Props) {
   const pill =
     "inline-flex items-center rounded-md px-3 py-1.5 text-xs font-semibold transition-colors";
@@ -49,7 +52,12 @@ export function PicksViewToggle({
         </div>
       </div>
       <p className="max-w-2xl text-xs leading-relaxed text-ash-muted">
-        {knockoutBracketPicksUnlocked ? (
+        {picksLocked && knockoutBracketPicksUnlocked ? (
+          <>
+            Bracket view shows your knockout path and which picks are still alive. List view
+            shows the full pick details.
+          </>
+        ) : knockoutBracketPicksUnlocked ? (
           <>
             Bracket View shows how your picks line up with the tournament. Third-place
             qualifiers are not placed into the Round of 32 until the official knockout

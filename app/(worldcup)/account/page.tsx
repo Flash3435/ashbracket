@@ -51,6 +51,7 @@ import { shouldShowStandingsWarmingNote } from "../../../lib/leaderboard/bracket
 import { STANDINGS_WARMING_UP_DASHBOARD_NOTE, STANDINGS_WARMING_UP_HEADLINE, computeBracketOutlookSummary, type BracketOutlookSummary } from "../../../lib/leaderboard/bracketOutlookSeparation";
 import { BracketOutlookDashboardCard } from "@/components/leaderboard/BracketOutlookDashboardCard";
 import { fetchPublicTournamentProgress } from "../../../lib/tournament/fetchPublicTournamentProgress";
+import { buildPicksViewHrefs, resolvePicksViewMode } from "../../../lib/picks/picksViewMode";
 import type { TournamentMatchPublicRow } from "../../../types/tournamentPublic";
 import { TournamentStatLeadersPanel } from "@/components/tournament/TournamentStatLeadersPanel";
 import { loadTournamentTeamStatLeaders } from "@/lib/tournament/matchTeamStats/loadTournamentTeamStatLeaders";
@@ -63,7 +64,7 @@ type PageProps = {
 
 export default async function AccountPage({ searchParams }: PageProps) {
   const sp = await searchParams;
-  const view = sp.view === "bracket" ? "bracket" : "list";
+  const view = resolvePicksViewMode(sp.view);
   const supabase = await createClient();
   const {
     data: { user },
@@ -227,10 +228,10 @@ export default async function AccountPage({ searchParams }: PageProps) {
 
   const dashListQs = new URLSearchParams();
   if (picksCtx?.selectedId) dashListQs.set("participant", picksCtx.selectedId);
-  const dashBracketQs = new URLSearchParams(dashListQs);
-  dashBracketQs.set("view", "bracket");
-  const dashboardListHref = `/account${dashListQs.toString() ? `?${dashListQs}` : ""}`;
-  const dashboardBracketHref = `/account?${dashBracketQs}`;
+  const { listHref: dashboardListHref, bracketHref: dashboardBracketHref } = buildPicksViewHrefs(
+    "/account",
+    dashListQs,
+  );
   const editPicksFromDashboardHref = picksCtx?.selectedParticipant?.id
     ? `/account/picks?participant=${picksCtx.selectedParticipant.id}`
     : picksHref;
@@ -662,6 +663,7 @@ export default async function AccountPage({ searchParams }: PageProps) {
                   knockoutBracketPicksUnlocked={
                     picksCtx.knockoutBracketPicksUnlocked
                   }
+                  picksLocked={locked}
                 />
               </div>
 
@@ -705,6 +707,7 @@ export default async function AccountPage({ searchParams }: PageProps) {
                       knockoutBracketPicksUnlocked={
                         picksCtx.knockoutBracketPicksUnlocked
                       }
+                      tournamentMatches={tournamentMatches}
                       editPicksHref={editPicksFromDashboardHref}
                       listViewHref={dashboardListHref}
                       readOnly={false}

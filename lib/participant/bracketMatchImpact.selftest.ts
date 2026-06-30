@@ -106,21 +106,22 @@ function knockoutMatch(
     slot({ predictionKind: "round_of_32", teamId: "team-jpn", rowKey: "r32-jpn" }),
   ];
   const guidance = buildMatchBracketGuidance(m, slots, teams, [m]);
-  assert.equal(guidance.impact, "mixed");
-  assert.equal(guidance.homeHighlight, "in_bracket");
+  assert.equal(guidance.impact, "helped");
+  assert.equal(guidance.homeHighlight, "needed");
   assert.equal(guidance.awayHighlight, "eliminated");
   assert.ok(guidance.explanation.includes("Brazil advancing keeps your champion pick alive"));
   assert.ok(guidance.explanation.includes("Japan is now eliminated"));
-  assert.equal(guidance.wantsLabel.primary, "Mixed impact");
+  assert.equal(guidance.wantsLabel.primary, "Brazil");
+  assert.notEqual(guidance.wantsLabel.primary, "Mixed impact");
 
   const recap = buildRecapItemForMatch(m, slots, teams, undefined, [m]);
-  assert.equal(recap.impact, "mixed");
-  assert.equal(recapBadgeKind(recap), "mixed");
+  assert.equal(recap.impact, "helped");
+  assert.equal(recapBadgeKind(recap), "helped");
   assert.ok(!recap.explanation.includes("No strong angle"));
 
   const homeHighlight = pickSideHighlightForMatch(m, "home", slots, teams, [m]);
   const awayHighlight = pickSideHighlightForMatch(m, "away", slots, teams, [m]);
-  assert.equal(homeHighlight, "in_bracket");
+  assert.equal(homeHighlight, "needed");
   assert.equal(awayHighlight, "eliminated");
 }
 
@@ -194,7 +195,7 @@ function knockoutMatch(
   assert.equal(recap.impact, "neutral");
 }
 
-// Badge and copy cannot contradict
+// Badge and copy cannot contradict on completed knockout
 {
   const m = knockoutMatch({ match_id: "r32-mixed", match_code: "R32-4" });
   const slots = [
@@ -203,7 +204,8 @@ function knockoutMatch(
   ];
   const recap = buildRecapItemForMatch(m, slots, teams, undefined, [m]);
   const badge = recapBadgeKind(recap);
-  assert.equal(badge, "mixed");
+  assert.equal(badge, "helped");
+  assert.equal(recap.impact, "helped");
   assert.ok(!recap.explanation.toLowerCase().includes("no strong angle"));
 }
 

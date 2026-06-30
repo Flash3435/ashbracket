@@ -16,6 +16,7 @@ import {
   poolLocked,
 } from "../../../../../lib/account/loadAccountKnockoutSelection";
 import { fetchPublicTournamentProgress } from "../../../../../lib/tournament/fetchPublicTournamentProgress";
+import { buildPicksViewHrefs, resolvePicksViewMode } from "../../../../../lib/picks/picksViewMode";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 
@@ -38,7 +39,7 @@ export default async function AccountPicksSummaryPage({ searchParams }: PageProp
 
   const participantParam = sp.participant?.trim() ?? "";
   const showSavedBanner = sp.saved === "1" || sp.saved === "true";
-  const view = sp.view === "bracket" ? "bracket" : "list";
+  const view = resolvePicksViewMode(sp.view);
 
   const ctx = await loadAccountKnockoutSelection(user.id, participantParam);
 
@@ -46,7 +47,7 @@ export default async function AccountPicksSummaryPage({ searchParams }: PageProp
     const redirectQs = new URLSearchParams();
     redirectQs.set("from", "account");
     if (showSavedBanner) redirectQs.set("saved", "1");
-    if (view === "bracket") redirectQs.set("view", "bracket");
+    if (view === "list") redirectQs.set("view", "list");
     redirect(`/participant/${ctx.paramId}/snapshot?${redirectQs}`);
   }
 
@@ -67,10 +68,7 @@ export default async function AccountPicksSummaryPage({ searchParams }: PageProp
   const listQs = new URLSearchParams();
   if (pid) listQs.set("participant", pid);
   if (showSavedBanner) listQs.set("saved", "1");
-  const bracketQs = new URLSearchParams(listQs);
-  bracketQs.set("view", "bracket");
-  const listHref = `/account/picks/summary${listQs.toString() ? `?${listQs}` : ""}`;
-  const bracketHref = `/account/picks/summary?${bracketQs}`;
+  const { listHref, bracketHref } = buildPicksViewHrefs("/account/picks/summary", listQs);
   const editPicksHref = pid ? `/account/picks?participant=${pid}` : "/account/picks";
 
   const knockoutSelectionCard = buildKnockoutSelectionInstructionCard({
@@ -182,6 +180,7 @@ export default async function AccountPicksSummaryPage({ searchParams }: PageProp
                   listHref={listHref}
                   bracketHref={bracketHref}
                   knockoutBracketPicksUnlocked={ctx.knockoutBracketPicksUnlocked}
+                  picksLocked={locked}
                 />
               </div>
 
@@ -220,6 +219,7 @@ export default async function AccountPicksSummaryPage({ searchParams }: PageProp
                       slots={ctx.initialSlots}
                       teams={ctx.teams}
                       knockoutBracketPicksUnlocked={ctx.knockoutBracketPicksUnlocked}
+                      tournamentMatches={tournamentPayload?.matches ?? null}
                       editPicksHref={editPicksHref}
                       listViewHref={listHref}
                       readOnly={false}

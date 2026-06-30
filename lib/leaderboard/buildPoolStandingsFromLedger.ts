@@ -62,5 +62,6 @@ export function buildPoolStandingsFromLedger(input: {
   return rows;
 }
 
-export const LEADERBOARD_AWARDED_POINTS_NOTE =
-  "Current standings are based on points awarded so far. Some match results may help a bracket path before points are awarded. Group advancement points land after each group is complete.";
+import { LEADERBOARD_ACTIVE_SUBTITLE } from "./leaderboardPageCopy";
+
+export const LEADERBOARD_AWARDED_POINTS_NOTE = LEADERBOARD_ACTIVE_SUBTITLE;

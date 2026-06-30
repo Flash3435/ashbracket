@@ -28,6 +28,8 @@ import { saveParticipantKnockoutPicksForPoolAction, correctParticipantKnockoutPi
 import type { KnockoutPickSlotDraft } from "../../../../../../types/adminKnockoutPicks";
 import { fetchOfficialRoundOf32Complete } from "../../../../../../lib/tournament/fetchOfficialRoundOf32Complete";
 import { fetchPublicTournamentProgress } from "../../../../../../lib/tournament/fetchPublicTournamentProgress";
+import { buildPicksViewHrefs, resolvePicksViewMode } from "../../../../../../lib/picks/picksViewMode";
+import { poolLocked } from "../../../../../../lib/account/loadAccountKnockoutSelection";
 
 export const dynamic = "force-dynamic";
 
@@ -55,7 +57,7 @@ export default async function AdminPoolPicksPage({ params, searchParams }: PageP
   const { supabase, pool } = await requireManagedPool(poolId);
 
   const sp = searchParams != null ? await searchParams : {};
-  const view = sp.view === "bracket" ? "bracket" : "list";
+  const view = resolvePicksViewMode(sp.view);
   const participantParam =
     typeof sp.participant === "string" ? sp.participant.trim() : "";
   const selectedId =
@@ -278,10 +280,11 @@ export default async function AdminPoolPicksPage({ params, searchParams }: PageP
 
   const adminListQs = new URLSearchParams();
   if (pickerSelectedId) adminListQs.set("participant", pickerSelectedId);
-  const adminBracketQs = new URLSearchParams(adminListQs);
-  adminBracketQs.set("view", "bracket");
-  const adminListHref = `${picksBase}${adminListQs.toString() ? `?${adminListQs}` : ""}`;
-  const adminBracketHref = `${picksBase}?${adminBracketQs}`;
+  const { listHref: adminListHref, bracketHref: adminBracketHref } = buildPicksViewHrefs(
+    picksBase,
+    adminListQs,
+  );
+  const locked = poolLocked(pool.lock_at);
 
   return (
     <PageContainer>
@@ -360,6 +363,7 @@ export default async function AdminPoolPicksPage({ params, searchParams }: PageP
                   listLabel="Pick wizard"
                   bracketLabel="Bracket view"
                   knockoutBracketPicksUnlocked={knockoutBracketPicksUnlocked}
+                  picksLocked={locked}
                 />
               </div>
               {view === "list" ? (
@@ -395,6 +399,7 @@ export default async function AdminPoolPicksPage({ params, searchParams }: PageP
                   slots={initialSlots}
                   teams={teams}
                   knockoutBracketPicksUnlocked={knockoutBracketPicksUnlocked}
+                  tournamentMatches={tournamentPayload?.matches ?? null}
                   readOnly
                 />
               )}
