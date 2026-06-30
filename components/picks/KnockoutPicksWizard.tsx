@@ -50,7 +50,15 @@ import { KnockoutBracketPreview } from "./KnockoutBracketPreview";
 import { PicksProgressSummaryPanel } from "./PicksProgressSummaryPanel";
 import { PoolPickDeadlineBanner } from "./PoolPickDeadlineBanner";
 import { KnockoutBracketPathReviewBanner } from "./KnockoutBracketPathReviewBanner";
+import { PicksPageStatusCard } from "./PicksPageStatusCard";
 import { buildPoolPickDeadlineStatus } from "../../lib/picks/poolPickDeadlineDisplay";
+import {
+  buildPicksPageCompactLockNote,
+  buildPicksPageStatusModel,
+  PICKS_PAGE_GROUP_BONUS_LOCKED_NOTE,
+  PICKS_PAGE_KNOCKOUT_HELPER_TEXT,
+  shouldShowPicksPageStatusCard,
+} from "../../lib/picks/buildPicksPageStatus";
 import {
   buildPicksProgressSummary,
   wizardStepIndexForNextSection,
@@ -163,6 +171,8 @@ export type KnockoutPicksWizardProps = {
   defaultPicksMainView?: PicksMainView;
   /** When true, persist list/bracket choice in localStorage (account picks only). */
   rememberPicksMainView?: boolean;
+  /** Account /account/picks layout — consolidated status card, no duplicate banners. */
+  picksPageLayout?: boolean;
   /** Admin-only post-kickoff correction path (does not unlock participant rows). */
   adminKnockoutPickCorrection?: AdminKnockoutPickCorrectionFn;
 };
@@ -812,9 +822,11 @@ export function KnockoutPicksWizard({
   postSaveRedirectTo,
   defaultPicksMainView = "bracket",
   rememberPicksMainView = false,
+  picksPageLayout = false,
   adminKnockoutPickCorrection,
 }: KnockoutPicksWizardProps) {
   const router = useRouter();
+  const formRef = useRef<HTMLFormElement>(null);
   const [isSaving, startSaveTransition] = useTransition();
   const gradualKnockout = useMemo(
     () =>
@@ -1028,6 +1040,100 @@ export function KnockoutPicksWizard({
     }
   }
   const draftSignature = useMemo(() => picksDraftSignature(slots), [slots]);
+
+  const showPicksPageStatus = picksPageLayout &&
+    shouldShowPicksPageStatusCard({
+      knockoutPicksAccessible,
+      readOnly,
+    });
+  const picksPageStatus = useMemo(
+    () =>
+      showPicksPageStatus
+        ? buildPicksPageStatusModel({
+            slots,
+            teams,
+            tournamentMatches,
+            officialRoundOf32Complete: knockoutBracketPicksUnlocked,
+            knockoutPathRepairUnsaved,
+          })
+        : null,
+    [
+      showPicksPageStatus,
+      slots,
+      teams,
+      tournamentMatches,
+      knockoutBracketPicksUnlocked,
+      knockoutPathRepairUnsaved,
+    ],
+  );
+  const picksPageCompactLockNote = useMemo(
+    () =>
+      picksPageLayout && showPicksPageStatus
+        ? buildPicksPageCompactLockNote({
+            knockoutBracketPicksUnlocked,
+            matches: tournamentMatches,
+          })
+        : null,
+    [
+      picksPageLayout,
+      showPicksPageStatus,
+      knockoutBracketPicksUnlocked,
+      tournamentMatches,
+    ],
+  );
+  const showPicksPageGroupBonusNote =
+    picksPageLayout &&
+    showPicksPageStatus &&
+    preBracketSelectionsLocked &&
+    !readOnly &&
+    knockoutPicksAccessible;
+  const needsKnockoutOnboarding =
+    picksPageLayout &&
+    showPicksPageStatus &&
+    fullBracketPicksUnlocked &&
+    !slots.some(
+      (s) => isKnockoutProgressionKind(s.predictionKind) && s.teamId.trim(),
+    );
+  const picksPageSecondaryNote = useMemo(() => {
+    if (!picksPageLayout || !showPicksPageStatus) return null;
+    if (picksPageCompactLockNote) return picksPageCompactLockNote;
+    if (showPicksPageGroupBonusNote) return PICKS_PAGE_GROUP_BONUS_LOCKED_NOTE;
+    if (!needsKnockoutOnboarding && knockoutPicksAccessible) {
+      return PICKS_PAGE_KNOCKOUT_HELPER_TEXT;
+    }
+    return null;
+  }, [
+    picksPageLayout,
+    showPicksPageStatus,
+    picksPageCompactLockNote,
+    showPicksPageGroupBonusNote,
+    needsKnockoutOnboarding,
+    knockoutPicksAccessible,
+  ]);
+
+  function jumpToMissingKnockoutPicks() {
+    continueToNextSection();
+  }
+
+  function scrollToSaveButton() {
+    document
+      .getElementById("picks-save-button")
+      ?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+
+  function handlePicksPageStatusCta(action: "jump_missing" | "save") {
+    if (action === "jump_missing") {
+      jumpToMissingKnockoutPicks();
+      return;
+    }
+    scrollToSaveButton();
+    const saveBtn = document.getElementById(
+      "picks-save-button",
+    ) as HTMLButtonElement | null;
+    if (saveBtn && !saveBtn.disabled) {
+      saveBtn.focus();
+    }
+  }
 
   useEffect(() => {
     const sameParticipant = lastParticipantIdRef.current === participantId;
@@ -1575,22 +1681,32 @@ export function KnockoutPicksWizard({
       ).length;
 
   return (
-    <form onSubmit={onSubmit} className="space-y-6">
-      <p className="text-sm text-ash-muted">
-        {readOnly ? "Viewing picks for " : "Editing picks for "}
-        <span className="font-medium text-ash-text">
-          {participantDisplayName}
-        </span>
-        {readOnly
-          ? " — this view is read-only."
-          : preBracketActive
-            ? " Group stage, third-place, and bonus picks are locked — see the deadline banner above for what you can still edit."
-            : ". Start in bracket view to see what’s filled and what’s missing, or switch to list view to edit step by step — then save."}
-      </p>
+    <form ref={formRef} onSubmit={onSubmit} className="space-y-6">
+      {!picksPageLayout ? (
+        <p className="text-sm text-ash-muted">
+          {readOnly ? "Viewing picks for " : "Editing picks for "}
+          <span className="font-medium text-ash-text">
+            {participantDisplayName}
+          </span>
+          {readOnly
+            ? " — this view is read-only."
+            : preBracketActive
+              ? " Group stage, third-place, and bonus picks are locked — see the deadline banner above for what you can still edit."
+              : ". Start in bracket view to see what’s filled and what’s missing, or switch to list view to edit step by step — then save."}
+        </p>
+      ) : readOnly ? (
+        <p className="text-sm text-ash-muted">
+          Viewing picks for{" "}
+          <span className="font-medium text-ash-text">
+            {participantDisplayName}
+          </span>{" "}
+          — this view is read-only.
+        </p>
+      ) : null}
 
-      {deadlineStatus ? (
+      {deadlineStatus && !picksPageLayout ? (
         <PoolPickDeadlineBanner status={deadlineStatus} />
-      ) : lockedMessage ? (
+      ) : !picksPageLayout && lockedMessage ? (
         <p
           className="rounded-md border border-amber-700/50 bg-amber-950/30 px-3 py-2 text-sm text-amber-100"
           role="status"
@@ -1599,8 +1715,24 @@ export function KnockoutPicksWizard({
         </p>
       ) : null}
 
-      {showKnockoutPathReviewBanner ? (
-        <KnockoutBracketPathReviewBanner unsavedRepair={knockoutPathRepairUnsaved} />
+      {!picksPageLayout && knockoutPathRepairUnsaved ? (
+        <KnockoutBracketPathReviewBanner unsavedRepair />
+      ) : null}
+
+      {showPicksPageStatus && picksPageStatus ? (
+        <div className="space-y-2">
+          <PicksPageStatusCard
+            model={picksPageStatus}
+            onCta={handlePicksPageStatusCta}
+            saveDisabled={coreDisabled || picksSaveButtonDisabled(saveUiState)}
+          />
+          {picksPageSecondaryNote &&
+          picksPageStatus.kind !== "path_reconciliation" ? (
+            <p className="text-xs leading-relaxed text-ash-muted">
+              {picksPageSecondaryNote}
+            </p>
+          ) : null}
+        </div>
       ) : null}
 
       {saveUiState.kind === "error" ? (
@@ -1651,7 +1783,7 @@ export function KnockoutPicksWizard({
         </p>
       ) : null}
 
-      {!knockoutPicksAccessible && !readOnly ? (
+      {!picksPageLayout && !knockoutPicksAccessible && !readOnly ? (
         <p
           className="rounded-md border border-sky-800/50 bg-sky-950/25 px-3 py-2 text-sm text-sky-100"
           role="status"
@@ -1660,7 +1792,8 @@ export function KnockoutPicksWizard({
           confirmed. Use List view to edit group stage, third-place qualification,
           and bonus picks.
         </p>
-      ) : !knockoutBracketPicksUnlocked &&
+      ) : !picksPageLayout &&
+          !knockoutBracketPicksUnlocked &&
           gradualR32Pickable &&
           !fullBracketPicksUnlocked &&
           !readOnly ? (
@@ -1671,7 +1804,8 @@ export function KnockoutPicksWizard({
           Confirmed Round of 32 matchups are open for picks. Unconfirmed slots stay
           locked. Later knockout rounds unlock once the full bracket is official.
         </p>
-      ) : !knockoutBracketPicksUnlocked &&
+      ) : !picksPageLayout &&
+          !knockoutBracketPicksUnlocked &&
           fullBracketPicksUnlocked &&
           gradualR32MatchRows &&
           !readOnly ? (
@@ -1682,9 +1816,19 @@ export function KnockoutPicksWizard({
           The official Round of 32 is set. Pick match winners, then continue through
           Round of 16, the quarters, semis, final, and champion.
         </p>
+      ) : picksPageLayout &&
+          needsKnockoutOnboarding &&
+          !readOnly ? (
+        <p
+          className="rounded-md border border-sky-800/50 bg-sky-950/25 px-3 py-2 text-sm text-sky-100"
+          role="status"
+        >
+          The official Round of 32 is set. Pick match winners, then continue through
+          Round of 16, the quarters, semis, final, and champion.
+        </p>
       ) : null}
 
-      {!readOnly ? (
+      {!readOnly && !showPicksPageStatus ? (
         <div className="space-y-3">
           <PicksProgressSummaryPanel
             summary={picksProgress}
@@ -2812,6 +2956,7 @@ export function KnockoutPicksWizard({
       {!readOnly ? (
         <div>
           <button
+            id="picks-save-button"
             type="submit"
             disabled={coreDisabled || picksSaveButtonDisabled(saveUiState)}
             className="btn-primary disabled:cursor-not-allowed disabled:opacity-60"

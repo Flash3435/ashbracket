@@ -3,6 +3,7 @@ import { ParticipantKnockoutPicksForm } from "@/components/admin/ParticipantKnoc
 import { KnockoutSelectionInstructionCard } from "@/components/picks/KnockoutSelectionInstructionCard";
 import { PicksDeadlineBannerFromPool } from "@/components/pool/PicksDeadlineBannerFromPool";
 import { buildKnockoutSelectionInstructionCard } from "@/lib/picks/knockoutSelectionWindow";
+import { shouldShowKnockoutInstructionOnPicksPage } from "@/lib/picks/buildPicksPageStatus";
 import {
   getGradualKnockoutSelectionState,
   hasEditableKnockoutPicks,
@@ -134,9 +135,11 @@ export default async function AccountPicksPage({ searchParams }: PageProps) {
         description={
           picksReadOnly
             ? "Picks are locked — this is a read-only view. Confirmed knockout matchups may still be editable until each match kicks off."
-            : locked
-              ? "Group stage, third-place, and bonus picks are locked. You can still update confirmed knockout matchups in list view until each match kicks off."
-              : "Your picks open in bracket view so you can see what’s done and what’s still missing. Stage 1: 1st and 2nd in every group. Stage 2: one third-place advancer per group row (eight total). Stage 3: confirmed Round of 32 matchups unlock gradually, then the full knockout path once the bracket is official, plus bonus picks. Use list view anytime for step-by-step editing."
+            : locked && knockoutPicksEditable
+              ? "Update knockout picks until each match kicks off."
+              : locked
+                ? "Group stage, third-place, and bonus picks are locked."
+                : "Your picks open in bracket view so you can see what’s done and what’s still missing. Stage 1: 1st and 2nd in every group. Stage 2: one third-place advancer per group row (eight total). Stage 3: confirmed Round of 32 matchups unlock gradually, then the full knockout path once the bracket is official, plus bonus picks. Use list view anytime for step-by-step editing."
         }
       />
 
@@ -239,7 +242,8 @@ export default async function AccountPicksPage({ searchParams }: PageProps) {
                 />
               ) : null}
 
-              {knockoutSelectionCard ? (
+              {knockoutSelectionCard &&
+              shouldShowKnockoutInstructionOnPicksPage(knockoutSelectionCard) ? (
                 <KnockoutSelectionInstructionCard
                   model={knockoutSelectionCard}
                   className="mb-6"
@@ -274,6 +278,7 @@ export default async function AccountPicksPage({ searchParams }: PageProps) {
                 postSaveRedirectTo={postSaveRedirectTo}
                 defaultPicksMainView="bracket"
                 rememberPicksMainView
+                picksPageLayout
               />
 
               {ctx.teams.length === 0 ? (
