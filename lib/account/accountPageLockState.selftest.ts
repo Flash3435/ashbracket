@@ -137,8 +137,8 @@ const lockedCopy = buildAccountPageTitleDescription({
   userEmail: "user@example.com",
 });
 assert.ok(
-  lockedCopy.includes("read-only"),
-  "locked participant pool uses post-lock header copy",
+  lockedCopy.includes("Signed in as user@example.com"),
+  "locked participant pool uses lightweight signed-in header copy",
 );
 
 const gradualLockedCopy = buildAccountPageTitleDescription({
@@ -149,16 +149,12 @@ const gradualLockedCopy = buildAccountPageTitleDescription({
   userEmail: "user@example.com",
 });
 assert.ok(
+  gradualLockedCopy.includes("Signed in as user@example.com"),
+  "gradual R32 pickable keeps lightweight signed-in header copy",
+);
+assert.ok(
   !gradualLockedCopy.includes("read-only"),
   "gradual R32 pickable avoids read-only headline",
-);
-assert.ok(
-  gradualLockedCopy.includes("Group and bonus picks are locked"),
-  "gradual R32 pickable explains locked group/bonus picks",
-);
-assert.ok(
-  gradualLockedCopy.includes("Round of 32"),
-  "gradual R32 pickable mentions Round of 32",
 );
 
 const editCopy = buildAccountPageTitleDescription({
@@ -168,8 +164,8 @@ const editCopy = buildAccountPageTitleDescription({
   userEmail: "user@example.com",
 });
 assert.ok(
-  editCopy.includes("Edit picks"),
-  "custom-open participant pool keeps edit header copy",
+  editCopy.includes("Signed in as user@example.com"),
+  "custom-open participant pool keeps lightweight signed-in header copy",
 );
 
 const organizerCopy = buildAccountPageTitleDescription({

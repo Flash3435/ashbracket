@@ -588,6 +588,32 @@ function earliestUrgentMatch(
   };
 }
 
+export type ParticipantDashboardMissingKnockoutPicks = {
+  actionableCount: number;
+  /** Friendly matchup labels, e.g. "France vs Sweden". */
+  matchups: string[];
+  categorySummaryLines: string[];
+};
+
+/** Actionable knockout picks still missing for one participant (dashboard alert). */
+export function buildParticipantDashboardMissingKnockoutPicks(
+  context: KnockoutProgressContext & { nowMs?: number },
+): ParticipantDashboardMissingKnockoutPicks {
+  const ctx = resolveKnockoutProgressContext(context);
+  const teams = context.teams;
+  const pickableMissing = analyzeKnockoutMissing(ctx, teams).filter(
+    (m) => m.lockReason === "pickable",
+  );
+  const matchups = pickableMissing
+    .map((m) => m.displayMatchup)
+    .filter((line): line is string => Boolean(line?.trim()));
+  return {
+    actionableCount: pickableMissing.length,
+    matchups,
+    categorySummaryLines: formatMissingCategorySummaryLines(pickableMissing),
+  };
+}
+
 export function buildAdminKnockoutParticipantStatus(
   participantId: string,
   displayName: string,

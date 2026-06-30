@@ -169,7 +169,8 @@ const publicRow: TournamentMatchPublicRow = {
 };
 assert.equal(publicMatchForFifaNoLocal([publicRow], 73)?.match_code, "M73");
 assert.ok(isKnockoutMatchConfirmed(publicRow));
-assert.ok(isMatchPickable(publicRow, new Date("2026-06-28T12:00:00Z").getTime()));
+const beforeKickoffMs = new Date("2026-06-28T12:00:00Z").getTime();
+assert.ok(isMatchPickable(publicRow, beforeKickoffMs));
 assert.ok(!isMatchPickable(publicRow, new Date("2026-06-28T20:00:00Z").getTime()));
 
 assert.match(
@@ -177,7 +178,7 @@ assert.match(
   /no Round of 32 fixture rows found/,
 );
 assert.match(
-  buildR32GradualUnlockDiagnosticLine([publicRow]),
+  buildR32GradualUnlockDiagnosticLine([publicRow], beforeKickoffMs),
   /1 pickable/,
 );
 

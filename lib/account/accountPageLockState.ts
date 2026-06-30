@@ -27,19 +27,10 @@ export function buildAccountPageTitleDescription(input: {
       ? `Signed in as ${input.userEmail}.`
       : "Your AshBracket account.";
   }
-  if (input.picksLocked && (input.gradualR32PickableCount ?? 0) > 0) {
-    return input.userEmail
-      ? `Signed in as ${input.userEmail}. Group and bonus picks are locked. Confirmed Round of 32 matchups are now opening for picks.`
-      : "Group and bonus picks are locked. Confirmed Round of 32 matchups are now opening for picks.";
+  if (input.userEmail) {
+    return `Signed in as ${input.userEmail}.`;
   }
-  if (input.picksLocked) {
-    return input.userEmail
-      ? `Signed in as ${input.userEmail}. Below is your bracket snapshot for the selected pool profile. Picks are locked, so this is now a read-only view.`
-      : "Your bracket overview for the selected pool profile. Picks are locked, so this is now a read-only view.";
-  }
-  return input.userEmail
-    ? `Signed in as ${input.userEmail}. Below is your bracket snapshot for the selected pool profile — use Edit picks to continue or change picks.`
-    : "Your bracket overview for the selected pool profile. Use Edit picks to update your picks.";
+  return "";
 }
 
 export type AccountCreatePoolLinkState = {
