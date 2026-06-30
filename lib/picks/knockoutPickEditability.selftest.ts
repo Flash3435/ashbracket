@@ -291,7 +291,7 @@ const existing: Prediction[] = [
     tournamentMatches,
     fullRoundOf32Official: true,
   });
-  assert.ok(!("error" in resolved), resolved);
+  assert.ok(!("error" in resolved), "expected resolved match for admin correction");
   const applied = applyKnockoutPickCorrection({
     slots,
     match: resolved.match,
