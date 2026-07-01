@@ -297,16 +297,18 @@ const r32OfficialResults: TournamentMatchPublicRow[] = [
   const m97 = qfRows.find((r) => r.fifaMatchNo === 97)!;
   assert.strictEqual(m97.lockReason, "incomplete");
   assert.match(
-    m97.display.statusLine!,
+    m97.display.emptyPrimaryLine!,
     /M97 is waiting for the winner of Germany vs Paraguay/i,
   );
+  assert.strictEqual(m97.display.statusLine, null);
   assert.doesNotMatch(
-    m97.display.statusLine!,
+    m97.display.emptyPrimaryLine!,
     /Complete previous round picks first/i,
   );
 
   const gate = blockedKnockoutStepGateCopy("quarterfinalist", input);
-  assert.match(gate!, /waiting for the winner of Germany vs Paraguay/i);
+  assert.match(gate!, /waiting on an earlier result/i);
+  assert.doesNotMatch(gate!, /M97 is waiting for the winner/i);
 }
 
 // QF blocked by editable missing R16 pick
@@ -338,9 +340,10 @@ const r32OfficialResults: TournamentMatchPublicRow[] = [
   assert.strictEqual(m89.awayTeamId, "team-par");
   const m97 = buildKnockoutMatchPickRows(input).find((r) => r.fifaMatchNo === 97)!;
   assert.match(
-    m97.display.statusLine!,
+    m97.display.emptyPrimaryLine!,
     /Pick a winner for Germany vs Paraguay first/i,
   );
+  assert.strictEqual(m97.display.statusLine, null);
 }
 
 // QF blocked by locked cleared R16 feeder
@@ -390,11 +393,12 @@ const r32OfficialResults: TournamentMatchPublicRow[] = [
   };
   const m97 = buildKnockoutMatchPickRows(input).find((r) => r.fifaMatchNo === 97)!;
   assert.match(
-    m97.display.statusLine!,
+    m97.display.emptyPrimaryLine!,
     /This path depended on Germany vs Paraguay and is no longer alive/i,
   );
-  assert.doesNotMatch(m97.display.statusLine!, /waiting for the winner/i);
-  assert.doesNotMatch(m97.display.statusLine!, /Save/i);
+  assert.strictEqual(m97.display.statusLine, null);
+  assert.doesNotMatch(m97.display.emptyPrimaryLine!, /waiting for the winner/i);
+  assert.doesNotMatch(m97.display.emptyPrimaryLine!, /Save/i);
 
   const repairSummary = getKnockoutRepairActionSummary(
     {
@@ -479,12 +483,13 @@ const r32OfficialResults: TournamentMatchPublicRow[] = [
   };
   const m101 = buildKnockoutMatchPickRows(sfInput).find((r) => r.fifaMatchNo === 101)!;
   assert.match(
-    m101.display.statusLine!,
+    m101.display.emptyPrimaryLine!,
     /This pick is out because the Germany vs Paraguay feeder pick was eliminated/i,
   );
-  assert.doesNotMatch(m101.display.statusLine!, /waiting for the winner/i);
-  assert.doesNotMatch(m101.display.statusLine!, /Pick a winner for/i);
-  assert.doesNotMatch(m101.display.statusLine!, /Save/i);
+  assert.strictEqual(m101.display.statusLine, null);
+  assert.doesNotMatch(m101.display.emptyPrimaryLine!, /waiting for the winner/i);
+  assert.doesNotMatch(m101.display.emptyPrimaryLine!, /Pick a winner for/i);
+  assert.doesNotMatch(m101.display.emptyPrimaryLine!, /Save/i);
 
   const r16Status = getKnockoutStepCompletionFromDraftState(
     "round_of_16",
@@ -582,7 +587,8 @@ const r32OfficialResults: TournamentMatchPublicRow[] = [
   const qfGate = getMissingFeederSummaryForStep("quarterfinalist", ctx);
   assert.ok(qfGate);
   assert.doesNotMatch(qfGate, /Complete previous round picks first/i);
-  assert.match(qfGate, /M97|Germany vs Paraguay|waiting/i);
+  assert.match(qfGate, /waiting on an earlier result/i);
+  assert.doesNotMatch(qfGate, /M97 is waiting for the winner/i);
 }
 
 console.log("knockoutBlockedRowExplanation.selftest.ts: ok");

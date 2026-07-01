@@ -264,9 +264,10 @@ function r32Side(slotKey: string, teamId = ""): KnockoutPickSlotDraft {
   const m89 = rows.find((r) => r.fifaMatchNo === 89)!;
   assert.strictEqual(m89.lockReason, "incomplete");
   assert.ok(
-    m89.display.statusLine?.includes("M74"),
+    m89.display.emptyPrimaryLine?.includes("M74"),
     "should name missing upstream R32 fixtures",
   );
+  assert.strictEqual(m89.display.statusLine, null);
   assert.strictEqual(
     incompleteR16MatchMessage(0, slots),
     "Complete Round of 32 first — pick winners for M74 and M77.",
@@ -293,7 +294,8 @@ function r32Side(slotKey: string, teamId = ""): KnockoutPickSlotDraft {
     gradual: emptyGradual,
   });
   const m89 = rows.find((r) => r.fifaMatchNo === 89)!;
-  assert.ok(m89.display.statusLine?.includes("M77"));
+  assert.ok(m89.display.emptyPrimaryLine?.includes("M77"));
+  assert.strictEqual(m89.display.statusLine, null);
 }
 
 // Official R16 pairings (not adjacent R32 winners)
@@ -509,8 +511,9 @@ function r32Side(slotKey: string, teamId = ""): KnockoutPickSlotDraft {
   });
   assert.strictEqual(rows[0]!.lockReason, "incomplete");
   assert.ok(
-    rows[0]!.display.statusLine?.includes("Complete Round of 32 first"),
+    rows[0]!.display.emptyPrimaryLine?.includes("Complete Round of 32 first"),
   );
+  assert.strictEqual(rows[0]!.display.statusLine, null);
 }
 
 // Saving R16 match winner writes quarterfinalist slot
@@ -628,10 +631,11 @@ function r32Side(slotKey: string, teamId = ""): KnockoutPickSlotDraft {
   });
   assert.strictEqual(rows[0]!.lockReason, "incomplete");
   assert.match(
-    rows[0]!.display.statusLine!,
+    rows[0]!.display.emptyPrimaryLine!,
     /M74|semi-final|Pick a winner/i,
   );
-  assert.notStrictEqual(rows[0]!.display.statusLine, FINAL_MATCH_INCOMPLETE_MSG);
+  assert.strictEqual(rows[0]!.display.statusLine, null);
+  assert.notStrictEqual(rows[0]!.display.emptyPrimaryLine, FINAL_MATCH_INCOMPLETE_MSG);
 }
 
 // Saving final winner writes champion slot only from finalists
@@ -1699,15 +1703,15 @@ function r32Side(slotKey: string, teamId = ""): KnockoutPickSlotDraft {
   const m91 = r16Rows.find((r) => r.fifaMatchNo === 91)!;
   const m92 = r16Rows.find((r) => r.fifaMatchNo === 92)!;
   assert.ok(
-    !m89.display.statusLine?.includes("M74"),
+    !m89.display.emptyPrimaryLine?.includes("M74"),
     "M89 must not report M74 missing when R32 shows Germany",
   );
   assert.ok(
-    !m91.display.statusLine?.includes("M78"),
+    !m91.display.emptyPrimaryLine?.includes("M78"),
     "M91 must not report M78 missing when R32 shows Norway",
   );
   assert.ok(
-    !m92.display.statusLine?.includes("M80"),
+    !m92.display.emptyPrimaryLine?.includes("M80"),
     "M92 must not report M80 missing when R32 shows England",
   );
   assert.strictEqual(m89.homeTeamId, "team-ger");
@@ -1734,7 +1738,7 @@ function r32Side(slotKey: string, teamId = ""): KnockoutPickSlotDraft {
     nowMs,
   });
   assert.ok(
-    !displayR16.find((r) => r.fifaMatchNo === 89)!.display.statusLine?.includes(
+    !displayR16.find((r) => r.fifaMatchNo === 89)!.display.emptyPrimaryLine?.includes(
       "M74",
     ),
   );

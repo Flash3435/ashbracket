@@ -374,6 +374,7 @@ function findBlockedDownstreamAction(
       buildRowExplanationOptions(ctx),
     );
     if (!explanation) continue;
+    if (explanation.userAction === "wait_for_result") continue;
     const row = buildKnockoutMatchPickRows(input).find(
       (r) => r.fifaMatchNo === explanation.blockedRowMatchNo,
     );
@@ -454,8 +455,8 @@ export function getKnockoutRepairActionSummary(
   return {
     headline: "Review updated knockout picks",
     detail:
-      "Some later-round picks no longer fit the official path and were cleared. Save your picks to confirm the updated bracket.",
-    ctaLabel: "Save picks",
+      "Some later-round picks no longer fit the official path and were cleared.",
+    ctaLabel: null,
     action: null,
   };
 }
@@ -474,8 +475,45 @@ export function requiresParticipantKnockoutRepairSave(
   input: KnockoutProgressContext,
   clearedPicks: ClearedKnockoutPathPick[],
 ): boolean {
+  if (clearedPicks.length === 0) return false;
+
+  const hasEditableClearedSlot = clearedPicks.some((pick) => {
+    const slot = input.slots.find((s) => s.rowKey === pick.rowKey);
+    if (!slot) return false;
+    if (isKnockoutPickLockedOut(slot)) return false;
+    return !slot.teamId.trim();
+  });
+  if (!hasEditableClearedSlot) return false;
+
   const action = findFirstKnockoutWizardActionNeeded(input, { clearedPicks });
-  return Boolean(action && action.reason !== "locked_unfixable");
+  if (action?.reason === "locked_unfixable") return false;
+  if (action?.reason === "repaired_cleared_pick") return true;
+  // Persist client-side repair clearing even when later steps are waiting upstream.
+  return true;
+}
+
+/** Whether the participant should see Save / unsaved-changes for the current draft. */
+export function resolveParticipantKnockoutDraftSaveRequired(input: {
+  draftSignature: string;
+  savedSignature: string;
+  userEditedPicks: boolean;
+  knockoutPathRepairUnsaved?: boolean;
+  progressContext: KnockoutProgressContext;
+  clearedPicks?: ClearedKnockoutPathPick[];
+}): boolean {
+  if (
+    input.knockoutPathRepairUnsaved &&
+    (input.clearedPicks?.length ?? 0) > 0 &&
+    requiresParticipantKnockoutRepairSave(
+      input.progressContext,
+      input.clearedPicks!,
+    )
+  ) {
+    return true;
+  }
+  return (
+    input.userEditedPicks && input.draftSignature !== input.savedSignature
+  );
 }
 
 /** Friendly summary for a cleared or missing pick (status card / gates). */

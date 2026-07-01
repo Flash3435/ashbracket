@@ -105,10 +105,14 @@ import {
   getKnockoutStepCompletionFromDraftState,
   getMissingFeederSummaryForStep,
   isKnockoutWizardStepComplete,
+  knockoutStepPillPresentation,
   resolveKnockoutProgressContext,
   type KnockoutWizardBracketKindId,
 } from "../../lib/picks/knockoutMatchProgress";
-import { requiresParticipantKnockoutRepairSave } from "../../lib/picks/knockoutWizardAction";
+import {
+  requiresParticipantKnockoutRepairSave,
+  resolveParticipantKnockoutDraftSaveRequired,
+} from "../../lib/picks/knockoutWizardAction";
 import { KnockoutMatchDirectTeamPick } from "./KnockoutMatchTeamPick";
 import { isKnockoutProgressionKind } from "../../lib/predictions/knockoutProgressionKinds";
 import { isKnockoutPickEditableForParticipant } from "../../lib/picks/knockoutPickEditability";
@@ -1065,6 +1069,7 @@ export function KnockoutPicksWizard({
     defaultPicksMainView,
   );
   const lastParticipantIdRef = useRef(participantId);
+  const userEditedPicksRef = useRef(false);
 
   useEffect(() => {
     if (!rememberPicksMainView) return;
@@ -1224,6 +1229,7 @@ export function KnockoutPicksWizard({
   useEffect(() => {
     const sameParticipant = lastParticipantIdRef.current === participantId;
     lastParticipantIdRef.current = participantId;
+    userEditedPicksRef.current = false;
     setSlots(normalizedInitialSlots);
     setSavedSignature(initialSignature);
     setSaveUiState((prev) => ({
@@ -1246,14 +1252,45 @@ export function KnockoutPicksWizard({
 
   useEffect(() => {
     if (isSaving) return;
-    setSaveUiState((prev) =>
-      reconcilePicksSaveUiState({
+    const saveRequired = resolveParticipantKnockoutDraftSaveRequired({
+      draftSignature,
+      savedSignature,
+      userEditedPicks: userEditedPicksRef.current,
+      knockoutPathRepairUnsaved,
+      progressContext: {
+        slots,
+        teams,
+        tournamentMatches,
+        officialRoundOf32Complete: knockoutBracketPicksUnlocked,
+        clearedPickRowKeys: knockoutPathClearedRowKeys,
+      },
+      clearedPicks: knockoutPathRepairOnLoad.cleared,
+    });
+    setSaveUiState((prev) => {
+      if (!saveRequired) {
+        if (prev.kind === "error") return prev;
+        return prev.kind === "saved"
+          ? prev
+          : { kind: "saved", lastSavedAt: prev.lastSavedAt };
+      }
+      return reconcilePicksSaveUiState({
         draftSignature,
         savedSignature,
         currentState: prev,
-      }),
-    );
-  }, [draftSignature, savedSignature, isSaving]);
+      });
+    });
+  }, [
+    draftSignature,
+    savedSignature,
+    isSaving,
+    knockoutPathRepairUnsaved,
+    slots,
+    teams,
+    tournamentMatches,
+    knockoutBracketPicksUnlocked,
+    knockoutPathClearedRowKeys,
+    knockoutPathRepairOnLoad.cleared,
+  ]);
 
   const teamById = useMemo(() => new Map(teams.map((t) => [t.id, t])), [teams]);
   const thirdPlaceTeamGroupById = useMemo(
@@ -1388,6 +1425,7 @@ export function KnockoutPicksWizard({
     matchRow: KnockoutMatchPickRow,
     teamId: string,
   ) {
+    userEditedPicksRef.current = true;
     setSlots((prev) => {
       const id = teamId.trim();
       const bracketKind =
@@ -1480,6 +1518,7 @@ export function KnockoutPicksWizard({
 
   function setTeamForRow(rowKey: string, teamId: string) {
     let autoClearNotice: string | null = null;
+    userEditedPicksRef.current = true;
     setSlots((prev) => {
       const row = prev.find((x) => x.rowKey === rowKey);
       if (
@@ -1535,6 +1574,7 @@ export function KnockoutPicksWizard({
   }
 
   function applyQuick(mode: "random" | "favorites" | "balanced") {
+    userEditedPicksRef.current = true;
     setSlots((prev) =>
       applyQuickPickToSlots(prev, teams, mode, {
         fillKnockoutProgression: knockoutBracketPicksUnlocked,
@@ -1608,6 +1648,7 @@ export function KnockoutPicksWizard({
         }
 
         setSavedSignature(submittedSignature);
+        userEditedPicksRef.current = false;
         setSaveUiState({
           kind: "saved",
           lastSavedAt: Date.now(),
@@ -2072,6 +2113,12 @@ export function KnockoutPicksWizard({
             knockoutStepStatus != null
               ? knockoutStepStatus.complete
               : stepComplete(slots, i, wizardSteps, stepRowOptions);
+          const pill = knockoutStepPillPresentation({
+            status: knockoutStepStatus,
+            active,
+            fallbackComplete: done,
+            fallbackMissingCount: missingInStep,
+          });
           return (
             <button
               key={s.id}
@@ -2096,23 +2143,11 @@ export function KnockoutPicksWizard({
                 setOpenRowKey(null);
                 setSearch("");
               }}
-              className={`rounded-full px-3 py-1 text-xs font-medium transition ${
-                active
-                  ? "bg-ash-accent text-white"
-                  : done
-                    ? "bg-ash-accent/20 text-ash-accent hover:bg-ash-accent/30"
-                    : lockedOut
-                      ? "bg-rose-950/35 text-rose-100 ring-1 ring-rose-700/45 hover:bg-rose-950/50"
-                    : missingInStep > 0
-                      ? "bg-amber-950/35 text-amber-100 ring-1 ring-amber-700/45 hover:bg-amber-950/50"
-                      : stepBlocked
-                        ? "bg-slate-900/50 text-slate-200 ring-1 ring-slate-600/45 hover:bg-slate-900/70"
-                      : "bg-ash-surface text-ash-muted ring-1 ring-ash-border hover:bg-ash-border/30"
-              } disabled:cursor-not-allowed disabled:opacity-50`}
+              className={`rounded-full px-3 py-1 text-xs font-medium transition ${pill.statusClassName} ${pill.activeClassName} disabled:cursor-not-allowed disabled:opacity-50`}
             >
               {i + 1}. {s.title}
-              {lockedOut ? (
-                <span className="ml-1 opacity-80">(out)</span>
+              {pill.suffix ? (
+                <span className="ml-1 opacity-80">· {pill.suffix}</span>
               ) : !done && missingInStep > 0 ? (
                 <span className="ml-1 tabular-nums opacity-80">
                   ({missingInStep})
@@ -2418,7 +2453,10 @@ export function KnockoutPicksWizard({
                           : null}
                       </div>
 
-                      {matchRow.display.statusLine && isEmptyPick ? (
+                      {matchRow.display.statusLine &&
+                      isEmptyPick &&
+                      matchRow.display.statusLine !==
+                        matchRow.display.emptyPrimaryLine ? (
                         <p
                           className="mt-2 rounded-md border border-sky-800/40 bg-sky-950/20 px-3 py-2 text-xs text-sky-100"
                           role="status"

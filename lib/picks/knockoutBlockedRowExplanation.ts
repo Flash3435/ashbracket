@@ -435,6 +435,39 @@ export function firstBlockedRowExplanationForStep(
   return explainBlockedKnockoutMatchRow(incomplete[0]!, bracketKind, input, options);
 }
 
+function stepGateSummaryFromExplanation(
+  bracketKind: KnockoutWizardBracketKind,
+  explanation: BlockedKnockoutMatchExplanation,
+  blockedCount: number,
+): string {
+  const stageLabel =
+    knockoutMatchStepDef(bracketKind)?.stageLabel ?? "match";
+  const stageLower = stageLabel.toLowerCase();
+  const stageSingular =
+    stageLower.endsWith("s") && !stageLower.endsWith(" of 16")
+      ? stageLower.slice(0, -1)
+      : stageLower;
+  const countLabel =
+    blockedCount === 1
+      ? `One ${stageSingular}`
+      : `${blockedCount} ${stageLower}`;
+
+  switch (explanation.userAction) {
+    case "wait_for_result":
+      return `${countLabel} ${blockedCount === 1 ? "is" : "are"} waiting on an earlier result.`;
+    case "locked_out":
+      return `${countLabel} ${blockedCount === 1 ? "pick is" : "picks are"} out.`;
+    case "pick_upstream":
+      return `${countLabel} ${blockedCount === 1 ? "is" : "are"} blocked by an earlier round pick.`;
+    case "pick_this_row":
+    case "contact_admin":
+      return explanation.userFacingCopy;
+    default:
+      return explanation.userFacingCopy;
+  }
+}
+
+/** Short section-banner copy — not the same sentence as a blocked row headline. */
 export function blockedKnockoutStepGateCopy(
   bracketKind: KnockoutWizardBracketKind,
   input: BuildKnockoutMatchPickRowsInput,
@@ -453,12 +486,19 @@ export function blockedKnockoutStepGateCopy(
     return `${pickableMissing.length} ${stageLabel.toLowerCase()} picks remain.`;
   }
 
+  const incomplete = rows.filter((r) => r.lockReason === "incomplete");
   const explanation = firstBlockedRowExplanationForStep(
     bracketKind,
     input,
     options,
   );
-  return explanation?.userFacingCopy ?? null;
+  if (!explanation) return null;
+  if (incomplete.length === 0) return explanation.userFacingCopy;
+  return stepGateSummaryFromExplanation(
+    bracketKind,
+    explanation,
+    incomplete.length,
+  );
 }
 
 /** Locked cleared pick on this step, or downstream block requiring save. */

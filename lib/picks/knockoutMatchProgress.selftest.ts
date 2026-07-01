@@ -7,6 +7,7 @@ import {
   getKnockoutStepCompletionFromDraftState,
   getMissingFeederSummaryForStep,
   isKnockoutWizardStepComplete,
+  knockoutStepPillPresentation,
   resolveKnockoutProgressContext,
 } from "./knockoutMatchProgress";
 import {
@@ -16,6 +17,8 @@ import {
 import {
   findFirstKnockoutWizardActionNeeded,
   getKnockoutRepairActionSummary,
+  requiresParticipantKnockoutRepairSave,
+  resolveParticipantKnockoutDraftSaveRequired,
 } from "./knockoutWizardAction";
 import { pruneOfficialKnockoutPathPicks } from "../predictions/pruneOfficialKnockoutPathPicks";
 import type { GradualKnockoutSelectionState } from "./gradualKnockoutUnlock";
@@ -383,8 +386,9 @@ function assertStepComplete(
   const sfGate = getMissingFeederSummaryForStep("semifinalist", ctx);
   assert.ok(sfGate);
   assert.doesNotMatch(sfGate, /four semi-finalists/i);
-  assert.match(sfGate, /first\.|M\d+| vs /i);
+  assert.match(sfGate, /blocked by an earlier round pick/i);
   assert.doesNotMatch(sfGate, /Complete Round of 16 picks first/i);
+  assert.doesNotMatch(sfGate, /M101 is waiting/i);
 }
 
 // Official R16 feeder result counts as resolved for QF availability
@@ -721,6 +725,158 @@ function assertStepComplete(
   assertStepComplete(repaired, "round_of_16", false);
   assertStepComplete(repaired, "quarterfinalist", false);
   assertStepComplete(persisted, "round_of_16", false);
+}
+
+// Active step styling must not imply completion when the step is only waiting
+{
+  const tournamentMatches: TournamentMatchPublicRow[] = [
+    {
+      match_id: "m89",
+      edition_id: "ed",
+      edition_code: "2026",
+      match_code: "M89",
+      stage_code: "round_of_16",
+      stage_label: "Round of 16",
+      stage_sort_order: 3,
+      group_code: null,
+      round_index: 0,
+      kickoff_at: "2026-07-05T18:00:00Z",
+      status: "live",
+      home_goals: null,
+      away_goals: null,
+      home_penalties: null,
+      away_penalties: null,
+      home_team_name: "Germany",
+      home_country_code: "GER",
+      away_team_name: "Paraguay",
+      away_country_code: "PAR",
+      winner_team_name: null,
+      winner_country_code: null,
+    },
+  ];
+  const waitingStatus = getKnockoutStepCompletionFromDraftState(
+    "quarterfinalist",
+    resolveKnockoutProgressContext({
+      slots: [
+        r16Slot("2", "team-ger"),
+        r16Slot("5", "team-par"),
+        qfSlot("1", ""),
+        ...Array.from({ length: 7 }, (_, i) => qfSlot(String(i + 2), "team-ger")),
+      ],
+      teams,
+      tournamentMatches,
+      officialRoundOf32Complete: true,
+    }),
+  );
+  assert.strictEqual(waitingStatus.complete, false);
+  assert.strictEqual(waitingStatus.kind, "locked_upstream");
+  const activePill = knockoutStepPillPresentation({
+    status: waitingStatus,
+    active: true,
+  });
+  const inactivePill = knockoutStepPillPresentation({
+    status: waitingStatus,
+    active: false,
+  });
+  assert.strictEqual(activePill.visualKind, "waiting");
+  assert.strictEqual(inactivePill.visualKind, "waiting");
+  assert.strictEqual(activePill.suffix, "waiting");
+  assert.match(activePill.statusClassName, /amber/);
+  assert.match(activePill.activeClassName, /ring-sky-400/);
+  assert.doesNotMatch(activePill.statusClassName, /emerald/);
+
+  const completeActive = knockoutStepPillPresentation({
+    status: {
+      kind: "complete",
+      complete: true,
+      missingPickable: 0,
+      totalPickable: 8,
+      gateMessage: null,
+    },
+    active: true,
+  });
+  assert.strictEqual(completeActive.visualKind, "complete");
+  assert.match(completeActive.statusClassName, /emerald/);
+}
+
+// Waiting-for-result blocked rows do not require participant save
+{
+  const tournamentMatches: TournamentMatchPublicRow[] = [
+    {
+      match_id: "m89",
+      edition_id: "ed",
+      edition_code: "2026",
+      match_code: "M89",
+      stage_code: "round_of_16",
+      stage_label: "Round of 16",
+      stage_sort_order: 3,
+      group_code: null,
+      round_index: 0,
+      kickoff_at: "2026-07-05T18:00:00Z",
+      status: "live",
+      home_goals: null,
+      away_goals: null,
+      home_penalties: null,
+      away_penalties: null,
+      home_team_name: "Germany",
+      home_country_code: "GER",
+      away_team_name: "Paraguay",
+      away_country_code: "PAR",
+      winner_team_name: null,
+      winner_country_code: null,
+    },
+  ];
+  const slots: KnockoutPickSlotDraft[] = [
+    r16Slot("2", "team-ger"),
+    r16Slot("5", "team-par"),
+    qfSlot("1", ""),
+    ...Array.from({ length: 7 }, (_, i) => qfSlot(String(i + 2), "team-ger")),
+  ];
+  const progressInput = {
+    slots,
+    teams,
+    tournamentMatches,
+    officialRoundOf32Complete: true,
+  };
+  assert.strictEqual(
+    requiresParticipantKnockoutRepairSave(progressInput, []),
+    false,
+  );
+  assert.strictEqual(
+    resolveParticipantKnockoutDraftSaveRequired({
+      draftSignature: "draft",
+      savedSignature: "draft",
+      userEditedPicks: false,
+      progressContext: progressInput,
+    }),
+    false,
+  );
+  assert.strictEqual(
+    resolveParticipantKnockoutDraftSaveRequired({
+      draftSignature: "draft-a",
+      savedSignature: "draft-b",
+      userEditedPicks: false,
+      progressContext: progressInput,
+    }),
+    false,
+  );
+}
+
+// User-edited picks still require save when the draft signature changes
+{
+  assert.strictEqual(
+    resolveParticipantKnockoutDraftSaveRequired({
+      draftSignature: "draft-a",
+      savedSignature: "draft-b",
+      userEditedPicks: true,
+      progressContext: {
+        slots: [],
+        teams,
+        officialRoundOf32Complete: true,
+      },
+    }),
+    true,
+  );
 }
 
 console.log("knockoutMatchProgress.selftest.ts: ok");

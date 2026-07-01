@@ -354,7 +354,7 @@ function matchRowDisplay(
       heading,
       emptyPrimaryLine: incompleteMsg,
       kickoffIso: null,
-      statusLine: incompleteMsg,
+      statusLine: null,
       chooseButtonLabel,
     };
   }

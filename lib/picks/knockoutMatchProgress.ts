@@ -69,6 +69,94 @@ export type KnockoutWizardStepStatus = {
   gateMessage: string | null;
 };
 
+export type KnockoutStepPillVisualKind =
+  | "complete"
+  | "needs_pick"
+  | "waiting"
+  | "blocked"
+  | "locked_out"
+  | "neutral";
+
+export type KnockoutStepPillPresentation = {
+  visualKind: KnockoutStepPillVisualKind;
+  /** Short suffix for the pill label, e.g. "waiting" or "complete". */
+  suffix: string | null;
+  /** Tailwind classes for semantic status (excluding active ring). */
+  statusClassName: string;
+  /** Extra ring/outline classes when this step is selected. */
+  activeClassName: string;
+};
+
+const KNOCKOUT_STEP_PILL_STATUS_CLASSES: Record<
+  KnockoutStepPillVisualKind,
+  string
+> = {
+  complete:
+    "bg-emerald-950/40 text-emerald-100 ring-1 ring-emerald-600/50 hover:bg-emerald-950/55",
+  needs_pick:
+    "bg-amber-950/35 text-amber-100 ring-1 ring-amber-700/45 hover:bg-amber-950/50",
+  waiting:
+    "bg-amber-950/30 text-amber-100/90 ring-1 ring-amber-700/40 hover:bg-amber-950/45",
+  blocked:
+    "bg-slate-900/50 text-slate-200 ring-1 ring-slate-600/45 hover:bg-slate-900/70",
+  locked_out:
+    "bg-rose-950/35 text-rose-100 ring-1 ring-rose-700/45 hover:bg-rose-950/50",
+  neutral:
+    "bg-ash-surface text-ash-muted ring-1 ring-ash-border hover:bg-ash-border/30",
+};
+
+/** Step pill styling from completion/blocking status — active ring never implies complete. */
+export function knockoutStepPillPresentation(input: {
+  status: KnockoutWizardStepStatus | null;
+  active: boolean;
+  fallbackComplete?: boolean;
+  fallbackMissingCount?: number;
+}): KnockoutStepPillPresentation {
+  const {
+    status,
+    active,
+    fallbackComplete = false,
+    fallbackMissingCount = 0,
+  } = input;
+
+  let visualKind: KnockoutStepPillVisualKind = "neutral";
+  let suffix: string | null = null;
+
+  if (status) {
+    if (status.complete) {
+      visualKind = "complete";
+      suffix = "complete";
+    } else if (status.kind === "locked_out") {
+      visualKind = "locked_out";
+      suffix = "out";
+    } else if (status.kind === "locked_upstream") {
+      visualKind = "waiting";
+      suffix = "waiting";
+    } else if (status.kind === "needs_pick") {
+      visualKind = "needs_pick";
+    } else if (status.kind === "locked") {
+      visualKind = status.missingPickable > 0 ? "needs_pick" : "blocked";
+      suffix = status.missingPickable > 0 ? null : "blocked";
+    } else {
+      visualKind = "neutral";
+    }
+  } else if (fallbackComplete) {
+    visualKind = "complete";
+    suffix = "complete";
+  } else if (fallbackMissingCount > 0) {
+    visualKind = "needs_pick";
+  }
+
+  return {
+    visualKind,
+    suffix,
+    statusClassName: KNOCKOUT_STEP_PILL_STATUS_CLASSES[visualKind],
+    activeClassName: active
+      ? "ring-2 ring-sky-400 ring-offset-1 ring-offset-ash-body"
+      : "",
+  };
+}
+
 export type KnockoutMatchProgress = {
   filled: number;
   total: number;
