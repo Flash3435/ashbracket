@@ -20,6 +20,7 @@ import {
   resolveKnockoutPickCorrectionMatch,
   resolveKnockoutPickCorrectionTeamId,
   summarizeKnockoutPickCorrectionDryRun,
+  summarizeKnockoutPickStatusAuditChanges,
   validateKnockoutPickCorrectionReason,
 } from "../lib/admin/knockoutPickCorrection";
 import { applyParticipantPickSlots } from "../lib/predictions/applyParticipantPickSlots";
@@ -316,6 +317,20 @@ async function main(): Promise<void> {
       metadata: {
         clearedPickCount: applied.cleared.length,
         clearedSummary: summary.clearedLabels,
+        ...(() => {
+          const statusAudit = summarizeKnockoutPickStatusAuditChanges(
+            slots,
+            applied.slots,
+          );
+          return {
+            ...(statusAudit.markedOut.length
+              ? { markedOutPicks: statusAudit.markedOut }
+              : {}),
+            ...(statusAudit.restoredActive.length
+              ? { restoredActivePicks: statusAudit.restoredActive }
+              : {}),
+          };
+        })(),
         source: "scripts/admin-correct-knockout-pick.ts",
       },
     });

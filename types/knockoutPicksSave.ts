@@ -17,6 +17,8 @@ export type ParticipantPickSlotPayload = {
   bonusKey: string | null;
   /** Empty or whitespace means clear this slot. */
   teamId: string;
+  /** Encoded in `predictions.value_text` for locked-out historical picks. */
+  valueText?: string | null;
 };
 
 /** @deprecated Use ParticipantPickSlotPayload */

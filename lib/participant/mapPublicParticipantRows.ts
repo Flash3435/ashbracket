@@ -16,6 +16,7 @@ export type PredictionsPublicRowDb = {
   stage_sort_order: number | null;
   team_name: string | null;
   team_country_code: string | null;
+  pick_is_out?: boolean | null;
 };
 
 export type PointsLedgerPublicRowDb = {
@@ -43,6 +44,7 @@ export function mapPredictionPublicRow(
     stageSortOrder: row.stage_sort_order ?? 10_000,
     teamName: row.team_name,
     teamCountryCode: row.team_country_code,
+    pickIsOut: Boolean(row.pick_is_out),
   };
 }
 

@@ -17,6 +17,11 @@ import {
   thirdPlaceSlotInvalidReason,
 } from "../../lib/predictions/knockoutPickConsistency";
 import { pruneOfficialKnockoutPathPicks } from "../../lib/predictions/pruneOfficialKnockoutPathPicks";
+import { applyKnockoutPathInvalidation } from "../../lib/predictions/knockoutPathInvalidation";
+import {
+  clearedOutPickRowKeys,
+  participantPickSlotPayloadFromDraft,
+} from "../../lib/predictions/knockoutPickStatus";
 import { applyQuickPickToSlots } from "../../lib/predictions/knockoutQuickPickStrategies";
 import { CountryFlagIcon } from "../tournament/Flag";
 import { KickoffTimeDisplay } from "../datetime/KickoffTimeDisplay";
@@ -103,7 +108,6 @@ import {
   resolveKnockoutProgressContext,
   type KnockoutWizardBracketKindId,
 } from "../../lib/picks/knockoutMatchProgress";
-import { clearedPickRowKeySet } from "../../lib/picks/knockoutBlockedRowExplanation";
 import { requiresParticipantKnockoutRepairSave } from "../../lib/picks/knockoutWizardAction";
 import { KnockoutMatchDirectTeamPick } from "./KnockoutMatchTeamPick";
 import { isKnockoutProgressionKind } from "../../lib/predictions/knockoutProgressionKinds";
@@ -893,10 +897,17 @@ export function KnockoutPicksWizard({
     }),
     [teams, tournamentMatches, gradualKnockout, knockoutBracketPicksUnlocked],
   );
-  const knockoutPathRepairOnLoad = useMemo(
-    () => pruneOfficialKnockoutPathPicks(initialSlots, r32WinnerContext),
-    [initialSlots, r32WinnerContext],
-  );
+  const knockoutPathRepairOnLoad = useMemo(() => {
+    const pruned = pruneOfficialKnockoutPathPicks(initialSlots, r32WinnerContext);
+    return {
+      cleared: pruned.cleared,
+      slots: applyKnockoutPathInvalidation(pruned.slots, pruned.cleared, {
+        teams,
+        tournamentMatches,
+        knockoutBracketPicksUnlocked,
+      }),
+    };
+  }, [initialSlots, r32WinnerContext, teams, tournamentMatches, knockoutBracketPicksUnlocked]);
   const normalizedInitialSlots = useMemo(
     () =>
       pruneParticipantPicks(knockoutPathRepairOnLoad.slots, {
@@ -954,8 +965,8 @@ export function KnockoutPicksWizard({
     [slots, knockoutPicksAccessible, r32WinnerContext],
   );
   const knockoutPathClearedRowKeys = useMemo(
-    () => clearedPickRowKeySet(knockoutPathRepairOnLoad.cleared),
-    [knockoutPathRepairOnLoad.cleared],
+    () => clearedOutPickRowKeys(normalizedInitialSlots),
+    [normalizedInitialSlots],
   );
   const knockoutProgressCtx = useMemo(
     () =>
@@ -1570,14 +1581,7 @@ export function KnockoutPicksWizard({
           state: gradualKnockout,
           omitFrozenPreBracketPicks: preBracketActive,
         })
-      : saveSlots.map((s) => ({
-          predictionKind: s.predictionKind,
-          tournamentStageId: s.tournamentStageId,
-          slotKey: s.slotKey,
-          groupCode: s.groupCode,
-          bonusKey: s.bonusKey,
-          teamId: s.teamId,
-        }));
+      : saveSlots.map((s) => participantPickSlotPayloadFromDraft(s));
     setSaveUiState((prev) => ({
       kind: "saving",
       lastSavedAt: prev.lastSavedAt,

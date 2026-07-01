@@ -29,6 +29,12 @@ import {
   pruneOfficialKnockoutPathPicks,
   summarizeKnockoutPathRepair,
 } from "../lib/predictions/pruneOfficialKnockoutPathPicks";
+import { applyKnockoutPathInvalidation } from "../lib/predictions/knockoutPathInvalidation";
+import {
+  encodeKnockoutPickStatusMetadata,
+  isKnockoutPickLockedOut,
+} from "../lib/predictions/knockoutPickStatus";
+import type { TournamentMatchPublicRow } from "../types/tournamentPublic";
 
 function loadEnvLocal(): void {
   const path = resolve(process.cwd(), ".env.local");
@@ -97,6 +103,8 @@ type RepairAction = {
   tournamentStageId: string;
   teamId: string;
   reason: string;
+  /** When true, keep team and persist out status instead of deleting the row. */
+  markOut: boolean;
 };
 
 async function loadPoolIds(): Promise<string[]> {
@@ -109,7 +117,30 @@ async function loadPoolIds(): Promise<string[]> {
   return (data ?? []).map((r) => r.id);
 }
 
-async function repairPool(poolId: string): Promise<RepairAction[]> {
+async function loadTournamentMatches(): Promise<TournamentMatchPublicRow[]> {
+  const { data, error } = await supabase.from("tournament_public_matches").select(
+    [
+      "match_id",
+      "edition_id",
+      "stage_code",
+      "match_code",
+      "kickoff_at",
+      "status",
+      "home_country_code",
+      "away_country_code",
+      "home_score",
+      "away_score",
+      "winner_country_code",
+    ].join(", "),
+  );
+  if (error) throw error;
+  return (data ?? []) as unknown as TournamentMatchPublicRow[];
+}
+
+async function repairPool(
+  poolId: string,
+  tournamentMatches: TournamentMatchPublicRow[],
+): Promise<RepairAction[]> {
   const [
     { data: participants, error: partErr },
     { data: stageRows, error: stageErr },
@@ -191,9 +222,21 @@ async function repairPool(poolId: string): Promise<RepairAction[]> {
     const pathResult = pruneOfficialKnockoutPathPicks(before);
     if (pathResult.cleared.length === 0) continue;
 
+    const finalized = applyKnockoutPathInvalidation(
+      pathResult.slots,
+      pathResult.cleared,
+      {
+        teams,
+        tournamentMatches,
+        knockoutBracketPicksUnlocked: true,
+      },
+    );
+
     for (const cleared of pathResult.cleared) {
       const row = before.find((s) => s.rowKey === cleared.rowKey);
-      if (!row) continue;
+      const after = finalized.find((s) => s.rowKey === cleared.rowKey);
+      if (!row || !after) continue;
+      const markOut = isKnockoutPickLockedOut(after);
       actions.push({
         participantId: participant.id,
         participantName: String(participant.display_name ?? participant.id),
@@ -201,8 +244,9 @@ async function repairPool(poolId: string): Promise<RepairAction[]> {
         predictionKind: cleared.predictionKind,
         slotKey: cleared.slotKey,
         tournamentStageId: row.tournamentStageId,
-        teamId: cleared.teamId,
+        teamId: markOut ? after.teamId.trim() : cleared.teamId,
         reason: cleared.reason,
+        markOut,
       });
     }
   }
@@ -212,6 +256,40 @@ async function repairPool(poolId: string): Promise<RepairAction[]> {
 
 async function applyActions(actions: RepairAction[]): Promise<void> {
   for (const action of actions) {
+    if (action.markOut) {
+      const valueText = encodeKnockoutPickStatusMetadata({
+        v: 1,
+        status: "out",
+        reason: action.reason as "not_in_official_matchup",
+        invalidatedAt: new Date().toISOString(),
+      });
+      const { error } = await supabase.from("predictions").upsert(
+        {
+          pool_id: action.poolId,
+          participant_id: action.participantId,
+          prediction_kind: action.predictionKind,
+          tournament_stage_id: action.tournamentStageId,
+          group_code: null,
+          slot_key: action.slotKey,
+          bonus_key: null,
+          team_id: action.teamId,
+          value_text: valueText,
+        },
+        {
+          onConflict:
+            "participant_id,pool_id,prediction_kind,tournament_stage_id,group_code,slot_key,bonus_key",
+        },
+      );
+      if (error) {
+        console.error(
+          `Failed to mark out ${action.participantName} ${action.predictionKind}:`,
+          error.message,
+        );
+        process.exit(1);
+      }
+      continue;
+    }
+
     let query = supabase
       .from("predictions")
       .delete()
@@ -240,10 +318,11 @@ async function applyActions(actions: RepairAction[]): Promise<void> {
 
 async function main() {
   const poolIds = await loadPoolIds();
+  const tournamentMatches = await loadTournamentMatches();
   const allActions: RepairAction[] = [];
 
   for (const poolId of poolIds) {
-    const actions = await repairPool(poolId);
+    const actions = await repairPool(poolId, tournamentMatches);
     allActions.push(...actions);
   }
 
@@ -260,7 +339,9 @@ async function main() {
 
   console.log(`Pools scanned: ${poolIds.length}`);
   console.log(`Participants affected: ${affectedParticipants.size}`);
-  console.log(`Rows to clear: ${allActions.length}`);
+  console.log(`Rows to repair: ${allActions.length}`);
+  console.log(`  mark out (locked): ${allActions.filter((a) => a.markOut).length}`);
+  console.log(`  clear (editable): ${allActions.filter((a) => !a.markOut).length}`);
   console.log("Cleared by prediction kind:");
   for (const [kind, count] of Object.entries(summary.clearedByKind)) {
     console.log(`  ${kind}: ${count}`);
@@ -297,14 +378,14 @@ async function main() {
 
   for (const action of allActions) {
     console.log(
-      `  ${action.participantName}: clear ${action.predictionKind}` +
+      `  ${action.participantName}: ${action.markOut ? "mark out" : "clear"} ${action.predictionKind}` +
         (action.slotKey ? ` slot ${action.slotKey}` : "") +
         ` (${action.teamId}) — ${action.reason}`,
     );
   }
 
   if (!apply) {
-    console.log("\nDry run only. Re-run with --apply to clear invalid rows.");
+    console.log("\nDry run only. Re-run with --apply to persist repairs.");
     return;
   }
 
@@ -314,7 +395,7 @@ async function main() {
   }
 
   await applyActions(allActions);
-  console.log(`Applied ${allActions.length} clear(s).`);
+  console.log(`Applied ${allActions.length} repair(s).`);
 }
 
 main().catch((e) => {

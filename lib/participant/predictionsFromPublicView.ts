@@ -1,5 +1,6 @@
 import type { Prediction, Team, TournamentStage } from "../../src/types/domain";
 import type { PredictionsPublicRowDb } from "./mapPublicParticipantRows";
+import { encodeKnockoutPickStatusMetadata } from "../predictions/knockoutPickStatus";
 
 const EMPTY_TS = "1970-01-01T00:00:00.000Z";
 
@@ -35,7 +36,14 @@ export function predictionsFromPublicViewRows(
       groupCode: row.group_code,
       slotKey: row.slot_key,
       bonusKey: row.bonus_key,
-      valueText: null,
+      valueText:
+        row.pick_is_out && team?.id
+          ? encodeKnockoutPickStatusMetadata({
+              v: 1,
+              status: "out",
+              reason: "restored_from_reviewed_audit",
+            })
+          : null,
       createdAt: EMPTY_TS,
       updatedAt: EMPTY_TS,
     };

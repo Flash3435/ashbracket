@@ -12,6 +12,10 @@ import {
   hasLockedOutKnockoutPicks,
   requiresParticipantKnockoutRepairSave,
 } from "./knockoutWizardAction";
+import { isKnockoutPickLockedOut } from "../predictions/knockoutPickStatus";
+import { isKnockoutProgressionKind } from "../predictions/knockoutProgressionKinds";
+import type { KnockoutProgressionPredictionKind } from "../predictions/knockoutProgressionKinds";
+import { LOCKED_OUT_PICK_HEADLINE, lockedOutPickCardBody } from "./knockoutBlockedRowExplanation";
 
 export type PicksPageStatusKind =
   | "path_reconciliation"
@@ -39,6 +43,32 @@ export const PICKS_PAGE_GROUP_BONUS_LOCKED_NOTE =
 export const PICKS_PAGE_COMPACT_LOCK_NOTE =
   "Picks lock at kickoff. You can still edit future matches until they start.";
 
+function clearedPicksFromLockedSlots(
+  slots: KnockoutPickSlotDraft[],
+): ClearedKnockoutPathPick[] {
+  const out: ClearedKnockoutPathPick[] = [];
+  for (const row of slots) {
+    if (!isKnockoutPickLockedOut(row)) continue;
+    if (!isKnockoutProgressionKind(row.predictionKind)) continue;
+    out.push({
+      predictionKind: row.predictionKind as KnockoutProgressionPredictionKind,
+      slotKey: row.slotKey,
+      rowKey: row.rowKey,
+      teamId: row.teamId,
+      reason: row.invalidReason ?? "not_in_official_matchup",
+    });
+  }
+  return out;
+}
+
+function effectiveClearedPicks(
+  slots: KnockoutPickSlotDraft[],
+  clearedPicks: ClearedKnockoutPathPick[],
+): ClearedKnockoutPathPick[] {
+  if (clearedPicks.length > 0) return clearedPicks;
+  return clearedPicksFromLockedSlots(slots);
+}
+
 /** Primary picks-page status card (missing picks → editable repair → locked out → complete). */
 export function buildPicksPageStatusModel(input: {
   slots: KnockoutPickSlotDraft[];
@@ -56,7 +86,7 @@ export function buildPicksPageStatusModel(input: {
     officialRoundOf32Complete: input.officialRoundOf32Complete,
     nowMs: input.nowMs,
   };
-  const clearedPicks = input.knockoutPathClearedPicks ?? [];
+  const clearedPicks = effectiveClearedPicks(input.slots, input.knockoutPathClearedPicks ?? []);
 
   const missing = buildParticipantDashboardMissingKnockoutPicks({
     slots: input.slots,
@@ -109,6 +139,18 @@ export function buildPicksPageStatusModel(input: {
       kind: "locked_out_picks",
       headline: lockedOutSummary.headline,
       detail: lockedOutSummary.detail,
+      tone: "warning",
+      ctaLabel: null,
+      ctaAction: null,
+    };
+  }
+
+  const persistedLockedOut = input.slots.filter((row) => isKnockoutPickLockedOut(row));
+  if (persistedLockedOut.length > 0) {
+    return {
+      kind: "locked_out_picks",
+      headline: LOCKED_OUT_PICK_HEADLINE,
+      detail: lockedOutPickCardBody(persistedLockedOut[0]?.slotLabel ?? null),
       tone: "warning",
       ctaLabel: null,
       ctaAction: null,

@@ -8,6 +8,7 @@ import {
   resolveKnockoutPickCorrectionMatch,
   resolveKnockoutPickCorrectionTeamId,
   summarizeKnockoutPickCorrectionDryRun,
+  summarizeKnockoutPickStatusAuditChanges,
   validateKnockoutPickCorrectionReason,
 } from "@/lib/admin/knockoutPickCorrection";
 import { logKnockoutPickCorrectionAudit } from "@/lib/admin/knockoutPickCorrectionAudit";
@@ -310,6 +311,10 @@ export async function correctParticipantKnockoutPickAction(input: {
       teams,
       applyResult: applied,
     });
+    const statusAudit = summarizeKnockoutPickStatusAuditChanges(
+      initialSlots,
+      applied.slots,
+    );
 
     const audit = await logKnockoutPickCorrectionAudit(supabase, {
       poolId,
@@ -324,6 +329,8 @@ export async function correctParticipantKnockoutPickAction(input: {
       reason: input.reason.trim(),
       clearedPickCount: applied.cleared.length,
       clearedSummary: dryRunSummary.clearedLabels,
+      markedOutPicks: statusAudit.markedOut,
+      restoredActivePicks: statusAudit.restoredActive,
     });
     if (!audit.ok) {
       return savePicksSuccess(

@@ -9,10 +9,11 @@ import type {
 /**
  * What we can infer from public picks + ledger only (no per-slot result resolution):
  * - empty: no team saved on the pick
+ * - out: team saved but marked out (historical locked invalid pick)
  * - scored: at least one ledger line for this prediction (points awarded)
  * - awaiting: team saved but no ledger yet (may be pending results OR settled with 0 pts)
  */
-export type PickDisplayState = "empty" | "scored" | "awaiting";
+export type PickDisplayState = "empty" | "out" | "scored" | "awaiting";
 
 export type PickStatusPresentation = {
   state: PickDisplayState;
@@ -168,6 +169,7 @@ function resolvePickDisplayState(
   pick: PublicParticipantPick,
   pickLedger: PublicParticipantLedgerRow[],
 ): PickDisplayState {
+  if (pick.pickIsOut && hasSavedTeam(pick)) return "out";
   if (pickLedger.length > 0) return "scored";
   if (hasSavedTeam(pick)) return "awaiting";
   return "empty";
@@ -175,6 +177,13 @@ function resolvePickDisplayState(
 
 export function pickStatusPresentation(state: PickDisplayState): PickStatusPresentation {
   switch (state) {
+    case "out":
+      return {
+        state,
+        label: "Pick out",
+        meaning:
+          "This locked knockout pick no longer fits the official bracket path and cannot be changed.",
+      };
     case "scored":
       return {
         state,
@@ -391,7 +400,7 @@ export function buildPublicParticipantPresentation(detail: PublicParticipantDeta
       existing.totalPoints += displayPick.pointsEarned;
       if (displayPick.state === "scored") existing.scoredPicksCount += 1;
       else if (displayPick.state === "awaiting") existing.awaitingScoreCount += 1;
-      else existing.emptyPicksCount += 1;
+      else if (displayPick.state === "empty") existing.emptyPicksCount += 1;
     } else {
       sectionMap.set(sectionMeta.key, {
         key: sectionMeta.key,
@@ -453,7 +462,7 @@ export function buildPublicParticipantPresentation(detail: PublicParticipantDeta
     );
     if (state === "scored") scoredPicksCount += 1;
     else if (state === "awaiting") awaitingScoreCount += 1;
-    else emptyPicksCount += 1;
+    else if (state === "empty") emptyPicksCount += 1;
   }
 
   const totalPointsFromLedger = detail.ledger.reduce(

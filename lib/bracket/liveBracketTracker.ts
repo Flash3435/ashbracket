@@ -407,10 +407,13 @@ function buildLaterRoundMatches(
     const pub = publicMatchForFifaNo(stageMatches, def.stageCode, row.fifaMatchNo);
     const participantPick = row.winnerTeamId.trim() || null;
     const pickValid =
-      participantPick &&
-      (participantPick === row.homeTeamId || participantPick === row.awayTeamId)
+      row.pickStatus === "out" && participantPick
         ? participantPick
-        : null;
+        : participantPick &&
+            (participantPick === row.homeTeamId ||
+              participantPick === row.awayTeamId)
+          ? participantPick
+          : null;
 
     return buildLiveMatchFromFixture({
       matchKey: row.fifaMatchNo > 0 ? `M${row.fifaMatchNo}` : row.rowKey,

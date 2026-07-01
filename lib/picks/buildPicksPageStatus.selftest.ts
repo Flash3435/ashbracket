@@ -9,6 +9,8 @@ import {
 } from "./buildPicksPageStatus";
 import { LOCKED_OUT_PICK_HEADLINE } from "./knockoutBlockedRowExplanation";
 import { pruneOfficialKnockoutPathPicks } from "../predictions/pruneOfficialKnockoutPathPicks";
+import { applyKnockoutPathInvalidation } from "../predictions/knockoutPathInvalidation";
+import { isKnockoutPickLockedOut } from "../predictions/knockoutPickStatus";
 import type { KnockoutPickSlotDraft } from "../../types/adminKnockoutPicks";
 import type { Team } from "../../src/types/domain";
 import type { TournamentMatchPublicRow } from "../../types/tournamentPublic";
@@ -406,12 +408,23 @@ const r32OfficialResults: TournamentMatchPublicRow[] = [
     champSlot("team-ger"),
   ];
   const { slots: repaired, cleared } = pruneOfficialKnockoutPathPicks(before);
+  const finalized = applyKnockoutPathInvalidation(repaired, cleared, {
+    teams: fullTeams,
+    tournamentMatches,
+    knockoutBracketPicksUnlocked: true,
+    nowMs: Date.parse("2026-07-11T00:00:00.000Z"),
+  });
+  const lockedOutQf = finalized.find(
+    (s) => s.predictionKind === "quarterfinalist" && s.slotKey === "1",
+  );
+  assert.ok(isKnockoutPickLockedOut(lockedOutQf ?? { pickStatus: null, teamId: "" }));
+  assert.equal(lockedOutQf?.teamId, "team-bra");
   const model = buildPicksPageStatusModel({
-    slots: repaired,
+    slots: finalized,
     teams: fullTeams,
     tournamentMatches,
     officialRoundOf32Complete: true,
-    knockoutPathRepairUnsaved: true,
+    knockoutPathRepairUnsaved: false,
     knockoutPathClearedPicks: cleared,
   });
   assert.equal(model.kind, "locked_out_picks");

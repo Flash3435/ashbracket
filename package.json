@@ -69,7 +69,9 @@
     "seed:nhl-phase2": "tsx scripts/seed-nhl-phase2.ts",
     "repair:nhl-2026-official": "tsx scripts/repair-nhl-2026-official.ts",
     "test:activity-feed-tournament-mode": "tsx lib/poolActivity/activityFeedTournamentMode.selftest.ts",
-    "test:knockout-pick-correction": "tsx lib/admin/knockoutPickCorrection.selftest.ts"
+    "test:knockout-pick-correction": "tsx lib/admin/knockoutPickCorrection.selftest.ts",
+    "test:knockout-out-backfill": "tsx lib/admin/knockoutOutPickBackfillPlanner.selftest.ts",
+    "test:restored-out-pick-presentation": "tsx lib/participant/restoredOutPickPresentation.selftest.ts"
   },
   "dependencies": {
     "@supabase/ssr": "^0.10.0",

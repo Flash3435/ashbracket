@@ -1,4 +1,8 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import type {
+  KnockoutPickStatusAuditChange,
+  KnockoutPickStatusRestoreAuditChange,
+} from "./knockoutPickCorrection";
 
 export type KnockoutPickCorrectionAuditInput = {
   poolId: string;
@@ -11,6 +15,8 @@ export type KnockoutPickCorrectionAuditInput = {
   reason: string;
   clearedPickCount?: number;
   clearedSummary?: string[];
+  markedOutPicks?: ReadonlyArray<KnockoutPickStatusAuditChange>;
+  restoredActivePicks?: ReadonlyArray<KnockoutPickStatusRestoreAuditChange>;
 };
 
 /**
@@ -27,6 +33,18 @@ export async function logKnockoutPickCorrectionAudit(
     return { ok: false, error: "Not authenticated." };
   }
 
+  const metadata: Record<string, unknown> = {};
+  if (input.clearedPickCount != null || input.clearedSummary?.length) {
+    metadata.clearedPickCount = input.clearedPickCount ?? 0;
+    metadata.clearedSummary = input.clearedSummary ?? [];
+  }
+  if (input.markedOutPicks?.length) {
+    metadata.markedOutPicks = input.markedOutPicks;
+  }
+  if (input.restoredActivePicks?.length) {
+    metadata.restoredActivePicks = input.restoredActivePicks;
+  }
+
   const { error } = await supabase
     .from("participant_pick_correction_audit")
     .insert({
@@ -40,13 +58,7 @@ export async function logKnockoutPickCorrectionAudit(
       old_team_country_code: input.oldTeamCountryCode?.trim() || null,
       new_team_country_code: input.newTeamCountryCode?.trim() || null,
       reason: input.reason.trim(),
-      metadata:
-        input.clearedPickCount != null || input.clearedSummary?.length
-          ? {
-              clearedPickCount: input.clearedPickCount ?? 0,
-              clearedSummary: input.clearedSummary ?? [],
-            }
-          : null,
+      metadata: Object.keys(metadata).length > 0 ? metadata : null,
     });
 
   if (error) {

@@ -22,6 +22,7 @@ import {
   blockedKnockoutRowUserCopy,
   blockedKnockoutStepGateCopy,
 } from "./knockoutBlockedRowExplanation";
+import { isKnockoutPickLockedOut } from "../predictions/knockoutPickStatus";
 
 export type KnockoutWizardBracketKind =
   | "round_of_16"
@@ -44,6 +45,7 @@ export type KnockoutMatchPickRow = {
   homeTeamId: string | null;
   awayTeamId: string | null;
   winnerTeamId: string;
+  pickStatus: import("../predictions/knockoutPickStatus").KnockoutPickStatus | null;
   lockReason: KnockoutMatchLockReason;
   display: R32SlotRowDisplay;
   kickoffIso: string | null;
@@ -511,6 +513,7 @@ export function validatedKnockoutMatchWinner(
   row: KnockoutMatchPickRow | undefined,
 ): string | null {
   if (!row) return null;
+  if (row.pickStatus === "out") return null;
   const w = row.winnerTeamId.trim();
   if (!w || !row.homeTeamId || !row.awayTeamId) return null;
   if (w === row.homeTeamId || w === row.awayTeamId) return w;
@@ -806,6 +809,10 @@ export function buildKnockoutMatchPickRows(
     const saveSlotKey = resultSlotKeyForMatch(def, matchIndex);
     const saveRow = findSaveRow(input.slots, def.resultKind, saveSlotKey);
     const winnerTeamId = saveRow?.teamId.trim() ?? "";
+    const pickStatus = saveRow?.pickStatus ?? null;
+    const pickOut = isKnockoutPickLockedOut(
+      saveRow ?? { pickStatus: null, teamId: "" },
+    );
 
     let lockReason: KnockoutMatchLockReason = "pickable";
     if (!homeTeamId || !awayTeamId) {
@@ -843,6 +850,7 @@ export function buildKnockoutMatchPickRows(
               homeTeamId,
               awayTeamId,
               winnerTeamId,
+              pickStatus: null,
               lockReason,
               display: matchRowDisplay(
                 def.stageLabel,
@@ -872,21 +880,44 @@ export function buildKnockoutMatchPickRows(
       homeTeamId,
       awayTeamId,
       winnerTeamId,
+      pickStatus,
       lockReason,
       kickoffIso,
       display: {
-        ...matchRowDisplay(
-          def.stageLabel,
-          fifaMatchNo,
-          homeName,
-          awayName,
-          lockReason,
-          {
-            championPick: def.resultKind === "champion",
-            incompleteMsg,
-          },
-        ),
-        kickoffIso,
+        ...(pickOut
+          ? {
+              heading: matchRowDisplay(
+                def.stageLabel,
+                fifaMatchNo,
+                homeName,
+                awayName,
+                lockReason,
+              ).heading,
+              emptyPrimaryLine: `${teamName(winnerTeamId, input.teams)} · Out`,
+              kickoffIso,
+              statusLine: "Pick out",
+              chooseButtonLabel: matchRowDisplay(
+                def.stageLabel,
+                fifaMatchNo,
+                homeName,
+                awayName,
+                lockReason,
+              ).chooseButtonLabel,
+            }
+          : {
+              ...matchRowDisplay(
+                def.stageLabel,
+                fifaMatchNo,
+                homeName,
+                awayName,
+                lockReason,
+                {
+                  championPick: def.resultKind === "champion",
+                  incompleteMsg,
+                },
+              ),
+              kickoffIso,
+            }),
       },
     };
   });

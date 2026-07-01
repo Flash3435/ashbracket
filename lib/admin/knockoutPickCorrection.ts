@@ -4,6 +4,11 @@ import type { ParticipantPickSlotPayload } from "../../types/knockoutPicksSave";
 import type { TournamentMatchPublicRow } from "../../types/tournamentPublic";
 import { WC2026_R32_MATCH_DEFS } from "../bracket/wc2026RoundOf32";
 import { isKnockoutProgressionKind } from "../predictions/knockoutProgressionKinds";
+import { applyKnockoutPathInvalidation } from "../predictions/knockoutPathInvalidation";
+import {
+  isKnockoutPickLockedOut,
+  participantPickSlotPayloadFromDraft,
+} from "../predictions/knockoutPickStatus";
 import { pruneOfficialKnockoutPathPicks } from "../predictions/pruneOfficialKnockoutPathPicks";
 import {
   applyGradualR32MatchWinnerToSlots,
@@ -332,16 +337,128 @@ export function resolveKnockoutPickCorrectionTeamId(input: {
 
 function slotPayloadFromDraft(
   row: KnockoutPickSlotDraft,
-  teamIdOverride?: string,
+  overrides?: Partial<KnockoutPickSlotDraft>,
 ): ParticipantPickSlotPayload {
-  return {
-    predictionKind: row.predictionKind,
-    tournamentStageId: row.tournamentStageId,
-    slotKey: row.slotKey,
-    groupCode: row.groupCode,
-    bonusKey: row.bonusKey,
-    teamId: teamIdOverride ?? row.teamId,
+  const merged: KnockoutPickSlotDraft = {
+    ...row,
+    ...overrides,
+    teamId: overrides?.teamId ?? row.teamId,
   };
+  if (isKnockoutProgressionKind(merged.predictionKind)) {
+    return participantPickSlotPayloadFromDraft(merged);
+  }
+  return {
+    predictionKind: merged.predictionKind,
+    tournamentStageId: merged.tournamentStageId,
+    slotKey: merged.slotKey,
+    groupCode: merged.groupCode,
+    bonusKey: merged.bonusKey,
+    teamId: merged.teamId,
+  };
+}
+
+function activateCorrectedKnockoutSlot(
+  slots: KnockoutPickSlotDraft[],
+  match: KnockoutPickCorrectionMatch,
+  newTeamId: string,
+): KnockoutPickSlotDraft[] {
+  if (match.knockoutMatchRow) {
+    return slots.map((s) =>
+      s.rowKey === match.knockoutMatchRow!.saveRowKey
+        ? {
+            ...s,
+            teamId: newTeamId,
+            pickStatus: null,
+            invalidReason: null,
+          }
+        : s,
+    );
+  }
+  if (match.predictionKind === "round_of_16" && match.slotKey) {
+    return slots.map((s) =>
+      s.predictionKind === "round_of_16" && s.slotKey === match.slotKey
+        ? {
+            ...s,
+            teamId: newTeamId,
+            pickStatus: null,
+            invalidReason: null,
+          }
+        : s,
+    );
+  }
+  return slots;
+}
+
+function knockoutSlotMateriallyChanged(
+  prev: KnockoutPickSlotDraft | undefined,
+  row: KnockoutPickSlotDraft,
+): boolean {
+  const prevId = prev?.teamId.trim() ?? "";
+  const nextId = row.teamId.trim();
+  if (prevId !== nextId) return true;
+  const prevOut = isKnockoutPickLockedOut(
+    prev ?? { pickStatus: null, teamId: "" },
+  );
+  const nextOut = isKnockoutPickLockedOut(row);
+  if (prevOut !== nextOut) return true;
+  if ((prev?.invalidReason ?? null) !== (row.invalidReason ?? null)) return true;
+  return false;
+}
+
+export type KnockoutPickStatusAuditChange = {
+  predictionKind: string;
+  slotKey: string | null;
+  teamId: string;
+  reason: string;
+};
+
+export type KnockoutPickStatusRestoreAuditChange = {
+  predictionKind: string;
+  slotKey: string | null;
+  previousReason: string | null;
+  newTeamId: string;
+};
+
+/** Compare draft rows before/after admin correction for out-status audit metadata. */
+export function summarizeKnockoutPickStatusAuditChanges(
+  before: KnockoutPickSlotDraft[],
+  after: KnockoutPickSlotDraft[],
+): {
+  markedOut: KnockoutPickStatusAuditChange[];
+  restoredActive: KnockoutPickStatusRestoreAuditChange[];
+} {
+  const markedOut: KnockoutPickStatusAuditChange[] = [];
+  const restoredActive: KnockoutPickStatusRestoreAuditChange[] = [];
+
+  for (const row of after) {
+    if (!isKnockoutProgressionKind(row.predictionKind)) continue;
+    const prev = before.find((s) => s.rowKey === row.rowKey);
+    const wasOut = isKnockoutPickLockedOut(
+      prev ?? { pickStatus: null, teamId: "" },
+    );
+    const isOut = isKnockoutPickLockedOut(row);
+
+    if (isOut && !wasOut && row.invalidReason) {
+      markedOut.push({
+        predictionKind: row.predictionKind,
+        slotKey: row.slotKey,
+        teamId: row.teamId.trim(),
+        reason: row.invalidReason,
+      });
+      continue;
+    }
+
+    if (wasOut && !isOut && row.teamId.trim()) {
+      restoredActive.push({
+        predictionKind: row.predictionKind,
+        slotKey: row.slotKey,
+        previousReason: prev?.invalidReason ?? null,
+        newTeamId: row.teamId.trim(),
+      });
+    }
+  }
+
+  return { markedOut, restoredActive };
 }
 
 function progressionPayloadKey(payload: ParticipantPickSlotPayload): string {
@@ -384,7 +501,13 @@ export function buildAdminKnockoutPickCorrectionWritePayloads(input: {
       s.slotKey === input.match.slotKey,
   );
   if (correctionRow) {
-    payloads.push(slotPayloadFromDraft(correctionRow, newId));
+    payloads.push(
+      slotPayloadFromDraft(correctionRow, {
+        teamId: newId,
+        pickStatus: null,
+        invalidReason: null,
+      }),
+    );
   }
 
   for (const clear of input.pruneCleared) {
@@ -423,9 +546,7 @@ function changedKnockoutPayloads(
   for (const row of after) {
     if (!isKnockoutProgressionKind(row.predictionKind)) continue;
     const prev = before.find((s) => s.rowKey === row.rowKey);
-    const prevId = prev?.teamId.trim() ?? "";
-    const nextId = row.teamId.trim();
-    if (prevId !== nextId) {
+    if (knockoutSlotMateriallyChanged(prev, row)) {
       out.push(slotPayloadFromDraft(row));
     }
   }
@@ -481,37 +602,36 @@ export function applyKnockoutPickCorrection(input: {
     );
   }
 
+  const knockoutBracketPicksUnlocked = isFullKnockoutBracketPicksUnlocked({
+    officialRoundOf32Complete: input.fullRoundOf32Official,
+    gradual,
+  });
+  const invalidationCtx = {
+    teams: input.teams,
+    tournamentMatches: input.tournamentMatches,
+    knockoutBracketPicksUnlocked,
+    nowMs,
+  };
+
   const pruned = pruneOfficialKnockoutPathPicks(next, {
     teams: input.teams,
     tournamentMatches: input.tournamentMatches,
     gradual,
-    knockoutBracketPicksUnlocked: isFullKnockoutBracketPicksUnlocked({
-      officialRoundOf32Complete: input.fullRoundOf32Official,
-      gradual,
-    }),
+    knockoutBracketPicksUnlocked,
     exemptR32MatchIndices:
       r32MatchIndex != null && r32MatchIndex >= 0 ? [r32MatchIndex] : undefined,
   });
 
-  let finalSlots = pruned.slots;
-  if (
-    r32MatchIndex != null &&
-    r32MatchIndex >= 0 &&
-    input.match.predictionKind === "round_of_16" &&
-    input.match.slotKey
-  ) {
-    finalSlots = finalSlots.map((s) =>
-      s.predictionKind === "round_of_16" && s.slotKey === input.match.slotKey
-        ? { ...s, teamId: newTeamId }
-        : s,
-    );
-  } else if (input.match.knockoutMatchRow) {
-    finalSlots = finalSlots.map((s) =>
-      s.rowKey === input.match.knockoutMatchRow!.saveRowKey
-        ? { ...s, teamId: newTeamId }
-        : s,
-    );
-  }
+  const invalidatedSlots = applyKnockoutPathInvalidation(
+    pruned.slots,
+    pruned.cleared,
+    invalidationCtx,
+  );
+  const finalSlots = activateCorrectedKnockoutSlot(
+    invalidatedSlots,
+    input.match,
+    newTeamId,
+  );
 
   const writePayloads = buildAdminKnockoutPickCorrectionWritePayloads({
     before: input.slots,

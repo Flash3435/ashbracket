@@ -14,6 +14,9 @@ import {
   type PointsLedgerPublicRowDb,
   type PredictionsPublicRowDb,
 } from "./mapPublicParticipantRows";
+import {
+  decodeKnockoutPickStatusMetadata,
+} from "../predictions/knockoutPickStatus";
 import { normalizeParticipantProfileRouteId } from "./participantProfileRouting";
 
 type ParticipantBracketHeaderRpcRow = {
@@ -32,6 +35,7 @@ type PredictionTableRow = {
   bonus_key: string | null;
   team_id: string | null;
   tournament_stage_id: string | null;
+  value_text: string | null;
 };
 
 export type FetchPublicParticipantResult =
@@ -115,7 +119,7 @@ async function loadPublicPoolParticipantDetail(
     supabase
       .from("predictions_public")
       .select(
-        "prediction_id, participant_id, pool_id, prediction_kind, group_code, slot_key, bonus_key, stage_code, stage_label, stage_sort_order, team_name, team_country_code",
+        "prediction_id, participant_id, pool_id, prediction_kind, group_code, slot_key, bonus_key, stage_code, stage_label, stage_sort_order, team_name, team_country_code, pick_is_out",
       )
       .eq("participant_id", participantId)
       .order("stage_sort_order", { ascending: true, nullsFirst: false })
@@ -246,7 +250,7 @@ async function loadPicksFromPredictionsTable(
   const { data: predictions, error } = await service
     .from("predictions")
     .select(
-      "id, prediction_kind, group_code, slot_key, bonus_key, team_id, tournament_stage_id",
+      "id, prediction_kind, group_code, slot_key, bonus_key, team_id, tournament_stage_id, value_text",
     )
     .eq("pool_id", poolId)
     .eq("participant_id", participantId);
@@ -318,6 +322,9 @@ async function loadPicksFromPredictionsTable(
       stageSortOrder: Number(stage?.sort_order ?? 10_000),
       teamName: (team?.name as string | undefined) ?? null,
       teamCountryCode: (team?.country_code as string | undefined) ?? null,
+      pickIsOut:
+        Boolean(row.team_id) &&
+        decodeKnockoutPickStatusMetadata(row.value_text)?.status === "out",
     } satisfies PublicParticipantPick;
   });
 

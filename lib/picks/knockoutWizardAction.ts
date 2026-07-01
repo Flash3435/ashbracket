@@ -1,5 +1,6 @@
 import type { KnockoutProgressionPredictionKind } from "../predictions/knockoutProgressionKinds";
 import type { ClearedKnockoutPathPick } from "../predictions/pruneOfficialKnockoutPathPicks";
+import { isKnockoutPickLockedOut } from "../predictions/knockoutPickStatus";
 import {
   blockedKnockoutStepGateCopy,
   clearedPickRowKeySet,
@@ -270,9 +271,24 @@ function findClearedPickAction(
   const baseInput = buildInputFromContext(ctx);
 
   for (const pick of clearedPicks) {
-    const stillEmpty = !ctx.slots.some(
-      (s) => s.rowKey === pick.rowKey && s.teamId.trim(),
-    );
+    const slotRow = ctx.slots.find((s) => s.rowKey === pick.rowKey);
+    if (!slotRow) continue;
+
+    if (isKnockoutPickLockedOut(slotRow)) {
+      const bracketKind = wizardBracketKindForSavedPick(pick.predictionKind);
+      if (!bracketKind) continue;
+      const matchKind = matchBracketKindForWizardStep(bracketKind);
+      if (!matchKind) continue;
+      const rows = buildKnockoutMatchPickRows({
+        ...baseInput,
+        bracketKind: matchKind,
+      });
+      const row = rows[matchIndexForSavedPick(pick)];
+      if (!row) continue;
+      return actionFromLockedClearedPick(ctx, pick, row, matchKind);
+    }
+
+    const stillEmpty = !slotRow.teamId.trim();
     if (!stillEmpty) continue;
 
     const bracketKind = wizardBracketKindForSavedPick(pick.predictionKind);

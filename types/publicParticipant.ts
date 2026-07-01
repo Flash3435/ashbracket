@@ -10,6 +10,8 @@ export type PublicParticipantPick = {
   stageSortOrder: number;
   teamName: string | null;
   teamCountryCode: string | null;
+  /** True when value_text marks a locked historical knockout pick as out. */
+  pickIsOut?: boolean;
 };
 
 /** Mapped row from `points_ledger_public` (no note field). */

@@ -17,7 +17,9 @@ export const KNOCKOUT_BRACKET_PATH_REVIEW_MESSAGE =
 export type KnockoutPathPickClearReason =
   | "not_in_official_matchup"
   | "upstream_incomplete"
-  | "not_in_r32_match";
+  | "not_in_r32_match"
+  | "restored_from_audit"
+  | "restored_from_reviewed_audit";
 
 export type ClearedKnockoutPathPick = {
   predictionKind: KnockoutProgressionPredictionKind;

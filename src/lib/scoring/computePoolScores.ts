@@ -3,6 +3,7 @@ import {
   KNOCKOUT_PROGRESSION_PREDICTION_KINDS,
   isKnockoutProgressionKind,
 } from "../../../lib/predictions/knockoutProgressionKinds";
+import { isKnockoutPredictionScoringEligible } from "../../../lib/predictions/knockoutPickStatus";
 import type {
   ComputedLedgerLine,
   GroupStageScoringConfig,
@@ -83,7 +84,8 @@ function appendKnockoutOncePerTeamScores(
   const knockoutPreds = poolPreds.filter(
     (p) =>
       isKnockoutProgressionKind(p.predictionKind) &&
-      Boolean(p.teamId?.trim()),
+      Boolean(p.teamId?.trim()) &&
+      isKnockoutPredictionScoringEligible(p),
   );
 
   const byParticipant = new Map<string, Prediction[]>();

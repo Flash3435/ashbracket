@@ -4,11 +4,17 @@ import type { KnockoutPickSlotDraft } from "../../types/adminKnockoutPicks";
 import type { TournamentMatchPublicRow } from "../../types/tournamentPublic";
 import {
   applyKnockoutPickCorrection,
+  buildAdminKnockoutPickCorrectionWritePayloads,
   KNOCKOUT_PICK_CORRECTION_ALREADY_MATCHES_SAVED,
   resolveKnockoutPickCorrectionMatch,
   resolveKnockoutPickCorrectionTeamId,
+  summarizeKnockoutPickStatusAuditChanges,
   validateKnockoutPickCorrectionReason,
 } from "./knockoutPickCorrection";
+import {
+  decodeKnockoutPickStatusMetadata,
+  isKnockoutPickLockedOut,
+} from "../predictions/knockoutPickStatus";
 import {
   buildKnockoutMatchPickRows,
   readConfirmedR32MatchWinner,
@@ -132,6 +138,16 @@ const teams: Team[] = [
     createdAt: "",
     updatedAt: "",
   },
+  {
+    id: "team-ger",
+    name: "Germany",
+    countryCode: "GER",
+    fifaCode: "GER",
+    fifaRank: 5,
+    fifaRankAsOf: null,
+    createdAt: "",
+    updatedAt: "",
+  },
 ];
 
 function r16SlotDraft(slotKey: string, teamId = ""): KnockoutPickSlotDraft {
@@ -173,6 +189,20 @@ function qfSlotDraft(slotKey: string, teamId = ""): KnockoutPickSlotDraft {
     teamId,
     sectionLabel: "Quarter-finals",
     slotLabel: `QF slot ${slotKey}`,
+  };
+}
+
+function sfSlotDraft(slotKey: string, teamId = ""): KnockoutPickSlotDraft {
+  return {
+    rowKey: `semifinalist|${slotKey}`,
+    predictionKind: "semifinalist",
+    tournamentStageId: "sf-stage",
+    slotKey,
+    groupCode: null,
+    bonusKey: null,
+    teamId,
+    sectionLabel: "Semi-finals",
+    slotLabel: `SF slot ${slotKey}`,
   };
 }
 
@@ -694,6 +724,146 @@ function m76GradualSlots(input?: {
   });
   assert.ok("error" in wrong);
   assert.match(wrong.error, /not in this matchup/i);
+}
+
+// Admin write payloads persist locked-out metadata instead of deleting historical team
+{
+  const before = [sfSlotDraft("1", "team-bra")];
+  const after = [
+    {
+      ...sfSlotDraft("1", "team-bra"),
+      pickStatus: "out" as const,
+      invalidReason: "not_in_official_matchup" as const,
+    },
+  ];
+  const gradual = getGradualKnockoutSelectionState({
+    matches: [],
+    teams,
+    fullRoundOf32Official: true,
+  });
+  const payloads = buildAdminKnockoutPickCorrectionWritePayloads({
+    before,
+    after,
+    match: {
+      matchCode: "M89",
+      fifaMatchNo: 89,
+      predictionKind: "quarterfinalist",
+      slotKey: "1",
+      tournamentStageId: "qf-stage",
+      homeTeamId: "team-ger",
+      awayTeamId: "team-can",
+      oldTeamId: "team-can",
+      allowedTeamIds: ["team-ger", "team-can"],
+      isStarted: true,
+    },
+    newTeamId: "team-ger",
+    pruneCleared: [
+      {
+        predictionKind: "semifinalist",
+        slotKey: "1",
+        rowKey: "semifinalist|1",
+        teamId: "team-bra",
+        reason: "not_in_official_matchup",
+      },
+    ],
+    fullRoundOf32Official: true,
+    gradual,
+  });
+  const sfPayload = payloads.find((p) => p.predictionKind === "semifinalist");
+  assert.ok(sfPayload);
+  assert.strictEqual(sfPayload?.teamId, "team-bra");
+  assert.ok(decodeKnockoutPickStatusMetadata(sfPayload?.valueText ?? null));
+}
+
+// Admin correction restores active status on corrected slot (clears out metadata)
+{
+  const before = [
+    {
+      ...qfSlotDraft("1", "team-can"),
+      pickStatus: "out" as const,
+      invalidReason: "not_in_official_matchup" as const,
+    },
+  ];
+  const after = [qfSlotDraft("1", "team-ger")];
+  const audit = summarizeKnockoutPickStatusAuditChanges(before, after);
+  assert.strictEqual(audit.markedOut.length, 0);
+  assert.strictEqual(audit.restoredActive.length, 1);
+  assert.strictEqual(audit.restoredActive[0]?.newTeamId, "team-ger");
+
+  const gradual = getGradualKnockoutSelectionState({
+    matches: [],
+    teams,
+    fullRoundOf32Official: true,
+  });
+  const payloads = buildAdminKnockoutPickCorrectionWritePayloads({
+    before,
+    after,
+    match: {
+      matchCode: "M89",
+      fifaMatchNo: 89,
+      predictionKind: "quarterfinalist",
+      slotKey: "1",
+      tournamentStageId: "qf-stage",
+      homeTeamId: "team-ger",
+      awayTeamId: "team-can",
+      oldTeamId: "team-can",
+      allowedTeamIds: ["team-ger", "team-can"],
+      isStarted: true,
+    },
+    newTeamId: "team-ger",
+    pruneCleared: [],
+    fullRoundOf32Official: true,
+    gradual,
+  });
+  const corrected = payloads.find((p) => p.predictionKind === "quarterfinalist");
+  assert.strictEqual(corrected?.teamId, "team-ger");
+  assert.strictEqual(corrected?.valueText ?? null, null);
+}
+
+// Editable downstream clear does not mark out
+{
+  const before = [qfSlotDraft("1", "team-mex")];
+  const after = [qfSlotDraft("1", "")];
+  const audit = summarizeKnockoutPickStatusAuditChanges(before, after);
+  assert.strictEqual(audit.markedOut.length, 0);
+  assert.ok(!isKnockoutPickLockedOut(after[0]!));
+
+  const gradual = getGradualKnockoutSelectionState({
+    matches: [m73Started],
+    teams,
+    fullRoundOf32Official: false,
+  });
+  const payloads = buildAdminKnockoutPickCorrectionWritePayloads({
+    before,
+    after,
+    match: {
+      matchCode: "M73",
+      fifaMatchNo: 73,
+      predictionKind: "round_of_16",
+      slotKey: "1",
+      tournamentStageId: "r16-stage",
+      homeTeamId: "team-can",
+      awayTeamId: "team-mex",
+      oldTeamId: "team-mex",
+      allowedTeamIds: ["team-can", "team-mex"],
+      isStarted: true,
+    },
+    newTeamId: "team-can",
+    pruneCleared: [
+      {
+        predictionKind: "quarterfinalist",
+        slotKey: "1",
+        rowKey: "quarterfinalist|1",
+        teamId: "team-mex",
+        reason: "not_in_official_matchup",
+      },
+    ],
+    fullRoundOf32Official: false,
+    gradual,
+  });
+  const qfPayload = payloads.find((p) => p.predictionKind === "quarterfinalist");
+  assert.strictEqual(qfPayload?.teamId, "");
+  assert.strictEqual(qfPayload?.valueText ?? null, null);
 }
 
 console.log("knockoutPickCorrection.selftest.ts: ok");

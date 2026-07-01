@@ -216,6 +216,7 @@ export async function applyParticipantPickSlots(
         slot_key: s.slotKey,
         bonus_key: null,
         team_id: teamId,
+        value_text: s.valueText ?? null,
       },
       {
         onConflict:

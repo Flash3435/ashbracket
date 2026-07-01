@@ -7,6 +7,9 @@ import type { Prediction, Team, TournamentStage } from "../../src/types/domain";
 import type { KnockoutPickSlotDraft } from "../../types/adminKnockoutPicks";
 import { labelParticipantBonusPick } from "./participantBonusLabels";
 import {
+  applyPickStatusMetadataToDraft,
+} from "./knockoutPickStatus";
+import {
   buildTeamIdToGroupLetter,
   pruneParticipantPicks,
   type GroupTeamCountryCodesByLetter,
@@ -227,6 +230,10 @@ export function buildBracketPickSlotDrafts(
         bonusKey: null,
         teamId: pred?.teamId ?? "",
       });
+      if (pred) {
+        const idx = drafts.length - 1;
+        drafts[idx] = applyPickStatusMetadataToDraft(drafts[idx]!, pred);
+      }
     }
   }
 

@@ -57,6 +57,16 @@ function pickStateBadge(pick: PublicParticipantDisplayPick) {
   const base =
     "inline-flex max-w-[11rem] rounded-full px-2.5 py-0.5 text-[11px] font-semibold uppercase tracking-wide";
 
+  if (status.state === "out") {
+    return (
+      <span
+        className={`${base} border border-red-800/50 bg-red-950/35 text-red-200`}
+        title={status.meaning}
+      >
+        {status.label}
+      </span>
+    );
+  }
   if (status.state === "scored") {
     return (
       <span
