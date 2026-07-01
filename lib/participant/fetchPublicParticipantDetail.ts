@@ -2,6 +2,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { createClient } from "@/lib/supabase/server";
 import { createServiceRoleClient } from "@/lib/supabase/service";
 import { buildPoolStandingsFromLedger } from "../leaderboard/buildPoolStandingsFromLedger";
+import { fetchPoolLedgerLinesForStandings } from "../leaderboard/fetchPoolLedgerLinesForStandings";
 import type { LeaderboardPublicRowDb } from "../../types/leaderboard";
 import type {
   PublicParticipantDetail,
@@ -192,32 +193,29 @@ async function loadPeerPoolParticipantDetail(
   const service = createServiceRoleClient();
   const [
     { data: participants, error: participantsErr },
-    { data: ledgerLines, error: ledgerErr },
+    ledgerRes,
     picks,
   ] = await Promise.all([
     service
       .from("participants")
       .select("id, display_name")
       .eq("pool_id", header.poolId),
-    service
-      .from("points_ledger")
-      .select("participant_id, points_delta")
-      .eq("pool_id", header.poolId),
+    fetchPoolLedgerLinesForStandings(service, header.poolId),
     loadPicksFromPredictionsTable(service, header.poolId, participantId),
   ]);
 
   if (participantsErr) {
     return { ok: false, kind: "error", message: participantsErr.message };
   }
-  if (ledgerErr) {
-    return { ok: false, kind: "error", message: ledgerErr.message };
+  if (!ledgerRes.ok) {
+    return { ok: false, kind: "error", message: ledgerRes.error };
   }
 
   const standings = buildPoolStandingsFromLedger({
     poolId: header.poolId,
     poolName: header.poolName,
     participants: participants ?? [],
-    ledgerLines: ledgerLines ?? [],
+    ledgerLines: ledgerRes.ledgerLines,
   });
   const standingRow = standings.find((row) => row.participantId === participantId);
   if (!standingRow) {
@@ -241,18 +239,29 @@ async function loadPeerPoolParticipantDetail(
     mapLedgerPublicRow(row as PointsLedgerPublicRowDb),
   );
 
+  const { detail, issues } = reconcileParticipantProfileTotals({
+    displayName: standingRow.displayName,
+    poolName: header.poolName,
+    poolId: header.poolId,
+    participantId,
+    totalPoints: standingRow.totalPoints,
+    rank: standingRow.rank,
+    picks,
+    ledger,
+  });
+
+  if (issues.length > 0) {
+    console.warn("[ashbracket:participant-scoring] private pool integrity issues", {
+      participantId: detail.participantId,
+      poolId: detail.poolId,
+      ledgerPageCount: ledgerRes.pageCount,
+      issues,
+    });
+  }
+
   return {
     ok: true,
-    data: {
-      displayName: standingRow.displayName,
-      poolName: header.poolName,
-      poolId: header.poolId,
-      participantId,
-      totalPoints: standingRow.totalPoints,
-      rank: standingRow.rank,
-      picks,
-      ledger,
-    },
+    data: detail,
   };
 }
 

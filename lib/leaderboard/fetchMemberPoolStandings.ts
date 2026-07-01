@@ -2,6 +2,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { createClient } from "@/lib/supabase/server";
 import { createServiceRoleClient } from "@/lib/supabase/service";
 import { buildPoolStandingsFromLedger } from "./buildPoolStandingsFromLedger";
+import { fetchPoolLedgerLinesForStandings } from "./fetchPoolLedgerLinesForStandings";
 import type { LeaderboardPublicRow } from "../../types/leaderboard";
 
 export type FetchMemberPoolStandingsResult =
@@ -41,7 +42,7 @@ export async function fetchMemberPoolStandings(
   const [
     { data: poolRow, error: poolErr },
     { data: participants, error: pErr },
-    { data: ledger, error: lErr },
+    ledgerRes,
   ] = await Promise.all([
     service
       .from("pools")
@@ -52,10 +53,7 @@ export async function fetchMemberPoolStandings(
       .from("participants")
       .select("id, display_name")
       .eq("pool_id", trimmedPoolId),
-    service
-      .from("points_ledger")
-      .select("participant_id, points_delta")
-      .eq("pool_id", trimmedPoolId),
+    fetchPoolLedgerLinesForStandings(service, trimmedPoolId),
   ]);
 
   if (poolErr || !poolRow) {
@@ -64,8 +62,8 @@ export async function fetchMemberPoolStandings(
   if (pErr) {
     return { ok: false, error: pErr.message };
   }
-  if (lErr) {
-    return { ok: false, error: lErr.message };
+  if (!ledgerRes.ok) {
+    return { ok: false, error: ledgerRes.error };
   }
 
   const poolName = String(poolRow.name ?? "").trim() || "Pool";
@@ -73,7 +71,7 @@ export async function fetchMemberPoolStandings(
     poolId: trimmedPoolId,
     poolName,
     participants: participants ?? [],
-    ledgerLines: ledger ?? [],
+    ledgerLines: ledgerRes.ledgerLines,
   });
 
   return { ok: true, rows, poolName };
