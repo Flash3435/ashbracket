@@ -5,6 +5,10 @@ import {
   type LeaderboardStandingsPointRow,
 } from "./buildLeaderboardMomentum";
 import type { LeaderboardPublicRow } from "../../types/leaderboard";
+import {
+  parsePreviousStandingsFromMetadata,
+  validateLeaderboardMomentumSnapshot,
+} from "./validateLeaderboardMomentumSnapshot";
 
 type MomentumMetadataRow = {
   participant_id?: unknown;
@@ -31,19 +35,7 @@ function readString(v: unknown): string | null {
 function parsePreviousRowsFromMetadata(
   metadata: Record<string, unknown>,
 ): LeaderboardStandingsPointRow[] | null {
-  const raw = metadata.previous_standings;
-  if (!Array.isArray(raw)) return null;
-
-  const rows: LeaderboardStandingsPointRow[] = [];
-  for (const item of raw) {
-    if (item == null || typeof item !== "object") continue;
-    const participantId = readString((item as { participant_id?: unknown }).participant_id);
-    const totalPoints = readNumber((item as { total_points?: unknown }).total_points);
-    if (!participantId || totalPoints == null) continue;
-    rows.push({ participantId, totalPoints });
-  }
-
-  return rows.length > 0 ? rows : null;
+  return parsePreviousStandingsFromMetadata(metadata);
 }
 
 function parseMomentumFromMetadata(
@@ -115,5 +107,18 @@ export async function fetchLeaderboardMomentumForPool(
     return null;
   }
 
-  return parseMomentumFromMetadata(data.metadata_json as Record<string, unknown>, currentRows);
+  const metadata = data.metadata_json as Record<string, unknown>;
+  const validation = validateLeaderboardMomentumSnapshot({
+    metadata,
+    currentRows,
+  });
+  if (!validation.valid) {
+    console.warn("[ashbracket:leaderboard-momentum] ignoring invalid snapshot", {
+      poolId,
+      reason: validation.reason,
+    });
+    return { hasPreviousSnapshot: false, rows: [] };
+  }
+
+  return parseMomentumFromMetadata(metadata, currentRows);
 }

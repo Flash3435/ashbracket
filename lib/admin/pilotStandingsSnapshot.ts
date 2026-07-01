@@ -1,5 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { createHash } from "crypto";
+import { fetchPoolLedgerLinesForStandings } from "@/lib/leaderboard/fetchPoolLedgerLinesForStandings";
 import { fetchWcLedgerRecomputeDiagnosticsForPools } from "./wcLedgerRecomputeDiagnostics";
 
 export type PilotStandingsRow = {
@@ -40,19 +41,15 @@ export async function capturePoolStandingsState(
 
   if (pErr) throw new Error(pErr.message);
 
-  const { data: ledger, error: lErr } = await supabase
-    .from("points_ledger")
-    .select("participant_id, points_delta")
-    .eq("pool_id", poolId);
-
-  if (lErr) throw new Error(lErr.message);
+  const ledgerRes = await fetchPoolLedgerLinesForStandings(supabase, poolId);
+  if (!ledgerRes.ok) throw new Error(ledgerRes.error);
 
   const totals = new Map<string, number>();
   for (const p of participants ?? []) {
     totals.set(p.id as string, 0);
   }
-  for (const line of ledger ?? []) {
-    const pid = line.participant_id as string;
+  for (const line of ledgerRes.ledgerLines) {
+    const pid = line.participant_id;
     const delta = Number(line.points_delta ?? 0);
     totals.set(pid, (totals.get(pid) ?? 0) + delta);
   }

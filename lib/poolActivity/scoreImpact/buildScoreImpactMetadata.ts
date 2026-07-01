@@ -1,5 +1,9 @@
 import type { PilotStandingsRow } from "@/lib/admin/pilotStandingsSnapshot";
 import { buildLeaderboardMomentum } from "@/lib/leaderboard/buildLeaderboardMomentum";
+import {
+  STANDINGS_CAPTURE_VERSION,
+  STANDINGS_CAPTURE_VERSION_KEY,
+} from "@/lib/leaderboard/validateLeaderboardMomentumSnapshot";
 import { formatBiggestMover } from "./detectScoreImpact";
 import type {
   ScoreImpactActivityMetadata,
@@ -103,6 +107,7 @@ export function buildScoreImpactMetadata(input: {
 
   if (momentum.hasPreviousSnapshot) {
     metadata.has_previous_snapshot = true;
+    metadata[STANDINGS_CAPTURE_VERSION_KEY] = STANDINGS_CAPTURE_VERSION;
     metadata.previous_standings = input.beforeRows.map((row) => ({
       participant_id: row.participantId,
       total_points: row.totalPoints,

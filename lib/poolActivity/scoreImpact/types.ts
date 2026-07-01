@@ -130,6 +130,8 @@ export type ScoreImpactActivityMetadata = {
   }>;
   reason: ScoreImpactReason;
   soft_impact?: ScoreImpactSoftImpactMetadata;
+  /** >= 2 when before/after standings used paginated ledger capture. */
+  standings_capture_version?: number;
 };
 
 export type ScoreImpactRunContext = {
