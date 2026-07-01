@@ -16,7 +16,8 @@ export type AdminRiskAction =
   | "pool_communications_test"
   | "participant_invite_email"
   | "participant_pool_move"
-  | "pool_admin_invite_email";
+  | "pool_admin_invite_email"
+  | "knockout_out_pick_backfill_restore";
 
 export type AdminRiskAuditPayload = {
   action: AdminRiskAction;

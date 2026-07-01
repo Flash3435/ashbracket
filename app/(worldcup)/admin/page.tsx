@@ -250,6 +250,16 @@ export default async function AdminHomePage() {
               <span> — verify environment, snapshots, and live pool isolation.</span>
             </li>
             <li>
+              <Link href="/admin/knockout-out-backfill" className="ash-link">
+                Knockout out-pick backfill review
+              </Link>
+              <span>
+                {" "}
+                — review and restore historical locked picks marked out from audit
+                logs.
+              </span>
+            </li>
+            <li>
               <Link href="/admin/simulation" className="ash-link text-amber-200/90">
                 Simulation testing
               </Link>
