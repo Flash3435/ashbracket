@@ -8,6 +8,10 @@ import {
   type PickDisplayState,
 } from "./publicParticipantPresentation";
 import type { PublicParticipantDetail } from "../../types/publicParticipant";
+import {
+  assertParticipantScoringTotalsConsistent,
+  sumParticipantLedgerPoints,
+} from "./participantScoringConsistency";
 
 function statusLabel(state: PickDisplayState): string {
   return pickStatusPresentation(state).label;
@@ -22,7 +26,7 @@ const detail: PublicParticipantDetail = {
   poolName: "Pool",
   poolId: "pool-1",
   participantId: "part-1",
-  totalPoints: 5,
+  totalPoints: 3,
   rank: 1,
   picks: [
     {
@@ -89,5 +93,12 @@ assert.equal(group!.emptyPicksCount, 1);
 
 assert.equal(ledgerItems[0]?.dateLabel.length > 0, true);
 assert.equal(ledgerItems[0]?.stageLabel, "Group stage");
+
+assertParticipantScoringTotalsConsistent({
+  leaderboardTotal: detail.totalPoints,
+  profileHeaderTotal: detail.totalPoints,
+  ledgerTotal: sumParticipantLedgerPoints(detail.ledger),
+  stageTotals: sections.map((section) => section.totalPoints),
+});
 
 console.log("publicParticipantPresentation selftest: ok");

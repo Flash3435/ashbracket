@@ -1,4 +1,5 @@
 import { LedgerRecomputeDiagnosticsTable } from "@/components/admin/LedgerRecomputeDiagnosticsTable";
+import { PoolScoringIntegrityWarning } from "@/components/admin/PoolScoringIntegrityWarning";
 import { RecomputeStandingsPanel } from "@/components/admin/RecomputeStandingsPanel";
 import { SimulationModeBanner } from "@/components/admin/SimulationModeBanner";
 import { PageContainer } from "@/components/ui/PageContainer";
@@ -6,6 +7,7 @@ import { PageTitle } from "@/components/ui/PageTitle";
 import { isProductionDeployment } from "@/lib/admin/deploymentEnvironment";
 import { fetchPoolImpactSummary } from "@/lib/admin/fetchAdminImpactSummary";
 import { fetchWcLedgerRecomputeDiagnosticsForPools } from "@/lib/admin/wcLedgerRecomputeDiagnostics";
+import { loadPoolScoringIntegrityDiagnostics } from "@/lib/admin/loadParticipantScoringIntegrityDiagnostics";
 import { requireManagedPool } from "@/lib/admin/requireManagedPool";
 import { createClient } from "@/lib/supabase/server";
 
@@ -24,6 +26,10 @@ export default async function AdminPoolStandingsPage({
     supabase,
     [poolId],
   );
+  const scoringIntegrity = await loadPoolScoringIntegrityDiagnostics(
+    supabase,
+    poolId,
+  );
   const poolImpact = await fetchPoolImpactSummary(supabase, poolId);
   const isProduction = isProductionDeployment();
 
@@ -40,6 +46,7 @@ export default async function AdminPoolStandingsPage({
       {pool.is_simulation ? (
         <SimulationModeBanner variant="simulation" poolName={pool.name} className="mb-4" />
       ) : null}
+      <PoolScoringIntegrityWarning warningMessage={scoringIntegrity.warningMessage} />
       <LedgerRecomputeDiagnosticsTable
         title="Ledger recompute (this pool)"
         description="When this pool’s leaderboard was last rebuilt successfully, and from which path."

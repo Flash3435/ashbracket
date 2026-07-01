@@ -198,6 +198,7 @@ export async function loadParticipantBracketSnapshot(
           "prediction_id, participant_id, pool_id, prediction_kind, group_code, slot_key, bonus_key, stage_code, stage_label, stage_sort_order, team_name, team_country_code, pick_is_out",
         )
         .eq("participant_id", trimmed)
+        .eq("pool_id", header.poolId)
         .order("stage_sort_order", { ascending: true, nullsFirst: false })
         .order("prediction_kind", { ascending: true });
 

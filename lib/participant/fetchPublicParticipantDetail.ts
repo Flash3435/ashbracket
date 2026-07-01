@@ -18,6 +18,7 @@ import {
   decodeKnockoutPickStatusMetadata,
 } from "../predictions/knockoutPickStatus";
 import { normalizeParticipantProfileRouteId } from "./participantProfileRouting";
+import { reconcileParticipantProfileTotals } from "./participantScoringConsistency";
 
 type ParticipantBracketHeaderRpcRow = {
   display_name: string;
@@ -115,6 +116,7 @@ async function loadPublicPoolParticipantDetail(
         "pool_id, pool_name, participant_id, display_name, total_points, rank",
       )
       .eq("participant_id", participantId)
+      .eq("pool_id", header.poolId)
       .maybeSingle(),
     supabase
       .from("predictions_public")
@@ -122,6 +124,7 @@ async function loadPublicPoolParticipantDetail(
         "prediction_id, participant_id, pool_id, prediction_kind, group_code, slot_key, bonus_key, stage_code, stage_label, stage_sort_order, team_name, team_country_code, pick_is_out",
       )
       .eq("participant_id", participantId)
+      .eq("pool_id", header.poolId)
       .order("stage_sort_order", { ascending: true, nullsFirst: false })
       .order("prediction_kind", { ascending: true }),
     supabase
@@ -130,6 +133,7 @@ async function loadPublicPoolParticipantDetail(
         "id, participant_id, pool_id, points_delta, prediction_kind, created_at, prediction_id, result_id",
       )
       .eq("participant_id", participantId)
+      .eq("pool_id", header.poolId)
       .order("created_at", { ascending: false }),
   ]);
 
@@ -156,18 +160,28 @@ async function loadPublicPoolParticipantDetail(
     mapLedgerPublicRow(row as PointsLedgerPublicRowDb),
   );
 
+  const { detail, issues } = reconcileParticipantProfileTotals({
+    displayName: summary.displayName,
+    poolName: summary.poolName,
+    poolId: summary.poolId,
+    participantId: summary.participantId,
+    totalPoints: summary.totalPoints,
+    rank: summary.rank,
+    picks,
+    ledger,
+  });
+
+  if (issues.length > 0) {
+    console.warn("[ashbracket:participant-scoring] integrity issues", {
+      participantId: detail.participantId,
+      poolId: detail.poolId,
+      issues,
+    });
+  }
+
   return {
     ok: true,
-    data: {
-      displayName: summary.displayName,
-      poolName: summary.poolName,
-      poolId: summary.poolId,
-      participantId: summary.participantId,
-      totalPoints: summary.totalPoints,
-      rank: summary.rank,
-      picks,
-      ledger,
-    },
+    data: detail,
   };
 }
 
