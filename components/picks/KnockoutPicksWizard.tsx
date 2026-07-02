@@ -97,6 +97,7 @@ import {
   FINAL_MATCH_INCOMPLETE_MSG,
   isKnockoutMatchDirectPickEligible,
   usesKnockoutMatchPickRows,
+  knockoutMatchSavedPickPresentation,
   validatedKnockoutMatchWinner,
   type KnockoutMatchPickRow,
   type KnockoutWizardBracketKind,
@@ -2350,6 +2351,12 @@ export function KnockoutPicksWizard({
                     matchRow.lockReason === "pickable"
                       ? matchRow.display.emptyPrimaryLine
                       : null;
+                  const isLockedKnockoutRow =
+                    matchRow.lockReason === "started" ||
+                    matchRow.lockReason === "frozen";
+                  const savedPickPresentation = isLockedKnockoutRow
+                    ? knockoutMatchSavedPickPresentation(matchRow, teams)
+                    : null;
 
                   return (
                     <li
@@ -2390,6 +2397,11 @@ export function KnockoutPicksWizard({
                                 setSearch("");
                               }}
                             />
+                            {!isEmptyPick ? (
+                              <p className="mt-2 text-sm font-medium text-ash-text">
+                                Saved pick: {team?.name ?? selectedTeamId}
+                              </p>
+                            ) : null}
                             {team ? (
                               <div className="mt-2 flex flex-wrap gap-2">
                                 <button
@@ -2407,6 +2419,51 @@ export function KnockoutPicksWizard({
                               </div>
                             ) : null}
                           </>
+                        ) : isLockedKnockoutRow && savedPickPresentation ? (
+                          <div className="mt-1 space-y-1">
+                            {savedPickPresentation.matchupLine ? (
+                              <p className="text-sm font-medium text-ash-text">
+                                {savedPickPresentation.matchupLine}
+                              </p>
+                            ) : null}
+                            <p
+                              className={`text-sm font-medium ${
+                                savedPickPresentation.savedPickStatus ===
+                                "missing"
+                                  ? "text-amber-100/90"
+                                  : "text-ash-text"
+                              }`}
+                            >
+                              {savedPickPresentation.savedPickSummaryLine}
+                            </p>
+                            {savedPickPresentation.savedPickWarning ? (
+                              <p
+                                className="text-xs font-medium text-amber-200/90"
+                                role="status"
+                              >
+                                {savedPickPresentation.savedPickWarning}
+                              </p>
+                            ) : null}
+                            {savedPickPresentation.lockStatusLine ? (
+                              <p
+                                className="mt-2 rounded-md border border-sky-800/40 bg-sky-950/20 px-3 py-2 text-xs text-sky-100"
+                                role="status"
+                              >
+                                {savedPickPresentation.lockStatusLine}
+                              </p>
+                            ) : null}
+                            {renderAdminKnockoutCorrectionButton({
+                              matchCode: `M${matchRow.fifaMatchNo}`,
+                              matchLabel: heading,
+                              allowedTeamIds: [
+                                matchRow.homeTeamId,
+                                matchRow.awayTeamId,
+                              ].filter((id): id is string => Boolean(id)),
+                              currentTeamId:
+                                savedPickPresentation.savedPickTeamId ??
+                                undefined,
+                            })}
+                          </div>
                         ) : (
                           <div className="mt-1">
                             <p
@@ -2439,21 +2496,10 @@ export function KnockoutPicksWizard({
                             ) : null}
                           </div>
                         )}
-                        {(matchRow.lockReason === "started" ||
-                          matchRow.lockReason === "frozen")
-                          ? renderAdminKnockoutCorrectionButton({
-                              matchCode: `M${matchRow.fifaMatchNo}`,
-                              matchLabel: heading,
-                              allowedTeamIds: [
-                                matchRow.homeTeamId,
-                                matchRow.awayTeamId,
-                              ].filter((id): id is string => Boolean(id)),
-                              currentTeamId: selectedTeamId || undefined,
-                            })
-                          : null}
                       </div>
 
                       {matchRow.display.statusLine &&
+                      !isLockedKnockoutRow &&
                       isEmptyPick &&
                       matchRow.display.statusLine !==
                         matchRow.display.emptyPrimaryLine ? (

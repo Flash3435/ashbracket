@@ -520,6 +520,75 @@ export function validatedKnockoutMatchWinner(
   return null;
 }
 
+export type KnockoutMatchSavedPickStatus = "valid" | "missing" | "stale";
+
+export type KnockoutMatchSavedPickPresentation = {
+  savedPickTeamId: string | null;
+  savedPickLabel: string | null;
+  savedPickStatus: KnockoutMatchSavedPickStatus;
+  savedPickSummaryLine: string;
+  savedPickWarning: string | null;
+  lockStatusLine: string | null;
+  matchupLine: string | null;
+};
+
+function knockoutMatchRowMatchupLine(row: KnockoutMatchPickRow): string | null {
+  const primary = row.display.emptyPrimaryLine?.trim() ?? "";
+  if (primary.includes(" vs ")) return primary;
+  return null;
+}
+
+/** Saved pick copy for locked knockout rows — uses stored slot data, not validated draft state. */
+export function knockoutMatchSavedPickPresentation(
+  row: KnockoutMatchPickRow,
+  teams: Team[],
+): KnockoutMatchSavedPickPresentation {
+  const savedPickTeamId = row.winnerTeamId.trim() || null;
+  const savedPickLabel = savedPickTeamId
+    ? teamName(savedPickTeamId, teams)
+    : null;
+  const validatedId = validatedKnockoutMatchWinner(row);
+
+  let savedPickStatus: KnockoutMatchSavedPickStatus;
+  if (!savedPickTeamId) {
+    savedPickStatus = "missing";
+  } else if (validatedId) {
+    savedPickStatus = "valid";
+  } else {
+    savedPickStatus = "stale";
+  }
+
+  const savedPickSummaryLine =
+    savedPickStatus === "missing"
+      ? "No pick saved"
+      : `Saved pick: ${savedPickLabel ?? savedPickTeamId}`;
+
+  let savedPickWarning: string | null = null;
+  if (row.pickStatus === "out" && savedPickTeamId) {
+    savedPickWarning = row.display.statusLine ?? "Pick out";
+  } else if (savedPickStatus === "stale") {
+    savedPickWarning = "Does not match this matchup anymore.";
+  }
+
+  let lockStatusLine: string | null = null;
+  if (row.lockReason === "started") {
+    lockStatusLine = row.display.statusLine ?? "Locked at kickoff";
+  } else if (row.lockReason === "frozen") {
+    lockStatusLine =
+      row.display.statusLine ?? "Locked — feeder results are official.";
+  }
+
+  return {
+    savedPickTeamId,
+    savedPickLabel,
+    savedPickStatus,
+    savedPickSummaryLine,
+    savedPickWarning,
+    lockStatusLine,
+    matchupLine: knockoutMatchRowMatchupLine(row),
+  };
+}
+
 /**
  * Bracket progression winner: valid participant pick, otherwise the published
  * fixture result when the row is locked by official feeders or kickoff.

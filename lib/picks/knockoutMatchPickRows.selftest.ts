@@ -7,6 +7,7 @@ import {
   FINAL_MATCH_INCOMPLETE_MSG,
   incompleteR16MatchMessage,
   isKnockoutMatchDirectPickEligible,
+  knockoutMatchSavedPickPresentation,
   knockoutMatchStepComplete,
   knockoutMatchTeamPickAriaLabel,
   readConfirmedR32MatchWinner,
@@ -1742,6 +1743,114 @@ function r32Side(slotKey: string, teamId = ""): KnockoutPickSlotDraft {
       "M74",
     ),
   );
+}
+
+// Locked Round of 16 rows expose saved pick state for admin display.
+{
+  const tournamentMatches: TournamentMatchPublicRow[] = [
+    {
+      match_id: "m77",
+      edition_id: "ed",
+      edition_code: "2026",
+      match_code: "M77",
+      stage_code: "round_of_32",
+      stage_label: "Round of 32",
+      stage_sort_order: 1,
+      group_code: null,
+      round_index: 0,
+      kickoff_at: "2026-07-01T18:00:00Z",
+      status: "finished",
+      home_goals: 2,
+      away_goals: 1,
+      home_penalties: null,
+      away_penalties: null,
+      home_team_name: "Sweden",
+      home_country_code: "SWE",
+      away_team_name: "France",
+      away_country_code: "FRA",
+      winner_team_name: "Sweden",
+      winner_country_code: "SWE",
+    },
+  ];
+  const baseSlots: KnockoutPickSlotDraft[] = [
+    r16Slot("2", "team-ger"),
+    r16Slot("5", "team-fra"),
+    ...Array.from({ length: 14 }, (_, i) =>
+      r16Slot(String(i < 1 ? i + 1 : i + 2)),
+    ),
+    ...Array.from({ length: 8 }, (_, i) => qfSlot(String(i + 1))),
+  ];
+  const frozenRows = buildKnockoutMatchPickRows({
+    bracketKind: "round_of_16",
+    slots: baseSlots,
+    teams,
+    tournamentMatches,
+    gradual: emptyGradual,
+    knockoutBracketPicksUnlocked: true,
+  });
+  const frozenM89 = frozenRows.find((r) => r.fifaMatchNo === 89)!;
+  assert.strictEqual(frozenM89.lockReason, "frozen");
+
+  const missingPick = knockoutMatchSavedPickPresentation(frozenM89, teams);
+  assert.strictEqual(missingPick.savedPickStatus, "missing");
+  assert.strictEqual(missingPick.savedPickSummaryLine, "No pick saved");
+  assert.strictEqual(
+    missingPick.lockStatusLine,
+    "Locked — feeder results are official.",
+  );
+  assert.strictEqual(missingPick.matchupLine, "Germany vs Sweden");
+  assert.ok(
+    !missingPick.savedPickSummaryLine.toLowerCase().includes("admin"),
+    "participant-facing saved pick copy must not mention admin correction",
+  );
+
+  const withValidPick = applyKnockoutMatchWinnerToSlots(
+    baseSlots,
+    frozenM89,
+    "team-swe",
+  );
+  const validRows = buildKnockoutMatchPickRows({
+    bracketKind: "round_of_16",
+    slots: withValidPick,
+    teams,
+    tournamentMatches,
+    gradual: emptyGradual,
+    knockoutBracketPicksUnlocked: true,
+  });
+  const validM89 = validRows.find((r) => r.fifaMatchNo === 89)!;
+  const validPick = knockoutMatchSavedPickPresentation(validM89, teams);
+  assert.strictEqual(validPick.savedPickStatus, "valid");
+  assert.strictEqual(validPick.savedPickSummaryLine, "Saved pick: Sweden");
+  assert.strictEqual(validPick.savedPickTeamId, "team-swe");
+  assert.strictEqual(
+    validPick.lockStatusLine,
+    "Locked — feeder results are official.",
+  );
+  assert.strictEqual(validPick.savedPickWarning, null);
+
+  const staleSlots = [
+    ...baseSlots.filter(
+      (s) => !(s.predictionKind === "quarterfinalist" && s.slotKey === "1"),
+    ),
+    qfSlot("1", "team-bra"),
+  ];
+  const staleRows = buildKnockoutMatchPickRows({
+    bracketKind: "round_of_16",
+    slots: staleSlots,
+    teams,
+    tournamentMatches,
+    gradual: emptyGradual,
+    knockoutBracketPicksUnlocked: true,
+  });
+  const staleM89 = staleRows.find((r) => r.fifaMatchNo === 89)!;
+  const stalePick = knockoutMatchSavedPickPresentation(staleM89, teams);
+  assert.strictEqual(stalePick.savedPickStatus, "stale");
+  assert.strictEqual(stalePick.savedPickSummaryLine, "Saved pick: Brazil");
+  assert.strictEqual(
+    stalePick.savedPickWarning,
+    "Does not match this matchup anymore.",
+  );
+  assert.strictEqual(stalePick.savedPickTeamId, "team-bra");
 }
 
 console.log("knockoutMatchPickRows.selftest.ts: ok");
