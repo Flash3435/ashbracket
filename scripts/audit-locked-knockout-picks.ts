@@ -31,6 +31,7 @@ import {
   type ConfirmedR32WinnerContext,
 } from "../lib/picks/knockoutMatchPickRows";
 import { getGradualKnockoutSelectionState } from "../lib/picks/gradualKnockoutUnlock";
+import { pickStatusFromPrediction } from "../lib/predictions/knockoutPickStatus";
 import { mapPredictionRow } from "../src/lib/scoring/mapSupabaseRows";
 import type { Prediction, Team } from "../src/types/domain";
 import type { KnockoutPickSlotDraft } from "../types/adminKnockoutPicks";
@@ -118,7 +119,6 @@ function teamName(teamId: string | null, teams: Team[]): string | null {
 }
 
 function buildR32WinnerContext(
-  slots: KnockoutPickSlotDraft[],
   teams: Team[],
   tournamentMatches: TournamentMatchPublicRow[] | null,
   knockoutBracketPicksUnlocked: boolean,
@@ -128,7 +128,12 @@ function buildR32WinnerContext(
     teams,
     fullRoundOf32Official: knockoutBracketPicksUnlocked,
   });
-  return { slots, teams, tournamentMatches, gradual };
+  return {
+    teams,
+    tournamentMatches,
+    gradual,
+    knockoutBracketPicksUnlocked,
+  };
 }
 
 function mirrorWizardSlotStates(input: {
@@ -144,7 +149,6 @@ function mirrorWizardSlotStates(input: {
   slotsAfterInvalidation: KnockoutPickSlotDraft[];
 } {
   const r32WinnerContext = buildR32WinnerContext(
-    input.initialSlots,
     input.teams,
     input.tournamentMatches,
     input.knockoutBracketPicksUnlocked,
@@ -285,7 +289,9 @@ async function auditPool(pool: { id: string; name: string }): Promise<AuditRow[]
   ) as Partial<Record<string, (typeof stages)[number]>>;
   const teams = (teamsRes.data ?? []).map(mapTeamRow);
   const predictions = (predsRes.data ?? []).map(mapPredictionRow);
-  const bonusKeys = participantBonusKeysForPool(bonusRes.data ?? []);
+  const bonusKeys = participantBonusKeysForPool(
+    (bonusRes.data ?? []).map((r) => String(r.bonus_key ?? "")),
+  );
   const knockoutBracketPicksUnlocked = true;
   const quarterfinalStage = stageByCode.quarterfinal;
   if (!quarterfinalStage) return [];
@@ -342,7 +348,9 @@ async function auditPool(pool: { id: string; name: string }): Promise<AuditRow[]
         continue;
       }
 
-      const slotKey = matchRow.saveSlotKey;
+      const slotKey = matchRow.saveSlotKey?.trim();
+      if (!slotKey) continue;
+
       const rawPred = rawDbQuarterfinalistPick(
         predictions,
         participant.id,
@@ -401,10 +409,7 @@ async function auditPool(pool: { id: string; name: string }): Promise<AuditRow[]
       ) {
         flags.push("path_repair_would_clear_locked_slot");
       }
-      if (
-        presentation.savedPickStatus === "stale" ||
-        (rawDbTeamId && presentation.savedPickStatus === "stale")
-      ) {
+      if (presentation.savedPickStatus === "stale") {
         flags.push("stale_pick_should_still_show");
       }
       if (presentation.savedPickStatus === "missing" && rawDbTeamId) {
@@ -424,7 +429,9 @@ async function auditPool(pool: { id: string; name: string }): Promise<AuditRow[]
         lockReason: matchRow.lockReason,
         rawDbTeamId,
         rawDbTeamName: teamName(rawDbTeamId, teams),
-        rawDbPickStatus: rawPred?.pickStatus ?? null,
+        rawDbPickStatus: rawPred
+          ? pickStatusFromPrediction(rawPred).pickStatus
+          : null,
         rawDbValueText: rawPred?.valueText ?? null,
         initialSlotTeamId: initialTeamId,
         normalizedSlotTeamId: normalizedTeamId,
