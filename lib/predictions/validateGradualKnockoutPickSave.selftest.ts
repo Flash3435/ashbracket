@@ -1,8 +1,19 @@
 import assert from "node:assert";
 import type { Team } from "../../src/types/domain";
+import type { KnockoutPickSlotDraft } from "../../types/adminKnockoutPicks";
 import type { TournamentMatchPublicRow } from "../../types/tournamentPublic";
 import type { Prediction } from "../../src/types/domain";
-import { applyGradualKnockoutPickSaveGuards } from "./validateGradualKnockoutPickSave";
+import { r32SlotKeysForMatchIndex } from "../bracket/wc2026RoundOf32";
+import {
+  getGradualKnockoutSelectionState,
+  promoteGradualR32WinnersToRoundOf32Slots,
+} from "../picks/gradualKnockoutUnlock";
+import { participantPickSlotPayloadFromDraft } from "./knockoutPickStatus";
+import {
+  applyGradualKnockoutPickSaveGuards,
+  validateFrozenKnockoutSwapAttempts,
+  validateKnockoutParticipantPickChanges,
+} from "./validateGradualKnockoutPickSave";
 
 function match(
   partial: Partial<TournamentMatchPublicRow> &
@@ -28,8 +39,8 @@ function match(
     home_country_code: partial.home_country_code ?? null,
     away_team_name: partial.away_team_name ?? "Away",
     away_country_code: partial.away_country_code ?? null,
-    winner_team_name: null,
-    winner_country_code: null,
+    winner_team_name: partial.winner_team_name ?? null,
+    winner_country_code: partial.winner_country_code ?? null,
   };
 }
 
@@ -413,6 +424,315 @@ const existing: Prediction[] = [
     nowMs: new Date("2026-06-28T19:30:00Z").getTime(),
   });
   assert.ok(result.error?.includes("kicked off"), result.error ?? "");
+}
+
+// Locked Round of 32 with official result: save unrelated R16 pick while client
+// payload includes promoted official sides or auto-cleared legacy R32 rows.
+{
+  const extraTeams: Team[] = [
+    {
+      id: "team-ger",
+      name: "Germany",
+      countryCode: "GER",
+      fifaCode: "GER",
+      fifaRank: 5,
+      fifaRankAsOf: null,
+      createdAt: "",
+      updatedAt: "",
+    },
+    {
+      id: "team-par",
+      name: "Paraguay",
+      countryCode: "PAR",
+      fifaCode: "PAR",
+      fifaRank: 50,
+      fifaRankAsOf: null,
+      createdAt: "",
+      updatedAt: "",
+    },
+    {
+      id: "team-fra",
+      name: "France",
+      countryCode: "FRA",
+      fifaCode: "FRA",
+      fifaRank: 2,
+      fifaRankAsOf: null,
+      createdAt: "",
+      updatedAt: "",
+    },
+    {
+      id: "team-egy",
+      name: "Egypt",
+      countryCode: "EGY",
+      fifaCode: "EGY",
+      fifaRank: 30,
+      fifaRankAsOf: null,
+      createdAt: "",
+      updatedAt: "",
+    },
+  ];
+  const allTeams = [...teams, ...extraTeams];
+  const m82 = match({
+    match_code: "M82",
+    stage_code: "round_of_32",
+    status: "finished",
+    home_country_code: "GER",
+    away_country_code: "PAR",
+    winner_country_code: "PAR",
+  });
+  const m74 = match({
+    match_code: "M74",
+    stage_code: "round_of_32",
+    status: "finished",
+    home_country_code: "GER",
+    away_country_code: "EGY",
+    winner_country_code: "GER",
+  });
+  const m77 = match({
+    match_code: "M77",
+    stage_code: "round_of_32",
+    status: "finished",
+    home_country_code: "FRA",
+    away_country_code: "EGY",
+    winner_country_code: "FRA",
+  });
+  const m89 = match({
+    match_code: "M89",
+    stage_code: "round_of_16",
+    kickoff_at: "2026-07-05T18:00:00Z",
+    home_country_code: "GER",
+    away_country_code: "FRA",
+  });
+  const lockedMatches = [m74, m77, m82, m89];
+  const lockedNowMs = new Date("2026-07-04T12:00:00Z").getTime();
+  const lockedGradual = getGradualKnockoutSelectionState({
+    matches: lockedMatches,
+    teams: allTeams,
+    nowMs: lockedNowMs,
+    fullRoundOf32Official: true,
+  });
+  const { top: m82Top, bottom: m82Bottom } = r32SlotKeysForMatchIndex(9);
+
+  const savedOnR16: Prediction[] = [
+    {
+      id: "p-r16-m82",
+      poolId: "pool",
+      participantId: "par",
+      predictionKind: "round_of_16",
+      teamId: "team-par",
+      tournamentStageId: stageR16,
+      groupCode: null,
+      slotKey: "10",
+      bonusKey: null,
+      valueText: null,
+      createdAt: "",
+      updatedAt: "",
+    },
+    {
+      id: "p-m89",
+      poolId: "pool",
+      participantId: "par",
+      predictionKind: "quarterfinalist",
+      teamId: "",
+      tournamentStageId: stageR16,
+      groupCode: null,
+      slotKey: "1",
+      bonusKey: null,
+      valueText: null,
+      createdAt: "",
+      updatedAt: "",
+    },
+  ];
+  const savedOnR32: Prediction[] = [
+    {
+      id: "p-r32-m82",
+      poolId: "pool",
+      participantId: "par",
+      predictionKind: "round_of_32",
+      teamId: "team-par",
+      tournamentStageId: stageR32,
+      groupCode: null,
+      slotKey: m82Bottom,
+      bonusKey: null,
+      valueText: null,
+      createdAt: "",
+      updatedAt: "",
+    },
+  ];
+
+  function payloadFromDrafts(drafts: KnockoutPickSlotDraft[]) {
+    return drafts.map((s) => participantPickSlotPayloadFromDraft(s));
+  }
+
+  let clientSlots: KnockoutPickSlotDraft[] = [
+    {
+      rowKey: "round_of_16|10",
+      sectionLabel: "",
+      slotLabel: "",
+      predictionKind: "round_of_16",
+      tournamentStageId: stageR16,
+      slotKey: "10",
+      groupCode: null,
+      bonusKey: null,
+      teamId: "team-par",
+    },
+    {
+      rowKey: `round_of_32|${m82Top}`,
+      sectionLabel: "",
+      slotLabel: "",
+      predictionKind: "round_of_32",
+      tournamentStageId: stageR32,
+      slotKey: m82Top,
+      groupCode: null,
+      bonusKey: null,
+      teamId: "",
+    },
+    {
+      rowKey: `round_of_32|${m82Bottom}`,
+      sectionLabel: "",
+      slotLabel: "",
+      predictionKind: "round_of_32",
+      tournamentStageId: stageR32,
+      slotKey: m82Bottom,
+      groupCode: null,
+      bonusKey: null,
+      teamId: "",
+    },
+    {
+      rowKey: "quarterfinalist|1",
+      sectionLabel: "",
+      slotLabel: "",
+      predictionKind: "quarterfinalist",
+      tournamentStageId: stageR16,
+      slotKey: "1",
+      groupCode: null,
+      bonusKey: null,
+      teamId: "team-fra",
+    },
+  ];
+  clientSlots = promoteGradualR32WinnersToRoundOf32Slots(
+    clientSlots,
+    lockedGradual,
+    allTeams,
+  );
+
+  const m89Save = applyGradualKnockoutPickSaveGuards({
+    incoming: payloadFromDrafts(clientSlots),
+    existing: savedOnR16,
+    teams: allTeams,
+    matches: lockedMatches,
+    fullRoundOf32Official: true,
+    nowMs: lockedNowMs,
+  });
+  assert.strictEqual(
+    m89Save.error,
+    null,
+    "M89 save succeeds when locked M82 rows carry promoted official sides",
+  );
+  assert.strictEqual(
+    m89Save.slots.find(
+      (s) => s.predictionKind === "quarterfinalist" && s.slotKey === "1",
+    )?.teamId,
+    "team-fra",
+  );
+  assert.strictEqual(
+    m89Save.slots.find(
+      (s) => s.predictionKind === "round_of_32" && s.slotKey === m82Bottom,
+    )?.teamId,
+    "",
+    "locked M82 legacy R32 row is not rewritten when saved on round_of_16",
+  );
+
+  const clearedLegacy = applyGradualKnockoutPickSaveGuards({
+    incoming: payloadFromDrafts([
+      {
+        rowKey: `round_of_32|${m82Top}`,
+        sectionLabel: "",
+        slotLabel: "",
+        predictionKind: "round_of_32",
+        tournamentStageId: stageR32,
+        slotKey: m82Top,
+        groupCode: null,
+        bonusKey: null,
+        teamId: "",
+      },
+      {
+        rowKey: `round_of_32|${m82Bottom}`,
+        sectionLabel: "",
+        slotLabel: "",
+        predictionKind: "round_of_32",
+        tournamentStageId: stageR32,
+        slotKey: m82Bottom,
+        groupCode: null,
+        bonusKey: null,
+        teamId: "",
+      },
+      {
+        rowKey: "quarterfinalist|1",
+        sectionLabel: "",
+        slotLabel: "",
+        predictionKind: "quarterfinalist",
+        tournamentStageId: stageR16,
+        slotKey: "1",
+        groupCode: null,
+        bonusKey: null,
+        teamId: "team-fra",
+      },
+    ]),
+    existing: savedOnR32,
+    teams: allTeams,
+    matches: lockedMatches,
+    fullRoundOf32Official: true,
+    nowMs: lockedNowMs,
+  });
+  assert.strictEqual(
+    clearedLegacy.error,
+    null,
+    "auto-cleared locked M82 row is coerced back to saved value",
+  );
+  assert.strictEqual(
+    clearedLegacy.slots.find(
+      (s) => s.predictionKind === "round_of_32" && s.slotKey === m82Bottom,
+    )?.teamId,
+    "team-par",
+  );
+
+  const swapErr = validateFrozenKnockoutSwapAttempts({
+    incoming: [
+      {
+        predictionKind: "round_of_32",
+        tournamentStageId: stageR32,
+        slotKey: m82Bottom,
+        groupCode: null,
+        bonusKey: null,
+        teamId: "team-ger",
+      },
+    ],
+    existing: savedOnR32,
+    matches: lockedMatches,
+    gradual: lockedGradual,
+    nowMs: lockedNowMs,
+  });
+  assert.ok(swapErr?.includes("M82"), swapErr ?? "expected M82 swap error");
+
+  const clearErr = validateKnockoutParticipantPickChanges({
+    incoming: [
+      {
+        predictionKind: "round_of_32",
+        tournamentStageId: stageR32,
+        slotKey: m82Bottom,
+        groupCode: null,
+        bonusKey: null,
+        teamId: "",
+      },
+    ],
+    existing: savedOnR32,
+    matches: lockedMatches,
+    gradual: lockedGradual,
+    fullRoundOf32Official: true,
+    nowMs: lockedNowMs,
+  });
+  assert.ok(clearErr?.includes("M82"), clearErr ?? "expected M82 clear error");
 }
 
 console.log("validateGradualKnockoutPickSave.selftest.ts: ok");

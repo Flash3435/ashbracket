@@ -10,6 +10,7 @@ import {
   validateKnockoutMatchPick,
 } from "../picks/gradualKnockoutUnlock";
 import {
+  hasOfficialKnockoutMatchResult,
   isKnockoutPickFrozenForParticipant,
   knockoutPickEditBlockedMessage,
 } from "../picks/knockoutPickEditability";
@@ -60,9 +61,104 @@ function gradualR32MatchPickError(
 }
 
 /**
- * Frozen knockout slots keep their saved values in the payload unless the
- * participant is swapping to a different team. Clears from client-side path
- * repair must not block saves on still-editable rows.
+ * Client save payloads sometimes fill locked Round of 32 sides with official
+ * home/away teams even when the participant pick lives on another row (for
+ * example `round_of_16` slot 10). Those rows are not participant edits.
+ */
+function isLockedR32OfficialSideFill(input: {
+  slot: ParticipantPickSlotPayload;
+  incomingId: string;
+  matches: TournamentMatchPublicRow[];
+  gradual: ReturnType<typeof getGradualKnockoutSelectionState>;
+  nowMs?: number;
+}): boolean {
+  if (input.slot.predictionKind !== "round_of_32") return false;
+  const ms = matchStateForR32Slot(input.slot.slotKey, input.gradual);
+  if (!ms?.publicMatch || !hasOfficialKnockoutMatchResult(ms.publicMatch)) {
+    return false;
+  }
+  if (
+    !isKnockoutPickFrozenForParticipant({
+      predictionKind: input.slot.predictionKind,
+      slotKey: input.slot.slotKey,
+      tournamentMatches: input.matches,
+      gradual: input.gradual,
+      savedTeamId: "",
+      nowMs: input.nowMs,
+    })
+  ) {
+    return false;
+  }
+  return (
+    input.incomingId === ms.homeTeamId || input.incomingId === ms.awayTeamId
+  );
+}
+
+/**
+ * Reject non-empty changes to frozen knockout slots before coercion restores
+ * saved DB values. Empty clears are handled by coercion so unrelated editable
+ * rows can still be saved.
+ */
+export function validateFrozenKnockoutSwapAttempts(input: {
+  incoming: ParticipantPickSlotPayload[];
+  existing: Prediction[];
+  matches: TournamentMatchPublicRow[];
+  gradual: ReturnType<typeof getGradualKnockoutSelectionState>;
+  nowMs?: number;
+}): string | null {
+  const priorByKey = existingTeamIdByKey(input.existing);
+  for (const slot of input.incoming) {
+    if (!isKnockoutProgressionKind(slot.predictionKind)) continue;
+    const incomingId = slot.teamId.trim();
+    if (!incomingId) continue;
+    const k = progressionKey({
+      predictionKind: slot.predictionKind,
+      tournamentStageId: slot.tournamentStageId,
+      slotKey: slot.slotKey,
+    });
+    const keep = priorByKey.get(k) ?? "";
+    if (incomingId === keep) continue;
+
+    if (
+      !isKnockoutPickFrozenForParticipant({
+        predictionKind: slot.predictionKind,
+        slotKey: slot.slotKey,
+        tournamentMatches: input.matches,
+        gradual: input.gradual,
+        savedTeamId: keep,
+        nowMs: input.nowMs,
+      })
+    ) {
+      continue;
+    }
+
+    if (
+      !keep &&
+      isLockedR32OfficialSideFill({
+        slot,
+        incomingId,
+        matches: input.matches,
+        gradual: input.gradual,
+        nowMs: input.nowMs,
+      })
+    ) {
+      continue;
+    }
+
+    return knockoutPickEditBlockedMessage({
+      predictionKind: slot.predictionKind,
+      slotKey: slot.slotKey,
+      tournamentMatches: input.matches,
+      gradual: input.gradual,
+    });
+  }
+  return null;
+}
+
+/**
+ * Locked knockout slots keep their saved DB values in the write payload.
+ * Client-side path repair, pruning, and official-side promotion must not
+ * mutate locked rows or block saves on still-editable matchups.
  */
 export function coerceFrozenKnockoutSlotsToSaved(input: {
   incoming: ParticipantPickSlotPayload[];
@@ -77,7 +173,6 @@ export function coerceFrozenKnockoutSlotsToSaved(input: {
   return input.incoming.map((slot) => {
     if (!isKnockoutProgressionKind(slot.predictionKind)) return slot;
 
-    const incomingId = slot.teamId.trim();
     const k = progressionKey({
       predictionKind: slot.predictionKind,
       tournamentStageId: slot.tournamentStageId,
@@ -95,10 +190,6 @@ export function coerceFrozenKnockoutSlotsToSaved(input: {
         nowMs,
       })
     ) {
-      return slot;
-    }
-
-    if (incomingId && incomingId !== keep) {
       return slot;
     }
 
@@ -169,6 +260,17 @@ export function applyGradualKnockoutPickSaveGuards(input: {
     nowMs,
     fullRoundOf32Official: input.fullRoundOf32Official,
   });
+
+  const swapErr = validateFrozenKnockoutSwapAttempts({
+    incoming: input.incoming,
+    existing: input.existing,
+    matches: input.matches,
+    gradual,
+    nowMs,
+  });
+  if (swapErr) {
+    return { slots: input.incoming, error: swapErr };
+  }
 
   const incoming = coerceFrozenKnockoutSlotsToSaved({
     incoming: input.incoming,
