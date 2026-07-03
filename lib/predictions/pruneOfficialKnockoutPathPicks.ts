@@ -84,6 +84,9 @@ function clearRow(
 ): KnockoutPickSlotDraft[] {
   const teamId = row.teamId.trim();
   if (!teamId) return slots;
+  // Locked invalid picks preserved by applyKnockoutPathInvalidation must survive
+  // later display/normalization prunes.
+  if (row.pickStatus === "out") return slots;
   cleared.push({
     predictionKind: row.predictionKind as KnockoutProgressionPredictionKind,
     slotKey: row.slotKey,

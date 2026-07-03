@@ -20,15 +20,18 @@ export type KnockoutPathLockContext = {
   nowMs?: number;
 };
 
-function matchKindForProgressionPick(
+function wizardBracketKindForProgressionPick(
   kind: KnockoutProgressionPredictionKind,
 ): KnockoutWizardBracketKind | null {
+  // Progression prediction kinds name the saved result slot, not the wizard step.
+  // quarterfinalist rows store Round of 16 (M89–M96) winners, etc.
   switch (kind) {
     case "quarterfinalist":
-      return "quarterfinalist";
+      return "round_of_16";
     case "semifinalist":
-      return "semifinalist";
+      return "quarterfinalist";
     case "finalist":
+      return "semifinalist";
     case "champion":
       return "finalist";
     default:
@@ -61,7 +64,7 @@ function isInvalidPickLocked(
     return gradualR32MatchLockReason(ms, ctx.knockoutBracketPicksUnlocked) === "started";
   }
 
-  const matchKind = matchKindForProgressionPick(pick.predictionKind);
+  const matchKind = wizardBracketKindForProgressionPick(pick.predictionKind);
   if (!matchKind) return false;
 
   const rows = buildKnockoutMatchPickRows({

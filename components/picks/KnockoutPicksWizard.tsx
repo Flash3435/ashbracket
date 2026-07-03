@@ -98,6 +98,7 @@ import {
   isKnockoutMatchDirectPickEligible,
   usesKnockoutMatchPickRows,
   knockoutMatchSavedPickPresentation,
+  mergeKnockoutMatchRowSavedPickFromSlots,
   validatedKnockoutMatchWinner,
   type KnockoutMatchPickRow,
   type KnockoutWizardBracketKind,
@@ -2397,7 +2398,13 @@ export function KnockoutPicksWizard({
                     matchRow.lockReason === "started" ||
                     matchRow.lockReason === "frozen";
                   const savedPickPresentation = isLockedKnockoutRow
-                    ? knockoutMatchSavedPickPresentation(matchRow, teams)
+                    ? knockoutMatchSavedPickPresentation(
+                        mergeKnockoutMatchRowSavedPickFromSlots(
+                          matchRow,
+                          slots,
+                        ),
+                        teams,
+                      )
                     : null;
 
                   return (

@@ -538,6 +538,22 @@ function knockoutMatchRowMatchupLine(row: KnockoutMatchPickRow): string | null {
   return null;
 }
 
+/** Prefer stored slot data for locked rows when display pruning cleared the visible winner. */
+export function mergeKnockoutMatchRowSavedPickFromSlots(
+  row: KnockoutMatchPickRow,
+  slots: KnockoutPickSlotDraft[],
+): KnockoutMatchPickRow {
+  if (row.winnerTeamId.trim()) return row;
+  if (row.lockReason !== "frozen" && row.lockReason !== "started") return row;
+  const saveRow = slots.find((s) => s.rowKey === row.saveRowKey);
+  if (!saveRow?.teamId.trim()) return row;
+  return {
+    ...row,
+    winnerTeamId: saveRow.teamId.trim(),
+    pickStatus: saveRow.pickStatus ?? row.pickStatus,
+  };
+}
+
 /** Saved pick copy for locked knockout rows — uses stored slot data, not validated draft state. */
 export function knockoutMatchSavedPickPresentation(
   row: KnockoutMatchPickRow,
@@ -565,17 +581,22 @@ export function knockoutMatchSavedPickPresentation(
 
   let savedPickWarning: string | null = null;
   if (row.pickStatus === "out" && savedPickTeamId) {
-    savedPickWarning = row.display.statusLine ?? "Pick out";
+    savedPickWarning =
+      row.lockReason === "frozen" || row.lockReason === "started"
+        ? "Saved pick is eliminated or no longer matches this matchup."
+        : (row.display.statusLine ?? "Pick out");
   } else if (savedPickStatus === "stale") {
-    savedPickWarning = "Does not match this matchup anymore.";
+    savedPickWarning =
+      row.lockReason === "frozen" || row.lockReason === "started"
+        ? "Saved pick is eliminated or no longer matches this matchup."
+        : "Does not match this matchup anymore.";
   }
 
   let lockStatusLine: string | null = null;
   if (row.lockReason === "started") {
     lockStatusLine = row.display.statusLine ?? "Locked at kickoff";
   } else if (row.lockReason === "frozen") {
-    lockStatusLine =
-      row.display.statusLine ?? "Locked — feeder results are official.";
+    lockStatusLine = "Locked — feeder results are official.";
   }
 
   return {

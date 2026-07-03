@@ -259,4 +259,17 @@ assert.strictEqual(
   true,
 );
 
+// Locked invalid picks marked out must survive a later official-path re-prune.
+{
+  const lockedOut = {
+    ...qf("2", "ned"),
+    pickStatus: "out" as const,
+    invalidReason: "not_in_official_matchup" as const,
+  };
+  const { slots: repruned, cleared } = pruneOfficialKnockoutPathPicks([lockedOut]);
+  assert.strictEqual(cleared.length, 0);
+  assert.strictEqual(repruned[0]?.teamId, "ned");
+  assert.strictEqual(repruned[0]?.pickStatus, "out");
+}
+
 console.log("pruneOfficialKnockoutPathPicks.selftest.ts: ok");

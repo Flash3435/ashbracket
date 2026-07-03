@@ -1848,7 +1848,7 @@ function r32Side(slotKey: string, teamId = ""): KnockoutPickSlotDraft {
   assert.strictEqual(stalePick.savedPickSummaryLine, "Saved pick: Brazil");
   assert.strictEqual(
     stalePick.savedPickWarning,
-    "Does not match this matchup anymore.",
+    "Saved pick is eliminated or no longer matches this matchup.",
   );
   assert.strictEqual(stalePick.savedPickTeamId, "team-bra");
 }
