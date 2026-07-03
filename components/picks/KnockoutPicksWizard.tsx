@@ -183,8 +183,8 @@ export type KnockoutPicksWizardProps = {
    */
   preBracketSelectionsLocked?: boolean;
   /**
-   * Initial display when no saved preference (`rememberPicksMainView`). Account picks
-   * use `"bracket"`; admin pick wizard keeps `"list"`.
+   * Initial display when no saved preference (`rememberPicksMainView`). Admin pick
+   * wizard uses `"list"`; account picks force list via `picksPageLayout`.
    */
   defaultPicksMainView?: PicksMainView;
   /** When true, persist list/bracket choice in localStorage (account picks only). */
@@ -1096,20 +1096,27 @@ export function KnockoutPicksWizard({
   const [correctionNotice, setCorrectionNotice] = useState<string | null>(null);
   const [openRowKey, setOpenRowKey] = useState<string | null>(null);
   const [search, setSearch] = useState("");
+  const listOnlyLayout = picksPageLayout;
   const [picksMainView, setPicksMainView] = useState<PicksMainView>(
-    defaultPicksMainView,
+    listOnlyLayout ? "list" : defaultPicksMainView,
   );
+  const activePicksMainView: PicksMainView = listOnlyLayout
+    ? "list"
+    : picksMainView;
   const lastParticipantIdRef = useRef(participantId);
   const userEditedPicksRef = useRef(false);
 
   useEffect(() => {
-    if (!rememberPicksMainView) return;
+    if (!rememberPicksMainView || listOnlyLayout) return;
     setPicksMainView(readPicksMainViewPreference(defaultPicksMainView));
-  }, [rememberPicksMainView, defaultPicksMainView]);
+  }, [rememberPicksMainView, listOnlyLayout, defaultPicksMainView]);
 
   function selectPicksMainView(view: PicksMainView) {
+    if (listOnlyLayout && view === "bracket") return;
     setPicksMainView(view);
-    if (rememberPicksMainView) writePicksMainViewPreference(view);
+    if (rememberPicksMainView && !listOnlyLayout) {
+      writePicksMainViewPreference(view);
+    }
     setOpenRowKey(null);
     setSearch("");
   }
@@ -1639,8 +1646,12 @@ export function KnockoutPicksWizard({
         : mode === "random"
           ? "We filled group finishes and your eight third-place advancers — confirmed Round of 32 matchups will open for picks as they become official."
           : mode === "favorites"
-            ? "We leaned on popular picks for groups and third-place advancers. Pick confirmed knockout matchups in list view as they unlock."
-            : "We spread teams for groups and third-place advancers. Pick confirmed Round of 32 matchups in list view as they become available.",
+            ? listOnlyLayout
+              ? "We leaned on popular picks for groups and third-place advancers. Pick confirmed knockout matchups as they unlock."
+              : "We leaned on popular picks for groups and third-place advancers. Pick confirmed knockout matchups in list view as they unlock."
+            : listOnlyLayout
+              ? "We spread teams for groups and third-place advancers. Pick confirmed Round of 32 matchups as they become available."
+              : "We spread teams for groups and third-place advancers. Pick confirmed Round of 32 matchups in list view as they become available.",
     );
     setOpenRowKey(null);
     setStep(0);
@@ -2025,54 +2036,60 @@ export function KnockoutPicksWizard({
           <PicksProgressSummaryPanel
             summary={picksProgress}
             onContinue={continueToNextSection}
-            showListViewHint={picksMainView === "bracket"}
+            showListViewHint={
+              !listOnlyLayout && activePicksMainView === "bracket"
+            }
             onSwitchToListView={() => selectPicksMainView("list")}
           />
         </div>
       ) : null}
 
-      <div
-        className="flex flex-wrap items-center gap-2 border-b border-ash-border pb-4"
-        role="tablist"
-        aria-label="Picks display mode"
-      >
-        <span className="text-xs font-medium uppercase tracking-wide text-ash-muted">
-          View
-        </span>
-        <button
-          type="button"
-          role="tab"
-          aria-selected={picksMainView === "bracket"}
-          onClick={() => selectPicksMainView("bracket")}
-          className={`rounded-full px-3 py-1.5 text-xs font-medium transition ${
-            picksMainView === "bracket"
-              ? "bg-ash-accent text-white"
-              : "bg-ash-surface text-ash-muted ring-1 ring-ash-border hover:bg-ash-border/30"
-          }`}
-        >
-          Bracket view
-        </button>
-        <button
-          type="button"
-          role="tab"
-          aria-selected={picksMainView === "list"}
-          onClick={() => selectPicksMainView("list")}
-          className={`rounded-full px-3 py-1.5 text-xs font-medium transition ${
-            picksMainView === "list"
-              ? "bg-ash-accent text-white"
-              : "bg-ash-surface text-ash-muted ring-1 ring-ash-border hover:bg-ash-border/30"
-          }`}
-        >
-          List view
-        </button>
-      </div>
-      <p className="-mt-2 text-xs leading-relaxed text-ash-muted">
-        {knockoutPicksAccessible
-          ? "Bracket view is the default — it shows your full path and empty slots at a glance. List view is best when you want to work through picks one step at a time."
-          : "Bracket view shows a preview of your future knockout path from group-stage picks. Switch to List view to edit group stage, third-place qualification, bonus picks, and confirmed knockout matchups."}
-      </p>
+      {!listOnlyLayout ? (
+        <>
+          <div
+            className="flex flex-wrap items-center gap-2 border-b border-ash-border pb-4"
+            role="tablist"
+            aria-label="Picks display mode"
+          >
+            <span className="text-xs font-medium uppercase tracking-wide text-ash-muted">
+              View
+            </span>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={activePicksMainView === "bracket"}
+              onClick={() => selectPicksMainView("bracket")}
+              className={`rounded-full px-3 py-1.5 text-xs font-medium transition ${
+                activePicksMainView === "bracket"
+                  ? "bg-ash-accent text-white"
+                  : "bg-ash-surface text-ash-muted ring-1 ring-ash-border hover:bg-ash-border/30"
+              }`}
+            >
+              Bracket view
+            </button>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={activePicksMainView === "list"}
+              onClick={() => selectPicksMainView("list")}
+              className={`rounded-full px-3 py-1.5 text-xs font-medium transition ${
+                activePicksMainView === "list"
+                  ? "bg-ash-accent text-white"
+                  : "bg-ash-surface text-ash-muted ring-1 ring-ash-border hover:bg-ash-border/30"
+              }`}
+            >
+              List view
+            </button>
+          </div>
+          <p className="-mt-2 text-xs leading-relaxed text-ash-muted">
+            {knockoutPicksAccessible
+              ? "Bracket view is the default — it shows your full path and empty slots at a glance. List view is best when you want to work through picks one step at a time."
+              : "Bracket view shows a preview of your future knockout path from group-stage picks. Switch to List view to edit group stage, third-place qualification, bonus picks, and confirmed knockout matchups."}
+          </p>
+        </>
+      ) : null}
 
-      {picksMainView === "bracket" ? (
+      {activePicksMainView === "bracket" ? (
         <section className="ash-surface p-4">
           <h2 className="text-lg font-bold text-ash-text">
             {knockoutBracketPicksUnlocked ? "Knockout bracket" : "Bracket preview"}
@@ -2100,7 +2117,7 @@ export function KnockoutPicksWizard({
         </section>
       ) : null}
 
-      {picksMainView === "list" ? (
+      {activePicksMainView === "list" ? (
         <>
       <nav aria-label="Tournament pick steps" className="flex flex-wrap gap-2">
         {wizardSteps.map((s, i) => {
@@ -2260,7 +2277,9 @@ export function KnockoutPicksWizard({
               <p className="mt-1 text-xs text-ash-muted">
                 {knockoutBracketPicksUnlocked
                   ? "We’ll fill group finishes, your eight third-place advancers, every knockout round, and the champion in one coherent pass. Bonus questions stay for you to choose."
-                  : "We’ll fill group finishes and your eight third-place advancers. Confirmed Round of 32 matchups can be picked in list view as they become official; later rounds unlock once the full bracket is confirmed. Bonus questions stay for you to choose."}
+                  : listOnlyLayout
+                    ? "We’ll fill group finishes and your eight third-place advancers. Confirmed Round of 32 matchups can be picked as they become official; later rounds unlock once the full bracket is confirmed. Bonus questions stay for you to choose."
+                    : "We’ll fill group finishes and your eight third-place advancers. Confirmed Round of 32 matchups can be picked in list view as they become official; later rounds unlock once the full bracket is confirmed. Bonus questions stay for you to choose."}
               </p>
               <div className="mt-3 flex flex-wrap gap-2">
                 <button
