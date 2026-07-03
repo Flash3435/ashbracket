@@ -6,7 +6,12 @@ import type { GradualKnockoutSelectionState } from "./gradualKnockoutUnlock";
 import {
   blockedKnockoutStepGateCopy,
   clearedPickRowKeySet,
+  LOCKED_KNOCKOUT_NO_ACTION_HEADLINE,
+  participantLockedKnockoutRowBody,
+  participantLockedKnockoutStatusHeadline,
+  participantNonActionableLockedKnockoutRows,
 } from "./knockoutBlockedRowExplanation";
+import { getGradualKnockoutSelectionState } from "./gradualKnockoutUnlock";
 import { buildKnockoutMatchPickRows } from "./knockoutMatchPickRows";
 import {
   getKnockoutStepCompletionFromDraftState,
@@ -410,10 +415,10 @@ const r32OfficialResults: TournamentMatchPublicRow[] = [
     },
     cleared,
   );
-  assert.equal(repairSummary.headline, "One pick is out");
+  assert.equal(repairSummary.headline, LOCKED_KNOCKOUT_NO_ACTION_HEADLINE);
   assert.match(
     repairSummary.detail,
-    /locked and can no longer advance/i,
+    /Germany vs Paraguay is locked with no pick saved/i,
   );
   assert.match(repairSummary.detail, /No action is needed/i);
   assert.equal(repairSummary.ctaLabel, null);
@@ -514,8 +519,8 @@ const r32OfficialResults: TournamentMatchPublicRow[] = [
       clearedPickRowKeys: clearedKeys,
     }),
   );
-  assert.strictEqual(qfStatus.kind, "locked_out");
-  assert.strictEqual(qfStatus.complete, false);
+  assert.strictEqual(qfStatus.kind, "complete");
+  assert.strictEqual(qfStatus.complete, true);
 }
 
 // Green R16 pill + blocked QF never emits generic previous-round copy
@@ -589,6 +594,172 @@ const r32OfficialResults: TournamentMatchPublicRow[] = [
   assert.doesNotMatch(qfGate, /Complete previous round picks first/i);
   assert.match(qfGate, /waiting on an earlier result/i);
   assert.doesNotMatch(qfGate, /M97 is waiting for the winner/i);
+}
+
+// Locked-empty M94 (Seema-style): matchup copy, no internal slot labels, R16 step complete
+{
+  const seemaTeams: Team[] = [
+    ...teams,
+    {
+      id: "team-us",
+      name: "United States",
+      countryCode: "USA",
+      fifaCode: "USA",
+      fifaRank: 15,
+      fifaRankAsOf: null,
+      createdAt: "",
+      updatedAt: "",
+    },
+    {
+      id: "team-bel",
+      name: "Belgium",
+      countryCode: "BEL",
+      fifaCode: "BEL",
+      fifaRank: 12,
+      fifaRankAsOf: null,
+      createdAt: "",
+      updatedAt: "",
+    },
+    {
+      id: "team-fra",
+      name: "France",
+      countryCode: "FRA",
+      fifaCode: "FRA",
+      fifaRank: 10,
+      fifaRankAsOf: null,
+      createdAt: "",
+      updatedAt: "",
+    },
+    {
+      id: "team-eng",
+      name: "England",
+      countryCode: "ENG",
+      fifaCode: "ENG",
+      fifaRank: 4,
+      fifaRankAsOf: null,
+      createdAt: "",
+      updatedAt: "",
+    },
+  ];
+  const seemaMatches: TournamentMatchPublicRow[] = [
+    {
+      match_id: "m81",
+      edition_id: "ed",
+      edition_code: "wc2026",
+      match_code: "M81",
+      stage_code: "round_of_32",
+      stage_label: "Round of 32",
+      stage_sort_order: 2,
+      group_code: null,
+      round_index: 0,
+      kickoff_at: "2026-07-01T19:00:00Z",
+      status: "finished",
+      home_goals: 2,
+      away_goals: 1,
+      home_penalties: null,
+      away_penalties: null,
+      home_team_name: "United States",
+      home_country_code: "USA",
+      away_team_name: "Bosnia and Herzegovina",
+      away_country_code: "BIH",
+      winner_team_name: "United States",
+      winner_country_code: "USA",
+    },
+    {
+      match_id: "m82",
+      edition_id: "ed",
+      edition_code: "wc2026",
+      match_code: "M82",
+      stage_code: "round_of_32",
+      stage_label: "Round of 32",
+      stage_sort_order: 2,
+      group_code: null,
+      round_index: 0,
+      kickoff_at: "2026-07-01T22:00:00Z",
+      status: "finished",
+      home_goals: 1,
+      away_goals: 0,
+      home_penalties: null,
+      away_penalties: null,
+      home_team_name: "Belgium",
+      home_country_code: "BEL",
+      away_team_name: "Senegal",
+      away_country_code: "SEN",
+      winner_team_name: "Belgium",
+      winner_country_code: "BEL",
+    },
+  ];
+  const seemaSlots: KnockoutPickSlotDraft[] = [
+    ...Array.from({ length: 16 }, (_, i) =>
+      qfSlot(String(i + 1), i + 1 === 6 ? "" : "team-fra"),
+    ),
+    ...Array.from({ length: 16 }, (_, i) => ({
+      rowKey: `round_of_32|${i + 1}`,
+      sectionLabel: "Round of 32",
+      slotLabel: `R32 ${i + 1}`,
+      predictionKind: "round_of_32" as const,
+      tournamentStageId: "r32",
+      slotKey: String(i + 1),
+      groupCode: null,
+      bonusKey: null,
+      teamId: "team-fra",
+    })),
+    {
+      rowKey: "semifinalist|1",
+      sectionLabel: "Semi-finals",
+      slotLabel: "Semi-finals · pick 1",
+      predictionKind: "semifinalist",
+      tournamentStageId: "sf",
+      slotKey: "1",
+      groupCode: null,
+      bonusKey: null,
+      teamId: "team-fra",
+    },
+    {
+      rowKey: "finalist|1",
+      sectionLabel: "Final",
+      slotLabel: "Final · pick 1",
+      predictionKind: "finalist",
+      tournamentStageId: "fin",
+      slotKey: "1",
+      groupCode: null,
+      bonusKey: null,
+      teamId: "team-eng",
+    },
+  ];
+  const seemaGradual = getGradualKnockoutSelectionState({
+    matches: seemaMatches,
+    teams: seemaTeams,
+    fullRoundOf32Official: true,
+  });
+  const matchInput = {
+    slots: seemaSlots,
+    teams: seemaTeams,
+    tournamentMatches: seemaMatches,
+    gradual: seemaGradual,
+    knockoutBracketPicksUnlocked: true,
+  };
+  const m94 = buildKnockoutMatchPickRows({
+    ...matchInput,
+    bracketKind: "round_of_16",
+  }).find((r) => r.fifaMatchNo === 94)!;
+  assert.match(
+    participantLockedKnockoutRowBody(m94, seemaTeams),
+    /United States vs Belgium is locked with no pick saved/i,
+  );
+  assert.match(
+    participantLockedKnockoutRowBody(m94, seemaTeams),
+    /Round of 32 feeder results are already official/i,
+  );
+  assert.doesNotMatch(participantLockedKnockoutRowBody(m94, seemaTeams), /pick 6/i);
+  assert.doesNotMatch(participantLockedKnockoutRowBody(m94, seemaTeams), /pick is out/i);
+
+  const lockedRows = participantNonActionableLockedKnockoutRows(matchInput);
+  assert.ok(lockedRows.some((r) => r.fifaMatchNo === 94));
+  assert.equal(
+    participantLockedKnockoutStatusHeadline(lockedRows),
+    LOCKED_KNOCKOUT_NO_ACTION_HEADLINE,
+  );
 }
 
 console.log("knockoutBlockedRowExplanation.selftest.ts: ok");

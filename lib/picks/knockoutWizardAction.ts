@@ -10,6 +10,7 @@ import {
   firstBlockedRowExplanationForStep,
   lockedOutPickCardBody,
   LOCKED_OUT_PICK_HEADLINE,
+  participantLockedKnockoutStatusHeadline,
 } from "./knockoutBlockedRowExplanation";
 import {
   buildKnockoutMatchPickRows,
@@ -37,6 +38,7 @@ export type KnockoutWizardActionNeeded = {
   fifaMatchNo: number | null;
   matchupLabel: string | null;
   reason: KnockoutWizardActionReason;
+  statusCardHeadline: string | null;
   statusCardDetail: string;
   sectionGateMessage: string;
 };
@@ -153,6 +155,7 @@ function actionFromMatchRow(
     fifaMatchNo: row.fifaMatchNo > 0 ? row.fifaMatchNo : null,
     matchupLabel: matchup,
     reason,
+    statusCardHeadline: null,
     statusCardDetail,
     sectionGateMessage: gateMessage,
   };
@@ -247,7 +250,8 @@ function actionFromLockedClearedPick(
     : feederExplanation.userFacingCopy;
 
   const feederLabel = feederExplanation.missingFeederLabel;
-  const statusCardDetail = lockedOutPickCardBody(feederLabel);
+  const statusCardDetail = lockedOutPickCardBody(row, ctx.teams);
+  const statusCardHeadline = participantLockedKnockoutStatusHeadline([row]);
 
   return {
     bracketKind: targetStep,
@@ -259,6 +263,7 @@ function actionFromLockedClearedPick(
           : null,
     matchupLabel: feederLabel ?? matchupLabelFromRow(targetRow),
     reason: "locked_unfixable",
+    statusCardHeadline,
     statusCardDetail,
     sectionGateMessage: blockedCopy,
   };
@@ -379,6 +384,10 @@ function findBlockedDownstreamAction(
       (r) => r.fifaMatchNo === explanation.blockedRowMatchNo,
     );
     if (!row) continue;
+    const lockedHeadline =
+      explanation.userAction === "locked_out"
+        ? participantLockedKnockoutStatusHeadline([row])
+        : null;
     return {
       bracketKind: wizardStep,
       fifaMatchNo: explanation.blockedRowMatchNo || null,
@@ -389,6 +398,7 @@ function findBlockedDownstreamAction(
           : explanation.userAction === "pick_upstream"
             ? "upstream_missing"
             : "missing_pick",
+      statusCardHeadline: lockedHeadline,
       statusCardDetail: explanation.userFacingCopy,
       sectionGateMessage: explanation.userFacingCopy,
     };
@@ -438,8 +448,8 @@ export function getKnockoutRepairActionSummary(
   const action = findFirstKnockoutWizardActionNeeded(input, { clearedPicks });
   if (action?.reason === "locked_unfixable") {
     return {
-      headline: LOCKED_OUT_PICK_HEADLINE,
-      detail: lockedOutPickCardBody(action.matchupLabel),
+      headline: action.statusCardHeadline ?? LOCKED_OUT_PICK_HEADLINE,
+      detail: action.statusCardDetail,
       ctaLabel: null,
       action,
     };

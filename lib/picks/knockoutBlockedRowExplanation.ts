@@ -7,6 +7,7 @@ import {
   knockoutMatchStepDef,
   officialKnockoutMatchResultWinner,
   readConfirmedKnockoutMatchWinner,
+  usesKnockoutMatchPickRows,
   validatedKnockoutMatchWinner,
   type BuildKnockoutMatchPickRowsInput,
   type KnockoutMatchPickRow,
@@ -43,12 +44,108 @@ export type ExplainBlockedKnockoutRowOptions = {
 
 export const LOCKED_OUT_PICK_HEADLINE = "One pick is out";
 
+/** Participant-facing headline when locked rows need no action (empty or frozen). */
+export const LOCKED_KNOCKOUT_NO_ACTION_HEADLINE = "Locked — no action needed";
+
 /** @deprecated Use LOCKED_OUT_PICK_HEADLINE */
 export const LOCKED_CLEARED_REPAIR_HEADLINE = LOCKED_OUT_PICK_HEADLINE;
 
-export function lockedOutPickCardBody(feederLabel: string | null): string {
-  if (feederLabel) {
-    return `Your ${feederLabel} pick is locked and can no longer advance. No action is needed.`;
+export type ParticipantLockedKnockoutRowKind =
+  | "saved_out"
+  | "locked_empty"
+  | "saved_locked";
+
+export function participantLockedKnockoutRowKind(
+  row: Pick<
+    KnockoutMatchPickRow,
+    "lockReason" | "winnerTeamId" | "pickStatus"
+  >,
+): ParticipantLockedKnockoutRowKind | null {
+  if (row.lockReason !== "frozen" && row.lockReason !== "started") return null;
+  const saved = row.winnerTeamId.trim();
+  if (row.pickStatus === "out" && saved) return "saved_out";
+  if (!saved) return "locked_empty";
+  return "saved_locked";
+}
+
+export function participantMatchupLabelFromRow(
+  row: KnockoutMatchPickRow,
+  teams?: ReadonlyArray<{ id: string; name: string }>,
+): string {
+  if (row.homeTeamId?.trim() && row.awayTeamId?.trim() && teams?.length) {
+    const home = teams.find((t) => t.id === row.homeTeamId)?.name?.trim();
+    const away = teams.find((t) => t.id === row.awayTeamId)?.name?.trim();
+    if (home && away) return `${home} vs ${away}`;
+  }
+  const matchup = feederMatchupLabel(row);
+  if (matchup?.includes(" vs ")) return matchup;
+  return row.fifaMatchNo > 0 ? `M${row.fifaMatchNo}` : "This matchup";
+}
+
+export function feederStageLabelForSavedPickKind(
+  savePredictionKind: string,
+): string {
+  switch (savePredictionKind) {
+    case "quarterfinalist":
+      return "Round of 32";
+    case "semifinalist":
+      return "Round of 16";
+    case "finalist":
+      return "Quarter-finals";
+    case "champion":
+      return "Semi-finals";
+    default:
+      return "previous round";
+  }
+}
+
+export function participantLockedKnockoutRowBody(
+  row: KnockoutMatchPickRow,
+  teams?: ReadonlyArray<{ id: string; name: string }>,
+): string {
+  const kind = participantLockedKnockoutRowKind(row);
+  const matchup = participantMatchupLabelFromRow(row, teams);
+  if (kind === "saved_out") {
+    return `Your saved pick for ${matchup} is out and can no longer advance. No action is needed.`;
+  }
+  if (kind === "locked_empty") {
+    const feederStage = feederStageLabelForSavedPickKind(row.savePredictionKind);
+    return `${matchup} is locked with no pick saved because the ${feederStage} feeder results are already official. No action is needed.`;
+  }
+  if (kind === "saved_locked") {
+    return `Your saved pick for ${matchup} is locked because feeder results are official. No action is needed.`;
+  }
+  return "This pick is locked. No action is needed.";
+}
+
+export function participantLockedKnockoutStatusHeadline(
+  rows: KnockoutMatchPickRow[],
+): string {
+  const kinds = rows
+    .map((row) => participantLockedKnockoutRowKind(row))
+    .filter((k): k is ParticipantLockedKnockoutRowKind => k != null);
+  if (kinds.length === 0) return LOCKED_KNOCKOUT_NO_ACTION_HEADLINE;
+  if (kinds.every((k) => k === "locked_empty" || k === "saved_locked")) {
+    return kinds.length === 1
+      ? LOCKED_KNOCKOUT_NO_ACTION_HEADLINE
+      : "Locked picks — no action needed";
+  }
+  if (kinds.some((k) => k === "saved_out")) {
+    return kinds.length === 1 ? LOCKED_OUT_PICK_HEADLINE : "Saved picks are out";
+  }
+  return LOCKED_KNOCKOUT_NO_ACTION_HEADLINE;
+}
+
+export function lockedOutPickCardBody(
+  rowOrLegacyLabel: KnockoutMatchPickRow | string | null,
+  teams?: ReadonlyArray<{ id: string; name: string }>,
+): string {
+  if (rowOrLegacyLabel && typeof rowOrLegacyLabel === "object") {
+    return participantLockedKnockoutRowBody(rowOrLegacyLabel, teams);
+  }
+  const label = rowOrLegacyLabel?.trim();
+  if (label && label.includes(" vs ")) {
+    return `Your saved pick for ${label} is out and can no longer advance. No action is needed.`;
   }
   return "One of your picks is locked and can no longer advance. No action is needed.";
 }
@@ -282,9 +379,7 @@ function classifyUnresolvedFeeder(
         missingFeederLabel: feederLabel,
         feederState: "cleared_pick_locked",
         userAction: "locked_out",
-        userFacingCopy: feederLabel
-          ? `Your ${feederLabel} pick is locked and can no longer advance.`
-          : "This pick is locked and can no longer advance.",
+        userFacingCopy: participantLockedKnockoutRowBody(feeder),
       };
     }
 
@@ -324,9 +419,7 @@ export function explainLockedClearedPickRow(
     missingFeederLabel: feederLabel,
     feederState: "cleared_pick_locked",
     userAction: "locked_out",
-    userFacingCopy: feederLabel
-      ? `Your ${feederLabel} pick is locked and can no longer advance.`
-      : "This pick is locked and can no longer advance.",
+    userFacingCopy: participantLockedKnockoutRowBody(row),
   };
 }
 
@@ -525,4 +618,26 @@ export function stepLockedClearedPickIssue(
     return blocked;
   }
   return null;
+}
+
+const LATER_PARTICIPANT_MATCH_BRACKETS: KnockoutWizardBracketKind[] = [
+  "round_of_16",
+  "quarterfinalist",
+  "semifinalist",
+  "finalist",
+];
+
+/** Frozen/started rows that participants cannot action (saved out or locked empty). */
+export function participantNonActionableLockedKnockoutRows(
+  input: Omit<BuildKnockoutMatchPickRowsInput, "bracketKind">,
+): KnockoutMatchPickRow[] {
+  const rows: KnockoutMatchPickRow[] = [];
+  for (const bracketKind of LATER_PARTICIPANT_MATCH_BRACKETS) {
+    if (!usesKnockoutMatchPickRows(bracketKind, true)) continue;
+    rows.push(...buildKnockoutMatchPickRows({ ...input, bracketKind }));
+  }
+  return rows.filter((row) => {
+    const kind = participantLockedKnockoutRowKind(row);
+    return kind === "saved_out" || kind === "locked_empty";
+  });
 }

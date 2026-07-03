@@ -24,6 +24,8 @@ function mockMatch(
     tournamentOutcome: null,
     participantPick: pick,
     eliminatedFromTournament: false,
+    fillState: teamId ? ("team" as const) : ("no_saved_pick" as const),
+    helperTooltip: null,
   });
 
   return {
@@ -63,6 +65,8 @@ void (async function main() {
       tournamentOutcome: "pending",
       participantPick: "your_pick_alive",
       eliminatedFromTournament: false,
+      fillState: "team",
+      helperTooltip: null,
     },
     away: {
       teamId: "b",
@@ -71,6 +75,8 @@ void (async function main() {
       tournamentOutcome: "pending",
       participantPick: null,
       eliminatedFromTournament: false,
+      fillState: "team",
+      helperTooltip: null,
     },
   });
   assert(matchHasAliveParticipantPick(alive), "detects alive participant pick");
@@ -84,6 +90,8 @@ void (async function main() {
       tournamentOutcome: "advanced",
       participantPick: "your_pick",
       eliminatedFromTournament: false,
+      fillState: "team",
+      helperTooltip: null,
     },
     away: {
       teamId: "b",
@@ -92,6 +100,8 @@ void (async function main() {
       tournamentOutcome: "eliminated",
       participantPick: null,
       eliminatedFromTournament: true,
+      fillState: "team",
+      helperTooltip: null,
     },
   });
   assert(matchHasAliveParticipantPick(finished), "advanced pick counts as alive");

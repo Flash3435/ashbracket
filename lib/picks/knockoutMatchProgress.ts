@@ -319,10 +319,19 @@ function matchPickStepStatus(
       : null;
 
   if (lockedClearedIssue) {
+    if (progress.missing === 0) {
+      return {
+        kind: "complete",
+        complete: true,
+        missingPickable: 0,
+        totalPickable: pickable.length,
+        gateMessage: null,
+      };
+    }
     return {
       kind: "locked_out",
       complete: false,
-      missingPickable: 0,
+      missingPickable: progress.missing,
       totalPickable: pickable.length,
       gateMessage,
     };
@@ -354,6 +363,18 @@ function matchPickStepStatus(
       input,
       explanationOptions,
     );
+    if (
+      progress.missing === 0 &&
+      blockedExplanation?.userAction === "locked_out"
+    ) {
+      return {
+        kind: "complete",
+        complete: true,
+        missingPickable: 0,
+        totalPickable: pickable.length,
+        gateMessage: null,
+      };
+    }
     return {
       kind:
         blockedExplanation?.userAction === "locked_out"

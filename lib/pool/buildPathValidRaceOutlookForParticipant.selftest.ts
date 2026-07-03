@@ -233,6 +233,8 @@ const r32Finished = knockoutMatch({
         tournamentOutcome: "advanced",
         participantPick: "your_pick",
         eliminatedFromTournament: false,
+        fillState: "team",
+        helperTooltip: null,
       },
       away: {
         teamId: "team-tun",
@@ -241,6 +243,8 @@ const r32Finished = knockoutMatch({
         tournamentOutcome: "eliminated",
         participantPick: "your_pick_eliminated",
         eliminatedFromTournament: false,
+        fillState: "team",
+        helperTooltip: null,
       },
     }),
     null,

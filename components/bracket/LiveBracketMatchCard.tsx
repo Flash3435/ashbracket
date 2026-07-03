@@ -4,10 +4,12 @@ import {
   CountryFlagPlaceholder,
 } from "../tournament/Flag";
 import type { LiveBracketMatch, LiveBracketSide } from "../../lib/bracket/liveBracketTracker";
+import { NOT_YOUR_PICK_BADGE_LABEL } from "../../lib/bracket/knockoutBracketDisplayCopy";
 import {
   liveSideNameClassName,
   liveSideNeedsMutedFlag,
   liveSideRowClassName,
+  liveSideShowsFlag,
 } from "../../lib/bracket/liveBracketSideStyles";
 import type { Team } from "../../src/types/domain";
 
@@ -40,7 +42,17 @@ function ParticipantPickBadge({ pick }: { pick: LiveBracketSide["participantPick
   if (pick === "your_pick_eliminated") {
     return (
       <span className="shrink-0 rounded bg-red-950/50 px-1 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-red-200 ring-1 ring-red-900/40">
-        Your pick eliminated
+        Pick out
+      </span>
+    );
+  }
+  if (pick === "not_your_pick") {
+    return (
+      <span
+        className="shrink-0 rounded bg-ash-body/70 px-1 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-ash-muted ring-1 ring-ash-border/50"
+        title={NOT_YOUR_PICK_BADGE_LABEL}
+      >
+        {NOT_YOUR_PICK_BADGE_LABEL}
       </span>
     );
   }
@@ -55,33 +67,35 @@ function LiveSideRow({
   teamById: Map<string, Team>;
 }) {
   const team = side.teamId ? teamById.get(side.teamId) : undefined;
-  const picked = Boolean(side.teamId && team);
+  const showFlag = liveSideShowsFlag(side);
   const muted = liveSideNeedsMutedFlag(side);
+  const isPlaceholder = side.fillState !== "team";
 
   return (
     <div
       className={`flex min-h-[44px] items-center gap-2 rounded-md border px-2 py-1.5 ${liveSideRowClassName(side)}`}
+      title={side.helperTooltip ?? undefined}
     >
-      {picked ? (
+      {showFlag ? (
         <CountryFlagIcon
           countryCode={team!.countryCode}
           size="md"
           className={muted ? "opacity-60 grayscale" : undefined}
         />
-      ) : (
+      ) : isPlaceholder ? null : (
         <CountryFlagPlaceholder size="md" />
       )}
       <div className="min-w-0 flex-1">
         <div className="flex flex-wrap items-center gap-1">
-          <p className={`min-w-0 truncate text-xs font-medium ${liveSideNameClassName(side)}`}>
+          <p className={`min-w-0 truncate ${liveSideNameClassName(side)}`}>
             {side.displayName}
           </p>
           <ParticipantPickBadge pick={side.participantPick} />
           <TournamentOutcomeBadge outcome={side.tournamentOutcome} />
         </div>
-        {picked ? (
+        {showFlag && team ? (
           <p className={`truncate text-[10px] ${muted ? "text-ash-muted/80" : "text-ash-muted"}`}>
-            {side.countryCode ?? team!.countryCode}
+            {side.countryCode ?? team.countryCode}
           </p>
         ) : null}
       </div>

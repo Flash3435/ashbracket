@@ -15,7 +15,16 @@ import {
 import { isKnockoutPickLockedOut } from "../predictions/knockoutPickStatus";
 import { isKnockoutProgressionKind } from "../predictions/knockoutProgressionKinds";
 import type { KnockoutProgressionPredictionKind } from "../predictions/knockoutProgressionKinds";
-import { LOCKED_OUT_PICK_HEADLINE, lockedOutPickCardBody } from "./knockoutBlockedRowExplanation";
+import {
+  LOCKED_OUT_PICK_HEADLINE,
+  lockedOutPickCardBody,
+  participantLockedKnockoutStatusHeadline,
+  participantNonActionableLockedKnockoutRows,
+} from "./knockoutBlockedRowExplanation";
+import {
+  buildKnockoutMatchPickRows,
+  type KnockoutMatchPickRow,
+} from "./knockoutMatchPickRows";
 
 export type PicksPageStatusKind =
   | "path_reconciliation"
@@ -61,6 +70,66 @@ function clearedPicksFromLockedSlots(
   return out;
 }
 
+function buildLockedKnockoutMatchInput(input: {
+  slots: KnockoutPickSlotDraft[];
+  teams: Team[];
+  tournamentMatches?: TournamentMatchPublicRow[] | null;
+  officialRoundOf32Complete: boolean;
+  nowMs?: number;
+  clearedPickRowKeys?: ReadonlySet<string>;
+}) {
+  const gradual = getGradualKnockoutSelectionState({
+    matches: input.tournamentMatches,
+    teams: input.teams,
+    nowMs: input.nowMs,
+    fullRoundOf32Official: input.officialRoundOf32Complete,
+  });
+  return {
+    slots: input.slots,
+    teams: input.teams,
+    tournamentMatches: input.tournamentMatches,
+    gradual,
+    knockoutBracketPicksUnlocked: input.officialRoundOf32Complete,
+    nowMs: input.nowMs,
+    clearedPickRowKeys: input.clearedPickRowKeys,
+  };
+}
+
+function lockedKnockoutStatusFromRows(
+  rows: KnockoutMatchPickRow[],
+  teams: Team[],
+): PicksPageStatusModel | null {
+  if (rows.length === 0) return null;
+  return {
+    kind: "locked_out_picks",
+    headline: participantLockedKnockoutStatusHeadline(rows),
+    detail: lockedOutPickCardBody(rows[0]!, teams),
+    tone: "warning",
+    ctaLabel: null,
+    ctaAction: null,
+  };
+}
+
+function matchRowForLockedOutSlot(
+  slot: KnockoutPickSlotDraft,
+  matchInput: ReturnType<typeof buildLockedKnockoutMatchInput>,
+): KnockoutMatchPickRow | null {
+  const wizardKindByKind: Record<string, "round_of_16" | "quarterfinalist" | "semifinalist" | "finalist"> = {
+    quarterfinalist: "round_of_16",
+    semifinalist: "quarterfinalist",
+    finalist: "semifinalist",
+    champion: "finalist",
+  };
+  const bracketKind = wizardKindByKind[slot.predictionKind];
+  if (!bracketKind || !slot.slotKey) return null;
+  const matchIndex = Math.max(0, parseInt(slot.slotKey, 10) - 1);
+  const rows = buildKnockoutMatchPickRows({
+    ...matchInput,
+    bracketKind,
+  });
+  return rows[matchIndex] ?? null;
+}
+
 function effectiveClearedPicks(
   slots: KnockoutPickSlotDraft[],
   clearedPicks: ClearedKnockoutPathPick[],
@@ -87,6 +156,12 @@ export function buildPicksPageStatusModel(input: {
     nowMs: input.nowMs,
   };
   const clearedPicks = effectiveClearedPicks(input.slots, input.knockoutPathClearedPicks ?? []);
+  const clearedRowKeys = new Set(clearedPicks.map((c) => c.rowKey));
+  const matchInput = buildLockedKnockoutMatchInput({
+    ...progressInput,
+    clearedPickRowKeys: clearedRowKeys,
+  });
+  const nonActionableLocked = participantNonActionableLockedKnockoutRows(matchInput);
 
   const missing = buildParticipantDashboardMissingKnockoutPicks({
     slots: input.slots,
@@ -145,12 +220,28 @@ export function buildPicksPageStatusModel(input: {
     };
   }
 
+  if (nonActionableLocked.length > 0) {
+    const fromRows = lockedKnockoutStatusFromRows(
+      nonActionableLocked,
+      input.teams,
+    );
+    if (fromRows) return fromRows;
+  }
+
   const persistedLockedOut = input.slots.filter((row) => isKnockoutPickLockedOut(row));
   if (persistedLockedOut.length > 0) {
+    const mappedRows = persistedLockedOut
+      .map((slot) => matchRowForLockedOutSlot(slot, matchInput))
+      .filter((row): row is KnockoutMatchPickRow => row != null);
+    const fromRows = lockedKnockoutStatusFromRows(
+      mappedRows.length > 0 ? mappedRows : [],
+      input.teams,
+    );
+    if (fromRows) return fromRows;
     return {
       kind: "locked_out_picks",
       headline: LOCKED_OUT_PICK_HEADLINE,
-      detail: lockedOutPickCardBody(persistedLockedOut[0]?.slotLabel ?? null),
+      detail: lockedOutPickCardBody(null),
       tone: "warning",
       ctaLabel: null,
       ctaAction: null,

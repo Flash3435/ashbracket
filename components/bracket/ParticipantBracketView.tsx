@@ -157,8 +157,8 @@ export function ParticipantBracketView({
             Knockout Bracket Tracker
           </p>
           <p className="mt-1 max-w-3xl text-xs leading-relaxed text-ash-muted">
-            Follow your saved knockout picks against live tournament results. Completed matches
-            show who advanced, who was eliminated, and whether your pick is still alive.
+            Official matchups and results are shown first. Badges mark your saved picks, whether
+            they are still alive, and teams that advanced without being one of your picks.
           </p>
         </div>
       ) : null}

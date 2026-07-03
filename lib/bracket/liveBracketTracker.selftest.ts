@@ -156,7 +156,29 @@ void (async function main() {
 
     const m73 = tracker.roundOf32[0]!;
     assert(m73.away.participantPick === "your_pick_eliminated", "picked loser flagged");
+    assert(m73.home.participantPick === "not_your_pick", "official winner not your pick");
     assert(liveSideNeedsMutedFlag(m73.away), "loser side muted");
+  }
+
+  // Official advancer when participant saved no R32 winner pick
+  {
+    const slots: KnockoutPickSlotDraft[] = [
+      slot("r32|1", "round_of_32", "team-bra", "1"),
+      slot("r32|2", "round_of_32", "team-tun", "2"),
+    ];
+
+    const tracker = buildLiveBracketTracker({
+      slots,
+      teams,
+      knockoutBracketPicksUnlocked: false,
+      tournamentMatches: [r32Finished],
+    });
+
+    const m73 = tracker.roundOf32[0]!;
+    assert(m73.home.participantPick === "not_your_pick", "no saved winner shows not your pick");
+    assert(m73.home.displayName === "Brazil", "official winner name shown");
+    assert(m73.away.tournamentOutcome === "eliminated", "official loser eliminated");
+    assert(m73.away.participantPick === null, "eliminated non-pick side has no pick badge");
   }
 
   // Upcoming match still shows participant pick

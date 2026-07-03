@@ -429,8 +429,10 @@ const r32OfficialResults: TournamentMatchPublicRow[] = [
   });
   assert.equal(model.kind, "locked_out_picks");
   assert.equal(model.headline, LOCKED_OUT_PICK_HEADLINE);
-  assert.match(model.detail, /locked and can no longer advance/i);
+  assert.match(model.detail, /Your saved pick for .+ vs .+ is out/i);
   assert.match(model.detail, /No action is needed/i);
+  assert.doesNotMatch(model.detail, /Round of 16 · pick/i);
+  assert.doesNotMatch(model.detail, /pick \d pick/i);
   assert.equal(model.ctaLabel, null);
   assert.equal(model.ctaAction, null);
 }

@@ -6,6 +6,10 @@ import { deriveParticipantBracket } from "./deriveParticipantBracket";
 import {
   FINAL_FEEDER_NO_CHAMPION_HELPER,
   NO_CHAMPION_PICK_SAVED_LABEL,
+  NO_SAVED_PICK_BRACKET_LABEL,
+  AWAITING_RESULT_BRACKET_LABEL,
+  OFFICIAL_ADVANCED_NOT_YOUR_PICK_TOOLTIP,
+  NO_SAVED_PICK_BRACKET_TOOLTIP,
 } from "./knockoutBracketDisplayCopy";
 import { resolveFullBracketUnlockedForTracker } from "./resolveLiveBracketTrackerMode";
 import type { BracketMatchResolved } from "./types";
@@ -39,7 +43,10 @@ export type ParticipantPickBadge =
   | "your_pick"
   | "your_pick_alive"
   | "your_pick_eliminated"
+  | "not_your_pick"
   | null;
+
+export type LiveBracketSideFillState = "team" | "no_saved_pick" | "awaiting";
 
 export type LiveBracketSide = {
   teamId: string | null;
@@ -48,6 +55,8 @@ export type LiveBracketSide = {
   tournamentOutcome: TournamentSideOutcome | null;
   participantPick: ParticipantPickBadge;
   eliminatedFromTournament: boolean;
+  fillState: LiveBracketSideFillState;
+  helperTooltip: string | null;
 };
 
 export type LiveBracketMatch = {
@@ -201,16 +210,48 @@ function participantPickBadge(args: {
   eliminatedFromTournament: boolean;
 }): ParticipantPickBadge {
   const { teamId, participantPickedWinnerId } = args;
-  if (!teamId || !participantPickedWinnerId || teamId !== participantPickedWinnerId) {
-    return null;
+  if (!teamId) return null;
+
+  if (participantPickedWinnerId && teamId === participantPickedWinnerId) {
+    if (args.matchFinished) {
+      if (args.tournamentOutcome === "advanced") return "your_pick";
+      if (args.tournamentOutcome === "eliminated") return "your_pick_eliminated";
+      return "your_pick_eliminated";
+    }
+    if (args.eliminatedFromTournament) return "your_pick_eliminated";
+    return "your_pick_alive";
   }
-  if (args.matchFinished) {
-    if (args.tournamentOutcome === "advanced") return "your_pick";
-    if (args.tournamentOutcome === "eliminated") return "your_pick_eliminated";
-    return "your_pick_eliminated";
+
+  if (
+    args.matchFinished &&
+    args.tournamentOutcome === "advanced" &&
+    teamId !== participantPickedWinnerId
+  ) {
+    return "not_your_pick";
   }
-  if (args.eliminatedFromTournament) return "your_pick_eliminated";
-  return "your_pick_alive";
+
+  return null;
+}
+
+function resolveSideFillState(args: {
+  teamId: string | null;
+  usesOfficialFixture: boolean;
+  siblingHasTeam: boolean;
+}): LiveBracketSideFillState {
+  if (args.teamId) return "team";
+  if (args.usesOfficialFixture || args.siblingHasTeam) return "awaiting";
+  return "no_saved_pick";
+}
+
+function sideDisplayName(
+  teamId: string | null,
+  teamById: Map<string, Team>,
+  fillState: LiveBracketSideFillState,
+): string {
+  if (teamId) return teamLabel(teamId, teamById);
+  if (fillState === "no_saved_pick") return NO_SAVED_PICK_BRACKET_LABEL;
+  if (fillState === "awaiting") return AWAITING_RESULT_BRACKET_LABEL;
+  return "TBD";
 }
 
 function buildLiveSide(args: {
@@ -220,7 +261,8 @@ function buildLiveSide(args: {
   matchFinished: boolean;
   participantPickedWinnerId: string | null;
   eliminatedTeamIds: Set<string>;
-  fallbackName?: string;
+  usesOfficialFixture: boolean;
+  siblingHasTeam: boolean;
 }): LiveBracketSide {
   const teamId = args.teamId?.trim() || null;
   const eliminatedFromTournament = Boolean(
@@ -235,19 +277,34 @@ function buildLiveSide(args: {
     tournamentOutcome = "pending";
   }
 
+  const fillState = resolveSideFillState({
+    teamId,
+    usesOfficialFixture: args.usesOfficialFixture,
+    siblingHasTeam: args.siblingHasTeam,
+  });
+  const participantPick = participantPickBadge({
+    teamId,
+    participantPickedWinnerId: args.participantPickedWinnerId,
+    matchFinished: args.matchFinished,
+    tournamentOutcome,
+    eliminatedFromTournament,
+  });
+  const helperTooltip =
+    participantPick === "not_your_pick"
+      ? OFFICIAL_ADVANCED_NOT_YOUR_PICK_TOOLTIP
+      : fillState === "no_saved_pick"
+        ? NO_SAVED_PICK_BRACKET_TOOLTIP
+        : null;
+
   return {
     teamId,
-    displayName: teamLabel(teamId, args.teamById, args.fallbackName ?? "TBD"),
+    displayName: sideDisplayName(teamId, args.teamById, fillState),
     countryCode: countryCodeForTeam(teamId, args.teamById),
     tournamentOutcome,
-    participantPick: participantPickBadge({
-      teamId,
-      participantPickedWinnerId: args.participantPickedWinnerId,
-      matchFinished: args.matchFinished,
-      tournamentOutcome,
-      eliminatedFromTournament,
-    }),
+    participantPick,
     eliminatedFromTournament,
+    fillState,
+    helperTooltip,
   };
 }
 
@@ -312,6 +369,15 @@ function buildLiveMatchFromFixture(args: {
       ? args.participantPickedWinnerId
       : null;
 
+  const sideArgs = {
+    teamById: args.teamById,
+    officialWinnerId,
+    matchFinished,
+    participantPickedWinnerId: participantPick,
+    eliminatedTeamIds: args.eliminatedTeamIds,
+    usesOfficialFixture,
+  };
+
   return {
     matchKey: args.matchKey,
     fifaMatchNo: args.fifaMatchNo,
@@ -324,19 +390,13 @@ function buildLiveMatchFromFixture(args: {
     participantPickedWinnerId: participantPick,
     home: buildLiveSide({
       teamId: homeId,
-      teamById: args.teamById,
-      officialWinnerId,
-      matchFinished,
-      participantPickedWinnerId: participantPick,
-      eliminatedTeamIds: args.eliminatedTeamIds,
+      siblingHasTeam: Boolean(awayId),
+      ...sideArgs,
     }),
     away: buildLiveSide({
       teamId: awayId,
-      teamById: args.teamById,
-      officialWinnerId,
-      matchFinished,
-      participantPickedWinnerId: participantPick,
-      eliminatedTeamIds: args.eliminatedTeamIds,
+      siblingHasTeam: Boolean(homeId),
+      ...sideArgs,
     }),
   };
 }
@@ -502,6 +562,17 @@ function hasAnyKnockoutProgressionPick(slots: KnockoutPickSlotDraft[]): boolean 
   );
 }
 
+function officialFixtureTeamIds(
+  pub: TournamentMatchPublicRow | null,
+  teamByCountry: Map<string, Team>,
+): { homeId: string | null; awayId: string | null } {
+  if (!pub) return { homeId: null, awayId: null };
+  const homeId = teamIdForCountry(teamByCountry, pub.home_country_code);
+  const awayId = teamIdForCountry(teamByCountry, pub.away_country_code);
+  if (!homeId && !awayId) return { homeId: null, awayId: null };
+  return { homeId, awayId };
+}
+
 function enrichLiveRound(
   liveMatches: LiveBracketMatch[],
   participantMatches: BracketMatchResolved[],
@@ -526,15 +597,30 @@ function enrichLiveRound(
       (m) => m.stage_code === live.stageCode,
     );
     const pub = publicMatchForFifaNo(stageMatches, live.stageCode, live.fifaMatchNo);
+    const officialSides = officialFixtureTeamIds(pub, teamByCountry);
 
     const homeId =
-      live.home.teamId ?? participant?.home.teamId ?? pathFallback.homeId;
+      officialSides.homeId ??
+      live.home.teamId ??
+      pathFallback.homeId ??
+      participant?.home.teamId ??
+      null;
     const awayId =
-      live.away.teamId ?? participant?.away.teamId ?? pathFallback.awayId;
+      officialSides.awayId ??
+      live.away.teamId ??
+      pathFallback.awayId ??
+      participant?.away.teamId ??
+      null;
     const participantPick =
       live.participantPickedWinnerId ??
-      participant?.winnerTeamId ??
-      pathFallback.pickId ??
+      (participant?.winnerTeamId &&
+      (participant.winnerTeamId === homeId || participant.winnerTeamId === awayId)
+        ? participant.winnerTeamId
+        : null) ??
+      (pathFallback.pickId &&
+      (pathFallback.pickId === homeId || pathFallback.pickId === awayId)
+        ? pathFallback.pickId
+        : null) ??
       null;
 
     if (

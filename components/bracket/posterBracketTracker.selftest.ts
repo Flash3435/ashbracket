@@ -153,6 +153,7 @@ void (async function main() {
     PosterBracketTracker({ tracker: loserTracker, teamById, matchEditHref: null }),
   );
   assert(loserHtml.includes("Pick out"), "eliminated participant pick shows Pick out");
+  assert(loserHtml.includes("Not your pick"), "official winner shows not your pick badge");
   assert(loserHtml.includes("Tunisia"), "eliminated pick team still visible");
 
   // QF enrichment must use quarterfinalist (R16 winner) slots, not round_of_16 R32 winners.
