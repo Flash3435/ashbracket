@@ -458,7 +458,7 @@ function koPred(
 
 function koResult(
   id: string,
-  kind: string,
+  kind: Result["kind"],
   teamId: string,
   slotKey: string,
   stageId: string,
