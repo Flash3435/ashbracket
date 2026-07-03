@@ -18,9 +18,11 @@ import {
 import {
   buildKnockoutMatchPickRows,
   isKnockoutMatchDirectPickEligible,
+  knockoutMatchSavedPickPresentation,
   readConfirmedR32MatchWinner,
   readOfficialR32MatchResultWinner,
   readParticipantR32MatchWinnerPick,
+  validateKnockoutLaterMatchPick,
 } from "./knockoutMatchPickRows";
 import {
   isKnockoutMatchLockedForParticipant,
@@ -424,7 +426,72 @@ const existing: Prediction[] = [
   assert.ok(missingErr, "cannot add first pick on live match");
 }
 
-// 1. Canada R16 pick frozen after Morocco eliminates Netherlands in R32 feeders
+// 1. No saved M90 pick, feeders official, M90 not started → first-time pick allowed
+{
+  const emptyM90Slots = [r16Slot("1", "team-can"), r16Slot("3", "team-mar")];
+  const rows = buildKnockoutMatchPickRows({
+    bracketKind: "round_of_16",
+    slots: emptyM90Slots,
+    teams,
+    tournamentMatches,
+    gradual,
+    knockoutBracketPicksUnlocked: true,
+    nowMs,
+  });
+  const m90Row = rows.find((r) => r.fifaMatchNo === 90)!;
+  assert.strictEqual(m90Row.homeTeamId, "team-can");
+  assert.strictEqual(m90Row.awayTeamId, "team-mar");
+  assert.strictEqual(m90Row.winnerTeamId, "");
+  assert.strictEqual(m90Row.lockReason, "pickable");
+  assert.strictEqual(isKnockoutMatchDirectPickEligible(m90Row), true);
+  assert.strictEqual(
+    validateKnockoutLaterMatchPick(m90Row, "team-can"),
+    null,
+    "can pick Canada",
+  );
+  assert.strictEqual(
+    validateKnockoutLaterMatchPick(m90Row, "team-mar"),
+    null,
+    "can pick Morocco",
+  );
+  assert.strictEqual(
+    isKnockoutPickEditableForParticipant({
+      predictionKind: "quarterfinalist",
+      slotKey: "2",
+      tournamentMatches,
+      gradual,
+      fullRoundOf32Official: true,
+      savedTeamId: "",
+      nowMs,
+    }),
+    true,
+  );
+  const backfillOk = applyGradualKnockoutPickSaveGuards({
+    incoming: [
+      {
+        predictionKind: "quarterfinalist",
+        tournamentStageId: stageR16,
+        slotKey: "2",
+        groupCode: null,
+        bonusKey: null,
+        teamId: "team-can",
+      },
+    ],
+    existing: [],
+    teams,
+    matches: tournamentMatches,
+    fullRoundOf32Official: true,
+    nowMs,
+  });
+  assert.strictEqual(backfillOk.error, null, "server allows first-time M90 pick");
+  assert.strictEqual(
+    backfillOk.slots.find((s) => s.predictionKind === "quarterfinalist" && s.slotKey === "2")
+      ?.teamId,
+    "team-can",
+  );
+}
+
+// Canada R16 pick frozen after Morocco eliminates Netherlands in R32 feeders
 {
   const slots = [r16Slot("3", "team-ned"), qfSlot("2", "team-can")];
   const existingQf: Prediction[] = [
@@ -465,6 +532,7 @@ const existing: Prediction[] = [
       tournamentMatches,
       gradual,
       fullRoundOf32Official: true,
+      savedTeamId: "team-can",
       nowMs,
     }),
     false,
@@ -489,7 +557,153 @@ const existing: Prediction[] = [
   assert.ok(swapErr, "cannot switch R16 winner from Canada to Morocco");
 }
 
-// 2. Norway R16 pick frozen when Brazil appears from official feeder
+// 2. Saved M90 Canada, feeders official, M90 not started → cannot switch or clear
+{
+  const clearErr = validateKnockoutParticipantPickChanges({
+    incoming: [
+      {
+        predictionKind: "quarterfinalist",
+        tournamentStageId: stageR16,
+        slotKey: "2",
+        groupCode: null,
+        bonusKey: null,
+        teamId: "",
+      },
+    ],
+    existing: [
+      {
+        id: "p-qf",
+        poolId: "pool",
+        participantId: "par",
+        predictionKind: "quarterfinalist",
+        teamId: "team-can",
+        tournamentStageId: stageR16,
+        groupCode: null,
+        slotKey: "2",
+        bonusKey: null,
+        valueText: null,
+        createdAt: "",
+        updatedAt: "",
+      },
+    ],
+    matches: tournamentMatches,
+    gradual,
+    fullRoundOf32Official: true,
+    nowMs,
+  });
+  assert.ok(clearErr, "clear blocked for saved M90 pick on feeder-official row");
+}
+
+// 3. Saved stale M90 Netherlands, feeders official → stale and cannot repair
+{
+  const staleSlots = [r16Slot("3", "team-ned"), qfSlot("2", "team-ned")];
+  const staleRows = buildKnockoutMatchPickRows({
+    bracketKind: "round_of_16",
+    slots: staleSlots,
+    teams,
+    tournamentMatches,
+    gradual,
+    knockoutBracketPicksUnlocked: true,
+    nowMs,
+  });
+  const staleM90 = staleRows.find((r) => r.fifaMatchNo === 90)!;
+  assert.strictEqual(staleM90.homeTeamId, "team-can");
+  assert.strictEqual(staleM90.awayTeamId, "team-mar");
+  assert.strictEqual(staleM90.winnerTeamId, "team-ned");
+  assert.strictEqual(staleM90.lockReason, "frozen");
+  const presentation = knockoutMatchSavedPickPresentation(staleM90, teams);
+  assert.strictEqual(presentation.savedPickStatus, "stale");
+  assert.ok(
+    presentation.savedPickWarning?.includes("eliminated") ||
+      presentation.savedPickWarning?.includes("no longer matches"),
+  );
+  const repairErr = validateKnockoutParticipantPickChanges({
+    incoming: [
+      {
+        predictionKind: "quarterfinalist",
+        tournamentStageId: stageR16,
+        slotKey: "2",
+        groupCode: null,
+        bonusKey: null,
+        teamId: "team-mar",
+      },
+    ],
+    existing: [
+      {
+        id: "p-stale",
+        poolId: "pool",
+        participantId: "par",
+        predictionKind: "quarterfinalist",
+        teamId: "team-ned",
+        tournamentStageId: stageR16,
+        groupCode: null,
+        slotKey: "2",
+        bonusKey: null,
+        valueText: null,
+        createdAt: "",
+        updatedAt: "",
+      },
+    ],
+    matches: tournamentMatches,
+    gradual,
+    fullRoundOf32Official: true,
+    nowMs,
+  });
+  assert.ok(repairErr, "cannot repair stale Netherlands pick to Morocco");
+}
+
+// 4. No saved M90 pick, M90 started/live/final → cannot backfill
+{
+  const liveM90 = match({
+    match_code: "M90",
+    stage_code: "round_of_16",
+    kickoff_at: "2026-07-04T19:00:00Z",
+    status: "live",
+    home_country_code: "CAN",
+    away_country_code: "MAR",
+    home_team_name: "Canada",
+    away_team_name: "Morocco",
+  });
+  const liveMatches = [m73, m75, liveM90];
+  const liveGradual = getGradualKnockoutSelectionState({
+    matches: liveMatches,
+    teams,
+    nowMs: new Date("2026-07-04T20:00:00Z").getTime(),
+    fullRoundOf32Official: true,
+  });
+  const liveRows = buildKnockoutMatchPickRows({
+    bracketKind: "round_of_16",
+    slots: [r16Slot("1", "team-can"), r16Slot("3", "team-mar")],
+    teams,
+    tournamentMatches: liveMatches,
+    gradual: liveGradual,
+    knockoutBracketPicksUnlocked: true,
+    nowMs: new Date("2026-07-04T20:00:00Z").getTime(),
+  });
+  const liveM90Row = liveRows.find((r) => r.fifaMatchNo === 90)!;
+  assert.strictEqual(liveM90Row.lockReason, "started");
+  assert.strictEqual(isKnockoutMatchDirectPickEligible(liveM90Row), false);
+  const backfillErr = validateKnockoutParticipantPickChanges({
+    incoming: [
+      {
+        predictionKind: "quarterfinalist",
+        tournamentStageId: stageR16,
+        slotKey: "2",
+        groupCode: null,
+        bonusKey: null,
+        teamId: "team-can",
+      },
+    ],
+    existing: [],
+    matches: liveMatches,
+    gradual: liveGradual,
+    fullRoundOf32Official: true,
+    nowMs: new Date("2026-07-04T20:00:00Z").getTime(),
+  });
+  assert.ok(backfillErr, "cannot backfill M90 after kickoff");
+}
+
+// Norway R16 pick frozen when Brazil appears from official feeder
 {
   const m76 = match({
     match_code: "M76",
@@ -539,6 +753,7 @@ const existing: Prediction[] = [
       slotKey: "3",
       tournamentMatches: norMatches,
       gradual: norGradual,
+      savedTeamId: "team-nor",
       nowMs,
     }),
     true,
@@ -578,7 +793,7 @@ const existing: Prediction[] = [
   assert.ok(swapErr, "cannot switch Norway pick to Brazil after feeder is official");
 }
 
-// 3. Clear is blocked for frozen later-round rows
+// 3. Clear is blocked for frozen later-round rows with saved picks
 {
   const clearErr = validateKnockoutParticipantPickChanges({
     incoming: [
@@ -707,7 +922,7 @@ const existing: Prediction[] = [
   });
   const m89 = futureRows.find((r) => r.fifaMatchNo === 89)!;
   const m90 = futureRows.find((r) => r.fifaMatchNo === 90)!;
-  assert.strictEqual(m90.lockReason, "frozen", "M90 frozen after official R32 feeders");
+  assert.strictEqual(m90.lockReason, "frozen", "M90 frozen when saved pick exists after official R32 feeders");
   assert.strictEqual(m89.lockReason, "pickable", "M89 stays editable before feeder results");
   assert.strictEqual(m89.homeTeamId, "team-can");
   assert.strictEqual(m89.awayTeamId, "team-mar");

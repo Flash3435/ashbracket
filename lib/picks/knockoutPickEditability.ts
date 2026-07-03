@@ -288,6 +288,7 @@ export function isKnockoutPickEditableForParticipant(input: {
   tournamentMatches?: TournamentMatchPublicRow[] | null;
   gradual: GradualKnockoutSelectionState;
   fullRoundOf32Official: boolean;
+  savedTeamId?: string | null;
   nowMs?: number;
 }): boolean {
   if (!isKnockoutProgressionKind(input.predictionKind)) return true;
@@ -329,10 +330,13 @@ export function isKnockoutPickEditableForParticipant(input: {
 
   if (!input.fullRoundOf32Official) return false;
 
-  if (isKnockoutSlotFrozenByOfficialFeeders(input)) return false;
-
   const match = resolveTournamentMatchForKnockoutSlot(input);
   if (match && isKnockoutMatchLockedForParticipant(match, nowMs)) return false;
+
+  if (isKnockoutSlotFrozenByOfficialFeeders(input)) {
+    return !input.savedTeamId?.trim();
+  }
+
   return true;
 }
 
@@ -342,6 +346,7 @@ export function isKnockoutPickFrozenForParticipant(input: {
   slotKey: string | null;
   tournamentMatches?: TournamentMatchPublicRow[] | null;
   gradual: GradualKnockoutSelectionState;
+  savedTeamId?: string | null;
   nowMs?: number;
 }): boolean {
   if (!isKnockoutProgressionKind(input.predictionKind)) return false;
@@ -375,8 +380,12 @@ export function isKnockoutPickFrozenForParticipant(input: {
     return false;
   }
 
-  if (isKnockoutSlotFrozenByOfficialFeeders(input)) return true;
-
   const match = resolveTournamentMatchForKnockoutSlot(input);
-  return match != null && isKnockoutMatchLockedForParticipant(match, nowMs);
+  if (match && isKnockoutMatchLockedForParticipant(match, nowMs)) return true;
+
+  if (isKnockoutSlotFrozenByOfficialFeeders(input)) {
+    return Boolean(input.savedTeamId?.trim());
+  }
+
+  return false;
 }

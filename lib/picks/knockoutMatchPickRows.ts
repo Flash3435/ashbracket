@@ -918,7 +918,8 @@ export function buildKnockoutMatchPickRows(
         slotKey: saveSlotKey,
         tournamentMatches: input.tournamentMatches,
         gradual,
-      })
+      }) &&
+      Boolean(winnerTeamId.trim())
     ) {
       lockReason = "frozen";
     }

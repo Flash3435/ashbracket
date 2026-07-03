@@ -1346,6 +1346,7 @@ export function KnockoutPicksWizard({
         tournamentMatches,
         gradual: gradualKnockout,
         fullRoundOf32Official: knockoutBracketPicksUnlocked,
+        savedTeamId: row.teamId,
       });
     }
     return false;

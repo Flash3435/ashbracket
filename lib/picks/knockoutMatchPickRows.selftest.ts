@@ -1281,12 +1281,13 @@ function r32Side(slotKey: string, teamId = ""): KnockoutPickSlotDraft {
   const m89 = rows.find((r) => r.fifaMatchNo === 89)!;
   assert.strictEqual(m89.homeTeamId, "team-ger");
   assert.strictEqual(m89.awayTeamId, "team-swe");
-  assert.strictEqual(m89.lockReason, "frozen");
+  assert.strictEqual(m89.lockReason, "pickable");
   assert.strictEqual(
-    validateKnockoutLaterMatchPick(m89, "team-fra"),
-    "This pick is locked because feeder match results are official.",
+    validateKnockoutLaterMatchPick(m89, "team-swe"),
+    null,
+    "first-time pick allowed when feeders official and match not started",
   );
-  assert.strictEqual(isKnockoutMatchDirectPickEligible(m89), false);
+  assert.strictEqual(isKnockoutMatchDirectPickEligible(m89), true);
 
   const afterPick = pruneParticipantPicks(
     applyKnockoutMatchWinnerToSlots(slots, m89, "team-swe"),
@@ -1789,15 +1790,12 @@ function r32Side(slotKey: string, teamId = ""): KnockoutPickSlotDraft {
     knockoutBracketPicksUnlocked: true,
   });
   const frozenM89 = frozenRows.find((r) => r.fifaMatchNo === 89)!;
-  assert.strictEqual(frozenM89.lockReason, "frozen");
+  assert.strictEqual(frozenM89.lockReason, "pickable");
 
   const missingPick = knockoutMatchSavedPickPresentation(frozenM89, teams);
   assert.strictEqual(missingPick.savedPickStatus, "missing");
   assert.strictEqual(missingPick.savedPickSummaryLine, "No pick saved");
-  assert.strictEqual(
-    missingPick.lockStatusLine,
-    "Locked — feeder results are official.",
-  );
+  assert.strictEqual(missingPick.lockStatusLine, null);
   assert.strictEqual(missingPick.matchupLine, "Germany vs Sweden");
   assert.ok(
     !missingPick.savedPickSummaryLine.toLowerCase().includes("admin"),
