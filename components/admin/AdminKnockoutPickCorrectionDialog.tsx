@@ -93,14 +93,15 @@ export function AdminKnockoutPickCorrectionDialog({
               {matchLabel} has already kicked off. Record an organizer-approved
               correction for this participant?
             </p>
-            {currentTeamId ? (
-              <p className="mt-2 text-xs text-ash-muted">
-                Current pick:{" "}
-                <span className="text-ash-text">
-                  {teams.find((t) => t.id === currentTeamId)?.name ?? "Unknown"}
-                </span>
-              </p>
-            ) : null}
+            <p className="mt-2 text-xs text-ash-muted">
+              Current pick:{" "}
+              <span className="text-ash-text">
+                {currentTeamId?.trim()
+                  ? (teams.find((t) => t.id === currentTeamId)?.name ??
+                    "Unknown")
+                  : "No pick saved"}
+              </span>
+            </p>
 
             <fieldset className="mt-4">
               <legend className="text-xs font-medium uppercase tracking-wide text-ash-muted">

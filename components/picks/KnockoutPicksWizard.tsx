@@ -77,6 +77,7 @@ import {
   buildGradualR32SavePayload,
   countGradualR32MatchupsFilled,
   getGradualKnockoutSelectionState,
+  gradualR32MatchSavedPickPresentation,
   hasGradualR32WinnerStorage,
   isFullKnockoutBracketPicksUnlocked,
   isGradualR32WinnerPickRow,
@@ -2735,6 +2736,11 @@ export function KnockoutPicksWizard({
               const r32DirectPickEligible =
                 r32MatchTeams != null && r32LockReason === "pickable";
               const r32RowPickDisabled = pickRowDisabled(row);
+              const isLockedR32Row =
+                r32LockReason === "started" && gradualMatchRow != null;
+              const r32SavedPickPresentation = isLockedR32Row
+                ? gradualR32MatchSavedPickPresentation(gradualMatchRow, teams)
+                : null;
 
               return (
                 <li
@@ -2746,7 +2752,9 @@ export function KnockoutPicksWizard({
                         : "border-dashed border-amber-700/35 bg-amber-950/10"
                       : r32DirectPickEligible && !isEmptyPick
                         ? "border-ash-accent/45 bg-ash-accent/[0.07]"
-                        : isEmptyPick && !thirdRowChooseDisabled
+                        : isEmptyPick &&
+                            !thirdRowChooseDisabled &&
+                            !isLockedR32Row
                           ? "border-dashed border-amber-700/40 bg-amber-950/15"
                           : "border-ash-border bg-ash-body/40"
                   }`}
@@ -2765,6 +2773,69 @@ export function KnockoutPicksWizard({
                           setSearch("");
                         }}
                       />
+                    </div>
+                  ) : isLockedR32Row && r32SavedPickPresentation ? (
+                    <div>
+                      <p className="text-xs font-medium uppercase tracking-wide text-ash-muted">
+                        {heading}
+                      </p>
+                      <div className="mt-1 space-y-1">
+                        {r32SavedPickPresentation.matchupLine ? (
+                          <p className="text-sm font-medium text-ash-text">
+                            {r32SavedPickPresentation.matchupLine}
+                          </p>
+                        ) : null}
+                        <p
+                          className={`text-sm font-medium ${
+                            r32SavedPickPresentation.savedPickStatus ===
+                            "missing"
+                              ? "text-amber-100/90"
+                              : "text-ash-text"
+                          }`}
+                        >
+                          {r32SavedPickPresentation.savedPickSummaryLine}
+                        </p>
+                        {r32SavedPickPresentation.savedPickWarning ? (
+                          <p
+                            className="text-xs font-medium text-amber-200/90"
+                            role="status"
+                          >
+                            {r32SavedPickPresentation.savedPickWarning}
+                          </p>
+                        ) : null}
+                        {gradualMatchRow.participantPickEliminated &&
+                        gradualMatchRow.officialResultTeamId ? (
+                          <p className="text-xs font-medium text-rose-300/90">
+                            Your pick is out — official:{" "}
+                            {teamById.get(gradualMatchRow.officialResultTeamId)
+                              ?.name ?? "Winner"}
+                          </p>
+                        ) : null}
+                        {r32SavedPickPresentation.lockStatusLine ? (
+                          <p
+                            className="mt-2 rounded-md border border-sky-800/40 bg-sky-950/20 px-3 py-2 text-xs text-sky-100"
+                            role="status"
+                          >
+                            {r32SavedPickPresentation.lockStatusLine}
+                          </p>
+                        ) : null}
+                        {renderAdminKnockoutCorrectionButton({
+                          matchCode: `M${gradualMatchRow.fifaMatchNo}`,
+                          matchLabel:
+                            gradualMatchRow.display.heading ?? heading,
+                          allowedTeamIds: [
+                            gradualKnockout.matchStates[
+                              gradualMatchRow.matchIndex
+                            ]?.homeTeamId,
+                            gradualKnockout.matchStates[
+                              gradualMatchRow.matchIndex
+                            ]?.awayTeamId,
+                          ].filter((id): id is string => Boolean(id)),
+                          currentTeamId:
+                            r32SavedPickPresentation.savedPickTeamId ??
+                            undefined,
+                        })}
+                      </div>
                     </div>
                   ) : (
                   <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
@@ -2854,20 +2925,6 @@ export function KnockoutPicksWizard({
                               : (r32RowDisplay?.chooseButtonLabel ?? "Choose team")}
                         </button>
                       ) : null}
-                      {r32LockReason === "started" && gradualMatchRow
-                        ? renderAdminKnockoutCorrectionButton({
-                            matchCode: `M${gradualMatchRow.fifaMatchNo}`,
-                            matchLabel:
-                              gradualMatchRow.display.heading ?? heading,
-                            allowedTeamIds: [
-                              gradualKnockout.matchStates[gradualMatchRow.matchIndex]
-                                ?.homeTeamId,
-                              gradualKnockout.matchStates[gradualMatchRow.matchIndex]
-                                ?.awayTeamId,
-                            ].filter((id): id is string => Boolean(id)),
-                            currentTeamId: effectiveTeamId || undefined,
-                          })
-                        : null}
                     </div>
                   </div>
                   )}

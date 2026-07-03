@@ -2,7 +2,8 @@ import assert from "node:assert";
 import type { Team } from "../../src/types/domain";
 import type { KnockoutPickSlotDraft } from "../../types/adminKnockoutPicks";
 import type { TournamentMatchPublicRow } from "../../types/tournamentPublic";
-import type { Prediction } from "../../src/types/domain";
+import type { Prediction, Result } from "../../src/types/domain";
+import { computePoolScores } from "../../src/lib/scoring/computePoolScores";
 import {
   applyKnockoutPickCorrection,
   resolveKnockoutPickCorrectionMatch,
@@ -14,6 +15,7 @@ import {
 import {
   buildGradualR32MatchPickRows,
   getGradualKnockoutSelectionState,
+  gradualR32MatchSavedPickPresentation,
 } from "./gradualKnockoutUnlock";
 import {
   buildKnockoutMatchPickRows,
@@ -1370,6 +1372,337 @@ const existing: Prediction[] = [
     )?.teamId,
     "team-us",
     "admin can backfill frozen missing M94 row",
+  );
+}
+
+// --- Admin R32 correction requirements (Seema review flow) ---
+
+// 1. Participant cannot edit final R32 match
+{
+  const finishedM75 = match({
+    match_code: "M75",
+    stage_code: "round_of_32",
+    kickoff_at: "2026-06-29T19:00:00Z",
+    status: "finished",
+    home_country_code: "NED",
+    away_country_code: "MAR",
+    home_team_name: "Netherlands",
+    away_team_name: "Morocco",
+    winner_country_code: "MAR",
+  });
+  const finishedGradual = getGradualKnockoutSelectionState({
+    matches: [finishedM75],
+    teams,
+    nowMs,
+    fullRoundOf32Official: true,
+  });
+  assert.strictEqual(
+    isKnockoutPickEditableForParticipant({
+      predictionKind: "round_of_16",
+      slotKey: "3",
+      tournamentMatches: [finishedM75],
+      gradual: finishedGradual,
+      fullRoundOf32Official: true,
+      savedTeamId: "team-ned",
+      nowMs,
+    }),
+    false,
+    "finished R32 match is not editable by participant",
+  );
+}
+
+// 2. Admin can correct missing final R32 pick
+{
+  const finishedM75 = match({
+    match_code: "M75",
+    stage_code: "round_of_32",
+    kickoff_at: "2026-06-29T19:00:00Z",
+    status: "finished",
+    home_country_code: "NED",
+    away_country_code: "MAR",
+    home_team_name: "Netherlands",
+    away_team_name: "Morocco",
+    winner_country_code: "MAR",
+  });
+  const slots = [r16Slot("3", "")];
+  const resolved = resolveKnockoutPickCorrectionMatch({
+    matchCode: "M75",
+    slots,
+    teams,
+    tournamentMatches: [finishedM75],
+    fullRoundOf32Official: true,
+    nowMs,
+  });
+  assert.ok(!("error" in resolved), "admin can open missing final R32 pick");
+  assert.strictEqual(resolved.match.oldTeamId, "");
+  const applied = applyKnockoutPickCorrection({
+    slots,
+    match: resolved.match,
+    newTeamId: "team-mar",
+    teams,
+    tournamentMatches: [finishedM75],
+    fullRoundOf32Official: true,
+    nowMs,
+  });
+  assert.ok(applied.writePayloads.length >= 1);
+  assert.strictEqual(
+    applied.slots.find((s) => s.predictionKind === "round_of_16" && s.slotKey === "3")
+      ?.teamId,
+    "team-mar",
+  );
+  const gradual = getGradualKnockoutSelectionState({
+    matches: [finishedM75],
+    teams,
+    nowMs,
+    fullRoundOf32Official: true,
+  });
+  const uiRowsBefore = buildGradualR32MatchPickRows({
+    slots,
+    state: gradual,
+    teams,
+    fullRoundOf32Official: true,
+  });
+  const missingPresentation = gradualR32MatchSavedPickPresentation(
+    uiRowsBefore.find((r) => r.fifaMatchNo === 75)!,
+    teams,
+  );
+  assert.strictEqual(missingPresentation.savedPickStatus, "missing");
+  assert.strictEqual(missingPresentation.savedPickSummaryLine, "No pick saved");
+  const uiRows = buildGradualR32MatchPickRows({
+    slots: applied.slots,
+    state: gradual,
+    teams,
+    fullRoundOf32Official: true,
+  });
+  const m75Row = uiRows.find((r) => r.fifaMatchNo === 75)!;
+  const presentation = gradualR32MatchSavedPickPresentation(m75Row, teams);
+  assert.strictEqual(presentation.savedPickStatus, "valid");
+  assert.strictEqual(presentation.savedPickSummaryLine, "Saved pick: Morocco");
+}
+
+// 3. Admin can correct stale/incorrect final R32 pick
+{
+  const finishedM75 = match({
+    match_code: "M75",
+    stage_code: "round_of_32",
+    kickoff_at: "2026-06-29T19:00:00Z",
+    status: "finished",
+    home_country_code: "NED",
+    away_country_code: "MAR",
+    winner_country_code: "MAR",
+  });
+  const slots = [r16Slot("3", "team-ned")];
+  const gradual = getGradualKnockoutSelectionState({
+    matches: [finishedM75],
+    teams,
+    nowMs,
+    fullRoundOf32Official: true,
+  });
+  const beforeRows = buildGradualR32MatchPickRows({
+    slots,
+    state: gradual,
+    teams,
+    fullRoundOf32Official: true,
+  });
+  const beforePresentation = gradualR32MatchSavedPickPresentation(
+    beforeRows.find((r) => r.fifaMatchNo === 75)!,
+    teams,
+  );
+  assert.strictEqual(beforePresentation.savedPickStatus, "stale");
+  const resolved = resolveKnockoutPickCorrectionMatch({
+    matchCode: "M75",
+    slots,
+    teams,
+    tournamentMatches: [finishedM75],
+    fullRoundOf32Official: true,
+    nowMs,
+  });
+  assert.ok(!("error" in resolved));
+  const applied = applyKnockoutPickCorrection({
+    slots,
+    match: resolved.match,
+    newTeamId: "team-mar",
+    teams,
+    tournamentMatches: [finishedM75],
+    fullRoundOf32Official: true,
+    nowMs,
+  });
+  assert.strictEqual(
+    applied.slots.find((s) => s.predictionKind === "round_of_16" && s.slotKey === "3")
+      ?.teamId,
+    "team-mar",
+  );
+}
+
+// 4. Correction produces auditable before/after metadata
+{
+  const finishedM75 = match({
+    match_code: "M75",
+    stage_code: "round_of_32",
+    kickoff_at: "2026-06-29T19:00:00Z",
+    status: "finished",
+    home_country_code: "NED",
+    away_country_code: "MAR",
+    winner_country_code: "MAR",
+  });
+  const before = [r16Slot("3", "team-ned")];
+  const resolved = resolveKnockoutPickCorrectionMatch({
+    matchCode: "M75",
+    slots: before,
+    teams,
+    tournamentMatches: [finishedM75],
+    fullRoundOf32Official: true,
+    nowMs,
+  });
+  assert.ok(!("error" in resolved));
+  const applied = applyKnockoutPickCorrection({
+    slots: before,
+    match: resolved.match,
+    newTeamId: "team-mar",
+    teams,
+    tournamentMatches: [finishedM75],
+    fullRoundOf32Official: true,
+    nowMs,
+  });
+  const auditInput = {
+    poolId: "pool",
+    participantId: "par",
+    matchCode: resolved.match.matchCode,
+    oldTeamId: resolved.match.oldTeamId || null,
+    newTeamId: "team-mar",
+    oldTeamCountryCode: "NED",
+    newTeamCountryCode: "MAR",
+    reason: "Participant could not access account before kickoff; organizer-approved correction",
+    clearedPickCount: applied.cleared.length,
+  };
+  assert.strictEqual(auditInput.matchCode, "M75");
+  assert.strictEqual(auditInput.oldTeamId, "team-ned");
+  assert.strictEqual(auditInput.newTeamId, "team-mar");
+  assert.ok(auditInput.reason.length >= 8);
+  assert.ok(applied.writePayloads.length >= 1);
+}
+
+// 5. Scoring updates from corrected R32 pick
+{
+  const poolId = "pool";
+  const participantId = "par";
+  const stageR16Id = "stage-r16";
+  const finishedM75 = match({
+    match_code: "M75",
+    stage_code: "round_of_32",
+    kickoff_at: "2026-06-29T19:00:00Z",
+    status: "finished",
+    home_country_code: "NED",
+    away_country_code: "MAR",
+    winner_country_code: "MAR",
+  });
+  const slotsBefore = [r16Slot("3", "")];
+  const resolved = resolveKnockoutPickCorrectionMatch({
+    matchCode: "M75",
+    slots: slotsBefore,
+    teams,
+    tournamentMatches: [finishedM75],
+    fullRoundOf32Official: true,
+    nowMs,
+  });
+  assert.ok(!("error" in resolved));
+  const applied = applyKnockoutPickCorrection({
+    slots: slotsBefore,
+    match: resolved.match,
+    newTeamId: "team-mar",
+    teams,
+    tournamentMatches: [finishedM75],
+    fullRoundOf32Official: true,
+    nowMs,
+  });
+  const correctedRow = applied.slots.find(
+    (s) => s.predictionKind === "round_of_16" && s.slotKey === "3",
+  )!;
+  const predictionsBefore: Prediction[] = [];
+  const predictionsAfter: Prediction[] = [
+    {
+      id: "pred-r16-3",
+      poolId,
+      participantId,
+      predictionKind: "round_of_16",
+      teamId: correctedRow.teamId,
+      tournamentStageId: stageR16Id,
+      groupCode: null,
+      slotKey: "3",
+      bonusKey: null,
+      valueText: null,
+      createdAt: "",
+      updatedAt: "",
+    },
+  ];
+  const officialResults: Result[] = [
+    {
+      id: "res-mar-r16",
+      tournamentStageId: stageR16Id,
+      kind: "round_of_16",
+      teamId: "team-mar",
+      groupCode: null,
+      slotKey: null,
+      valueText: null,
+      resolvedAt: "",
+      createdAt: "",
+    },
+  ];
+  const scoringRules = [
+    {
+      id: "rule-r16",
+      poolId,
+      predictionKind: "round_of_16" as const,
+      bonusKey: null,
+      points: 4,
+      createdAt: "",
+      updatedAt: "",
+    },
+  ];
+  const beforeScore = computePoolScores({
+    poolId,
+    predictions: predictionsBefore,
+    results: officialResults,
+    scoringRules,
+    groupStageScoring: null,
+  });
+  const afterScore = computePoolScores({
+    poolId,
+    predictions: predictionsAfter,
+    results: officialResults,
+    scoringRules,
+    groupStageScoring: null,
+  });
+  assert.strictEqual(beforeScore.totalsByParticipantId[participantId] ?? 0, 0);
+  assert.strictEqual(afterScore.totalsByParticipantId[participantId] ?? 0, 4);
+}
+
+// 6. Later-round admin correction still works after R32 correction path
+{
+  const slots = [r16Slot("3", "team-ned"), qfSlot("2", "team-can")];
+  const resolved = resolveKnockoutPickCorrectionMatch({
+    matchCode: "M90",
+    slots,
+    teams,
+    tournamentMatches,
+    fullRoundOf32Official: true,
+    knockoutBracketPicksUnlocked: true,
+    nowMs,
+  });
+  assert.ok(!("error" in resolved), "later-round admin correction still resolves");
+  const applied = applyKnockoutPickCorrection({
+    slots,
+    match: resolved.match,
+    newTeamId: "team-mar",
+    teams,
+    tournamentMatches,
+    fullRoundOf32Official: true,
+  });
+  assert.strictEqual(
+    applied.slots.find((s) => s.predictionKind === "quarterfinalist" && s.slotKey === "2")
+      ?.teamId,
+    "team-mar",
+    "later-round frozen row correction still applies",
   );
 }
 

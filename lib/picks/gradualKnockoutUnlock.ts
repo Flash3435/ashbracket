@@ -301,6 +301,72 @@ export type GradualR32MatchPickRow = {
   display: R32SlotRowDisplay;
 };
 
+export type R32MatchSavedPickStatus = "valid" | "missing" | "stale";
+
+export type R32MatchSavedPickPresentation = {
+  savedPickTeamId: string | null;
+  savedPickLabel: string | null;
+  savedPickStatus: R32MatchSavedPickStatus;
+  savedPickSummaryLine: string;
+  savedPickWarning: string | null;
+  lockStatusLine: string | null;
+  matchupLine: string | null;
+};
+
+function r32MatchRowMatchupLine(row: GradualR32MatchPickRow): string | null {
+  const primary = row.display.emptyPrimaryLine?.trim() ?? "";
+  if (primary.includes(" vs ")) return primary;
+  return null;
+}
+
+/** Saved pick copy for locked R32 match rows — participant path, not official results. */
+export function gradualR32MatchSavedPickPresentation(
+  row: GradualR32MatchPickRow,
+  teams: Team[],
+): R32MatchSavedPickPresentation {
+  const savedPickTeamId = row.winnerTeamId.trim() || null;
+  const savedPickLabel = savedPickTeamId
+    ? (teams.find((t) => t.id === savedPickTeamId)?.name?.trim() ??
+      savedPickTeamId)
+    : null;
+
+  let savedPickStatus: R32MatchSavedPickStatus;
+  if (!savedPickTeamId) {
+    savedPickStatus = "missing";
+  } else if (row.participantPickEliminated) {
+    savedPickStatus = "stale";
+  } else {
+    savedPickStatus = "valid";
+  }
+
+  const savedPickSummaryLine =
+    savedPickStatus === "missing"
+      ? "No pick saved"
+      : `Saved pick: ${savedPickLabel ?? savedPickTeamId}`;
+
+  let savedPickWarning: string | null = null;
+  if (savedPickStatus === "stale") {
+    savedPickWarning =
+      "Saved pick is eliminated or no longer matches this matchup.";
+  } else if (savedPickStatus === "missing" && row.lockReason === "started") {
+    savedPickWarning =
+      "This matchup locked at kickoff before a pick was saved.";
+  }
+
+  const lockStatusLine =
+    row.lockReason === "started" ? R32_LOCKED_AT_KICKOFF : null;
+
+  return {
+    savedPickTeamId,
+    savedPickLabel,
+    savedPickStatus,
+    savedPickSummaryLine,
+    savedPickWarning,
+    lockStatusLine,
+    matchupLine: r32MatchRowMatchupLine(row),
+  };
+}
+
 /** One UI row per R32 matchup (16 total) during gradual unlock. */
 export function buildGradualR32MatchPickRows(input: {
   slots: KnockoutPickSlotDraft[];
