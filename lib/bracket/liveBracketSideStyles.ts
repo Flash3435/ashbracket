@@ -14,7 +14,7 @@ export function liveSideRowClassName(side: LiveBracketSide): string {
     return "border-ash-accent/55 bg-ash-accent/18 ring-1 ring-ash-accent/30";
   }
   if (side.participantPick === "not_your_pick") {
-    return "border-emerald-800/35 bg-emerald-950/15 opacity-90";
+    return "border-ash-border/50 bg-ash-body/20 opacity-85";
   }
   if (side.tournamentOutcome === "advanced") {
     return "border-emerald-800/45 bg-emerald-950/20";
@@ -43,7 +43,7 @@ export function liveSideNameClassName(side: LiveBracketSide): string {
     return "text-ash-text";
   }
   if (side.participantPick === "not_your_pick") {
-    return "text-ash-text/90";
+    return "text-ash-muted";
   }
   if (side.tournamentOutcome === "advanced") {
     return "text-ash-text";
@@ -55,7 +55,8 @@ export function liveSideNeedsMutedFlag(side: LiveBracketSide): boolean {
   return (
     side.eliminatedFromTournament ||
     side.tournamentOutcome === "eliminated" ||
-    side.participantPick === "your_pick_eliminated"
+    side.participantPick === "your_pick_eliminated" ||
+    side.participantPick === "not_your_pick"
   );
 }
 

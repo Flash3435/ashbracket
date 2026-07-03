@@ -318,24 +318,22 @@ function resolveFixtureSides(args: {
   awayId: string | null;
   usesOfficialFixture: boolean;
 } {
+  let officialHomeId: string | null = null;
+  let officialAwayId: string | null = null;
   if (args.officialMatch) {
-    const homeId = teamIdForCountry(
+    officialHomeId = teamIdForCountry(
       args.teamByCountry,
       args.officialMatch.home_country_code,
     );
-    const awayId = teamIdForCountry(
+    officialAwayId = teamIdForCountry(
       args.teamByCountry,
       args.officialMatch.away_country_code,
     );
-    if (homeId && awayId) {
-      return { homeId, awayId, usesOfficialFixture: true };
-    }
   }
-  return {
-    homeId: args.participantHomeId,
-    awayId: args.participantAwayId,
-    usesOfficialFixture: false,
-  };
+  const homeId = officialHomeId ?? args.participantHomeId;
+  const awayId = officialAwayId ?? args.participantAwayId;
+  const usesOfficialFixture = Boolean(officialHomeId || officialAwayId);
+  return { homeId, awayId, usesOfficialFixture };
 }
 
 function buildLiveMatchFromFixture(args: {
@@ -573,6 +571,66 @@ function officialFixtureTeamIds(
   return { homeId, awayId };
 }
 
+function enrichR32Matches(
+  liveMatches: LiveBracketMatch[],
+  participantMatches: BracketMatchResolved[],
+  slots: KnockoutPickSlotDraft[],
+  ctx: ConfirmedR32WinnerContext,
+  teamById: Map<string, Team>,
+  teamByCountry: Map<string, Team>,
+  eliminatedTeamIds: Set<string>,
+  tournamentMatches: TournamentMatchPublicRow[] | null | undefined,
+): LiveBracketMatch[] {
+  return liveMatches.map((live, index) => {
+    const participant = participantMatches[index];
+    const pub = r32PublicMatchForIndex(tournamentMatches, index);
+    const officialSides = officialFixtureTeamIds(pub, teamByCountry);
+    const { topId, bottomId } = officialR32ParticipantIds(index, slots, ctx);
+
+    const homeId =
+      officialSides.homeId ??
+      live.home.teamId ??
+      topId ??
+      participant?.home.teamId ??
+      null;
+    const awayId =
+      officialSides.awayId ??
+      live.away.teamId ??
+      bottomId ??
+      participant?.away.teamId ??
+      null;
+    const participantPick =
+      readParticipantR32MatchWinnerPick(index, slots, ctx) || null;
+    const pickValid =
+      participantPick &&
+      (participantPick === homeId || participantPick === awayId)
+        ? participantPick
+        : null;
+
+    if (
+      homeId === live.home.teamId &&
+      awayId === live.away.teamId &&
+      pickValid === live.participantPickedWinnerId
+    ) {
+      return live;
+    }
+
+    return buildLiveMatchFromFixture({
+      matchKey: live.matchKey,
+      fifaMatchNo: live.fifaMatchNo,
+      stageCode: live.stageCode,
+      stageLabel: live.stageLabel,
+      officialMatch: pub,
+      participantHomeId: homeId,
+      participantAwayId: awayId,
+      participantPickedWinnerId: pickValid,
+      teamById,
+      teamByCountry,
+      eliminatedTeamIds,
+    });
+  });
+}
+
 function enrichLiveRound(
   liveMatches: LiveBracketMatch[],
   participantMatches: BracketMatchResolved[],
@@ -733,12 +791,21 @@ export function buildLiveBracketTracker(
       : null;
 
   return {
-    roundOf32: buildR32Matches(
-      trackerInput,
-      gradual,
+    roundOf32: enrichR32Matches(
+      buildR32Matches(
+        trackerInput,
+        gradual,
+        teamById,
+        teamByCountry,
+        eliminatedTeamIds,
+      ),
+      participantBracket.roundOf32,
+      input.slots,
+      pathCtx,
       teamById,
       teamByCountry,
       eliminatedTeamIds,
+      input.tournamentMatches,
     ),
     roundOf16: enrichLiveRound(
       buildLaterRoundMatches(

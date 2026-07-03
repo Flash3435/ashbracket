@@ -4,6 +4,7 @@
  */
 import assert from "node:assert/strict";
 import type { Prediction, Result, ScoringRule } from "../../types/domain";
+import { encodeKnockoutPickStatusMetadata } from "../../../lib/predictions/knockoutPickStatus";
 import { computePoolScores } from "./computePoolScores";
 
 const poolId = "pool-1111-1111-1111-111111111111";
@@ -395,3 +396,230 @@ const r32AdvanceAgain = computePoolScores({
 assert.deepEqual(r32AdvanceAgain.ledgerLines, r32AdvanceOutcome.ledgerLines);
 
 console.log("scoring selftest r32 advancement via round_of_16 result: ok");
+
+// --- Knockout carry-forward: score by team advancement, not predicted matchup ---
+
+const teamNed = "team-ned-0001-0000-0000-000000000001";
+const teamMar = "team-mar-0001-0000-0000-000000000001";
+const teamCan = "team-can-0001-0000-0000-000000000001";
+const teamCro = "team-cro-0001-0000-0000-000000000001";
+const teamEng = "team-eng-0001-0000-0000-000000000001";
+const teamSui = "team-sui-0001-0000-0000-000000000001";
+const dave = "part-dave-0001-0000-0000-000000000001";
+
+const stageR32Ko = "stage-r32-ko-0001-0000-000000000001";
+const stageR16Ko = "stage-r16-ko-0001-0000-000000000001";
+
+const koCarryRules: ScoringRule[] = [
+  {
+    id: "rule-ko-r16",
+    poolId,
+    predictionKind: "round_of_16",
+    bonusKey: null,
+    points: 4,
+    createdAt: now,
+    updatedAt: now,
+  },
+  {
+    id: "rule-ko-qf",
+    poolId,
+    predictionKind: "quarterfinalist",
+    bonusKey: null,
+    points: 8,
+    createdAt: now,
+    updatedAt: now,
+  },
+];
+
+function koPred(
+  id: string,
+  participantId: string,
+  kind: Prediction["predictionKind"],
+  teamId: string,
+  slotKey: string,
+  stageId: string,
+  valueText: string | null = null,
+): Prediction {
+  return {
+    id,
+    poolId,
+    participantId,
+    predictionKind: kind,
+    teamId,
+    tournamentStageId: stageId,
+    groupCode: null,
+    slotKey,
+    bonusKey: null,
+    valueText,
+    createdAt: now,
+    updatedAt: now,
+  };
+}
+
+function koResult(
+  id: string,
+  kind: string,
+  teamId: string,
+  slotKey: string,
+  stageId: string,
+): Result {
+  return {
+    id,
+    tournamentStageId: stageId,
+    kind,
+    teamId,
+    groupCode: null,
+    slotKey,
+    valueText: null,
+    resolvedAt: now,
+    createdAt: now,
+  };
+}
+
+// M75 (R32 slots 5/6, R16 slot 3): Netherlands picked to win M75 over Morocco; official MAR vs POR, MAR wins.
+{
+  const officialM75 = [
+    koResult("res-m75-r32-mar", "round_of_32", teamMar, "5", stageR32Ko),
+    koResult("res-m75-r16-mar", "round_of_16", teamMar, "3", stageR16Ko),
+  ];
+  const preds = [
+    koPred("pred-dave-r32-ned-m75", dave, "round_of_32", teamNed, "5", stageR32Ko),
+  ];
+  const outcome = computePoolScores({
+    poolId,
+    predictions: preds,
+    results: officialM75,
+    scoringRules: koCarryRules,
+  });
+  assert.equal(outcome.totalsByParticipantId[dave] ?? 0, 0);
+  assert.equal(
+    outcome.ledgerLines.filter((l) => l.participantId === dave).length,
+    0,
+    "Netherlands R32 winner pick earns no M75 points when NED did not advance",
+  );
+}
+
+// M73 (R32 slots 1/2, R16 slot 1): Canada picked in R32; Canada wins official M73.
+{
+  const officialM73 = [
+    koResult("res-m73-r32-can", "round_of_32", teamCan, "2", stageR32Ko),
+    koResult("res-m73-r16-can", "round_of_16", teamCan, "1", stageR16Ko),
+  ];
+  const preds = [
+    koPred("pred-dave-r32-can-m73", dave, "round_of_32", teamCan, "2", stageR32Ko),
+  ];
+  const outcome = computePoolScores({
+    poolId,
+    predictions: preds,
+    results: officialM73,
+    scoringRules: koCarryRules,
+  });
+  assert.equal(outcome.totalsByParticipantId[dave], 4);
+  assert.equal(outcome.ledgerLines.length, 1);
+  assert.equal(outcome.ledgerLines[0]?.predictionId, "pred-dave-r32-can-m73");
+  assert.equal(outcome.ledgerLines[0]?.predictionKind, "round_of_16");
+}
+
+// Netherlands picked as R16 winner (slot 3) but eliminated in R32 — no R16 points.
+{
+  const officialNoNed = [
+    koResult("res-m75-r32-mar", "round_of_32", teamMar, "5", stageR32Ko),
+    koResult("res-m75-r16-mar", "round_of_16", teamMar, "3", stageR16Ko),
+  ];
+  const preds = [
+    koPred("pred-dave-r16-ned", dave, "round_of_16", teamNed, "3", stageR16Ko),
+  ];
+  const outcome = computePoolScores({
+    poolId,
+    predictions: preds,
+    results: officialNoNed,
+    scoringRules: koCarryRules,
+  });
+  assert.equal(outcome.totalsByParticipantId[dave] ?? 0, 0);
+}
+
+// Locked-out R16 Netherlands pick must not score even if a stale path existed.
+{
+  const outValueText = encodeKnockoutPickStatusMetadata({
+    v: 1,
+    status: "out",
+    reason: "not_in_official_matchup",
+    invalidatedAt: now,
+  });
+  const preds = [
+    koPred(
+      "pred-dave-r16-ned-out",
+      dave,
+      "round_of_16",
+      teamNed,
+      "3",
+      stageR16Ko,
+      outValueText,
+    ),
+  ];
+  const outcome = computePoolScores({
+    poolId,
+    predictions: preds,
+    results: [koResult("res-m75-r16-mar", "round_of_16", teamMar, "3", stageR16Ko)],
+    scoringRules: koCarryRules,
+  });
+  assert.equal(outcome.totalsByParticipantId[dave] ?? 0, 0);
+}
+
+// M80 (R16 slot 8): England picked as R16 winner; official ENG vs CRO, ENG wins — points despite wrong opponent path.
+{
+  const officialM80 = [
+    koResult("res-m80-r16-eng", "round_of_16", teamEng, "8", stageR16Ko),
+  ];
+  const preds = [
+    koPred("pred-dave-r16-eng", dave, "round_of_16", teamEng, "8", stageR16Ko),
+    // Participant's bracket story had Switzerland, not Croatia, in this path.
+    koPred("pred-dave-r32-sui", dave, "round_of_32", teamSui, "15", stageR32Ko),
+    koPred("pred-dave-r32-cro", dave, "round_of_32", teamCro, "16", stageR32Ko),
+  ];
+  const outcome = computePoolScores({
+    poolId,
+    predictions: preds,
+    results: officialM80,
+    scoringRules: koCarryRules,
+  });
+  assert.equal(outcome.totalsByParticipantId[dave], 4);
+  assert.equal(outcome.ledgerLines[0]?.predictionId, "pred-dave-r16-eng");
+  assert.equal(outcome.ledgerLines[0]?.resultId, "res-m80-r16-eng");
+}
+
+// Missing knockout picks score zero (no teamId rows persisted).
+{
+  const outcome = computePoolScores({
+    poolId,
+    predictions: [],
+    results: [koResult("res-m73-r16-can", "round_of_16", teamCan, "1", stageR16Ko)],
+    scoringRules: koCarryRules,
+  });
+  assert.deepEqual(outcome.totalsByParticipantId, {});
+  assert.equal(outcome.ledgerLines.length, 0);
+}
+
+// Saved predictions are scoring input only — recompute is idempotent and does not mutate picks.
+{
+  const preds = [koPred("pred-dave-r32-can-m73", dave, "round_of_32", teamCan, "2", stageR32Ko)];
+  const results = [
+    koResult("res-m73-r16-can", "round_of_16", teamCan, "1", stageR16Ko),
+  ];
+  const first = computePoolScores({
+    poolId,
+    predictions: preds,
+    results,
+    scoringRules: koCarryRules,
+  });
+  const second = computePoolScores({
+    poolId,
+    predictions: preds,
+    results,
+    scoringRules: koCarryRules,
+  });
+  assert.deepEqual(second, first);
+  assert.equal(preds[0]?.teamId, teamCan, "predictions unchanged after scoring recompute");
+}
+
+console.log("scoring selftest knockout carry-forward by team: ok");

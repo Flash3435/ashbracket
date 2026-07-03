@@ -8,8 +8,9 @@ import { buildLiveBracketTracker } from "./liveBracketTracker";
 import {
   FINAL_FEEDER_NO_CHAMPION_HELPER,
   NO_CHAMPION_PICK_SAVED_LABEL,
+  NO_SAVED_PICK_BRACKET_LABEL,
 } from "./knockoutBracketDisplayCopy";
-import { liveSideNeedsMutedFlag } from "./liveBracketSideStyles";
+import { liveSideNeedsMutedFlag, liveSideRowClassName } from "./liveBracketSideStyles";
 import { shouldUseLiveBracketTracker } from "./resolveLiveBracketTrackerMode";
 
 function assert(cond: unknown, msg: string): void {
@@ -72,6 +73,25 @@ function knockoutMatch(
     winner_team_name: "Brazil",
     winner_country_code: "BRA",
     ...overrides,
+  };
+}
+
+function groupSlot(
+  rowKey: string,
+  kind: "group_winner" | "group_runner_up",
+  group: string,
+  teamId: string,
+): KnockoutPickSlotDraft {
+  return {
+    rowKey,
+    sectionLabel: "",
+    slotLabel: "",
+    predictionKind: kind,
+    tournamentStageId: "s",
+    slotKey: null,
+    groupCode: group,
+    bonusKey: null,
+    teamId,
   };
 }
 
@@ -286,6 +306,92 @@ void (async function main() {
     assert(
       tracker.champion.displayName === "France",
       "stale champion shows team name not empty label",
+    );
+  }
+
+  // R32 without fixtures falls back to group picks — not dashed "No saved pick" placeholders
+  {
+    const slots: KnockoutPickSlotDraft[] = [
+      groupSlot("gw-a", "group_runner_up", "A", "team-bra"),
+      groupSlot("gw-b", "group_runner_up", "B", "team-tun"),
+      slot("r16|1", "round_of_16", "team-bra", "1"),
+    ];
+
+    const tracker = buildLiveBracketTracker({
+      slots,
+      teams,
+      knockoutBracketPicksUnlocked: false,
+      tournamentMatches: [],
+    });
+
+    const m73 = tracker.roundOf32[0]!;
+    assert(m73.home.teamId === "team-bra", "M73 home from group runner-up A");
+    assert(m73.away.teamId === "team-tun", "M73 away from group runner-up B");
+    assert(m73.home.fillState === "team", "known home is a team row");
+    assert(m73.away.fillState === "team", "known away is a team row");
+    assert(m73.home.displayName === "Brazil", "home shows team name");
+    assert(
+      !m73.home.displayName.includes(NO_SAVED_PICK_BRACKET_LABEL),
+      "home is not a no-saved-pick placeholder",
+    );
+    const pickedSide = [m73.home, m73.away].find((s) => s.participantPick === "your_pick_alive");
+    assert(pickedSide?.teamId === "team-bra", "saved R32 winner still highlighted");
+  }
+
+  // Partial official fixture still shows known side (not empty placeholder)
+  {
+    const partialFixture = knockoutMatch({
+      match_id: "m74",
+      match_code: "M74",
+      stage_code: "round_of_32",
+      home_country_code: "FRA",
+      home_team_name: "France",
+      away_country_code: null,
+      away_team_name: null,
+      status: "scheduled",
+      home_goals: null,
+      away_goals: null,
+      winner_country_code: null,
+      winner_team_name: null,
+    });
+    const slots: KnockoutPickSlotDraft[] = [
+      groupSlot("gw-e", "group_winner", "E", "team-fra"),
+    ];
+
+    const tracker = buildLiveBracketTracker({
+      slots,
+      teams,
+      knockoutBracketPicksUnlocked: false,
+      tournamentMatches: [partialFixture],
+    });
+
+    const m74 = tracker.roundOf32[1]!;
+    assert(m74.home.teamId === "team-fra", "partial fixture home team shown");
+    assert(m74.home.fillState === "team", "partial home is team row not placeholder");
+    assert(m74.usesOfficialFixture, "partial fixture counts as official");
+  }
+
+  // Official advancer not picked uses muted styling
+  {
+    const slots: KnockoutPickSlotDraft[] = [
+      slot("r32|1", "round_of_32", "team-bra", "1"),
+      slot("r32|2", "round_of_32", "team-tun", "2"),
+      slot("r16|1", "round_of_16", "team-tun", "1"),
+    ];
+
+    const tracker = buildLiveBracketTracker({
+      slots,
+      teams,
+      knockoutBracketPicksUnlocked: false,
+      tournamentMatches: [r32Finished],
+    });
+
+    const m73 = tracker.roundOf32[0]!;
+    assert(m73.home.participantPick === "not_your_pick", "official winner not your pick");
+    assert(liveSideNeedsMutedFlag(m73.home), "not your pick side is muted");
+    assert(
+      liveSideRowClassName(m73.home).includes("ash-body"),
+      "not your pick uses muted row styling not green highlight",
     );
   }
 
