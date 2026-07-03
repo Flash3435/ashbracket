@@ -39,7 +39,7 @@ export type LaterRoundKnockoutResultKind =
   (typeof LATER_ROUND_KNOCKOUT_RESULT_KINDS)[number];
 
 export type KnockoutProgressionRowRef = Pick<
-  { predictionKind: string; slotKey: string | null; teamId: string },
+  { predictionKind: string; slotKey: string | null; teamId: string | null },
   "predictionKind" | "slotKey" | "teamId"
 >;
 
@@ -75,7 +75,7 @@ export function participantHasKnockoutProgressPastStage(
   const indicatorKinds = progressIndicatorKindsForResultKind(resultKind);
   return rows.some((row) => {
     if (!indicatorKinds.includes(row.predictionKind)) return false;
-    if (!row.teamId.trim()) return false;
+    if (!(row.teamId ?? "").trim()) return false;
     if (
       row.predictionKind === resultKind &&
       excludeSlotKey != null &&
