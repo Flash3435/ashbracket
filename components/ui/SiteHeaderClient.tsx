@@ -38,8 +38,6 @@ function TextNavLink({
 export type SiteHeaderClientProps = {
   isSignedIn: boolean;
   isAdmin: boolean;
-  /** True when the user has at least one pool profile (activity is per-pool, not public). */
-  showActivityNav?: boolean;
   showLeaderboardNav?: boolean;
   leaderboardHref?: string | null;
   standingsNavLabel?: "Leaderboard" | "Outlook" | null;
@@ -50,7 +48,6 @@ export type SiteHeaderClientProps = {
 export function SiteHeaderClient({
   isSignedIn,
   isAdmin,
-  showActivityNav = false,
   showLeaderboardNav = false,
   leaderboardHref = null,
   standingsNavLabel = null,
@@ -136,24 +133,6 @@ export function SiteHeaderClient({
                 >
                   {standingsNavLabel ?? "Leaderboard"}
                 </TextNavLink>
-              ) : null}
-              {showActivityNav ? (
-                <>
-                  <TextNavLink
-                    href="/account/activity"
-                    pathname={pathname}
-                    match="prefix"
-                  >
-                    Activity
-                  </TextNavLink>
-                  <TextNavLink
-                    href="/account/reveal"
-                    pathname={pathname}
-                    match="prefix"
-                  >
-                    Reveal
-                  </TextNavLink>
-                </>
               ) : null}
               {isAdmin ? (
                 <TextNavLink href="/admin" pathname={pathname} match="prefix">
