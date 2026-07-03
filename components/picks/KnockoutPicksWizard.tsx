@@ -1347,6 +1347,7 @@ export function KnockoutPicksWizard({
         gradual: gradualKnockout,
         fullRoundOf32Official: knockoutBracketPicksUnlocked,
         savedTeamId: row.teamId,
+        progressionRows: slots,
       });
     }
     return false;
@@ -1391,6 +1392,7 @@ export function KnockoutPicksWizard({
       tournamentMatches,
       gradual: gradualKnockout,
       knockoutBracketPicksUnlocked,
+      clearedPickRowKeys: knockoutPathClearedRowKeys,
     });
   }, [
     currentStepDef,
@@ -1400,6 +1402,7 @@ export function KnockoutPicksWizard({
     tournamentMatches,
     gradualKnockout,
     knockoutBracketPicksUnlocked,
+    knockoutPathClearedRowKeys,
   ]);
   const championStepFinalRows = useMemo(() => {
     if (

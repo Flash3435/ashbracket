@@ -10,6 +10,7 @@ import {
   knockoutMatchSavedPickPresentation,
   knockoutMatchStepComplete,
   knockoutMatchTeamPickAriaLabel,
+  mergeKnockoutMatchRowSavedPickFromSlots,
   readConfirmedR32MatchWinner,
   readR32MatchWinnerForBracket,
   validateKnockoutLaterMatchPick,
@@ -18,7 +19,12 @@ import {
 import {
   pruneOfficialKnockoutPathPicks,
 } from "../predictions/pruneOfficialKnockoutPathPicks";
+import { applyKnockoutPathInvalidation } from "../predictions/knockoutPathInvalidation";
 import { pruneParticipantPicks } from "../predictions/knockoutPickConsistency";
+import {
+  applyGradualKnockoutPickSaveGuards,
+  validateKnockoutParticipantPickChanges,
+} from "../predictions/validateGradualKnockoutPickSave";
 import type { GradualKnockoutSelectionState } from "./gradualKnockoutUnlock";
 import {
   buildGradualR32MatchPickRows,
@@ -1868,6 +1874,351 @@ function r32Side(slotKey: string, teamId = ""): KnockoutPickSlotDraft {
     "Saved pick is eliminated or no longer matches this matchup.",
   );
   assert.strictEqual(stalePick.savedPickTeamId, "team-bra");
+}
+
+// M94 stale R16 winner survives path invalidation when R32 feeders are official (Seema scenario).
+{
+  const m94Teams: Team[] = [
+    ...teams,
+    {
+      id: "team-us",
+      name: "United States",
+      countryCode: "USA",
+      fifaCode: "USA",
+      fifaRank: 15,
+      fifaRankAsOf: null,
+      createdAt: "",
+      updatedAt: "",
+    },
+    {
+      id: "team-bih",
+      name: "Bosnia and Herzegovina",
+      countryCode: "BIH",
+      fifaCode: "BIH",
+      fifaRank: 60,
+      fifaRankAsOf: null,
+      createdAt: "",
+      updatedAt: "",
+    },
+    {
+      id: "team-bel",
+      name: "Belgium",
+      countryCode: "BEL",
+      fifaCode: "BEL",
+      fifaRank: 12,
+      fifaRankAsOf: null,
+      createdAt: "",
+      updatedAt: "",
+    },
+    {
+      id: "team-sen",
+      name: "Senegal",
+      countryCode: "SEN",
+      fifaCode: "SEN",
+      fifaRank: 22,
+      fifaRankAsOf: null,
+      createdAt: "",
+      updatedAt: "",
+    },
+  ];
+  function finishedR32(
+    code: string,
+    home: string,
+    away: string,
+    winner: string,
+  ): TournamentMatchPublicRow {
+    return {
+      match_id: code,
+      edition_id: "ed",
+      edition_code: "wc2026",
+      match_code: code,
+      stage_code: "round_of_32",
+      stage_label: "Round of 32",
+      stage_sort_order: 2,
+      group_code: null,
+      round_index: 0,
+      kickoff_at: "2026-07-01T19:00:00Z",
+      status: "finished",
+      home_goals: 2,
+      away_goals: 1,
+      home_penalties: null,
+      away_penalties: null,
+      home_team_name: home,
+      home_country_code: home,
+      away_team_name: away,
+      away_country_code: away,
+      winner_team_name: winner,
+      winner_country_code: winner,
+    };
+  }
+  const m94Matches = [
+    finishedR32("M81", "USA", "BIH", "USA"),
+    finishedR32("M82", "BEL", "SEN", "BEL"),
+    {
+      match_id: "M94",
+      edition_id: "ed",
+      edition_code: "wc2026",
+      match_code: "M94",
+      stage_code: "round_of_16",
+      stage_label: "Round of 16",
+      stage_sort_order: 3,
+      group_code: null,
+      round_index: 0,
+      kickoff_at: "2026-07-06T19:00:00Z",
+      status: "scheduled",
+      home_goals: null,
+      away_goals: null,
+      home_penalties: null,
+      away_penalties: null,
+      home_team_name: "United States",
+      home_country_code: "USA",
+      away_team_name: "Belgium",
+      away_country_code: "BEL",
+      winner_team_name: null,
+      winner_country_code: null,
+    },
+  ];
+  const m94Gradual = getGradualKnockoutSelectionState({
+    matches: m94Matches,
+    teams: m94Teams,
+    fullRoundOf32Official: true,
+  });
+  const m94Ctx = {
+    teams: m94Teams,
+    tournamentMatches: m94Matches,
+    gradual: m94Gradual,
+    knockoutBracketPicksUnlocked: true,
+  };
+  const staleM94Slots: KnockoutPickSlotDraft[] = [
+    r16Slot("9", "team-us"),
+    r16Slot("10", "team-bel"),
+    qfSlot("6", "team-fra"),
+  ];
+  const { slots: pruned, cleared } = pruneOfficialKnockoutPathPicks(
+    staleM94Slots,
+    m94Ctx,
+  );
+  assert.ok(
+    cleared.some(
+      (c) => c.predictionKind === "quarterfinalist" && c.slotKey === "6",
+    ),
+    "stale France M94 pick should be cleared by path repair",
+  );
+  const afterInvalidation = applyKnockoutPathInvalidation(pruned, cleared, {
+    teams: m94Teams,
+    tournamentMatches: m94Matches,
+    knockoutBracketPicksUnlocked: true,
+  });
+  const qf6After = afterInvalidation.find(
+    (s) => s.predictionKind === "quarterfinalist" && s.slotKey === "6",
+  );
+  assert.strictEqual(qf6After?.teamId, "team-fra");
+  assert.strictEqual(qf6After?.pickStatus, "out");
+
+  const displaySlots = pruneParticipantPicks(afterInvalidation, {
+    r32WinnerContext: m94Ctx,
+  });
+  const m94Rows = buildKnockoutMatchPickRows({
+    bracketKind: "round_of_16",
+    slots: displaySlots,
+    teams: m94Teams,
+    tournamentMatches: m94Matches,
+    gradual: m94Gradual,
+    knockoutBracketPicksUnlocked: true,
+    clearedPickRowKeys: new Set(["quarterfinalist|6"]),
+  });
+  const m94Row = m94Rows.find((r) => r.fifaMatchNo === 94)!;
+  assert.strictEqual(m94Row.homeTeamId, "team-us");
+  assert.strictEqual(m94Row.awayTeamId, "team-bel");
+  assert.strictEqual(m94Row.lockReason, "frozen");
+  assert.strictEqual(m94Row.winnerTeamId, "team-fra");
+  assert.strictEqual(m94Row.pickStatus, "out");
+  assert.strictEqual(isKnockoutMatchDirectPickEligible(m94Row), false);
+
+  const presentation = knockoutMatchSavedPickPresentation(
+    mergeKnockoutMatchRowSavedPickFromSlots(m94Row, afterInvalidation),
+    m94Teams,
+  );
+  assert.strictEqual(presentation.savedPickStatus, "stale");
+  assert.strictEqual(presentation.savedPickSummaryLine, "Saved pick: France");
+  assert.strictEqual(
+    presentation.lockStatusLine,
+    "Locked — feeder results are official.",
+  );
+  assert.ok(
+    presentation.savedPickWarning?.includes("eliminated") ||
+      presentation.savedPickWarning?.includes("no longer matches"),
+  );
+
+  const swapErr = validateKnockoutParticipantPickChanges({
+    incoming: [
+      {
+        predictionKind: "quarterfinalist",
+        tournamentStageId: "qf",
+        slotKey: "6",
+        groupCode: null,
+        bonusKey: null,
+        teamId: "team-bel",
+      },
+    ],
+    existing: [
+      {
+        id: "p-m94",
+        poolId: "pool",
+        participantId: "par",
+        predictionKind: "quarterfinalist",
+        teamId: "team-fra",
+        tournamentStageId: "qf",
+        groupCode: null,
+        slotKey: "6",
+        bonusKey: null,
+        valueText: null,
+        createdAt: "",
+        updatedAt: "",
+      },
+    ],
+    matches: m94Matches,
+    gradual: m94Gradual,
+    fullRoundOf32Official: true,
+  });
+  assert.ok(swapErr, "server rejects replacing stale M94 pick with Belgium");
+
+  const backfillGuard = applyGradualKnockoutPickSaveGuards({
+    incoming: [
+      {
+        predictionKind: "quarterfinalist",
+        tournamentStageId: "qf",
+        slotKey: "6",
+        groupCode: null,
+        bonusKey: null,
+        teamId: "team-us",
+      },
+    ],
+    existing: [
+      {
+        id: "p-m94",
+        poolId: "pool",
+        participantId: "par",
+        predictionKind: "quarterfinalist",
+        teamId: "team-fra",
+        tournamentStageId: "qf",
+        groupCode: null,
+        slotKey: "6",
+        bonusKey: null,
+        valueText: null,
+        createdAt: "",
+        updatedAt: "",
+      },
+    ],
+    teams: m94Teams,
+    matches: m94Matches,
+    fullRoundOf32Official: true,
+  });
+  assert.ok(backfillGuard.error, "server rejects swapping stale M94 pick to US");
+}
+
+// Seema-style partial-complete participant: missing M94 locked, no direct pick controls.
+{
+  const seemaTeams: Team[] = [
+    ...teams,
+    {
+      id: "team-us",
+      name: "United States",
+      countryCode: "USA",
+      fifaCode: "USA",
+      fifaRank: 15,
+      fifaRankAsOf: null,
+      createdAt: "",
+      updatedAt: "",
+    },
+    {
+      id: "team-bel",
+      name: "Belgium",
+      countryCode: "BEL",
+      fifaCode: "BEL",
+      fifaRank: 12,
+      fifaRankAsOf: null,
+      createdAt: "",
+      updatedAt: "",
+    },
+  ];
+  const seemaMatches: TournamentMatchPublicRow[] = [
+    {
+      match_id: "m81",
+      edition_id: "ed",
+      edition_code: "wc2026",
+      match_code: "M81",
+      stage_code: "round_of_32",
+      stage_label: "Round of 32",
+      stage_sort_order: 2,
+      group_code: null,
+      round_index: 0,
+      kickoff_at: "2026-07-01T19:00:00Z",
+      status: "finished",
+      home_goals: 2,
+      away_goals: 1,
+      home_penalties: null,
+      away_penalties: null,
+      home_team_name: "United States",
+      home_country_code: "USA",
+      away_team_name: "Bosnia and Herzegovina",
+      away_country_code: "BIH",
+      winner_team_name: "United States",
+      winner_country_code: "USA",
+    },
+    {
+      match_id: "m82",
+      edition_id: "ed",
+      edition_code: "wc2026",
+      match_code: "M82",
+      stage_code: "round_of_32",
+      stage_label: "Round of 32",
+      stage_sort_order: 2,
+      group_code: null,
+      round_index: 0,
+      kickoff_at: "2026-07-01T22:00:00Z",
+      status: "finished",
+      home_goals: 1,
+      away_goals: 0,
+      home_penalties: null,
+      away_penalties: null,
+      home_team_name: "Belgium",
+      home_country_code: "BEL",
+      away_team_name: "Senegal",
+      away_country_code: "SEN",
+      winner_team_name: "Belgium",
+      winner_country_code: "BEL",
+    },
+  ];
+  const seemaGradual = getGradualKnockoutSelectionState({
+    matches: seemaMatches,
+    teams: seemaTeams,
+    fullRoundOf32Official: true,
+  });
+  const seemaSlots: KnockoutPickSlotDraft[] = [
+    r16Slot("9", "team-us"),
+    r16Slot("10", "team-bel"),
+    qfSlot("1", "team-fra"),
+    qfSlot("2", "team-can"),
+    qfSlot("6", ""),
+    sfSlot("1", "team-fra"),
+    finSlot("1", "team-eng"),
+  ];
+  const seemaRows = buildKnockoutMatchPickRows({
+    bracketKind: "round_of_16",
+    slots: seemaSlots,
+    teams: seemaTeams,
+    tournamentMatches: seemaMatches,
+    gradual: seemaGradual,
+    knockoutBracketPicksUnlocked: true,
+  });
+  const seemaM94 = seemaRows.find((r) => r.fifaMatchNo === 94)!;
+  assert.strictEqual(seemaM94.lockReason, "frozen");
+  assert.strictEqual(isKnockoutMatchDirectPickEligible(seemaM94), false);
+  const seemaPresentation = knockoutMatchSavedPickPresentation(seemaM94, seemaTeams);
+  assert.strictEqual(seemaPresentation.savedPickStatus, "missing");
+  assert.strictEqual(seemaPresentation.savedPickSummaryLine, "No pick saved");
+  assert.ok(seemaPresentation.savedPickWarning?.includes("already in progress"));
 }
 
 console.log("knockoutMatchPickRows.selftest.ts: ok");

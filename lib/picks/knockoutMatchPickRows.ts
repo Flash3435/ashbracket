@@ -16,6 +16,8 @@ import {
 import {
   isKnockoutMatchLockedForParticipant,
   isKnockoutSlotFrozenByOfficialFeeders,
+  KNOCKOUT_MISSING_PICK_PROGRESS_LOCK_HELPER,
+  shouldFreezeLaterRoundKnockoutMatchRow,
 } from "./knockoutPickEditability";
 import { isMatchStarted } from "./knockoutSelectionWindow";
 import {
@@ -543,14 +545,19 @@ export function mergeKnockoutMatchRowSavedPickFromSlots(
   row: KnockoutMatchPickRow,
   slots: KnockoutPickSlotDraft[],
 ): KnockoutMatchPickRow {
-  if (row.winnerTeamId.trim()) return row;
-  if (row.lockReason !== "frozen" && row.lockReason !== "started") return row;
   const saveRow = slots.find((s) => s.rowKey === row.saveRowKey);
-  if (!saveRow?.teamId.trim()) return row;
+  const storedTeamId = saveRow?.teamId.trim() ?? "";
+  if (!storedTeamId) return row;
+  if (
+    row.winnerTeamId.trim() === storedTeamId &&
+    (row.pickStatus ?? null) === (saveRow?.pickStatus ?? null)
+  ) {
+    return row;
+  }
   return {
     ...row,
-    winnerTeamId: saveRow.teamId.trim(),
-    pickStatus: saveRow.pickStatus ?? row.pickStatus,
+    winnerTeamId: storedTeamId,
+    pickStatus: saveRow?.pickStatus ?? row.pickStatus,
   };
 }
 
@@ -597,6 +604,14 @@ export function knockoutMatchSavedPickPresentation(
     lockStatusLine = row.display.statusLine ?? "Locked at kickoff";
   } else if (row.lockReason === "frozen") {
     lockStatusLine = "Locked — feeder results are official.";
+  }
+
+  if (
+    savedPickStatus === "missing" &&
+    row.lockReason === "frozen" &&
+    !savedPickWarning
+  ) {
+    savedPickWarning = KNOCKOUT_MISSING_PICK_PROGRESS_LOCK_HELPER;
   }
 
   return {
@@ -977,13 +992,17 @@ export function buildKnockoutMatchPickRows(
     ) {
       lockReason = "started";
     } else if (
-      isKnockoutSlotFrozenByOfficialFeeders({
-        predictionKind: def.resultKind,
+      shouldFreezeLaterRoundKnockoutMatchRow({
+        resultKind: def.resultKind,
         slotKey: saveSlotKey,
+        savedTeamId: winnerTeamId,
+        pickStatus,
+        clearedByPathRepair:
+          input.clearedPickRowKeys?.has(saveRow?.rowKey ?? "") ?? false,
         tournamentMatches: input.tournamentMatches,
         gradual,
-      }) &&
-      Boolean(winnerTeamId.trim())
+        progressionRows: input.slots,
+      })
     ) {
       lockReason = "frozen";
     }

@@ -126,6 +126,7 @@ export function validateFrozenKnockoutSwapAttempts(input: {
         tournamentMatches: input.matches,
         gradual: input.gradual,
         savedTeamId: keep,
+        progressionRows: input.existing,
         nowMs: input.nowMs,
       })
     ) {
@@ -187,6 +188,7 @@ export function coerceFrozenKnockoutSlotsToSaved(input: {
         tournamentMatches: input.matches,
         gradual: input.gradual,
         savedTeamId: keep,
+        progressionRows: input.existing,
         nowMs,
       })
     ) {
@@ -227,6 +229,7 @@ export function validateKnockoutParticipantPickChanges(input: {
       tournamentMatches: input.matches,
       gradual: input.gradual,
       savedTeamId: keep,
+      progressionRows: input.existing,
       nowMs: input.nowMs,
     })) {
       continue;

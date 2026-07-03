@@ -3,7 +3,10 @@ import {
   knockoutParticipantSlotPair,
   r16R32ParticipantPair,
 } from "../bracket/wc2026KnockoutPairings";
-import { isKnockoutProgressionKind } from "../predictions/knockoutProgressionKinds";
+import {
+  isKnockoutProgressionKind,
+  type KnockoutProgressionPredictionKind,
+} from "../predictions/knockoutProgressionKinds";
 import {
   matchStateForR16GradualWinnerSlot,
   matchStateForR32Slot,
@@ -20,6 +23,126 @@ export const KNOCKOUT_PICK_LOCKED_OFFICIAL_RESULT =
 
 export const KNOCKOUT_PICK_LOCKED_FEEDER_RESULTS =
   "This pick is locked because feeder match results are official.";
+
+export const KNOCKOUT_MISSING_PICK_PROGRESS_LOCK_HELPER =
+  "This matchup is locked because this part of the bracket was already in progress after official feeder results.";
+
+/** Result kinds stored by M89+ wizard match rows (not R32 gradual rows). */
+export const LATER_ROUND_KNOCKOUT_RESULT_KINDS = [
+  "quarterfinalist",
+  "semifinalist",
+  "finalist",
+  "champion",
+] as const;
+
+export type LaterRoundKnockoutResultKind =
+  (typeof LATER_ROUND_KNOCKOUT_RESULT_KINDS)[number];
+
+export type KnockoutProgressionRowRef = Pick<
+  { predictionKind: string; slotKey: string | null; teamId: string },
+  "predictionKind" | "slotKey" | "teamId"
+>;
+
+export function isLaterRoundKnockoutResultKind(
+  kind: string,
+): kind is LaterRoundKnockoutResultKind {
+  return (LATER_ROUND_KNOCKOUT_RESULT_KINDS as readonly string[]).includes(
+    kind,
+  );
+}
+
+function progressIndicatorKindsForResultKind(
+  resultKind: LaterRoundKnockoutResultKind,
+): readonly string[] {
+  switch (resultKind) {
+    case "quarterfinalist":
+      return ["quarterfinalist", "semifinalist", "finalist", "champion"];
+    case "semifinalist":
+      return ["semifinalist", "finalist", "champion"];
+    case "finalist":
+      return ["finalist", "champion"];
+    case "champion":
+      return ["finalist"];
+  }
+}
+
+/** True when saved downstream (or same-step) picks show the bracket was already in progress. */
+export function participantHasKnockoutProgressPastStage(
+  rows: readonly KnockoutProgressionRowRef[],
+  resultKind: LaterRoundKnockoutResultKind,
+  excludeSlotKey?: string | null,
+): boolean {
+  const indicatorKinds = progressIndicatorKindsForResultKind(resultKind);
+  return rows.some((row) => {
+    if (!indicatorKinds.includes(row.predictionKind)) return false;
+    if (!row.teamId.trim()) return false;
+    if (
+      row.predictionKind === resultKind &&
+      excludeSlotKey != null &&
+      row.slotKey === excludeSlotKey
+    ) {
+      return false;
+    }
+    return true;
+  });
+}
+
+/** Freeze a missing later-round pick when feeders are official and the bracket was in progress. */
+export function isLaterRoundKnockoutRowFrozenForMissingBackfill(input: {
+  resultKind: string;
+  slotKey: string | null;
+  tournamentMatches?: TournamentMatchPublicRow[] | null;
+  gradual: GradualKnockoutSelectionState;
+  progressionRows: readonly KnockoutProgressionRowRef[];
+}): boolean {
+  if (!isLaterRoundKnockoutResultKind(input.resultKind)) return false;
+  if (
+    !isKnockoutSlotFrozenByOfficialFeeders({
+      predictionKind: input.resultKind,
+      slotKey: input.slotKey,
+      tournamentMatches: input.tournamentMatches,
+      gradual: input.gradual,
+    })
+  ) {
+    return false;
+  }
+  return participantHasKnockoutProgressPastStage(
+    input.progressionRows,
+    input.resultKind,
+    input.slotKey,
+  );
+}
+
+export function shouldFreezeLaterRoundKnockoutMatchRow(input: {
+  resultKind: KnockoutProgressionPredictionKind;
+  slotKey: string | null;
+  savedTeamId?: string | null;
+  pickStatus?: "active" | "out" | null;
+  clearedByPathRepair?: boolean;
+  tournamentMatches?: TournamentMatchPublicRow[] | null;
+  gradual: GradualKnockoutSelectionState;
+  progressionRows: readonly KnockoutProgressionRowRef[];
+}): boolean {
+  if (!isLaterRoundKnockoutResultKind(input.resultKind)) return false;
+  if (
+    !isKnockoutSlotFrozenByOfficialFeeders({
+      predictionKind: input.resultKind,
+      slotKey: input.slotKey,
+      tournamentMatches: input.tournamentMatches,
+      gradual: input.gradual,
+    })
+  ) {
+    return false;
+  }
+  if (input.savedTeamId?.trim()) return true;
+  if (input.pickStatus === "out" && input.savedTeamId?.trim()) return true;
+  if (input.clearedByPathRepair) return true;
+  return participantHasKnockoutProgressPastStage(
+    input.progressionRows,
+    input.resultKind,
+    input.slotKey,
+  );
+}
 
 const LATER_KNOCKOUT_SLOT_STAGES: {
   predictionKind: string;
@@ -289,6 +412,7 @@ export function isKnockoutPickEditableForParticipant(input: {
   gradual: GradualKnockoutSelectionState;
   fullRoundOf32Official: boolean;
   savedTeamId?: string | null;
+  progressionRows?: readonly KnockoutProgressionRowRef[];
   nowMs?: number;
 }): boolean {
   if (!isKnockoutProgressionKind(input.predictionKind)) return true;
@@ -334,7 +458,20 @@ export function isKnockoutPickEditableForParticipant(input: {
   if (match && isKnockoutMatchLockedForParticipant(match, nowMs)) return false;
 
   if (isKnockoutSlotFrozenByOfficialFeeders(input)) {
-    return !input.savedTeamId?.trim();
+    if (input.savedTeamId?.trim()) return false;
+    if (
+      input.progressionRows &&
+      isLaterRoundKnockoutRowFrozenForMissingBackfill({
+        resultKind: input.predictionKind,
+        slotKey: input.slotKey,
+        tournamentMatches: input.tournamentMatches,
+        gradual: input.gradual,
+        progressionRows: input.progressionRows,
+      })
+    ) {
+      return false;
+    }
+    return true;
   }
 
   return true;
@@ -347,6 +484,7 @@ export function isKnockoutPickFrozenForParticipant(input: {
   tournamentMatches?: TournamentMatchPublicRow[] | null;
   gradual: GradualKnockoutSelectionState;
   savedTeamId?: string | null;
+  progressionRows?: readonly KnockoutProgressionRowRef[];
   nowMs?: number;
 }): boolean {
   if (!isKnockoutProgressionKind(input.predictionKind)) return false;
@@ -384,7 +522,20 @@ export function isKnockoutPickFrozenForParticipant(input: {
   if (match && isKnockoutMatchLockedForParticipant(match, nowMs)) return true;
 
   if (isKnockoutSlotFrozenByOfficialFeeders(input)) {
-    return Boolean(input.savedTeamId?.trim());
+    if (input.savedTeamId?.trim()) return true;
+    if (
+      input.progressionRows &&
+      isLaterRoundKnockoutRowFrozenForMissingBackfill({
+        resultKind: input.predictionKind,
+        slotKey: input.slotKey,
+        tournamentMatches: input.tournamentMatches,
+        gradual: input.gradual,
+        progressionRows: input.progressionRows,
+      })
+    ) {
+      return true;
+    }
+    return false;
   }
 
   return false;

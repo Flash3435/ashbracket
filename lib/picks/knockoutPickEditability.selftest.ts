@@ -126,6 +126,34 @@ function qfSlot(slotKey: string, teamId: string): KnockoutPickSlotDraft {
   };
 }
 
+function sfSlot(slotKey: string, teamId: string): KnockoutPickSlotDraft {
+  return {
+    rowKey: `semifinalist|${slotKey}`,
+    sectionLabel: "Semi-finals",
+    slotLabel: `SF winner ${slotKey}`,
+    predictionKind: "semifinalist",
+    tournamentStageId: stageR16,
+    slotKey,
+    groupCode: null,
+    bonusKey: null,
+    teamId,
+  };
+}
+
+function finSlot(slotKey: string, teamId: string): KnockoutPickSlotDraft {
+  return {
+    rowKey: `finalist|${slotKey}`,
+    sectionLabel: "Final",
+    slotLabel: `Final winner ${slotKey}`,
+    predictionKind: "finalist",
+    tournamentStageId: stageR16,
+    slotKey,
+    groupCode: null,
+    bonusKey: null,
+    teamId,
+  };
+}
+
 const stageR32 = "stage-r32";
 const stageR16 = "stage-r16";
 
@@ -1118,6 +1146,230 @@ const existing: Prediction[] = [
   assert.ok(
     swapErr?.includes("feeder match results are official"),
     swapErr ?? "expected feeder lock reason",
+  );
+}
+
+// Partial-complete participant: missing M94 frozen when other QF/SF/F picks exist
+{
+  const teamUs: Team = {
+    id: "team-us",
+    name: "United States",
+    countryCode: "USA",
+    fifaCode: "USA",
+    fifaRank: 15,
+    fifaRankAsOf: null,
+    createdAt: "",
+    updatedAt: "",
+  };
+  const teamBel: Team = {
+    id: "team-bel",
+    name: "Belgium",
+    countryCode: "BEL",
+    fifaCode: "BEL",
+    fifaRank: 12,
+    fifaRankAsOf: null,
+    createdAt: "",
+    updatedAt: "",
+  };
+  const teamFra: Team = {
+    id: "team-fra",
+    name: "France",
+    countryCode: "FRA",
+    fifaCode: "FRA",
+    fifaRank: 2,
+    fifaRankAsOf: null,
+    createdAt: "",
+    updatedAt: "",
+  };
+  const teamEng: Team = {
+    id: "team-eng",
+    name: "England",
+    countryCode: "ENG",
+    fifaCode: "ENG",
+    fifaRank: 4,
+    fifaRankAsOf: null,
+    createdAt: "",
+    updatedAt: "",
+  };
+  const seemaTeams = [...teams, teamUs, teamBel, teamFra, teamEng];
+  const m81 = match({
+    match_code: "M81",
+    stage_code: "round_of_32",
+    kickoff_at: "2026-07-01T19:00:00Z",
+    status: "finished",
+    home_country_code: "USA",
+    away_country_code: "BIH",
+    home_team_name: "United States",
+    away_team_name: "Bosnia and Herzegovina",
+    winner_country_code: "USA",
+  });
+  const m82 = match({
+    match_code: "M82",
+    stage_code: "round_of_32",
+    kickoff_at: "2026-07-01T22:00:00Z",
+    status: "finished",
+    home_country_code: "BEL",
+    away_country_code: "SEN",
+    home_team_name: "Belgium",
+    away_team_name: "Senegal",
+    winner_country_code: "BEL",
+  });
+  const seemaMatches = [m81, m82];
+  const seemaGradual = getGradualKnockoutSelectionState({
+    matches: seemaMatches,
+    teams: seemaTeams,
+    nowMs,
+    fullRoundOf32Official: true,
+  });
+  const partialCompleteSlots = [
+    r16Slot("9", "team-us"),
+    r16Slot("10", "team-bel"),
+    qfSlot("1", "team-fra"),
+    qfSlot("2", "team-mar"),
+    qfSlot("5", "team-bra"),
+    qfSlot("6", ""),
+    qfSlot("7", "team-bra"),
+    qfSlot("8", "team-can"),
+    sfSlot("1", "team-fra"),
+    sfSlot("3", "team-eng"),
+    finSlot("1", "team-eng"),
+  ];
+  const m94Rows = buildKnockoutMatchPickRows({
+    bracketKind: "round_of_16",
+    slots: partialCompleteSlots,
+    teams: seemaTeams,
+    tournamentMatches: seemaMatches,
+    gradual: seemaGradual,
+    knockoutBracketPicksUnlocked: true,
+    nowMs,
+  });
+  const m94 = m94Rows.find((r) => r.fifaMatchNo === 94)!;
+  assert.strictEqual(m94.homeTeamId, "team-us");
+  assert.strictEqual(m94.awayTeamId, "team-bel");
+  assert.strictEqual(m94.winnerTeamId, "");
+  assert.strictEqual(m94.lockReason, "frozen");
+  assert.strictEqual(isKnockoutMatchDirectPickEligible(m94), false);
+  const missingPresentation = knockoutMatchSavedPickPresentation(m94, seemaTeams);
+  assert.strictEqual(missingPresentation.savedPickStatus, "missing");
+  assert.strictEqual(missingPresentation.savedPickSummaryLine, "No pick saved");
+  assert.strictEqual(
+    missingPresentation.lockStatusLine,
+    "Locked — feeder results are official.",
+  );
+  assert.ok(
+    missingPresentation.savedPickWarning?.includes("already in progress"),
+  );
+  assert.strictEqual(
+    isKnockoutPickEditableForParticipant({
+      predictionKind: "quarterfinalist",
+      slotKey: "6",
+      tournamentMatches: seemaMatches,
+      gradual: seemaGradual,
+      fullRoundOf32Official: true,
+      savedTeamId: "",
+      progressionRows: partialCompleteSlots,
+      nowMs,
+    }),
+    false,
+  );
+  assert.strictEqual(
+    isKnockoutPickFrozenForParticipant({
+      predictionKind: "quarterfinalist",
+      slotKey: "6",
+      tournamentMatches: seemaMatches,
+      gradual: seemaGradual,
+      savedTeamId: "",
+      progressionRows: partialCompleteSlots,
+      nowMs,
+    }),
+    true,
+  );
+  const partialExisting: Prediction[] = [
+    {
+      id: "p-qf1",
+      poolId: "pool",
+      participantId: "par",
+      predictionKind: "quarterfinalist",
+      teamId: "team-fra",
+      tournamentStageId: stageR16,
+      groupCode: null,
+      slotKey: "1",
+      bonusKey: null,
+      valueText: null,
+      createdAt: "",
+      updatedAt: "",
+    },
+    {
+      id: "p-sf1",
+      poolId: "pool",
+      participantId: "par",
+      predictionKind: "semifinalist",
+      teamId: "team-fra",
+      tournamentStageId: stageR16,
+      groupCode: null,
+      slotKey: "1",
+      bonusKey: null,
+      valueText: null,
+      createdAt: "",
+      updatedAt: "",
+    },
+    {
+      id: "p-fin1",
+      poolId: "pool",
+      participantId: "par",
+      predictionKind: "finalist",
+      teamId: "team-eng",
+      tournamentStageId: stageR16,
+      groupCode: null,
+      slotKey: "1",
+      bonusKey: null,
+      valueText: null,
+      createdAt: "",
+      updatedAt: "",
+    },
+  ];
+  const backfillErr = validateKnockoutParticipantPickChanges({
+    incoming: [
+      {
+        predictionKind: "quarterfinalist",
+        tournamentStageId: stageR16,
+        slotKey: "6",
+        groupCode: null,
+        bonusKey: null,
+        teamId: "team-bel",
+      },
+    ],
+    existing: partialExisting,
+    matches: seemaMatches,
+    gradual: seemaGradual,
+    fullRoundOf32Official: true,
+    nowMs,
+  });
+  assert.ok(backfillErr, "server rejects M94 backfill for partial-complete participant");
+  const adminResolved = resolveKnockoutPickCorrectionMatch({
+    matchCode: "M94",
+    slots: partialCompleteSlots,
+    teams: seemaTeams,
+    tournamentMatches: seemaMatches,
+    fullRoundOf32Official: true,
+    knockoutBracketPicksUnlocked: true,
+    nowMs,
+  });
+  assert.ok(!("error" in adminResolved), "admin can open correction on frozen missing M94");
+  const adminApplied = applyKnockoutPickCorrection({
+    slots: partialCompleteSlots,
+    match: adminResolved.match,
+    newTeamId: "team-us",
+    teams: seemaTeams,
+    tournamentMatches: seemaMatches,
+    fullRoundOf32Official: true,
+  });
+  assert.strictEqual(
+    adminApplied.slots.find(
+      (s) => s.predictionKind === "quarterfinalist" && s.slotKey === "6",
+    )?.teamId,
+    "team-us",
+    "admin can backfill frozen missing M94 row",
   );
 }
 
