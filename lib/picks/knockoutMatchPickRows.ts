@@ -679,6 +679,49 @@ function upstreamWizardKindForMatchSides(
   return null;
 }
 
+/** Prediction kind whose slot keys store upstream match-winner picks for this round's feeders. */
+function feederSlotPredictionKind(
+  wizardKind: KnockoutWizardBracketKind,
+): KnockoutProgressionPredictionKind | null {
+  if (wizardKind === "quarterfinalist") return "quarterfinalist";
+  if (wizardKind === "semifinalist") return "semifinalist";
+  if (wizardKind === "finalist") return "finalist";
+  return null;
+}
+
+/**
+ * When upstream match rows are incomplete, read saved feeder picks at official slot keys
+ * (same keys used by the live bracket path fallback and FIFA pairings).
+ */
+function storedFeederSideTeamIds(
+  wizardKind: KnockoutWizardBracketKind,
+  matchIndex: number,
+  slots: KnockoutPickSlotDraft[],
+): { homeTeamId: string | null; awayTeamId: string | null } {
+  const slotStage = slotStageForWizardKind(wizardKind);
+  const feederKind = feederSlotPredictionKind(wizardKind);
+  if (!slotStage || !feederKind) {
+    return { homeTeamId: null, awayTeamId: null };
+  }
+  const slotPair = knockoutParticipantSlotPair(slotStage, matchIndex);
+  if (!slotPair) {
+    return { homeTeamId: null, awayTeamId: null };
+  }
+  const [homeSlot, awaySlot] = slotPair;
+  return {
+    homeTeamId: slotTeamId(slots, feederKind, homeSlot) || null,
+    awayTeamId: slotTeamId(slots, feederKind, awaySlot) || null,
+  };
+}
+
+export function storedFeederSideTeamIdsForMatch(
+  wizardKind: KnockoutWizardBracketKind,
+  matchIndex: number,
+  slots: KnockoutPickSlotDraft[],
+): { homeTeamId: string | null; awayTeamId: string | null } {
+  return storedFeederSideTeamIds(wizardKind, matchIndex, slots);
+}
+
 function slotStageForWizardKind(
   wizardKind: KnockoutWizardBracketKind,
 ): "quarterfinal" | "semifinal" | "final" | null {
@@ -820,14 +863,35 @@ function readMatchSides(
   const upstreamInput = buildInputForBracketKind(input, upstreamKind);
   const homeRow = rows[homeIdx];
   const awayRow = rows[awayIdx];
-  return {
-    homeTeamId: homeRow
-      ? readConfirmedKnockoutMatchWinner(homeRow, upstreamKind, upstreamInput)
-      : null,
-    awayTeamId: awayRow
-      ? readConfirmedKnockoutMatchWinner(awayRow, upstreamKind, upstreamInput)
-      : null,
-  };
+  let homeTeamId = homeRow
+    ? readConfirmedKnockoutMatchWinner(homeRow, upstreamKind, upstreamInput)
+    : null;
+  let awayTeamId = awayRow
+    ? readConfirmedKnockoutMatchWinner(awayRow, upstreamKind, upstreamInput)
+    : null;
+
+  const upstreamFeederIncomplete =
+    homeRow?.lockReason === "incomplete" ||
+    awayRow?.lockReason === "incomplete" ||
+    !homeRow ||
+    !awayRow;
+
+  if (
+    upstreamFeederIncomplete &&
+    (!homeTeamId || !awayTeamId) &&
+    (def.wizardBracketKind === "semifinalist" ||
+      def.wizardBracketKind === "finalist")
+  ) {
+    const stored = storedFeederSideTeamIds(
+      def.wizardBracketKind,
+      matchIndex,
+      input.slots,
+    );
+    if (!homeTeamId) homeTeamId = stored.homeTeamId;
+    if (!awayTeamId) awayTeamId = stored.awayTeamId;
+  }
+
+  return { homeTeamId, awayTeamId };
 }
 
 function resultSlotKeyForMatch(

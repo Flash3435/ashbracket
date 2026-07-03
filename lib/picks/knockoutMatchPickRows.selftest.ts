@@ -501,6 +501,25 @@ function r32Side(slotKey: string, teamId = ""): KnockoutPickSlotDraft {
   assert.strictEqual(rows[1]!.awayTeamId, "team-ned");
 }
 
+// SF sides use stored feeder picks when upstream QF validation is incomplete (poster/wizard parity)
+{
+  const slots: KnockoutPickSlotDraft[] = [
+    sfSlot("1", "team-fra"),
+    sfSlot("3", "team-ger"),
+    finSlot("1", "team-fra"),
+  ];
+  const rows = buildKnockoutMatchPickRows({
+    bracketKind: "semifinalist",
+    slots,
+    teams,
+    gradual: emptyGradual,
+    knockoutBracketPicksUnlocked: true,
+  });
+  assert.strictEqual(rows[0]!.fifaMatchNo, 101);
+  assert.strictEqual(rows[0]!.homeTeamId, "team-fra");
+  assert.strictEqual(rows[0]!.awayTeamId, "team-ger");
+}
+
 // Incomplete row when upstream missing
 {
   const slots = [r16Slot("1", "team-rsa"), r16Slot("2"), ...Array.from({ length: 14 }, (_, i) => r16Slot(String(i + 3)))];

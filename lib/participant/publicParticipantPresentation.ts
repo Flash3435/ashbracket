@@ -117,8 +117,8 @@ const SECTION_BY_KIND: Record<string, SectionMeta> = {
   },
   finalist: {
     key: "finalists",
-    title: "Finalists",
-    description: "Teams picked to reach the final.",
+    title: "Semi-final winners",
+    description: "Teams picked to reach the Final.",
     sortOrder: 70,
   },
   champion: {
@@ -266,7 +266,7 @@ function describePick(pick: PublicParticipantPick): {
     case "finalist":
       return {
         displayLabel: formatNumberSlot(pick.slotKey, "Pick"),
-        detailLabel: "Reached the final",
+        detailLabel: "Semi-final winner",
       };
     case "champion":
       return {

@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo } from "react";
+import { NO_CHAMPION_PICK_SAVED_LABEL } from "../../lib/bracket/knockoutBracketDisplayCopy";
 import { BracketMatchCard } from "../bracket/BracketMatchCard";
 import { LockedLaterRoundsPanel } from "../bracket/LockedLaterRoundsPanel";
 import {
@@ -385,7 +386,7 @@ export function KnockoutBracketPreview({
                   ? champTeam!.name
                   : champTid
                     ? "Unknown team"
-                    : "Not picked"}
+                    : NO_CHAMPION_PICK_SAVED_LABEL}
               </p>
               {champPicked ? (
                 <p className="text-[11px] text-ash-muted">{champTeam!.countryCode}</p>

@@ -18,6 +18,9 @@ export function ChampionCard({ champion, teamById }: Props) {
     champion.participantPickBadge === "your_pick" ||
     champion.participantPickBadge === "your_pick_alive";
 
+  const emptyLabel = champion.emptyLabel;
+  const displayName = picked ? team!.name : emptyLabel;
+
   return (
     <div
       className={`rounded-lg border p-3 text-center ${
@@ -41,12 +44,12 @@ export function ChampionCard({ champion, teamById }: Props) {
         )}
       </span>
       <p
-        className={`mt-2 truncate text-sm font-semibold ${
-          muted ? "text-ash-muted" : picked ? "text-ash-text" : "text-ash-muted"
+        className={`mt-2 text-sm font-semibold leading-snug ${
+          muted ? "text-ash-muted" : picked ? "truncate text-ash-text" : "text-ash-muted"
         }`}
-        title={picked ? team!.name : undefined}
+        title={picked ? team!.name : emptyLabel}
       >
-        {picked ? team!.name : "TBD"}
+        {displayName}
       </p>
       {picked ? (
         <>

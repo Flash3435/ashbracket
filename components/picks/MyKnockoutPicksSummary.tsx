@@ -19,6 +19,10 @@ import {
   type PickSectionStatus,
 } from "../../lib/picks/picksProgressSummary";
 import { buildPoolPickDeadlineStatus } from "../../lib/picks/poolPickDeadlineDisplay";
+import {
+  SEMI_FINAL_WINNER_SECTION_SUBTITLE,
+  SEMI_FINAL_WINNER_SECTION_TITLE,
+} from "../../lib/bracket/knockoutBracketDisplayCopy";
 import { buildKnockoutBracketGradualSectionNote } from "../../lib/picks/knockoutSelectionWindow";
 import { PicksProgressSummaryPanel } from "./PicksProgressSummaryPanel";
 import { PoolPickDeadlineBanner } from "./PoolPickDeadlineBanner";
@@ -364,8 +368,12 @@ export function MyKnockoutPicksSummary({
               teamById={teamById}
             />
             <StageBlock
-              title="Finalists"
-              subtitle={readOnly ? "Their predicted finalists" : "Your predicted finalists"}
+              title={SEMI_FINAL_WINNER_SECTION_TITLE}
+              subtitle={
+                readOnly
+                  ? "Semi-final winners they picked"
+                  : SEMI_FINAL_WINNER_SECTION_SUBTITLE
+              }
               rows={fin}
               teamById={teamById}
             />

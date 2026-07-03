@@ -3,6 +3,10 @@ import type { KnockoutPickSlotDraft } from "../../types/adminKnockoutPicks";
 import type { TournamentMatchPublicRow } from "../../types/tournamentPublic";
 import { buildEliminatedTeamIdSet } from "./bracketTeamDisplay";
 import { deriveParticipantBracket } from "./deriveParticipantBracket";
+import {
+  FINAL_FEEDER_NO_CHAMPION_HELPER,
+  NO_CHAMPION_PICK_SAVED_LABEL,
+} from "./knockoutBracketDisplayCopy";
 import { resolveFullBracketUnlockedForTracker } from "./resolveLiveBracketTrackerMode";
 import type { BracketMatchResolved } from "./types";
 import { WC2026_R32_MATCH_DEFS } from "./wc2026RoundOf32";
@@ -10,19 +14,18 @@ import {
   getGradualKnockoutSelectionState,
   type GradualKnockoutSelectionState,
 } from "../picks/gradualKnockoutUnlock";
-import {
-  knockoutParticipantSlotPair,
-  r16R32ParticipantPair,
-} from "./wc2026KnockoutPairings";
+import { r16R32ParticipantPair } from "./wc2026KnockoutPairings";
 import {
   buildKnockoutMatchPickRows,
   knockoutMatchStepDef,
   officialR32ParticipantIds,
   readConfirmedR32MatchWinner,
   readParticipantR32MatchWinnerPick,
+  storedFeederSideTeamIdsForMatch,
   type ConfirmedR32WinnerContext,
   type KnockoutWizardBracketKind,
 } from "../picks/knockoutMatchPickRows";
+import { isKnockoutProgressionKind } from "../predictions/knockoutProgressionKinds";
 import {
   formatTournamentMatchScoreLine,
   isFinishedMatchWithScores,
@@ -71,11 +74,17 @@ export type LiveBracketTrackerModel = {
     teamId: string | null;
     displayName: string;
     countryCode: string | null;
+    hasSavedPick: boolean;
+    emptyLabel: string;
     participantPick: boolean;
     eliminatedFromTournament: boolean;
     participantPickBadge: ParticipantPickBadge;
     tournamentOutcome: TournamentSideOutcome | null;
   };
+  /** Shown under M104 when feeder teams exist but champion is unsaved. */
+  finalHelperCopy: string | null;
+  /** True when any knockout progression pick exists — controls champion card visibility. */
+  showChampionCard: boolean;
   eliminatedTeamIds: Set<string>;
 };
 
@@ -475,38 +484,22 @@ function participantPathForLaterMatch(
     };
   }
 
-  const stage =
-    bracketKind === "quarterfinalist"
-      ? "quarterfinal"
-      : bracketKind === "semifinalist"
-        ? "semifinal"
-        : bracketKind === "finalist"
-          ? "final"
-          : null;
-  if (!stage) return { homeId: null, awayId: null, pickId };
-
-  const slotPair = knockoutParticipantSlotPair(stage, matchIndex);
-  if (!slotPair) return { homeId: null, awayId: null, pickId };
-
-  // Slot keys in `knockoutParticipantSlotPair` name the prediction kind that stores
-  // that round's feeders (QF slots → quarterfinalist / R16 winners, not gradual R32
-  // winners on `round_of_16` slots 1–16).
-  const feederKind =
-    bracketKind === "quarterfinalist"
-      ? "quarterfinalist"
-      : bracketKind === "semifinalist"
-        ? "semifinalist"
-        : bracketKind === "finalist"
-          ? "finalist"
-          : null;
-  if (!feederKind) return { homeId: null, awayId: null, pickId };
-
-  const [homeSlot, awaySlot] = slotPair;
+  const { homeTeamId, awayTeamId } = storedFeederSideTeamIdsForMatch(
+    bracketKind,
+    matchIndex,
+    slots,
+  );
   return {
-    homeId: pickTeamId(slots, feederKind, homeSlot),
-    awayId: pickTeamId(slots, feederKind, awaySlot),
+    homeId: homeTeamId,
+    awayId: awayTeamId,
     pickId,
   };
+}
+
+function hasAnyKnockoutProgressionPick(slots: KnockoutPickSlotDraft[]): boolean {
+  return slots.some(
+    (s) => isKnockoutProgressionKind(s.predictionKind) && s.teamId.trim() !== "",
+  );
 }
 
 function enrichLiveRound(
@@ -642,6 +635,17 @@ export function buildLiveBracketTracker(
     eliminatedFromTournament: championEliminated,
   });
 
+  const hasSavedChampionPick = Boolean(champId);
+  const showChampionCard = hasAnyKnockoutProgressionPick(input.slots);
+  const finalHasFeederTeams = Boolean(
+    finalMatch &&
+      (finalMatch.home.teamId?.trim() || finalMatch.away.teamId?.trim()),
+  );
+  const finalHelperCopy =
+    finalHasFeederTeams && !hasSavedChampionPick
+      ? FINAL_FEEDER_NO_CHAMPION_HELPER
+      : null;
+
   return {
     roundOf32: buildR32Matches(
       trackerInput,
@@ -707,13 +711,19 @@ export function buildLiveBracketTracker(
     final: finalMatches,
     champion: {
       teamId: champId,
-      displayName: teamLabel(champId, teamById, "TBD"),
+      displayName: hasSavedChampionPick
+        ? teamLabel(champId, teamById, "Unknown team")
+        : NO_CHAMPION_PICK_SAVED_LABEL,
       countryCode: countryCodeForTeam(champId, teamById),
+      hasSavedPick: hasSavedChampionPick,
+      emptyLabel: NO_CHAMPION_PICK_SAVED_LABEL,
       participantPick: Boolean(champId),
       eliminatedFromTournament: championEliminated,
       participantPickBadge: championPickBadge,
       tournamentOutcome: championTournamentOutcome,
     },
+    finalHelperCopy,
+    showChampionCard,
     eliminatedTeamIds,
   };
 }

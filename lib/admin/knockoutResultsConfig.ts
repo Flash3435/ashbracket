@@ -100,7 +100,7 @@ export const KNOCKOUT_PROGRESSION_SECTIONS: KnockoutEditorSection[] = [
   {
     kind: "finalist",
     stageCode: "final",
-    label: "Finalists",
+    label: "Semi-final winners",
     slotKeys: ["1", "2"],
   },
   {

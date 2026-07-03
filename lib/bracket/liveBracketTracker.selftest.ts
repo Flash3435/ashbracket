@@ -5,6 +5,10 @@ import type { Team } from "../../src/types/domain";
 import type { KnockoutPickSlotDraft } from "../../types/adminKnockoutPicks";
 import type { TournamentMatchPublicRow } from "../../types/tournamentPublic";
 import { buildLiveBracketTracker } from "./liveBracketTracker";
+import {
+  FINAL_FEEDER_NO_CHAMPION_HELPER,
+  NO_CHAMPION_PICK_SAVED_LABEL,
+} from "./knockoutBracketDisplayCopy";
 import { liveSideNeedsMutedFlag } from "./liveBracketSideStyles";
 import { shouldUseLiveBracketTracker } from "./resolveLiveBracketTrackerMode";
 
@@ -131,6 +135,8 @@ void (async function main() {
       "R16 shows Brazil from participant path",
     );
     assert(tracker.champion.teamId === "team-bra", "champion pick renders");
+    assert(tracker.champion.hasSavedPick, "saved champion flagged");
+    assert(tracker.showChampionCard, "champion card shown when knockout picks exist");
   }
 
   // Participant picked Tunisia — loser
@@ -182,6 +188,83 @@ void (async function main() {
     const pickedSide = [m73.home, m73.away].find((s) => s.participantPick === "your_pick_alive");
     assert(pickedSide?.teamId === "team-bra", "upcoming match shows participant pick");
     assert(m73.statusLabel === "Upcoming", "upcoming status shown");
+  }
+
+  // Finalist slot (SF winner) without champion row — Ash-style incomplete bracket
+  {
+    const slots: KnockoutPickSlotDraft[] = [
+      slot("sf|1", "semifinalist", "team-fra", "1"),
+      slot("sf|3", "semifinalist", "team-ger", "3"),
+      slot("f|1", "finalist", "team-fra", "1"),
+    ];
+
+    const tracker = buildLiveBracketTracker({
+      slots,
+      teams,
+      knockoutBracketPicksUnlocked: true,
+      tournamentMatches: [],
+    });
+
+    const m104 = tracker.final[0]!;
+    assert(m104.home.teamId === "team-fra", "M104 home from SF winner slot");
+    assert(m104.away.teamId == null, "M104 away TBD when SF slot 2 empty");
+    assert(!tracker.champion.hasSavedPick, "no saved champion pick");
+    assert(
+      tracker.champion.displayName === NO_CHAMPION_PICK_SAVED_LABEL,
+      "champion empty label",
+    );
+    assert(tracker.showChampionCard, "champion card visible with knockout picks");
+    assert(
+      tracker.finalHelperCopy === FINAL_FEEDER_NO_CHAMPION_HELPER,
+      "final helper copy when feeders exist without champion",
+    );
+
+    const m101 = tracker.semifinals[0]!;
+    assert(m101.home.teamId === "team-fra", "M101 home from feeder slots");
+    assert(m101.away.teamId === "team-ger", "M101 away from feeder slots");
+  }
+
+  // Saved champion pick
+  {
+    const slots: KnockoutPickSlotDraft[] = [
+      slot("f|1", "finalist", "team-fra", "1"),
+      slot("f|2", "finalist", "team-ger", "2"),
+      slot("champ", "champion", "team-fra"),
+    ];
+
+    const tracker = buildLiveBracketTracker({
+      slots,
+      teams,
+      knockoutBracketPicksUnlocked: true,
+      tournamentMatches: [],
+    });
+
+    assert(tracker.champion.teamId === "team-fra", "champion team id");
+    assert(tracker.champion.displayName === "France", "champion display name");
+    assert(tracker.champion.hasSavedPick, "has saved champion");
+    assert(tracker.finalHelperCopy == null, "no helper when champion saved");
+  }
+
+  // Stale/eliminated champion still shows saved pick, not empty label
+  {
+    const slots: KnockoutPickSlotDraft[] = [
+      slot("champ", "champion", "team-fra"),
+    ];
+    slots[0]!.pickStatus = "out";
+
+    const tracker = buildLiveBracketTracker({
+      slots,
+      teams,
+      knockoutBracketPicksUnlocked: true,
+      tournamentMatches: [],
+    });
+
+    assert(tracker.champion.teamId === "team-fra", "stale champion team preserved");
+    assert(tracker.champion.hasSavedPick, "stale champion counts as saved");
+    assert(
+      tracker.champion.displayName === "France",
+      "stale champion shows team name not empty label",
+    );
   }
 
   console.log("liveBracketTracker.selftest.ts: ok");

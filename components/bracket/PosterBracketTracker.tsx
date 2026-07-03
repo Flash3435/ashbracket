@@ -270,7 +270,6 @@ function PosterCenter({
   matchEditHref?: string | null;
 }) {
   const finalMatch = tracker.final[0] ?? null;
-  const showChampion = Boolean(tracker.champion.teamId);
 
   return (
     <div
@@ -304,12 +303,17 @@ function PosterCenter({
                   teamById={teamById}
                   matchEditHref={matchEditHref}
                 />
+                {tracker.finalHelperCopy ? (
+                  <p className="mt-1.5 text-center text-[9px] leading-snug text-ash-muted">
+                    {tracker.finalHelperCopy}
+                  </p>
+                ) : null}
               </div>
             </div>
           ) : null}
         </div>
       </div>
-      {showChampion ? (
+      {tracker.showChampionCard ? (
         <div className="mt-6 w-full max-w-[152px] shrink-0">
           <ChampionCard champion={tracker.champion} teamById={teamById} />
         </div>
@@ -364,12 +368,19 @@ function MobileColumnLayout({
         teamById={teamById}
         matchEditHref={matchEditHref}
       />
-      <div className="flex min-w-[120px] shrink-0 flex-col justify-start pl-2">
-        <h3 className="mb-2 text-center text-[10px] font-semibold uppercase tracking-wide text-ash-muted sm:text-xs">
-          Champion
-        </h3>
-        <ChampionCard champion={tracker.champion} teamById={teamById} />
-      </div>
+      {tracker.showChampionCard ? (
+        <div className="flex min-w-[120px] shrink-0 flex-col justify-start pl-2">
+          <h3 className="mb-2 text-center text-[10px] font-semibold uppercase tracking-wide text-ash-muted sm:text-xs">
+            Champion
+          </h3>
+          {tracker.finalHelperCopy ? (
+            <p className="mb-2 text-center text-[9px] leading-snug text-ash-muted">
+              {tracker.finalHelperCopy}
+            </p>
+          ) : null}
+          <ChampionCard champion={tracker.champion} teamById={teamById} />
+        </div>
+      ) : null}
     </div>
   );
 }
