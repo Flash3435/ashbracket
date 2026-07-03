@@ -645,7 +645,16 @@ const existing: Prediction[] = [
     fullRoundOf32Official: true,
     nowMs,
   });
-  assert.ok(guarded.error, "save guards reject clear on frozen row");
+  assert.strictEqual(
+    guarded.error,
+    null,
+    "save guards restore frozen clear instead of failing whole payload",
+  );
+  assert.strictEqual(
+    guarded.slots.find((s) => s.predictionKind === "quarterfinalist" && s.slotKey === "2")
+      ?.teamId,
+    "team-can",
+  );
 }
 
 // 4. Direct server mutation rejected for frozen later-round rows (covered above)
@@ -741,6 +750,159 @@ const existing: Prediction[] = [
       ?.teamId,
     "team-mar",
     "admin can correct frozen R16 match winner",
+  );
+}
+
+// 7. Save unlocked R16 pick when frozen row was auto-cleared in client payload
+{
+  const futureM74 = match({
+    match_code: "M74",
+    stage_code: "round_of_32",
+    kickoff_at: "2026-08-01T19:00:00Z",
+    status: "scheduled",
+    home_country_code: "CAN",
+    away_country_code: "NED",
+    home_team_name: "Canada",
+    away_team_name: "Netherlands",
+  });
+  const futureM77 = match({
+    match_code: "M77",
+    stage_code: "round_of_32",
+    kickoff_at: "2026-08-02T19:00:00Z",
+    status: "scheduled",
+    home_country_code: "MAR",
+    away_country_code: "SWE",
+    home_team_name: "Morocco",
+    away_team_name: "Sweden",
+  });
+  const futureMatches = [...tournamentMatches, futureM74, futureM77];
+  const futureGradual = getGradualKnockoutSelectionState({
+    matches: futureMatches,
+    teams: [
+      ...teams,
+      {
+        id: "team-swe",
+        name: "Sweden",
+        countryCode: "SWE",
+        fifaCode: "SWE",
+        fifaRank: 20,
+        fifaRankAsOf: null,
+        createdAt: "",
+        updatedAt: "",
+      },
+    ],
+    nowMs,
+    fullRoundOf32Official: true,
+  });
+  const existingQf: Prediction[] = [
+    {
+      id: "p-qf2",
+      poolId: "pool",
+      participantId: "par",
+      predictionKind: "quarterfinalist",
+      teamId: "team-can",
+      tournamentStageId: stageR16,
+      groupCode: null,
+      slotKey: "2",
+      bonusKey: null,
+      valueText: null,
+      createdAt: "",
+      updatedAt: "",
+    },
+  ];
+  const guarded = applyGradualKnockoutPickSaveGuards({
+    incoming: [
+      {
+        predictionKind: "quarterfinalist",
+        tournamentStageId: stageR16,
+        slotKey: "1",
+        groupCode: null,
+        bonusKey: null,
+        teamId: "team-swe",
+      },
+      {
+        predictionKind: "quarterfinalist",
+        tournamentStageId: stageR16,
+        slotKey: "2",
+        groupCode: null,
+        bonusKey: null,
+        teamId: "",
+      },
+    ],
+    existing: existingQf,
+    teams: [
+      ...teams,
+      {
+        id: "team-swe",
+        name: "Sweden",
+        countryCode: "SWE",
+        fifaCode: "SWE",
+        fifaRank: 20,
+        fifaRankAsOf: null,
+        createdAt: "",
+        updatedAt: "",
+      },
+    ],
+    matches: futureMatches,
+    fullRoundOf32Official: true,
+    nowMs,
+  });
+  assert.strictEqual(
+    guarded.error,
+    null,
+    "unlocked M89 pick saves even when frozen M90 slot was cleared client-side",
+  );
+  assert.strictEqual(
+    guarded.slots.find((s) => s.predictionKind === "quarterfinalist" && s.slotKey === "1")
+      ?.teamId,
+    "team-swe",
+  );
+  assert.strictEqual(
+    guarded.slots.find((s) => s.predictionKind === "quarterfinalist" && s.slotKey === "2")
+      ?.teamId,
+    "team-can",
+    "frozen saved pick is preserved in payload",
+  );
+}
+
+// 8. Frozen swap still rejected with row label in error
+{
+  const swapErr = validateKnockoutParticipantPickChanges({
+    incoming: [
+      {
+        predictionKind: "quarterfinalist",
+        tournamentStageId: stageR16,
+        slotKey: "2",
+        groupCode: null,
+        bonusKey: null,
+        teamId: "team-mar",
+      },
+    ],
+    existing: [
+      {
+        id: "p-qf",
+        poolId: "pool",
+        participantId: "par",
+        predictionKind: "quarterfinalist",
+        teamId: "team-can",
+        tournamentStageId: stageR16,
+        groupCode: null,
+        slotKey: "2",
+        bonusKey: null,
+        valueText: null,
+        createdAt: "",
+        updatedAt: "",
+      },
+    ],
+    matches: tournamentMatches,
+    gradual,
+    fullRoundOf32Official: true,
+    nowMs,
+  });
+  assert.ok(swapErr?.includes("M90"), swapErr ?? "expected M90 in frozen swap error");
+  assert.ok(
+    swapErr?.includes("feeder match results are official"),
+    swapErr ?? "expected feeder lock reason",
   );
 }
 

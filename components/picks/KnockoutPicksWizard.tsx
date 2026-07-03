@@ -225,6 +225,35 @@ type WizardStepDef =
     }
   | { id: number; mode: "bonus"; title: string; intro: string; hint: string };
 
+function roundOf16WizardStepCopy(
+  rows: KnockoutMatchPickRow[] | null,
+): { intro: string; hint: string } {
+  const defaultIntro =
+    "Pick the winner of each Round of 16 matchup. Each pairing is built from your Round of 32 winners.";
+  const defaultHint =
+    "Changing Round of 32 winners can clear picks here that no longer fit.";
+  if (!rows?.length) {
+    return { intro: defaultIntro, hint: defaultHint };
+  }
+  const frozen = rows.filter((row) => row.lockReason === "frozen").length;
+  const pickable = rows.filter((row) => row.lockReason === "pickable").length;
+  if (frozen > 0 && pickable > 0) {
+    return {
+      intro:
+        "Some matchups are locked because their Round of 32 feeder results are already official. You can still pick any remaining unlocked matchups below.",
+      hint: "Each pairing is built from your Round of 32 winners. Locked rows keep your saved pick; unlocked rows stay editable until kickoff.",
+    };
+  }
+  if (frozen > 0 && pickable === 0) {
+    return {
+      intro:
+        "All Round of 16 matchups are locked because their Round of 32 feeder results are already official. Your saved picks are shown below.",
+      hint: "These picks cannot be changed while feeder results are official.",
+    };
+  }
+  return { intro: defaultIntro, hint: defaultHint };
+}
+
 function participantWizardSteps(
   knockoutBracketPicksUnlocked: boolean,
   fullBracketPicksUnlocked: boolean,
@@ -1397,6 +1426,19 @@ export function KnockoutPicksWizard({
   ]);
   const activeKnockoutMatchRows =
     currentKnockoutMatchRows ?? championStepFinalRows;
+  const currentStepCopy = useMemo(() => {
+    if (
+      currentStepDef?.mode === "bracket" &&
+      currentStepDef.bracketKind === "round_of_16" &&
+      activeKnockoutMatchRows
+    ) {
+      return roundOf16WizardStepCopy(activeKnockoutMatchRows);
+    }
+    return {
+      intro: currentStepDef?.intro ?? "",
+      hint: currentStepDef?.hint ?? "",
+    };
+  }, [currentStepDef, activeKnockoutMatchRows]);
   const stepRowOptions = useMemo(
     () => ({
       gradualR32MatchRows,
@@ -2165,10 +2207,10 @@ export function KnockoutPicksWizard({
             {currentStepDef.title}
           </h2>
           <p className="mt-2 text-sm leading-relaxed text-ash-muted">
-            {currentStepDef.intro}
+            {currentStepCopy.intro}
           </p>
           <p className="mt-2 text-xs text-ash-border-hover">
-            {currentStepDef.hint}
+            {currentStepCopy.hint}
           </p>
 
           {currentStepDef.mode === "bracket" &&

@@ -60,6 +60,52 @@ function gradualR32MatchPickError(
 }
 
 /**
+ * Frozen knockout slots keep their saved values in the payload unless the
+ * participant is swapping to a different team. Clears from client-side path
+ * repair must not block saves on still-editable rows.
+ */
+export function coerceFrozenKnockoutSlotsToSaved(input: {
+  incoming: ParticipantPickSlotPayload[];
+  existing: Prediction[];
+  matches: TournamentMatchPublicRow[];
+  gradual: ReturnType<typeof getGradualKnockoutSelectionState>;
+  nowMs?: number;
+}): ParticipantPickSlotPayload[] {
+  const priorByKey = existingTeamIdByKey(input.existing);
+  const nowMs = input.nowMs ?? Date.now();
+
+  return input.incoming.map((slot) => {
+    if (!isKnockoutProgressionKind(slot.predictionKind)) return slot;
+
+    const incomingId = slot.teamId.trim();
+    const k = progressionKey({
+      predictionKind: slot.predictionKind,
+      tournamentStageId: slot.tournamentStageId,
+      slotKey: slot.slotKey,
+    });
+    const keep = priorByKey.get(k) ?? "";
+
+    if (
+      !isKnockoutPickFrozenForParticipant({
+        predictionKind: slot.predictionKind,
+        slotKey: slot.slotKey,
+        tournamentMatches: input.matches,
+        gradual: input.gradual,
+        nowMs,
+      })
+    ) {
+      return slot;
+    }
+
+    if (incomingId && incomingId !== keep) {
+      return slot;
+    }
+
+    return { ...slot, teamId: keep };
+  });
+}
+
+/**
  * Reject participant edits to knockout slots that are locked at kickoff or by
  * an official result. Applies regardless of gradual vs full-bracket unlock.
  */
@@ -122,8 +168,16 @@ export function applyGradualKnockoutPickSaveGuards(input: {
     fullRoundOf32Official: input.fullRoundOf32Official,
   });
 
-  const editErr = validateKnockoutParticipantPickChanges({
+  const incoming = coerceFrozenKnockoutSlotsToSaved({
     incoming: input.incoming,
+    existing: input.existing,
+    matches: input.matches,
+    gradual,
+    nowMs,
+  });
+
+  const editErr = validateKnockoutParticipantPickChanges({
+    incoming,
     existing: input.existing,
     matches: input.matches,
     gradual,
@@ -131,16 +185,16 @@ export function applyGradualKnockoutPickSaveGuards(input: {
     nowMs,
   });
   if (editErr) {
-    return { slots: input.incoming, error: editErr };
+    return { slots: incoming, error: editErr };
   }
 
   if (input.fullRoundOf32Official) {
-    return { slots: input.incoming, error: null };
+    return { slots: incoming, error: null };
   }
 
   const priorByKey = existingTeamIdByKey(input.existing);
 
-  for (const slot of input.incoming) {
+  for (const slot of incoming) {
     if (!isKnockoutProgressionKind(slot.predictionKind)) continue;
     const incomingId = slot.teamId.trim();
     if (!incomingId) continue;
@@ -156,13 +210,13 @@ export function applyGradualKnockoutPickSaveGuards(input: {
       const match = matchStateForR16GradualWinnerSlot(slot.slotKey, gradual);
       if (!match) {
         return {
-          slots: input.incoming,
+          slots: incoming,
           error: "Later knockout rounds unlock once the full Round of 32 is official.",
         };
       }
       if (!match.pickable) {
         const err = gradualR32MatchPickError(match);
-        return { slots: input.incoming, error: err ?? GRADUAL_R32_SLOT_EDIT_ERROR };
+        return { slots: incoming, error: err ?? GRADUAL_R32_SLOT_EDIT_ERROR };
       }
       const err = validateKnockoutMatchPick({
         slotKey: match.topSlotKey,
@@ -171,25 +225,25 @@ export function applyGradualKnockoutPickSaveGuards(input: {
         teams: input.teams,
         nowMs,
       });
-      if (err) return { slots: input.incoming, error: err };
+      if (err) return { slots: incoming, error: err };
       continue;
     }
 
     if (slot.predictionKind === "round_of_32") {
       if (incomingId !== keep) {
-        return { slots: input.incoming, error: GRADUAL_R32_SLOT_EDIT_ERROR };
+        return { slots: incoming, error: GRADUAL_R32_SLOT_EDIT_ERROR };
       }
       continue;
     }
 
     return {
-      slots: input.incoming,
+      slots: incoming,
       error: "Later knockout rounds unlock once the full Round of 32 is official.",
     };
   }
 
   let slots = mergeKnockoutProgressionSlotsFromPredictions(
-    input.incoming,
+    incoming,
     input.existing,
   );
 
@@ -204,13 +258,13 @@ export function applyGradualKnockoutPickSaveGuards(input: {
       slot.predictionKind === "round_of_16" &&
       pickableR16Keys.has(slot.slotKey ?? "")
     ) {
-      const incoming = input.incoming.find(
+      const incomingRow = incoming.find(
         (s) =>
           s.predictionKind === slot.predictionKind &&
           s.tournamentStageId === slot.tournamentStageId &&
           s.slotKey === slot.slotKey,
       );
-      return incoming ? { ...slot, teamId: incoming.teamId } : slot;
+      return incomingRow ? { ...slot, teamId: incomingRow.teamId } : slot;
     }
     return slot;
   });
@@ -309,7 +363,7 @@ export function applyGradualKnockoutPickSaveGuards(input: {
       slotKey: slot.slotKey,
     });
     const keep = priorByKey.get(k) ?? "";
-    const incomingRow = input.incoming.find(
+    const incomingRow = incoming.find(
       (s) =>
         s.predictionKind === slot.predictionKind &&
         s.tournamentStageId === slot.tournamentStageId &&

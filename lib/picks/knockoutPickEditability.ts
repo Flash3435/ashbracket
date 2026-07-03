@@ -249,20 +249,37 @@ export function isKnockoutSlotFrozenByOfficialFeeders(input: {
   );
 }
 
+function knockoutPickEditBlockedRowLabel(input: {
+  predictionKind: string;
+  slotKey: string | null;
+  tournamentMatches?: TournamentMatchPublicRow[] | null;
+  gradual: GradualKnockoutSelectionState;
+}): string {
+  const match = resolveTournamentMatchForKnockoutSlot(input);
+  if (match?.match_code?.trim()) {
+    return match.match_code.trim();
+  }
+  if (input.slotKey?.trim()) {
+    return `${input.predictionKind.replaceAll("_", " ")} slot ${input.slotKey}`;
+  }
+  return input.predictionKind.replaceAll("_", " ");
+}
+
 export function knockoutPickEditBlockedMessage(input: {
   predictionKind: string;
   slotKey: string | null;
   tournamentMatches?: TournamentMatchPublicRow[] | null;
   gradual: GradualKnockoutSelectionState;
 }): string {
+  const rowLabel = knockoutPickEditBlockedRowLabel(input);
   if (isKnockoutSlotFrozenByOfficialFeeders(input)) {
-    return KNOCKOUT_PICK_LOCKED_FEEDER_RESULTS;
+    return `${rowLabel}: ${KNOCKOUT_PICK_LOCKED_FEEDER_RESULTS}`;
   }
   const match = resolveTournamentMatchForKnockoutSlot(input);
   if (match && hasOfficialKnockoutMatchResult(match)) {
-    return KNOCKOUT_PICK_LOCKED_OFFICIAL_RESULT;
+    return `${rowLabel}: ${KNOCKOUT_PICK_LOCKED_OFFICIAL_RESULT}`;
   }
-  return KNOCKOUT_PICK_LOCKED_AT_KICKOFF;
+  return `${rowLabel}: ${KNOCKOUT_PICK_LOCKED_AT_KICKOFF}`;
 }
 
 export function isKnockoutPickEditableForParticipant(input: {
