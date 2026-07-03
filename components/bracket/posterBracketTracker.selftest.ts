@@ -155,5 +155,41 @@ void (async function main() {
   assert(loserHtml.includes("Pick out"), "eliminated participant pick shows Pick out");
   assert(loserHtml.includes("Tunisia"), "eliminated pick team still visible");
 
+  // QF enrichment must use quarterfinalist (R16 winner) slots, not round_of_16 R32 winners.
+  const fullBracketSlots: KnockoutPickSlotDraft[] = [
+    slot("r16|3", "round_of_16", "team-ned", "3"),
+    slot("r16|4", "round_of_16", "team-bra", "4"),
+  ];
+  const fullTracker = buildLiveBracketTracker({
+    slots: fullBracketSlots,
+    teams: [
+      ...teams,
+      team("team-ned", "Netherlands", "NED"),
+    ],
+    knockoutBracketPicksUnlocked: true,
+    tournamentMatches: [],
+  });
+  const m99 = fullTracker.quarterfinals[2];
+  assert(m99 != null, "M99 QF row exists");
+  assert(
+    !m99.home.teamId && !m99.away.teamId,
+    "QF sides stay empty when only gradual R32 winners exist on round_of_16 slots",
+  );
+
+  const withR16Winners: KnockoutPickSlotDraft[] = [
+    ...fullBracketSlots,
+    slot("qf|3", "quarterfinalist", "team-bra", "3"),
+    slot("qf|4", "quarterfinalist", "team-ger", "4"),
+  ];
+  const r16Tracker = buildLiveBracketTracker({
+    slots: withR16Winners,
+    teams: [...teams, team("team-ned", "Netherlands", "NED")],
+    knockoutBracketPicksUnlocked: true,
+    tournamentMatches: [],
+  });
+  const m99WithPicks = r16Tracker.quarterfinals[2];
+  assert(m99WithPicks?.home.teamId === "team-bra", "M99 home from quarterfinalist slot 3");
+  assert(m99WithPicks?.away.teamId === "team-ger", "M99 away from quarterfinalist slot 4");
+
   console.log("posterBracketTracker.selftest.ts: ok");
 })();

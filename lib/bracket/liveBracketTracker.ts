@@ -488,17 +488,23 @@ function participantPathForLaterMatch(
   const slotPair = knockoutParticipantSlotPair(stage, matchIndex);
   if (!slotPair) return { homeId: null, awayId: null, pickId };
 
-  const upstreamKind =
+  // Slot keys in `knockoutParticipantSlotPair` name the prediction kind that stores
+  // that round's feeders (QF slots → quarterfinalist / R16 winners, not gradual R32
+  // winners on `round_of_16` slots 1–16).
+  const feederKind =
     bracketKind === "quarterfinalist"
-      ? "round_of_16"
+      ? "quarterfinalist"
       : bracketKind === "semifinalist"
-        ? "quarterfinalist"
-        : "semifinalist";
+        ? "semifinalist"
+        : bracketKind === "finalist"
+          ? "finalist"
+          : null;
+  if (!feederKind) return { homeId: null, awayId: null, pickId };
 
   const [homeSlot, awaySlot] = slotPair;
   return {
-    homeId: pickTeamId(slots, upstreamKind, homeSlot),
-    awayId: pickTeamId(slots, upstreamKind, awaySlot),
+    homeId: pickTeamId(slots, feederKind, homeSlot),
+    awayId: pickTeamId(slots, feederKind, awaySlot),
     pickId,
   };
 }
