@@ -185,13 +185,13 @@ async function main(): Promise<void> {
 
   console.log(`Pools scanned: ${scanTotals.poolsScanned}`);
   console.log(`Participants scanned: ${scanTotals.participantsScanned}`);
-  console.log(`Participants with stale SF+ picks: ${scanTotals.participantsWithStalePicks}`);
+  console.log(`Participants with stale topology picks: ${scanTotals.participantsWithStalePicks}`);
   console.log(
     `Participants with missing-only downstream picks: ${scanTotals.participantsWithOnlyMissingDownstream}`,
   );
   console.log(`Planned clears: ${initial.actions.length}`);
-  console.log(`  semifinalist: ${summary.semifinalistClears}`);
-  console.log(`  finalist: ${summary.finalistClears}`);
+  console.log(`  quarter-final-winner (semifinalist slots): ${summary.semifinalistClears}`);
+  console.log(`  semifinal-winner/finalist: ${summary.finalistClears}`);
   console.log(`  champion: ${summary.championClears}`);
   console.log(`Plan fingerprint: ${initial.fingerprint}\n`);
 
@@ -238,14 +238,14 @@ async function main(): Promise<void> {
   console.log("\n=== POST-REPAIR SUMMARY ===");
   console.log(`Participants repaired: ${postSummary.participantsAffected}`);
   console.log(`Prediction rows cleared: ${cleared}`);
-  console.log(`  semifinalist slots cleared: ${postSummary.semifinalistClears}`);
-  console.log(`  finalist slots cleared: ${postSummary.finalistClears}`);
+  console.log(`  quarter-final-winner slots cleared: ${postSummary.semifinalistClears}`);
+  console.log(`  semifinal-winner/finalist slots cleared: ${postSummary.finalistClears}`);
   console.log(`  champion slots cleared: ${postSummary.championClears}`);
   console.log(
     `Participants still missing downstream picks: ${postTotals.participantsWithOnlyMissingDownstream}`,
   );
   console.log(
-    `Participants still with stale SF+ picks: ${postTotals.participantsWithStalePicks}`,
+    `Participants still with stale topology picks: ${postTotals.participantsWithStalePicks}`,
   );
 
   if (recompute) {

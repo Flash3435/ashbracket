@@ -24,6 +24,10 @@ export type TopologyStalePicksReviewPanelData = {
   participantsScanned: number;
   participantsWithStalePicks: number;
   participantsWithMissingOnly: number;
+  staleSemifinalWinnerPicks: number;
+  staleChampionPicks: number;
+  missingSemifinalWinnerPicks: number;
+  missingChampionPicks: number;
   plannedRepairClears: number;
   participants: TopologyStalePicksReviewParticipant[];
 };
@@ -57,8 +61,8 @@ export async function loadTopologyStalePicksReviewForPool(
         email: p.email,
         stalePickCount: p.audit.stalePicks.length,
         missingPickCount: p.audit.missingPicks.length,
-        staleSlots: p.audit.stalePicks.map((s) => s.slot),
-        missingSlots: p.audit.missingPicks.map((m) => m.slot),
+        staleSlots: p.audit.stalePicks.map((s) => s.displayLabel),
+        missingSlots: p.audit.missingPicks.map((m) => m.displayLabel),
       }))
       .sort((a, b) => b.stalePickCount - a.stalePickCount)
       .slice(0, MAX_VISIBLE);
@@ -70,6 +74,10 @@ export async function loadTopologyStalePicksReviewForPool(
       participantsScanned: scan.participantsScanned,
       participantsWithStalePicks: totals.participantsWithStalePicks,
       participantsWithMissingOnly: totals.participantsWithOnlyMissingDownstream,
+      staleSemifinalWinnerPicks: totals.staleFinalistPicks,
+      staleChampionPicks: totals.staleChampionPicks,
+      missingSemifinalWinnerPicks: totals.missingSemifinalWinnerPicks,
+      missingChampionPicks: totals.missingChampionPicks,
       plannedRepairClears: totals.plannedClears,
       participants,
     };
@@ -89,6 +97,10 @@ function emptyPanel(
     participantsScanned: 0,
     participantsWithStalePicks: 0,
     participantsWithMissingOnly: 0,
+    staleSemifinalWinnerPicks: 0,
+    staleChampionPicks: 0,
+    missingSemifinalWinnerPicks: 0,
+    missingChampionPicks: 0,
     plannedRepairClears: 0,
     participants: [],
   };

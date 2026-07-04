@@ -23,10 +23,24 @@ export type TopologyAuditSlot =
 
 export type TopologyPickRowState = "editable" | "locked_out" | "frozen";
 
+export type TopologyRoundImpact =
+  | "quarterfinal_winner"
+  | "semifinal_winner"
+  | "champion";
+
+export type TopologyStalePickDisplayMeta = {
+  slotType: "semifinalist" | "finalist" | "champion";
+  displayLabel: string;
+  roundImpact: TopologyRoundImpact;
+};
+
 export type TopologyStalePickFinding = {
   slot: TopologyAuditSlot;
   predictionKind: "semifinalist" | "finalist" | "champion";
   slotKey: string | null;
+  slotType: TopologyStalePickDisplayMeta["slotType"];
+  displayLabel: string;
+  roundImpact: TopologyRoundImpact;
   savedTeamId: string;
   savedTeamName: string;
   actualBranch: string;
@@ -45,8 +59,36 @@ export type TopologyMissingPickFinding = {
   slot: TopologyAuditSlot;
   predictionKind: "semifinalist" | "finalist" | "champion";
   slotKey: string | null;
+  slotType: TopologyStalePickDisplayMeta["slotType"];
+  displayLabel: string;
+  roundImpact: TopologyRoundImpact;
   reason: string;
 };
+
+/** Human-readable labels for audit/repair JSON and admin UI. */
+export function topologyStalePickDisplayMeta(
+  kind: "semifinalist" | "finalist" | "champion",
+): TopologyStalePickDisplayMeta {
+  if (kind === "finalist") {
+    return {
+      slotType: "finalist",
+      displayLabel: "Semifinal winner / finalist",
+      roundImpact: "semifinal_winner",
+    };
+  }
+  if (kind === "champion") {
+    return {
+      slotType: "champion",
+      displayLabel: "Champion",
+      roundImpact: "champion",
+    };
+  }
+  return {
+    slotType: "semifinalist",
+    displayLabel: "Quarter-final winner",
+    roundImpact: "quarterfinal_winner",
+  };
+}
 
 export type TopologyParticipantAudit = {
   stalePicks: TopologyStalePickFinding[];
@@ -181,11 +223,19 @@ export function auditKnockoutTopologyStalePicks(input: {
   const notes: string[] = [];
   const seen = new Set<string>();
 
-  function pushStale(finding: TopologyStalePickFinding): void {
+  function pushStale(
+    finding: Omit<
+      TopologyStalePickFinding,
+      "slotType" | "displayLabel" | "roundImpact"
+    >,
+  ): void {
     const key = `${finding.predictionKind}|${finding.slotKey ?? ""}|${finding.savedTeamId}|${finding.topologyIssue}`;
     if (seen.has(key)) return;
     seen.add(key);
-    stalePicks.push(finding);
+    stalePicks.push({
+      ...finding,
+      ...topologyStalePickDisplayMeta(finding.predictionKind),
+    });
   }
 
   const fin1 = slotRow(slots, "finalist", "1");
@@ -417,7 +467,8 @@ export function auditKnockoutTopologyStalePicks(input: {
           slot: auditSlotLabel(kind, slotKey),
           predictionKind: kind,
           slotKey,
-          reason: `No saved ${auditSlotLabel(kind, slotKey).replace("_", " ")} pick.`,
+          ...topologyStalePickDisplayMeta(kind),
+          reason: `No saved ${topologyStalePickDisplayMeta(kind).displayLabel.toLowerCase()} pick.`,
         });
       }
     }
@@ -434,8 +485,11 @@ export function summarizeTopologyAuditTotals(input: {
   participantsWithStalePicks: number;
   participantsWithOnlyMissingDownstream: number;
   staleSemifinalPicks: number;
+  /** Finalist slots store M101/M102 semifinal-winner picks. */
   staleFinalistPicks: number;
   staleChampionPicks: number;
+  missingSemifinalWinnerPicks: number;
+  missingChampionPicks: number;
   lockedStalePicks: number;
 } {
   let participantsWithStalePicks = 0;
@@ -443,6 +497,8 @@ export function summarizeTopologyAuditTotals(input: {
   let staleSemifinalPicks = 0;
   let staleFinalistPicks = 0;
   let staleChampionPicks = 0;
+  let missingSemifinalWinnerPicks = 0;
+  let missingChampionPicks = 0;
   let lockedStalePicks = 0;
 
   for (const audit of input.participantAudits) {
@@ -458,6 +514,11 @@ export function summarizeTopologyAuditTotals(input: {
       if (stale.predictionKind === "champion") staleChampionPicks += 1;
       if (stale.rowState === "locked_out") lockedStalePicks += 1;
     }
+
+    for (const missing of audit.missingPicks) {
+      if (missing.predictionKind === "finalist") missingSemifinalWinnerPicks += 1;
+      if (missing.predictionKind === "champion") missingChampionPicks += 1;
+    }
   }
 
   return {
@@ -466,6 +527,30 @@ export function summarizeTopologyAuditTotals(input: {
     staleSemifinalPicks,
     staleFinalistPicks,
     staleChampionPicks,
+    missingSemifinalWinnerPicks,
+    missingChampionPicks,
     lockedStalePicks,
   };
+}
+
+/** Console-friendly labels for topology audit totals (machine keys unchanged in JSON). */
+export function formatTopologyAuditTotalsForConsole(
+  totals: ReturnType<typeof summarizeTopologyAuditTotals> & {
+    poolsScanned?: number;
+    participantsScanned?: number;
+  },
+): string {
+  const lines = [
+    `Pools scanned: ${totals.poolsScanned ?? 0}`,
+    `Participants scanned: ${totals.participantsScanned ?? 0}`,
+    `Participants with stale picks: ${totals.participantsWithStalePicks}`,
+    `Participants with missing-only downstream picks: ${totals.participantsWithOnlyMissingDownstream}`,
+    `Stale quarter-final-winner picks (semifinalist slots): ${totals.staleSemifinalPicks}`,
+    `Stale semifinal-winner/finalist picks: ${totals.staleFinalistPicks}`,
+    `Stale champion picks: ${totals.staleChampionPicks}`,
+    `Missing semifinal-winner picks: ${totals.missingSemifinalWinnerPicks}`,
+    `Missing champion picks: ${totals.missingChampionPicks}`,
+    `Locked stale picks: ${totals.lockedStalePicks}`,
+  ];
+  return lines.join("\n");
 }

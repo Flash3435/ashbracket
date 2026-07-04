@@ -29,7 +29,7 @@ export function TopologyStalePicksReviewBanner({
       {stalePickCount != null && stalePickCount > 0 ? (
         <p className="mt-2 text-xs text-amber-200/90">
           {stalePickCount} saved pick{stalePickCount === 1 ? "" : "s"} need
-          review in your semi-final, final, or champion selections.
+          review in your semifinal-winner, final, or champion selections.
         </p>
       ) : null}
     </div>

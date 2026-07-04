@@ -126,6 +126,8 @@ const names: Record<string, string> = {
     audit.stalePicks.some(
       (s) =>
         s.slot === "finalist_2" &&
+        s.displayLabel === "Semifinal winner / finalist" &&
+        s.roundImpact === "semifinal_winner" &&
         s.topologyIssue === "wrong_semifinal_branch" &&
         s.actualBranch === "M101" &&
         s.expectedBranch === "M102",

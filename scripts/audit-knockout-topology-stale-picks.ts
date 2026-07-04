@@ -10,6 +10,8 @@
  *   npx tsx scripts/audit-knockout-topology-stale-picks.ts <poolId>
  *   Add --participant name-filter
  *   Add --report-json /tmp/knockout-topology-stale-picks-audit.json
+ *   Add --include-semifinals (also run M101/M102 semifinal pick audit)
+ *   Add --only-semifinals (semifinal pick audit only → /tmp/knockout-semifinal-picks-audit.json)
  *
  * Manual sanity checks (see lib/bracket/auditKnockoutTopologyStalePicks.selftest.ts):
  * - France + Spain finalists → stale (same M101 branch)
@@ -22,9 +24,17 @@ import { resolve } from "node:path";
 import {
   auditKnockoutTopologyStalePicks,
   CORRECTED_TOPOLOGY,
+  formatTopologyAuditTotalsForConsole,
   summarizeTopologyAuditTotals,
   type TopologyParticipantAudit,
 } from "../lib/bracket/auditKnockoutTopologyStalePicks";
+import { TOPOLOGY_STALE_FINALIST_SLOTS_EXPLANATION } from "../lib/bracket/knockoutBracketDisplayCopy";
+import {
+  auditKnockoutSemifinalPicks,
+  isStaleSemifinalPickStatus,
+  summarizeSemifinalAuditTotals,
+  type SemifinalParticipantAudit,
+} from "../lib/bracket/auditKnockoutSemifinalPicks";
 import {
   buildAllParticipantPickDrafts,
   participantBonusKeysForPool,
@@ -67,19 +77,22 @@ loadEnvLocal();
 
 const args = process.argv.slice(2);
 const allPools = args.includes("--all-pools");
+const includeSemifinals = args.includes("--include-semifinals");
+const onlySemifinals = args.includes("--only-semifinals");
 const poolArg = args.find((a) => !a.startsWith("--"))?.trim();
 const participantIdx = args.indexOf("--participant");
 const participantFilter =
   participantIdx >= 0 ? args[participantIdx + 1]?.trim().toLowerCase() : "";
 const reportJsonIdx = args.indexOf("--report-json");
+const defaultReportPath = onlySemifinals
+  ? "/tmp/knockout-semifinal-picks-audit.json"
+  : "/tmp/knockout-topology-stale-picks-audit.json";
 const reportJsonPath =
-  reportJsonIdx >= 0
-    ? args[reportJsonIdx + 1]?.trim()
-    : "/tmp/knockout-topology-stale-picks-audit.json";
+  reportJsonIdx >= 0 ? args[reportJsonIdx + 1]?.trim() : defaultReportPath;
 
 if (!allPools && !poolArg) {
   console.error(
-    "Usage: npx tsx scripts/audit-knockout-topology-stale-picks.ts <poolId> | --all-pools [--participant name] [--report-json path]",
+    "Usage: npx tsx scripts/audit-knockout-topology-stale-picks.ts <poolId> | --all-pools [--participant name] [--report-json path] [--include-semifinals | --only-semifinals]",
   );
   process.exit(1);
 }
@@ -113,6 +126,18 @@ type PoolReport = {
     stalePicks: TopologyParticipantAudit["stalePicks"];
     missingPicks: TopologyParticipantAudit["missingPicks"];
     notes: string[];
+  }>;
+};
+
+type SemifinalPoolReport = {
+  poolId: string;
+  poolName: string;
+  participantsScanned: number;
+  participants: Array<{
+    participantId: string;
+    displayName: string;
+    email: string | null;
+    semifinalPicks: SemifinalParticipantAudit["semifinalPicks"];
   }>;
 };
 
@@ -240,6 +265,87 @@ function auditParticipant(input: {
   return { ...audit, notes: [...new Set(notes)] };
 }
 
+function auditParticipantSemifinals(input: {
+  slots: ReturnType<typeof buildAllParticipantPickDrafts>;
+  ctx: ConfirmedR32WinnerContext;
+  teams: Team[];
+}): SemifinalParticipantAudit {
+  return auditKnockoutSemifinalPicks({
+    slots: input.slots,
+    ctx: input.ctx,
+    teamName: (id) => teamName(id, input.teams) ?? id,
+  });
+}
+
+async function auditPoolSemifinals(
+  pool: { id: string; name: string },
+  tournamentMatches: TournamentMatchPublicRow[],
+  teams: Team[],
+  stageByCode: Record<string, { id: string; code: string }>,
+  groupMap: Awaited<ReturnType<typeof fetchGroupTeamCountryCodesByLetter>>,
+): Promise<SemifinalPoolReport> {
+  const [participants, predictions, scoringRes] = await Promise.all([
+    loadParticipantsPaged(pool.id),
+    loadAllPredictionsForPool(pool.id),
+    supabase.from("scoring_rules").select("bonus_key").eq("pool_id", pool.id),
+  ]);
+  if (scoringRes.error) throw scoringRes.error;
+
+  const bonusKeys = participantBonusKeysForPool(
+    (scoringRes.data ?? []).map((r) => String(r.bonus_key ?? "")),
+  );
+  const knockoutBracketPicksUnlocked = true;
+  const gradual = getGradualKnockoutSelectionState({
+    matches: tournamentMatches,
+    teams,
+    fullRoundOf32Official: knockoutBracketPicksUnlocked,
+  });
+  const ctx: ConfirmedR32WinnerContext = {
+    teams,
+    tournamentMatches,
+    gradual,
+    knockoutBracketPicksUnlocked,
+  };
+
+  const poolParticipants: SemifinalPoolReport["participants"] = [];
+
+  for (const participant of participants) {
+    if (participantFilter) {
+      const hay = `${participant.display_name} ${participant.email ?? ""}`.toLowerCase();
+      if (!hay.includes(participantFilter)) continue;
+    }
+
+    const participantPredictions = predictions.filter(
+      (p) => p.participantId === participant.id,
+    );
+    const slots = buildAllParticipantPickDrafts({
+      stageByCode: stageByCode as Parameters<
+        typeof buildAllParticipantPickDrafts
+      >[0]["stageByCode"],
+      predictions: participantPredictions,
+      participantId: participant.id,
+      bonusKeys,
+      teams,
+      groupTeamCountryCodesByLetter: groupMap,
+    });
+
+    const audit = auditParticipantSemifinals({ slots, ctx, teams });
+    poolParticipants.push({
+      participantId: participant.id,
+      displayName: participant.display_name,
+      email: participant.email,
+      semifinalPicks: audit.semifinalPicks,
+    });
+  }
+
+  return {
+    poolId: pool.id,
+    poolName: pool.name,
+    participantsScanned: participants.length,
+    participants: poolParticipants,
+  };
+}
+
 async function auditPool(
   pool: { id: string; name: string },
   tournamentMatches: TournamentMatchPublicRow[],
@@ -351,6 +457,80 @@ async function main(): Promise<void> {
   );
   const teams = (teamsRes.data ?? []).map(mapTeamRow);
 
+  if (onlySemifinals || includeSemifinals) {
+    const semifinalPoolReports: SemifinalPoolReport[] = [];
+    const allSemifinalAudits: SemifinalParticipantAudit[] = [];
+    let semifinalParticipantsScanned = 0;
+
+    for (const pool of pools) {
+      console.log(`=== ${pool.name} (${pool.id}) — semifinal picks ===`);
+      const report = await auditPoolSemifinals(
+        pool,
+        tournamentMatches,
+        teams,
+        stageByCode,
+        groupMap,
+      );
+      semifinalPoolReports.push(report);
+      semifinalParticipantsScanned += report.participantsScanned;
+
+      for (const p of report.participants) {
+        allSemifinalAudits.push({ semifinalPicks: p.semifinalPicks });
+      }
+
+      const poolStale = report.participants.filter((p) =>
+        p.semifinalPicks.some((pick) => isStaleSemifinalPickStatus(pick.status)),
+      );
+      const poolMissing = report.participants.filter((p) =>
+        p.semifinalPicks.some((pick) => pick.status === "missing"),
+      );
+
+      console.log(`Participants scanned: ${report.participantsScanned}`);
+      console.log(`With stale semifinal picks: ${poolStale.length}`);
+      console.log(`With missing semifinal picks: ${poolMissing.length}`);
+
+      for (const p of poolStale.slice(0, 20)) {
+        console.log(
+          `  ${p.displayName}${p.email ? ` <${p.email}>` : ""}`,
+        );
+        for (const pick of p.semifinalPicks.filter((x) =>
+          isStaleSemifinalPickStatus(x.status),
+        )) {
+          console.log(
+            `    [${pick.locked ? "locked" : "editable"}] ${pick.slot}: ${pick.savedTeamName} — ${pick.reason}`,
+          );
+        }
+      }
+      if (poolStale.length > 20) {
+        console.log(`  … +${poolStale.length - 20} more participants with stale semifinal picks`);
+      }
+    }
+
+    const semifinalTotals = summarizeSemifinalAuditTotals({
+      poolsScanned: semifinalPoolReports.length,
+      participantsScanned: semifinalParticipantsScanned,
+      participantAudits: allSemifinalAudits,
+    });
+
+    const semifinalOutput = {
+      generatedAt: new Date().toISOString(),
+      mode: "read_only_semifinal_audit" as const,
+      topology: CORRECTED_TOPOLOGY,
+      totals: semifinalTotals,
+      pools: semifinalPoolReports,
+    };
+
+    const semifinalJsonPath = onlySemifinals
+      ? reportJsonPath
+      : "/tmp/knockout-semifinal-picks-audit.json";
+    writeFileSync(semifinalJsonPath, JSON.stringify(semifinalOutput, null, 2) + "\n");
+    console.log(`\nWrote ${semifinalJsonPath}`);
+    console.log("\n=== SEMIFINAL PICK TOTALS ===");
+    console.log(JSON.stringify(semifinalTotals, null, 2));
+  }
+
+  if (onlySemifinals) return;
+
   const poolReports: PoolReport[] = [];
   const allParticipantAudits: TopologyParticipantAudit[] = [];
   let participantsScanned = 0;
@@ -376,7 +556,7 @@ async function main(): Promise<void> {
     }
 
     console.log(`Participants scanned: ${report.participantsScanned}`);
-    console.log(`With stale SF+ picks: ${report.participantsWithStalePicks}`);
+    console.log(`With stale topology picks: ${report.participantsWithStalePicks}`);
     console.log(
       `With only missing downstream picks: ${report.participantsWithOnlyMissingDownstream}`,
     );
@@ -387,7 +567,7 @@ async function main(): Promise<void> {
       );
       for (const stale of p.stalePicks.slice(0, 4)) {
         console.log(
-          `    [${stale.rowState}] ${stale.slot}: ${stale.savedTeamName} — ${stale.reason}`,
+          `    [${stale.rowState}] ${stale.displayLabel}: ${stale.savedTeamName} — ${stale.reason}`,
         );
       }
       if (p.stalePicks.length > 4) {
@@ -406,18 +586,34 @@ async function main(): Promise<void> {
     generatedAt: new Date().toISOString(),
     mode: "read_only_audit" as const,
     topology: CORRECTED_TOPOLOGY,
+    semifinalWinnerSlotNote: TOPOLOGY_STALE_FINALIST_SLOTS_EXPLANATION,
     totals: {
       poolsScanned: poolReports.length,
       participantsScanned,
       ...totals,
+      labels: {
+        staleFinalistPicks: "Stale semifinal-winner/finalist picks",
+        staleChampionPicks: "Stale champion picks",
+        missingSemifinalWinnerPicks: "Missing semifinal-winner picks",
+        missingChampionPicks: "Missing champion picks",
+      },
     },
     pools: poolReports,
   };
 
-  writeFileSync(reportJsonPath, JSON.stringify(output, null, 2) + "\n");
-  console.log(`\nWrote ${reportJsonPath}`);
-  console.log("\n=== TOTALS ===");
-  console.log(JSON.stringify(output.totals, null, 2));
+  const topologyJsonPath = includeSemifinals
+    ? "/tmp/knockout-topology-stale-picks-audit.json"
+    : reportJsonPath;
+  writeFileSync(topologyJsonPath, JSON.stringify(output, null, 2) + "\n");
+  console.log(`\nWrote ${topologyJsonPath}`);
+  console.log("\n=== TOPOLOGY STALE PICK TOTALS ===");
+  console.log(
+    formatTopologyAuditTotalsForConsole({
+      poolsScanned: poolReports.length,
+      participantsScanned,
+      ...totals,
+    }),
+  );
 }
 
 main().catch((e) => {

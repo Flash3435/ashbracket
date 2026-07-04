@@ -26,11 +26,19 @@ export const FINAL_FEEDER_NO_CHAMPION_HELPER =
 export const TOPOLOGY_STALE_PICKS_REVIEW_HEADLINE = "Bracket correction needed";
 
 export const TOPOLOGY_STALE_PICKS_REVIEW_BODY =
-  "Some saved semi-final or final picks no longer match FIFA's official bracket path after a bracket correction. Please review these picks.";
+  "Some saved semifinal-winner, final, or champion picks no longer match FIFA's official bracket path after a bracket correction. Please review these picks.";
 
 /** Admin panel intro — does not blame the participant. */
 export const TOPOLOGY_STALE_PICKS_ADMIN_INTRO =
-  "Some participants have saved semi-final, final, or champion picks that cannot be valid under FIFA's corrected semi-final feeders (M101 = M97+M98, M102 = M99+M100). Missing-only picks are listed separately and are not cleared by the topology repair script.";
+  "Some participants have saved semifinal-winner (finalist slot), final, or champion picks that cannot be valid under FIFA's corrected semi-final feeders (M101 = M97+M98, M102 = M99+M100). Missing-only picks are listed separately and are not cleared by the topology repair script.";
+
+/** Admin note when M101/M102 matchup rows are fine but finalist slots were cleared. */
+export const TOPOLOGY_STALE_PICKS_ADMIN_M101_M102_NOTE =
+  "The displayed M101/M102 matchup rows are valid, but some saved semifinal-winner/finalist selections were cleared because they no longer fit the corrected FIFA path.";
+
+/** Audit/repair JSON note — finalist slots are semifinal-winner picks. */
+export const TOPOLOGY_STALE_FINALIST_SLOTS_EXPLANATION =
+  "Finalist slots (predictionKind=finalist) store M101/M102 semifinal-winner picks. The dedicated M101/M102 matchup audit reports wrong-branch displayed semifinal matchup picks separately; this topology report covers stale semifinal-winner/finalist and champion selections users may need to remake.";
 
 /** Repair script dry-run label. */
 export const TOPOLOGY_STALE_PICKS_REPAIR_DRY_RUN_LABEL =

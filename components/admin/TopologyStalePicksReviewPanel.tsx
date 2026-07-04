@@ -3,6 +3,7 @@
 import Link from "next/link";
 import {
   TOPOLOGY_STALE_PICKS_ADMIN_INTRO,
+  TOPOLOGY_STALE_PICKS_ADMIN_M101_M102_NOTE,
   TOPOLOGY_STALE_PICKS_REPAIR_DRY_RUN_LABEL,
 } from "@/lib/bracket/knockoutBracketDisplayCopy";
 import type { TopologyStalePicksReviewPanelData } from "@/lib/admin/loadTopologyStalePicksReviewForPool";
@@ -47,22 +48,35 @@ export function TopologyStalePicksReviewPanel({ data, className = "" }: Props) {
       <p className="mt-2 text-sm leading-relaxed text-amber-100/95">
         {TOPOLOGY_STALE_PICKS_ADMIN_INTRO}
       </p>
+      <p className="mt-2 text-sm leading-relaxed text-amber-100/90">
+        {TOPOLOGY_STALE_PICKS_ADMIN_M101_M102_NOTE}
+      </p>
 
-      <dl className="mt-3 grid gap-2 text-xs text-amber-100/90 sm:grid-cols-2 lg:grid-cols-4">
+      <dl className="mt-3 grid gap-2 text-xs text-amber-100/90 sm:grid-cols-2 lg:grid-cols-3">
         <div>
           <dt className="text-amber-200/70">Participants scanned</dt>
           <dd className="font-semibold text-amber-50">{data.participantsScanned}</dd>
         </div>
         <div>
-          <dt className="text-amber-200/70">Stale SF+ picks</dt>
+          <dt className="text-amber-200/70">Stale semifinal-winner picks</dt>
           <dd className="font-semibold text-amber-50">
-            {data.participantsWithStalePicks}
+            {data.staleSemifinalWinnerPicks}
           </dd>
         </div>
         <div>
-          <dt className="text-amber-200/70">Missing-only downstream</dt>
+          <dt className="text-amber-200/70">Stale champion picks</dt>
+          <dd className="font-semibold text-amber-50">{data.staleChampionPicks}</dd>
+        </div>
+        <div>
+          <dt className="text-amber-200/70">Missing semifinal-winner picks</dt>
           <dd className="font-semibold text-amber-50">
-            {data.participantsWithMissingOnly}
+            {data.missingSemifinalWinnerPicks}
+          </dd>
+        </div>
+        <div>
+          <dt className="text-amber-200/70">Missing champion picks</dt>
+          <dd className="font-semibold text-amber-50">
+            {data.missingChampionPicks}
           </dd>
         </div>
         <div>
