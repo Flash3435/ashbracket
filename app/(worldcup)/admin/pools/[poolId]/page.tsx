@@ -1,3 +1,4 @@
+import { TopologyStalePicksReviewPanel } from "@/components/admin/TopologyStalePicksReviewPanel";
 import { IncompleteBracketsPanel } from "@/components/admin/IncompleteBracketsPanel";
 import { KnockoutPickStatusPanel } from "@/components/admin/KnockoutPickStatusPanel";
 import { PoolPotAdminSummary } from "@/components/pools/PoolPotAdminSummary";
@@ -5,6 +6,7 @@ import { PageContainer } from "@/components/ui/PageContainer";
 import { PageTitle } from "@/components/ui/PageTitle";
 import { loadAdminKnockoutPickStatusForPool } from "@/lib/admin/loadAdminKnockoutPickStatusForPool";
 import { loadIncompleteBracketPanelForPool } from "@/lib/admin/loadIncompleteBracketPanelForPool";
+import { loadTopologyStalePicksReviewForPool } from "@/lib/admin/loadTopologyStalePicksReviewForPool";
 import { getSimulationPoolEmailUiStatus } from "@/lib/admin/simulationPoolEmailPolicy";
 import { requireManagedPool } from "@/lib/admin/requireManagedPool";
 import { mapPoolPaymentFromPool, poolIsPaid } from "@/lib/pools/poolPayment";
@@ -25,13 +27,18 @@ export default async function AdminPoolDashboardPage({
   const simulationEmailStatus = getSimulationPoolEmailUiStatus(
     Boolean(pool.is_simulation),
   );
-  const [incompleteBracketPanel, knockoutPickStatus] = await Promise.all([
+  const [incompleteBracketPanel, knockoutPickStatus, topologyStaleReview] =
+    await Promise.all([
     loadIncompleteBracketPanelForPool(supabase, {
       poolId,
       poolName: pool.name?.trim() || "Your pool",
       lockAtIso: pool.lock_at ?? null,
     }),
     loadAdminKnockoutPickStatusForPool(supabase, {
+      poolId,
+      poolName: pool.name?.trim() || "Your pool",
+    }),
+    loadTopologyStalePicksReviewForPool(supabase, {
       poolId,
       poolName: pool.name?.trim() || "Your pool",
     }),
@@ -67,6 +74,11 @@ export default async function AdminPoolDashboardPage({
       ) : null}
 
       <KnockoutPickStatusPanel data={knockoutPickStatus} className="mb-6" />
+
+      <TopologyStalePicksReviewPanel
+        data={topologyStaleReview}
+        className="mb-6"
+      />
 
       <IncompleteBracketsPanel
         data={incompleteBracketPanel}

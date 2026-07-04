@@ -17,6 +17,7 @@ import {
   thirdPlaceSlotInvalidReason,
 } from "../../lib/predictions/knockoutPickConsistency";
 import { pruneOfficialKnockoutPathPicks } from "../../lib/predictions/pruneOfficialKnockoutPathPicks";
+import { detectParticipantTopologyStaleSfPlusPicks } from "../../lib/bracket/detectParticipantTopologyStaleSfPlusPicks";
 import { applyKnockoutPathInvalidation } from "../../lib/predictions/knockoutPathInvalidation";
 import {
   clearedOutPickRowKeys,
@@ -55,6 +56,7 @@ import { KnockoutBracketPreview } from "./KnockoutBracketPreview";
 import { PicksProgressSummaryPanel } from "./PicksProgressSummaryPanel";
 import { PoolPickDeadlineBanner } from "./PoolPickDeadlineBanner";
 import { KnockoutBracketPathReviewBanner } from "./KnockoutBracketPathReviewBanner";
+import { TopologyStalePicksReviewBanner } from "./TopologyStalePicksReviewBanner";
 import { PicksPageStatusCard } from "./PicksPageStatusCard";
 import { buildPoolPickDeadlineStatus } from "../../lib/picks/poolPickDeadlineDisplay";
 import {
@@ -994,6 +996,29 @@ export function KnockoutPicksWizard({
     tournamentMatches,
     knockoutBracketPicksUnlocked,
     knockoutPathRepairOnLoad.cleared,
+  ]);
+  const topologyStaleSfPlusReview = useMemo(() => {
+    if (!knockoutPicksAccessible || !fullBracketPicksUnlocked || readOnly) {
+      return { hasStalePicks: false, stalePickCount: 0 };
+    }
+    const teamName = (teamId: string) =>
+      teams.find((team) => team.id === teamId)?.name?.trim() ?? teamId;
+    const detected = detectParticipantTopologyStaleSfPlusPicks({
+      slots: initialSlots,
+      ctx: r32WinnerContext,
+      teamName,
+    });
+    return {
+      hasStalePicks: detected.hasStalePicks,
+      stalePickCount: detected.stalePickCount,
+    };
+  }, [
+    initialSlots,
+    r32WinnerContext,
+    teams,
+    knockoutPicksAccessible,
+    fullBracketPicksUnlocked,
+    readOnly,
   ]);
   const initialSignature = useMemo(
     () => picksDraftSignature(normalizedInitialSlots),
@@ -1974,6 +1999,14 @@ export function KnockoutPicksWizard({
 
       {!picksPageLayout && knockoutPathRepairNeedsSave ? (
         <KnockoutBracketPathReviewBanner unsavedRepair />
+      ) : null}
+
+      {!picksPageLayout &&
+      topologyStaleSfPlusReview.hasStalePicks &&
+      !knockoutPathRepairNeedsSave ? (
+        <TopologyStalePicksReviewBanner
+          stalePickCount={topologyStaleSfPlusReview.stalePickCount}
+        />
       ) : null}
 
       {showPicksPageStatus && picksPageStatus ? (
