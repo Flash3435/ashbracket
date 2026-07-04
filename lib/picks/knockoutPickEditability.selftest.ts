@@ -624,7 +624,7 @@ const existing: Prediction[] = [
   assert.ok(clearErr, "clear blocked for saved M90 pick on feeder-official row");
 }
 
-// 3. Saved stale M90 Netherlands, feeders official → stale and cannot repair
+// 3. Saved stale M90 Netherlands, feeders official → stale but editable before kickoff
 {
   const staleSlots = [r16Slot("3", "team-ned"), qfSlot("2", "team-ned")];
   const staleRows = buildKnockoutMatchPickRows({
@@ -640,14 +640,29 @@ const existing: Prediction[] = [
   assert.strictEqual(staleM90.homeTeamId, "team-can");
   assert.strictEqual(staleM90.awayTeamId, "team-mar");
   assert.strictEqual(staleM90.winnerTeamId, "team-ned");
-  assert.strictEqual(staleM90.lockReason, "frozen");
+  assert.strictEqual(staleM90.lockReason, "pickable");
+  assert.strictEqual(isKnockoutMatchDirectPickEligible(staleM90), true);
+  assert.strictEqual(
+    staleM90.display.statusLine,
+    "Pick still open until this match kicks off.",
+  );
   const presentation = knockoutMatchSavedPickPresentation(staleM90, teams);
   assert.strictEqual(presentation.savedPickStatus, "stale");
-  assert.ok(
-    presentation.savedPickWarning?.includes("eliminated") ||
-      presentation.savedPickWarning?.includes("no longer matches"),
+  assert.strictEqual(
+    presentation.savedPickSummaryLine,
+    "Previous saved pick: Netherlands",
   );
-  const repairErr = validateKnockoutParticipantPickChanges({
+  assert.strictEqual(
+    presentation.savedPickWarning,
+    "That pick is out — it no longer matches this matchup.",
+  );
+  assert.strictEqual(presentation.lockStatusLine, null);
+  assert.strictEqual(
+    validateKnockoutLaterMatchPick(staleM90, "team-mar"),
+    null,
+    "can pick Morocco on stale M90 row",
+  );
+  const repairOk = applyGradualKnockoutPickSaveGuards({
     incoming: [
       {
         predictionKind: "quarterfinalist",
@@ -674,12 +689,21 @@ const existing: Prediction[] = [
         updatedAt: "",
       },
     ],
+    teams,
     matches: tournamentMatches,
-    gradual,
     fullRoundOf32Official: true,
     nowMs,
   });
-  assert.ok(repairErr, "cannot repair stale Netherlands pick to Morocco");
+  assert.strictEqual(
+    repairOk.error,
+    null,
+    "server allows replacing stale Netherlands pick with Morocco",
+  );
+  assert.strictEqual(
+    repairOk.slots.find((s) => s.predictionKind === "quarterfinalist" && s.slotKey === "2")
+      ?.teamId,
+    "team-mar",
+  );
 }
 
 // 4. No saved M90 pick, M90 started/live/final → cannot backfill
@@ -731,6 +755,81 @@ const existing: Prediction[] = [
     nowMs: new Date("2026-07-04T20:00:00Z").getTime(),
   });
   assert.ok(backfillErr, "cannot backfill M90 after kickoff");
+}
+
+// 4b. Stale saved M90 Netherlands after kickoff → locked, admin correction only
+{
+  const finishedM90 = match({
+    match_code: "M90",
+    stage_code: "round_of_16",
+    kickoff_at: "2026-07-04T19:00:00Z",
+    status: "finished",
+    home_country_code: "CAN",
+    away_country_code: "MAR",
+    home_team_name: "Canada",
+    away_team_name: "Morocco",
+    winner_country_code: "MAR",
+  });
+  const afterKickoffMatches = [m73, m75, finishedM90];
+  const afterKickoffGradual = getGradualKnockoutSelectionState({
+    matches: afterKickoffMatches,
+    teams,
+    nowMs: new Date("2026-07-05T12:00:00Z").getTime(),
+    fullRoundOf32Official: true,
+  });
+  const staleSlots = [r16Slot("1", "team-can"), r16Slot("3", "team-mar"), qfSlot("2", "team-ned")];
+  const staleRows = buildKnockoutMatchPickRows({
+    bracketKind: "round_of_16",
+    slots: staleSlots,
+    teams,
+    tournamentMatches: afterKickoffMatches,
+    gradual: afterKickoffGradual,
+    knockoutBracketPicksUnlocked: true,
+    nowMs: new Date("2026-07-05T12:00:00Z").getTime(),
+  });
+  const staleM90 = staleRows.find((r) => r.fifaMatchNo === 90)!;
+  assert.strictEqual(staleM90.lockReason, "started");
+  assert.strictEqual(isKnockoutMatchDirectPickEligible(staleM90), false);
+  const presentation = knockoutMatchSavedPickPresentation(staleM90, teams);
+  assert.strictEqual(presentation.savedPickStatus, "stale");
+  assert.strictEqual(
+    presentation.savedPickWarning,
+    "Saved pick is eliminated or no longer matches this matchup.",
+  );
+  const repairErr = validateKnockoutParticipantPickChanges({
+    incoming: [
+      {
+        predictionKind: "quarterfinalist",
+        tournamentStageId: stageR16,
+        slotKey: "2",
+        groupCode: null,
+        bonusKey: null,
+        teamId: "team-mar",
+      },
+    ],
+    existing: [
+      {
+        id: "p-stale-after",
+        poolId: "pool",
+        participantId: "par",
+        predictionKind: "quarterfinalist",
+        teamId: "team-ned",
+        tournamentStageId: stageR16,
+        groupCode: null,
+        slotKey: "2",
+        bonusKey: null,
+        valueText: null,
+        createdAt: "",
+        updatedAt: "",
+      },
+    ],
+    matches: afterKickoffMatches,
+    gradual: afterKickoffGradual,
+    fullRoundOf32Official: true,
+    teams,
+    nowMs: new Date("2026-07-05T12:00:00Z").getTime(),
+  });
+  assert.ok(repairErr, "cannot repair stale M90 pick after kickoff");
 }
 
 // Norway R16 pick frozen when Brazil appears from official feeder

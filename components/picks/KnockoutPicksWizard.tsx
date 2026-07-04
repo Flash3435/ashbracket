@@ -2484,6 +2484,16 @@ export function KnockoutPicksWizard({
                         teams,
                       )
                     : null;
+                  const stalePickPresentation =
+                    directPickEligible && isEmptyPick && matchRow.winnerTeamId.trim()
+                      ? knockoutMatchSavedPickPresentation(
+                          mergeKnockoutMatchRowSavedPickFromSlots(
+                            matchRow,
+                            slots,
+                          ),
+                          teams,
+                        )
+                      : null;
 
                   return (
                     <li
@@ -2512,6 +2522,29 @@ export function KnockoutPicksWizard({
                         ) : null}
                         {directPickEligible && matchupPair ? (
                           <>
+                            {stalePickPresentation?.savedPickStatus === "stale" ? (
+                              <div className="mt-1 space-y-1">
+                                <p className="text-sm font-medium text-ash-text">
+                                  {stalePickPresentation.savedPickSummaryLine}
+                                </p>
+                                {stalePickPresentation.savedPickWarning ? (
+                                  <p
+                                    className="text-xs font-medium text-amber-200/90"
+                                    role="status"
+                                  >
+                                    {stalePickPresentation.savedPickWarning}
+                                  </p>
+                                ) : null}
+                                {matchRow.display.statusLine ? (
+                                  <p
+                                    className="text-xs text-ash-muted"
+                                    role="status"
+                                  >
+                                    {matchRow.display.statusLine}
+                                  </p>
+                                ) : null}
+                              </div>
+                            ) : null}
                             <KnockoutMatchDirectTeamPick
                               teams={matchupPair}
                               selectedTeamId={selectedTeamId || undefined}

@@ -14,6 +14,7 @@ import {
   isKnockoutPickFrozenForParticipant,
   knockoutPickEditBlockedMessage,
 } from "../picks/knockoutPickEditability";
+import { pickStatusFromPrediction } from "./knockoutPickStatus";
 import { isKnockoutProgressionKind } from "./knockoutProgressionKinds";
 import { mergeKnockoutProgressionSlotsFromPredictions } from "./mergeKnockoutProgressionFromExistingPredictions";
 
@@ -46,6 +47,51 @@ function existingTeamIdByKey(
     );
   }
   return byKey;
+}
+
+function existingPredictionByKey(
+  existing: Prediction[],
+): Map<string, Prediction> {
+  const byKey = new Map<string, Prediction>();
+  for (const p of existing) {
+    if (!isKnockoutProgressionKind(p.predictionKind)) continue;
+    byKey.set(
+      progressionKey({
+        predictionKind: p.predictionKind,
+        tournamentStageId: p.tournamentStageId ?? "",
+        slotKey: p.slotKey,
+      }),
+      p,
+    );
+  }
+  return byKey;
+}
+
+function isSavedKnockoutPickFrozenForParticipant(input: {
+  predictionKind: string;
+  slotKey: string | null;
+  savedTeamId?: string | null;
+  existingPred?: Prediction;
+  matches: TournamentMatchPublicRow[];
+  gradual: ReturnType<typeof getGradualKnockoutSelectionState>;
+  teams?: Team[];
+  progressionRows?: Prediction[];
+  nowMs?: number;
+}): boolean {
+  const { pickStatus } = input.existingPred
+    ? pickStatusFromPrediction(input.existingPred)
+    : { pickStatus: null };
+  return isKnockoutPickFrozenForParticipant({
+    predictionKind: input.predictionKind,
+    slotKey: input.slotKey,
+    tournamentMatches: input.matches,
+    gradual: input.gradual,
+    savedTeamId: input.savedTeamId,
+    pickStatus,
+    teams: input.teams,
+    progressionRows: input.progressionRows,
+    nowMs: input.nowMs,
+  });
 }
 
 function gradualR32MatchPickError(
@@ -104,9 +150,11 @@ export function validateFrozenKnockoutSwapAttempts(input: {
   existing: Prediction[];
   matches: TournamentMatchPublicRow[];
   gradual: ReturnType<typeof getGradualKnockoutSelectionState>;
+  teams?: Team[];
   nowMs?: number;
 }): string | null {
   const priorByKey = existingTeamIdByKey(input.existing);
+  const predByKey = existingPredictionByKey(input.existing);
   for (const slot of input.incoming) {
     if (!isKnockoutProgressionKind(slot.predictionKind)) continue;
     const incomingId = slot.teamId.trim();
@@ -120,12 +168,14 @@ export function validateFrozenKnockoutSwapAttempts(input: {
     if (incomingId === keep) continue;
 
     if (
-      !isKnockoutPickFrozenForParticipant({
+      !isSavedKnockoutPickFrozenForParticipant({
         predictionKind: slot.predictionKind,
         slotKey: slot.slotKey,
-        tournamentMatches: input.matches,
-        gradual: input.gradual,
         savedTeamId: keep,
+        existingPred: predByKey.get(k),
+        matches: input.matches,
+        gradual: input.gradual,
+        teams: input.teams,
         progressionRows: input.existing,
         nowMs: input.nowMs,
       })
@@ -166,9 +216,11 @@ export function coerceFrozenKnockoutSlotsToSaved(input: {
   existing: Prediction[];
   matches: TournamentMatchPublicRow[];
   gradual: ReturnType<typeof getGradualKnockoutSelectionState>;
+  teams?: Team[];
   nowMs?: number;
 }): ParticipantPickSlotPayload[] {
   const priorByKey = existingTeamIdByKey(input.existing);
+  const predByKey = existingPredictionByKey(input.existing);
   const nowMs = input.nowMs ?? Date.now();
 
   return input.incoming.map((slot) => {
@@ -182,12 +234,14 @@ export function coerceFrozenKnockoutSlotsToSaved(input: {
     const keep = priorByKey.get(k) ?? "";
 
     if (
-      !isKnockoutPickFrozenForParticipant({
+      !isSavedKnockoutPickFrozenForParticipant({
         predictionKind: slot.predictionKind,
         slotKey: slot.slotKey,
-        tournamentMatches: input.matches,
-        gradual: input.gradual,
         savedTeamId: keep,
+        existingPred: predByKey.get(k),
+        matches: input.matches,
+        gradual: input.gradual,
+        teams: input.teams,
         progressionRows: input.existing,
         nowMs,
       })
@@ -209,9 +263,11 @@ export function validateKnockoutParticipantPickChanges(input: {
   matches: TournamentMatchPublicRow[];
   gradual: ReturnType<typeof getGradualKnockoutSelectionState>;
   fullRoundOf32Official: boolean;
+  teams?: Team[];
   nowMs?: number;
 }): string | null {
   const priorByKey = existingTeamIdByKey(input.existing);
+  const predByKey = existingPredictionByKey(input.existing);
   for (const slot of input.incoming) {
     if (!isKnockoutProgressionKind(slot.predictionKind)) continue;
     const incomingId = slot.teamId.trim();
@@ -223,15 +279,19 @@ export function validateKnockoutParticipantPickChanges(input: {
     const keep = priorByKey.get(k) ?? "";
     if (incomingId === keep) continue;
 
-    if (!isKnockoutPickFrozenForParticipant({
-      predictionKind: slot.predictionKind,
-      slotKey: slot.slotKey,
-      tournamentMatches: input.matches,
-      gradual: input.gradual,
-      savedTeamId: keep,
-      progressionRows: input.existing,
-      nowMs: input.nowMs,
-    })) {
+    if (
+      !isSavedKnockoutPickFrozenForParticipant({
+        predictionKind: slot.predictionKind,
+        slotKey: slot.slotKey,
+        savedTeamId: keep,
+        existingPred: predByKey.get(k),
+        matches: input.matches,
+        gradual: input.gradual,
+        teams: input.teams,
+        progressionRows: input.existing,
+        nowMs: input.nowMs,
+      })
+    ) {
       continue;
     }
     return knockoutPickEditBlockedMessage({
@@ -269,6 +329,7 @@ export function applyGradualKnockoutPickSaveGuards(input: {
     existing: input.existing,
     matches: input.matches,
     gradual,
+    teams: input.teams,
     nowMs,
   });
   if (swapErr) {
@@ -280,6 +341,7 @@ export function applyGradualKnockoutPickSaveGuards(input: {
     existing: input.existing,
     matches: input.matches,
     gradual,
+    teams: input.teams,
     nowMs,
   });
 
@@ -289,6 +351,7 @@ export function applyGradualKnockoutPickSaveGuards(input: {
     matches: input.matches,
     gradual,
     fullRoundOf32Official: input.fullRoundOf32Official,
+    teams: input.teams,
     nowMs,
   });
   if (editErr) {

@@ -1,3 +1,4 @@
+import type { Team } from "../../src/types/domain";
 import type { TournamentMatchPublicRow } from "../../types/tournamentPublic";
 import {
   knockoutParticipantSlotPair,
@@ -32,6 +33,150 @@ export const KNOCKOUT_R16_MISSING_PICK_OPEN_UNTIL_KICKOFF =
 
 export const KNOCKOUT_MISSING_PICK_AFTER_KICKOFF =
   "No pick saved — match has kicked off.";
+
+/** Saved winner counts only when it matches the current official matchup sides. */
+export function isValidSavedPickForMatchup(input: {
+  savedTeamId?: string | null;
+  homeTeamId?: string | null;
+  awayTeamId?: string | null;
+  pickStatus?: "active" | "out" | null;
+}): boolean {
+  if (input.pickStatus === "out") return false;
+  const saved = input.savedTeamId?.trim() ?? "";
+  if (!saved) return false;
+  const home = input.homeTeamId?.trim() ?? "";
+  const away = input.awayTeamId?.trim() ?? "";
+  if (!home || !away) return false;
+  return saved === home || saved === away;
+}
+
+function normalizeCountryCode(code: string | null | undefined): string {
+  return (code ?? "").trim().toUpperCase();
+}
+
+function teamIdForCountryCode(
+  teams: Team[],
+  code: string | null | undefined,
+): string | null {
+  const normalized = normalizeCountryCode(code);
+  if (!normalized) return null;
+  const match = teams.find(
+    (t) => normalizeCountryCode(t.countryCode) === normalized,
+  );
+  return match?.id ?? null;
+}
+
+function officialWinnerTeamIdFromPublicMatch(
+  pub: TournamentMatchPublicRow | null | undefined,
+  teams: Team[],
+): string | null {
+  if (!pub?.winner_country_code?.trim()) return null;
+  return teamIdForCountryCode(teams, pub.winner_country_code);
+}
+
+function officialR32WinnerTeamId(
+  matchIndex: number,
+  tournamentMatches: TournamentMatchPublicRow[] | null | undefined,
+  gradual: GradualKnockoutSelectionState,
+  teams: Team[],
+): string | null {
+  const fromState = gradual.matchStates[matchIndex]?.publicMatch ?? null;
+  const pub =
+    fromState ??
+    publicMatchForFifaNo(
+      tournamentMatches ?? [],
+      "round_of_32",
+      73 + matchIndex,
+    );
+  return officialWinnerTeamIdFromPublicMatch(pub, teams);
+}
+
+/** Official M89–M104 matchup sides from published feeder results (not participant picks). */
+export function resolveOfficialKnockoutSlotMatchupTeamIds(input: {
+  predictionKind: string;
+  slotKey: string | null;
+  tournamentMatches?: TournamentMatchPublicRow[] | null;
+  gradual: GradualKnockoutSelectionState;
+  teams: Team[];
+}): { homeTeamId: string | null; awayTeamId: string | null } {
+  if (!isLaterRoundKnockoutResultKind(input.predictionKind)) {
+    return { homeTeamId: null, awayTeamId: null };
+  }
+
+  if (input.predictionKind === "quarterfinalist") {
+    const slotNo = parseInt(input.slotKey ?? "", 10);
+    if (!Number.isFinite(slotNo) || slotNo < 1 || slotNo > 8) {
+      return { homeTeamId: null, awayTeamId: null };
+    }
+    const pair = r16R32ParticipantPair(slotNo - 1);
+    if (!pair) return { homeTeamId: null, awayTeamId: null };
+    const [homeR32Index, awayR32Index] = pair;
+    return {
+      homeTeamId: officialR32WinnerTeamId(
+        homeR32Index,
+        input.tournamentMatches,
+        input.gradual,
+        input.teams,
+      ),
+      awayTeamId: officialR32WinnerTeamId(
+        awayR32Index,
+        input.tournamentMatches,
+        input.gradual,
+        input.teams,
+      ),
+    };
+  }
+
+  const mapping = LATER_KNOCKOUT_SLOT_STAGES.find(
+    (row) => row.predictionKind === input.predictionKind,
+  );
+  if (!mapping) return { homeTeamId: null, awayTeamId: null };
+
+  const slotNo =
+    input.predictionKind === "champion"
+      ? 1
+      : parseInt(input.slotKey ?? "", 10);
+  if (!Number.isFinite(slotNo) || slotNo < 1 || slotNo > mapping.maxSlot) {
+    return { homeTeamId: null, awayTeamId: null };
+  }
+
+  const slotStage =
+    mapping.stageCode === "quarterfinal"
+      ? "quarterfinal"
+      : mapping.stageCode === "semifinal"
+        ? "semifinal"
+        : "final";
+  const pair = knockoutParticipantSlotPair(slotStage, slotNo - 1);
+  if (!pair) return { homeTeamId: null, awayTeamId: null };
+
+  const upstreamStage =
+    mapping.stageCode === "quarterfinal"
+      ? "round_of_16"
+      : mapping.stageCode === "semifinal"
+        ? "quarterfinal"
+        : "semifinal";
+  const upstreamFirstFifa =
+    mapping.stageCode === "quarterfinal"
+      ? 89
+      : mapping.stageCode === "semifinal"
+        ? 97
+        : 101;
+
+  const homePub = publicMatchForFifaNo(
+    input.tournamentMatches ?? [],
+    upstreamStage,
+    upstreamFirstFifa + parseInt(pair[0], 10) - 1,
+  );
+  const awayPub = publicMatchForFifaNo(
+    input.tournamentMatches ?? [],
+    upstreamStage,
+    upstreamFirstFifa + parseInt(pair[1], 10) - 1,
+  );
+  return {
+    homeTeamId: officialWinnerTeamIdFromPublicMatch(homePub, input.teams),
+    awayTeamId: officialWinnerTeamIdFromPublicMatch(awayPub, input.teams),
+  };
+}
 
 /** Result kinds stored by M89+ wizard match rows (not R32 gradual rows). */
 export const LATER_ROUND_KNOCKOUT_RESULT_KINDS = [
@@ -126,6 +271,8 @@ export function shouldFreezeLaterRoundKnockoutMatchRow(input: {
   slotKey: string | null;
   savedTeamId?: string | null;
   pickStatus?: "active" | "out" | null;
+  homeTeamId?: string | null;
+  awayTeamId?: string | null;
   clearedByPathRepair?: boolean;
   tournamentMatches?: TournamentMatchPublicRow[] | null;
   gradual: GradualKnockoutSelectionState;
@@ -142,8 +289,17 @@ export function shouldFreezeLaterRoundKnockoutMatchRow(input: {
   ) {
     return false;
   }
-  if (input.savedTeamId?.trim()) return true;
   if (input.pickStatus === "out" && input.savedTeamId?.trim()) return true;
+  if (
+    isValidSavedPickForMatchup({
+      savedTeamId: input.savedTeamId,
+      homeTeamId: input.homeTeamId,
+      awayTeamId: input.awayTeamId,
+      pickStatus: input.pickStatus,
+    })
+  ) {
+    return true;
+  }
   if (input.clearedByPathRepair) return true;
   // R16 rows (quarterfinalist): missing picks stay open until that match kicks off.
   if (input.resultKind === "quarterfinalist") return false;
@@ -415,6 +571,47 @@ export function knockoutPickEditBlockedMessage(input: {
   return `${rowLabel}: ${KNOCKOUT_PICK_LOCKED_AT_KICKOFF}`;
 }
 
+function savedPickBlocksLaterRoundFeederEdit(input: {
+  predictionKind: string;
+  slotKey: string | null;
+  savedTeamId?: string | null;
+  pickStatus?: "active" | "out" | null;
+  tournamentMatches?: TournamentMatchPublicRow[] | null;
+  gradual: GradualKnockoutSelectionState;
+  teams?: Team[];
+  matchupHomeTeamId?: string | null;
+  matchupAwayTeamId?: string | null;
+}): boolean {
+  if (input.pickStatus === "out" && input.savedTeamId?.trim()) return true;
+  if (
+    input.matchupHomeTeamId != null ||
+    input.matchupAwayTeamId != null
+  ) {
+    return isValidSavedPickForMatchup({
+      savedTeamId: input.savedTeamId,
+      homeTeamId: input.matchupHomeTeamId,
+      awayTeamId: input.matchupAwayTeamId,
+      pickStatus: input.pickStatus,
+    });
+  }
+  if (input.teams?.length && isLaterRoundKnockoutResultKind(input.predictionKind)) {
+    const sides = resolveOfficialKnockoutSlotMatchupTeamIds({
+      predictionKind: input.predictionKind,
+      slotKey: input.slotKey,
+      tournamentMatches: input.tournamentMatches,
+      gradual: input.gradual,
+      teams: input.teams,
+    });
+    return isValidSavedPickForMatchup({
+      savedTeamId: input.savedTeamId,
+      homeTeamId: sides.homeTeamId,
+      awayTeamId: sides.awayTeamId,
+      pickStatus: input.pickStatus,
+    });
+  }
+  return Boolean(input.savedTeamId?.trim());
+}
+
 export function isKnockoutPickEditableForParticipant(input: {
   predictionKind: string;
   slotKey: string | null;
@@ -422,6 +619,10 @@ export function isKnockoutPickEditableForParticipant(input: {
   gradual: GradualKnockoutSelectionState;
   fullRoundOf32Official: boolean;
   savedTeamId?: string | null;
+  pickStatus?: "active" | "out" | null;
+  teams?: Team[];
+  matchupHomeTeamId?: string | null;
+  matchupAwayTeamId?: string | null;
   progressionRows?: readonly KnockoutProgressionRowRef[];
   nowMs?: number;
 }): boolean {
@@ -468,7 +669,21 @@ export function isKnockoutPickEditableForParticipant(input: {
   if (match && isKnockoutMatchLockedForParticipant(match, nowMs)) return false;
 
   if (isKnockoutSlotFrozenByOfficialFeeders(input)) {
-    if (input.savedTeamId?.trim()) return false;
+    if (
+      savedPickBlocksLaterRoundFeederEdit({
+        predictionKind: input.predictionKind,
+        slotKey: input.slotKey,
+        savedTeamId: input.savedTeamId,
+        pickStatus: input.pickStatus,
+        tournamentMatches: input.tournamentMatches,
+        gradual: input.gradual,
+        teams: input.teams,
+        matchupHomeTeamId: input.matchupHomeTeamId,
+        matchupAwayTeamId: input.matchupAwayTeamId,
+      })
+    ) {
+      return false;
+    }
     if (
       input.progressionRows &&
       isLaterRoundKnockoutRowFrozenForMissingBackfill({
@@ -494,6 +709,10 @@ export function isKnockoutPickFrozenForParticipant(input: {
   tournamentMatches?: TournamentMatchPublicRow[] | null;
   gradual: GradualKnockoutSelectionState;
   savedTeamId?: string | null;
+  pickStatus?: "active" | "out" | null;
+  teams?: Team[];
+  matchupHomeTeamId?: string | null;
+  matchupAwayTeamId?: string | null;
   progressionRows?: readonly KnockoutProgressionRowRef[];
   nowMs?: number;
 }): boolean {
@@ -532,7 +751,21 @@ export function isKnockoutPickFrozenForParticipant(input: {
   if (match && isKnockoutMatchLockedForParticipant(match, nowMs)) return true;
 
   if (isKnockoutSlotFrozenByOfficialFeeders(input)) {
-    if (input.savedTeamId?.trim()) return true;
+    if (
+      savedPickBlocksLaterRoundFeederEdit({
+        predictionKind: input.predictionKind,
+        slotKey: input.slotKey,
+        savedTeamId: input.savedTeamId,
+        pickStatus: input.pickStatus,
+        tournamentMatches: input.tournamentMatches,
+        gradual: input.gradual,
+        teams: input.teams,
+        matchupHomeTeamId: input.matchupHomeTeamId,
+        matchupAwayTeamId: input.matchupAwayTeamId,
+      })
+    ) {
+      return true;
+    }
     if (
       input.progressionRows &&
       isLaterRoundKnockoutRowFrozenForMissingBackfill({

@@ -16,6 +16,7 @@ import {
 import {
   isKnockoutMatchLockedForParticipant,
   isKnockoutSlotFrozenByOfficialFeeders,
+  isValidSavedPickForMatchup,
   KNOCKOUT_MISSING_PICK_AFTER_KICKOFF,
   KNOCKOUT_MISSING_PICK_PROGRESS_LOCK_HELPER,
   KNOCKOUT_R16_MISSING_PICK_OPEN_UNTIL_KICKOFF,
@@ -588,7 +589,9 @@ export function knockoutMatchSavedPickPresentation(
       ? row.lockReason === "started"
         ? KNOCKOUT_MISSING_PICK_AFTER_KICKOFF
         : "No pick saved"
-      : `Saved pick: ${savedPickLabel ?? savedPickTeamId}`;
+      : savedPickStatus === "stale" && row.lockReason === "pickable"
+        ? `Previous saved pick: ${savedPickLabel ?? savedPickTeamId}`
+        : `Saved pick: ${savedPickLabel ?? savedPickTeamId}`;
 
   let savedPickWarning: string | null = null;
   if (row.pickStatus === "out" && savedPickTeamId) {
@@ -600,7 +603,7 @@ export function knockoutMatchSavedPickPresentation(
     savedPickWarning =
       row.lockReason === "frozen" || row.lockReason === "started"
         ? "Saved pick is eliminated or no longer matches this matchup."
-        : "Does not match this matchup anymore.";
+        : "That pick is out — it no longer matches this matchup.";
   }
 
   let lockStatusLine: string | null = null;
@@ -1056,6 +1059,8 @@ export function buildKnockoutMatchPickRows(
         slotKey: saveSlotKey,
         savedTeamId: winnerTeamId,
         pickStatus,
+        homeTeamId,
+        awayTeamId,
         clearedByPathRepair:
           input.clearedPickRowKeys?.has(saveRow?.rowKey ?? "") ?? false,
         tournamentMatches: input.tournamentMatches,
@@ -1099,10 +1104,17 @@ export function buildKnockoutMatchPickRows(
           )
         : INCOMPLETE_UPSTREAM_MSG;
 
-    const r16MissingPickOpenUntilKickoff =
+    const hasValidSavedPick = isValidSavedPickForMatchup({
+      savedTeamId: winnerTeamId,
+      homeTeamId,
+      awayTeamId,
+      pickStatus,
+    });
+
+    const r16OpenPickUntilKickoff =
       lockReason === "pickable" &&
       def.wizardBracketKind === "round_of_16" &&
-      !winnerTeamId.trim() &&
+      !hasValidSavedPick &&
       isKnockoutSlotFrozenByOfficialFeeders({
         predictionKind: def.resultKind,
         slotKey: saveSlotKey,
@@ -1162,7 +1174,7 @@ export function buildKnockoutMatchPickRows(
       pickStatus,
       lockReason,
       kickoffIso,
-      display: r16MissingPickOpenUntilKickoff
+      display: r16OpenPickUntilKickoff
         ? {
             ...baseDisplay,
             statusLine: KNOCKOUT_R16_MISSING_PICK_OPEN_UNTIL_KICKOFF,

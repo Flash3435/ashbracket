@@ -33,6 +33,7 @@ import {
   applyGradualKnockoutPickSaveGuards,
   validateKnockoutParticipantPickChanges,
 } from "../predictions/validateGradualKnockoutPickSave";
+import { encodeKnockoutPickStatusMetadata } from "../predictions/knockoutPickStatus";
 import type { GradualKnockoutSelectionState } from "./gradualKnockoutUnlock";
 import {
   buildGradualR32MatchPickRows,
@@ -1899,13 +1900,18 @@ function r32Side(slotKey: string, teamId = ""): KnockoutPickSlotDraft {
     knockoutBracketPicksUnlocked: true,
   });
   const staleM89 = staleRows.find((r) => r.fifaMatchNo === 89)!;
+  assert.strictEqual(staleM89.lockReason, "pickable");
   const stalePick = knockoutMatchSavedPickPresentation(staleM89, teams);
   assert.strictEqual(stalePick.savedPickStatus, "stale");
-  assert.strictEqual(stalePick.savedPickSummaryLine, "Saved pick: Brazil");
+  assert.strictEqual(
+    stalePick.savedPickSummaryLine,
+    "Previous saved pick: Brazil",
+  );
   assert.strictEqual(
     stalePick.savedPickWarning,
-    "Saved pick is eliminated or no longer matches this matchup.",
+    "That pick is out — it no longer matches this matchup.",
   );
+  assert.strictEqual(stalePick.lockStatusLine, null);
   assert.strictEqual(stalePick.savedPickTeamId, "team-bra");
 }
 
@@ -2083,7 +2089,7 @@ function r32Side(slotKey: string, teamId = ""): KnockoutPickSlotDraft {
       presentation.savedPickWarning?.includes("no longer matches"),
   );
 
-  const swapErr = validateKnockoutParticipantPickChanges({
+  const swapOk = validateKnockoutParticipantPickChanges({
     incoming: [
       {
         predictionKind: "quarterfinalist",
@@ -2113,8 +2119,13 @@ function r32Side(slotKey: string, teamId = ""): KnockoutPickSlotDraft {
     matches: m94Matches,
     gradual: m94Gradual,
     fullRoundOf32Official: true,
+    teams: m94Teams,
   });
-  assert.ok(swapErr, "server rejects replacing stale M94 pick with Belgium");
+  assert.strictEqual(
+    swapOk,
+    null,
+    "server allows replacing stale M94 pick with Belgium before kickoff",
+  );
 
   const backfillGuard = applyGradualKnockoutPickSaveGuards({
     incoming: [
@@ -2147,7 +2158,50 @@ function r32Side(slotKey: string, teamId = ""): KnockoutPickSlotDraft {
     matches: m94Matches,
     fullRoundOf32Official: true,
   });
-  assert.ok(backfillGuard.error, "server rejects swapping stale M94 pick to US");
+  assert.strictEqual(
+    backfillGuard.error,
+    null,
+    "server allows swapping stale M94 pick to US before kickoff",
+  );
+
+  const outValueText = encodeKnockoutPickStatusMetadata({
+    v: 1,
+    status: "out",
+    reason: "not_in_official_matchup",
+  });
+  const outSwapErr = validateKnockoutParticipantPickChanges({
+    incoming: [
+      {
+        predictionKind: "quarterfinalist",
+        tournamentStageId: "qf",
+        slotKey: "6",
+        groupCode: null,
+        bonusKey: null,
+        teamId: "team-bel",
+      },
+    ],
+    existing: [
+      {
+        id: "p-m94-out",
+        poolId: "pool",
+        participantId: "par",
+        predictionKind: "quarterfinalist",
+        teamId: "team-fra",
+        tournamentStageId: "qf",
+        groupCode: null,
+        slotKey: "6",
+        bonusKey: null,
+        valueText: outValueText,
+        createdAt: "",
+        updatedAt: "",
+      },
+    ],
+    matches: m94Matches,
+    gradual: m94Gradual,
+    fullRoundOf32Official: true,
+    teams: m94Teams,
+  });
+  assert.ok(outSwapErr, "server rejects replacing out M94 pick with Belgium");
 }
 
 // Seema-style partial-complete participant: missing M94 pickable before kickoff.

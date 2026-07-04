@@ -274,19 +274,97 @@ const gradualConfirmedContext = {
   assert.equal(presentation.preBracketSelectionsLocked, true);
 }
 
+function sfSlot(slotKey: string, teamId = ""): KnockoutPickSlotDraft {
+  return {
+    rowKey: `semifinalist|${slotKey}`,
+    sectionLabel: "",
+    slotLabel: `SF ${slotKey}`,
+    predictionKind: "semifinalist",
+    tournamentStageId: "stage-r16",
+    groupCode: null,
+    slotKey,
+    bonusKey: null,
+    teamId,
+  };
+}
+
+function validLaterRoundPickSlots(
+  baseSlots: KnockoutPickSlotDraft[],
+  tournamentMatches: TournamentMatchPublicRow[],
+  gradual: ReturnType<typeof getGradualKnockoutSelectionState>,
+): KnockoutPickSlotDraft[] {
+  let slots = [...baseSlots];
+  for (const bracketKind of [
+    "round_of_16",
+    "quarterfinalist",
+    "semifinalist",
+    "finalist",
+  ] as const) {
+    const rows = buildKnockoutMatchPickRows({
+      bracketKind,
+      slots,
+      teams,
+      tournamentMatches,
+      gradual,
+      knockoutBracketPicksUnlocked: false,
+      nowMs,
+    });
+    for (const row of rows) {
+      if (row.lockReason !== "pickable") continue;
+      const winner = row.homeTeamId?.trim();
+      if (!winner) continue;
+      const kind = row.savePredictionKind;
+      const slotKey = row.saveSlotKey;
+      if (!slotKey && kind !== "champion") continue;
+      const rowKey =
+        kind === "champion" ? "champion|" : `${kind}|${slotKey}`;
+      if (slots.some((s) => s.rowKey === rowKey)) {
+        slots = slots.map((s) =>
+          s.rowKey === rowKey ? { ...s, teamId: winner } : s,
+        );
+      } else if (kind === "champion") {
+        slots.push({
+          rowKey: "champion|",
+          sectionLabel: "",
+          slotLabel: "Champion",
+          predictionKind: "champion",
+          tournamentStageId: "stage-r16",
+          groupCode: null,
+          slotKey: null,
+          bonusKey: null,
+          teamId: winner,
+        });
+      } else {
+        slots.push({
+          rowKey,
+          sectionLabel: "",
+          slotLabel: "",
+          predictionKind: kind,
+          tournamentStageId: "stage-r16",
+          groupCode: null,
+          slotKey,
+          bonusKey: null,
+          teamId: winner,
+        });
+      }
+    }
+  }
+  return slots;
+}
+
 // No actionable missing picks → no Complete picks CTA and read-only after lock
 {
-  const filledSlots = [
-    ...gradualConfirmedSlots(),
-    qfSlot("1", "team-fra"),
-    qfSlot("2", "team-esp"),
-    qfSlot("3", "team-bra"),
-    qfSlot("4", "team-arg"),
-    qfSlot("5", "team-fra"),
-    qfSlot("6", "team-esp"),
-    qfSlot("7", "team-bra"),
-    qfSlot("8", "team-arg"),
-  ];
+  const gradual = getGradualKnockoutSelectionState({
+    matches: gradualConfirmedContext.tournamentMatches,
+    teams,
+    nowMs,
+    fullRoundOf32Official: false,
+  });
+  const filledSlots = validLaterRoundPickSlots(
+    gradualConfirmedSlots(),
+    gradualConfirmedContext.tournamentMatches,
+    gradual,
+  );
   const completeContext = {
     ...gradualConfirmedContext,
     slots: filledSlots,
