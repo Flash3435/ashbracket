@@ -65,6 +65,15 @@ export function targetKnockoutWizardStepForParticipant(
   return firstActionableIncompleteKnockoutWizardStep(context);
 }
 
+/** Deep-link `?step=` into the picks wizard; works in read-only browsing too. */
+export function resolveInitialWizardBracketKind(
+  progressContext: KnockoutProgressContext | null,
+  stepParam: string | null | undefined,
+): KnockoutWizardBracketKindId | null {
+  if (!progressContext || !stepParam?.trim()) return null;
+  return targetKnockoutWizardStepForParticipant(progressContext, stepParam);
+}
+
 export function buildParticipantKnockoutPicksHref(
   participantId: string,
   context: KnockoutProgressContext & { nowMs?: number },

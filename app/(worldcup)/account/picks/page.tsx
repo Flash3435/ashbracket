@@ -6,7 +6,7 @@ import { buildKnockoutSelectionInstructionCard } from "@/lib/picks/knockoutSelec
 import { shouldShowKnockoutInstructionOnPicksPage } from "@/lib/picks/buildPicksPageStatus";
 import {
   buildParticipantPicksPagePresentation,
-  targetKnockoutWizardStepForParticipant,
+  resolveInitialWizardBracketKind,
 } from "@/lib/picks/participantKnockoutEditMode";
 import { fetchPublicTournamentProgress } from "@/lib/tournament/fetchPublicTournamentProgress";
 import {
@@ -97,10 +97,9 @@ export default async function AccountPicksPage({ searchParams }: PageProps) {
       })
     : null;
   const picksReadOnly = picksPresentation?.picksReadOnly ?? locked;
-  const initialWizardBracketKind =
-    progressContext && !picksReadOnly && sp.step?.trim()
-      ? targetKnockoutWizardStepForParticipant(progressContext, sp.step)
-      : null;
+  const initialWizardBracketKind = progressContext
+    ? resolveInitialWizardBracketKind(progressContext, sp.step)
+    : null;
 
   const knockoutSelectionCard =
     ctx.selectedId && !ctx.loadError

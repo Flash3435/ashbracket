@@ -113,6 +113,12 @@ import {
   type KnockoutWizardBracketKindId,
 } from "../../lib/picks/knockoutMatchProgress";
 import {
+  knockoutWizardCanGoNextStep,
+  knockoutWizardCanGoPrevStep,
+  knockoutWizardMutationDisabled,
+  knockoutWizardNavigationDisabled,
+} from "../../lib/picks/knockoutWizardNavigation";
+import {
   requiresParticipantKnockoutRepairSave,
   resolveParticipantKnockoutDraftSaveRequired,
 } from "../../lib/picks/knockoutWizardAction";
@@ -1366,11 +1372,16 @@ export function KnockoutPicksWizard({
     [teams, groupTeamCountryCodesByLetter],
   );
 
-  const coreDisabled = disabled || readOnly || isSaving;
+  const mutationDisabled = knockoutWizardMutationDisabled({
+    disabled,
+    readOnly,
+    isSaving,
+  });
+  const navigationDisabled = knockoutWizardNavigationDisabled({ disabled });
   const preBracketActive = preBracketSelectionsLocked && !readOnly;
 
   function pickRowDisabled(row: KnockoutPickSlotDraft): boolean {
-    if (coreDisabled || (preBracketActive && isPreBracketPickSlot(row))) {
+    if (mutationDisabled || (preBracketActive && isPreBracketPickSlot(row))) {
       return true;
     }
     if (!knockoutPicksAccessible && isKnockoutProgressionKind(row.predictionKind)) {
@@ -1775,7 +1786,12 @@ export function KnockoutPicksWizard({
 
   function goNext() {
     if (step >= wizardSteps.length - 1) return;
-    if (!stepComplete(slots, step, wizardSteps, stepRowOptions)) return;
+    if (
+      !readOnly &&
+      !stepComplete(slots, step, wizardSteps, stepRowOptions)
+    ) {
+      return;
+    }
     const nextStep = step + 1;
     promoteGradualR32BeforeLaterKnockoutStep(nextStep);
     setStep(nextStep);
@@ -1823,9 +1839,18 @@ export function KnockoutPicksWizard({
     );
   }
 
-  const canGoNext =
-    stepComplete(slots, step, wizardSteps, stepRowOptions) &&
-    step < wizardSteps.length - 1;
+  const canGoNext = knockoutWizardCanGoNextStep({
+    readOnly,
+    step,
+    stepCount: wizardSteps.length,
+    currentStepComplete: stepComplete(
+      slots,
+      step,
+      wizardSteps,
+      stepRowOptions,
+    ),
+  });
+  const canGoPrev = knockoutWizardCanGoPrevStep({ step });
 
   const groupStepIdx = wizardSteps.findIndex((s) => s.mode === "group");
   const groupFilled =
@@ -1956,7 +1981,7 @@ export function KnockoutPicksWizard({
           <PicksPageStatusCard
             model={picksPageStatus}
             onCta={handlePicksPageStatusCta}
-            saveDisabled={coreDisabled || picksSaveButtonDisabled(saveUiState)}
+            saveDisabled={mutationDisabled || picksSaveButtonDisabled(saveUiState)}
           />
           {picksPageSecondaryNote &&
           picksPageStatus.kind !== "path_reconciliation" &&
@@ -2218,7 +2243,7 @@ export function KnockoutPicksWizard({
             <button
               key={s.id}
               type="button"
-              disabled={coreDisabled}
+              disabled={navigationDisabled}
               title={
                 done
                   ? `${s.title} — complete`
@@ -2296,7 +2321,7 @@ export function KnockoutPicksWizard({
 
           {currentStepDef.mode === "group" &&
           !readOnly &&
-          !coreDisabled &&
+          !mutationDisabled &&
           !preBracketSelectionsLocked ? (
             <div className="ash-surface mt-4 border border-ash-border bg-ash-body/30 p-3">
               <p className="text-sm font-medium text-ash-text">
@@ -2438,7 +2463,7 @@ export function KnockoutPicksWizard({
                     isKnockoutMatchDirectPickEligible(matchRow) &&
                     matchupPair != null;
                   const rowPickDisabled =
-                    coreDisabled ||
+                    mutationDisabled ||
                     !fullBracketPicksUnlocked ||
                     matchRow.lockReason !== "pickable";
                   const heading = matchRow.display.heading;
@@ -3275,7 +3300,7 @@ export function KnockoutPicksWizard({
           <div className="mt-4 flex flex-wrap gap-2 border-t border-ash-border pt-4">
             <button
               type="button"
-              disabled={coreDisabled || step <= 0}
+              disabled={navigationDisabled || !canGoPrev}
               onClick={goPrev}
               className="btn-ghost disabled:cursor-not-allowed disabled:opacity-40"
             >
@@ -3284,7 +3309,7 @@ export function KnockoutPicksWizard({
             {step < wizardSteps.length - 1 ? (
               <button
                 type="button"
-                disabled={coreDisabled || !canGoNext}
+                disabled={navigationDisabled || !canGoNext}
                 onClick={goNext}
                 className="rounded-lg bg-ash-text px-3 py-2 text-sm font-medium text-ash-body shadow-sm transition-colors hover:bg-white disabled:cursor-not-allowed disabled:opacity-40"
               >
@@ -3302,7 +3327,7 @@ export function KnockoutPicksWizard({
           <button
             id="picks-save-button"
             type="submit"
-            disabled={coreDisabled || picksSaveButtonDisabled(saveUiState)}
+            disabled={mutationDisabled || picksSaveButtonDisabled(saveUiState)}
             className="btn-primary disabled:cursor-not-allowed disabled:opacity-60"
           >
             {picksSaveButtonLabel(saveUiState)}

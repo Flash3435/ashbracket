@@ -12,6 +12,7 @@ import {
   buildParticipantKnockoutPicksHref,
   buildParticipantPicksPagePresentation,
   participantKnockoutPicksEditable,
+  resolveInitialWizardBracketKind,
   targetKnockoutWizardStepForParticipant,
 } from "./participantKnockoutEditMode";
 
@@ -249,6 +250,12 @@ const gradualConfirmedContext = {
   assert.equal(
     targetKnockoutWizardStepForParticipant(gradualConfirmedContext, "round_of_16"),
     "round_of_16",
+  );
+
+  assert.equal(
+    resolveInitialWizardBracketKind(gradualConfirmedContext, "round_of_16"),
+    "round_of_16",
+    "deep-link step param resolves in read-only browsing",
   );
 }
 
