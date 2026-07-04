@@ -252,12 +252,23 @@ export function officialR32ParticipantIds(
   return { topId, bottomId };
 }
 
+function r32PublicMatchForFeederWinner(
+  matchIndex: number,
+  ctx?: ConfirmedR32WinnerContext,
+): TournamentMatchPublicRow | null {
+  const fromSchedule = r32PublicMatchForIndex(ctx?.tournamentMatches, matchIndex);
+  if (fromSchedule?.winner_country_code?.trim()) return fromSchedule;
+  const fromGradual = ctx?.gradual?.matchStates[matchIndex]?.publicMatch ?? null;
+  if (fromGradual?.winner_country_code?.trim()) return fromGradual;
+  return fromSchedule ?? fromGradual;
+}
+
 function officialR32ResultWinner(
   matchIndex: number,
   ctx?: ConfirmedR32WinnerContext,
 ): string | null {
   if (!ctx?.teams?.length) return null;
-  const pub = r32PublicMatchForIndex(ctx.tournamentMatches, matchIndex);
+  const pub = r32PublicMatchForFeederWinner(matchIndex, ctx);
   if (!pub?.winner_country_code?.trim()) return null;
   return teamIdForCountryCode(ctx.teams, pub.winner_country_code);
 }
@@ -1122,6 +1133,10 @@ export function buildKnockoutMatchPickRows(
         gradual,
       });
 
+    const matchupLineForRow =
+      homeName && awayName ? `${homeName} vs ${awayName}` : null;
+    const outPickLabel = teamName(winnerTeamId, input.teams);
+
     const baseDisplay = pickOut
       ? {
           heading: matchRowDisplay(
@@ -1131,7 +1146,9 @@ export function buildKnockoutMatchPickRows(
             awayName,
             lockReason,
           ).heading,
-          emptyPrimaryLine: `${teamName(winnerTeamId, input.teams)} · Out`,
+          emptyPrimaryLine:
+            matchupLineForRow ??
+            (outPickLabel ? `${outPickLabel} · Out` : "Pick out"),
           kickoffIso,
           statusLine: "Pick out",
           chooseButtonLabel: matchRowDisplay(

@@ -12,6 +12,10 @@ import {
   applyGradualKnockoutPickSaveGuards,
   validateKnockoutParticipantPickChanges,
 } from "../predictions/validateGradualKnockoutPickSave";
+import { applyKnockoutPathInvalidation } from "../predictions/knockoutPathInvalidation";
+import { pruneOfficialKnockoutPathPicks } from "../predictions/pruneOfficialKnockoutPathPicks";
+import { pruneParticipantPicks } from "../predictions/knockoutPickConsistency";
+import { diagnoseKnockoutR16MatchRow } from "./knockoutR16RowDiagnostic";
 import {
   buildGradualR32MatchPickRows,
   getGradualKnockoutSelectionState,
@@ -25,6 +29,7 @@ import {
   readOfficialR32MatchResultWinner,
   readParticipantR32MatchWinnerPick,
   validateKnockoutLaterMatchPick,
+  validatedKnockoutMatchWinner,
 } from "./knockoutMatchPickRows";
 import {
   isKnockoutMatchLockedForParticipant,
@@ -703,6 +708,70 @@ const existing: Prediction[] = [
     repairOk.slots.find((s) => s.predictionKind === "quarterfinalist" && s.slotKey === "2")
       ?.teamId,
     "team-mar",
+  );
+}
+
+// 3b. Production wizard load path: path repair must not lock stale M90 as out before kickoff
+{
+  const wizardSlots = [r16Slot("1", "team-can"), r16Slot("3", "team-ned"), qfSlot("2", "team-ned")];
+  const diagnostic = diagnoseKnockoutR16MatchRow({
+    fifaMatchNo: 90,
+    slots: wizardSlots,
+    teams,
+    tournamentMatches,
+    knockoutBracketPicksUnlocked: true,
+    participantId: "par",
+    poolId: "pool",
+    nowMs,
+    simulateWizardLoadRepair: true,
+  })!;
+  assert.strictEqual(diagnostic.resolvedSideTeamIds.homeTeamId, "team-can");
+  assert.strictEqual(diagnostic.resolvedSideTeamIds.awayTeamId, "team-mar");
+  assert.strictEqual(diagnostic.matchupLine, "Canada vs Morocco");
+  assert.strictEqual(diagnostic.validSavedPick, false);
+  assert.strictEqual(diagnostic.lockReason, "pickable");
+  assert.strictEqual(diagnostic.directPickEligible, true);
+  assert.strictEqual(
+    diagnostic.editabilityReason,
+    "open_until_kickoff_missing_or_stale_pick",
+  );
+  assert.strictEqual(diagnostic.storedPickStatus, null);
+  assert.strictEqual(diagnostic.feederOfficialWinners.M73, "Canada");
+  assert.strictEqual(diagnostic.feederOfficialWinners.M75, "Morocco");
+
+  const pruned = pruneOfficialKnockoutPathPicks(wizardSlots, ctx);
+  const repaired = applyKnockoutPathInvalidation(pruned.slots, pruned.cleared, {
+    teams,
+    tournamentMatches,
+    knockoutBracketPicksUnlocked: true,
+    nowMs,
+  });
+  const qf2 = repaired.find(
+    (s) => s.predictionKind === "quarterfinalist" && s.slotKey === "2",
+  );
+  assert.strictEqual(qf2?.teamId, "", "stale M90 pick cleared on load, not marked out");
+  assert.strictEqual(qf2?.pickStatus ?? null, null);
+
+  const displaySlots = pruneParticipantPicks(repaired, { r32WinnerContext: ctx });
+  const wizardRows = buildKnockoutMatchPickRows({
+    bracketKind: "round_of_16",
+    slots: displaySlots,
+    teams,
+    tournamentMatches,
+    gradual,
+    knockoutBracketPicksUnlocked: true,
+    nowMs,
+  });
+  const wizardM90 = wizardRows.find((r) => r.fifaMatchNo === 90)!;
+  assert.strictEqual(wizardM90.homeTeamId, "team-can");
+  assert.strictEqual(wizardM90.awayTeamId, "team-mar");
+  assert.strictEqual(wizardM90.lockReason, "pickable");
+  assert.strictEqual(wizardM90.display.emptyPrimaryLine, "Canada vs Morocco");
+  assert.strictEqual(isKnockoutMatchDirectPickEligible(wizardM90), true);
+  assert.strictEqual(validatedKnockoutMatchWinner(wizardM90), null);
+  assert.ok(
+    !wizardM90.display.statusLine?.includes("Locked — feeder results are official"),
+    "editable M90 must not show feeder-official lock copy",
   );
 }
 

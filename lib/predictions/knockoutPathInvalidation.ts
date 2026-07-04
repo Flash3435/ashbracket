@@ -40,6 +40,20 @@ function isInvalidPickLocked(
     return gradualR32MatchLockReason(ms, ctx.knockoutBracketPicksUnlocked) === "started";
   }
 
+  // R16 match-winner slots (M89–M96): stale picks stay clearable until that match kicks off.
+  if (pick.predictionKind === "quarterfinalist") {
+    const match = resolveTournamentMatchForKnockoutSlot({
+      predictionKind: pick.predictionKind,
+      slotKey: pick.slotKey,
+      tournamentMatches: ctx.tournamentMatches,
+      gradual,
+    });
+    if (match && isKnockoutMatchLockedForParticipant(match, ctx.nowMs)) {
+      return true;
+    }
+    return false;
+  }
+
   if (
     isKnockoutSlotFrozenByOfficialFeeders({
       predictionKind: pick.predictionKind,

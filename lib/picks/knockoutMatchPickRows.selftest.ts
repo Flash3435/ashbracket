@@ -2051,8 +2051,8 @@ function r32Side(slotKey: string, teamId = ""): KnockoutPickSlotDraft {
   const qf6After = afterInvalidation.find(
     (s) => s.predictionKind === "quarterfinalist" && s.slotKey === "6",
   );
-  assert.strictEqual(qf6After?.teamId, "team-fra");
-  assert.strictEqual(qf6After?.pickStatus, "out");
+  assert.strictEqual(qf6After?.teamId, "", "stale M94 pick cleared before kickoff");
+  assert.strictEqual(qf6After?.pickStatus ?? null, null);
 
   const displaySlots = pruneParticipantPicks(afterInvalidation, {
     r32WinnerContext: m94Ctx,
@@ -2064,30 +2064,20 @@ function r32Side(slotKey: string, teamId = ""): KnockoutPickSlotDraft {
     tournamentMatches: m94Matches,
     gradual: m94Gradual,
     knockoutBracketPicksUnlocked: true,
-    clearedPickRowKeys: new Set(["quarterfinalist|6"]),
   });
   const m94Row = m94Rows.find((r) => r.fifaMatchNo === 94)!;
   assert.strictEqual(m94Row.homeTeamId, "team-us");
   assert.strictEqual(m94Row.awayTeamId, "team-bel");
-  assert.strictEqual(m94Row.lockReason, "frozen");
-  assert.strictEqual(m94Row.winnerTeamId, "team-fra");
-  assert.strictEqual(m94Row.pickStatus, "out");
-  assert.strictEqual(isKnockoutMatchDirectPickEligible(m94Row), false);
+  assert.strictEqual(m94Row.lockReason, "pickable");
+  assert.strictEqual(m94Row.winnerTeamId, "");
+  assert.strictEqual(m94Row.pickStatus, null);
+  assert.strictEqual(isKnockoutMatchDirectPickEligible(m94Row), true);
+  assert.strictEqual(m94Row.display.emptyPrimaryLine, "United States vs Belgium");
 
-  const presentation = knockoutMatchSavedPickPresentation(
-    mergeKnockoutMatchRowSavedPickFromSlots(m94Row, afterInvalidation),
-    m94Teams,
-  );
-  assert.strictEqual(presentation.savedPickStatus, "stale");
-  assert.strictEqual(presentation.savedPickSummaryLine, "Saved pick: France");
-  assert.strictEqual(
-    presentation.lockStatusLine,
-    "Locked — feeder results are official.",
-  );
-  assert.ok(
-    presentation.savedPickWarning?.includes("eliminated") ||
-      presentation.savedPickWarning?.includes("no longer matches"),
-  );
+  const presentation = knockoutMatchSavedPickPresentation(m94Row, m94Teams);
+  assert.strictEqual(presentation.savedPickStatus, "missing");
+  assert.strictEqual(presentation.savedPickSummaryLine, "No pick saved");
+  assert.strictEqual(presentation.lockStatusLine, null);
 
   const swapOk = validateKnockoutParticipantPickChanges({
     incoming: [

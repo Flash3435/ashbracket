@@ -8,6 +8,10 @@ import {
   buildParticipantPicksPagePresentation,
   resolveInitialWizardBracketKind,
 } from "@/lib/picks/participantKnockoutEditMode";
+import {
+  diagnoseKnockoutR16MatchRow,
+  formatKnockoutR16RowDiagnostic,
+} from "@/lib/picks/knockoutR16RowDiagnostic";
 import { fetchPublicTournamentProgress } from "@/lib/tournament/fetchPublicTournamentProgress";
 import {
   ParticipantPoolPaymentPanel,
@@ -100,6 +104,35 @@ export default async function AccountPicksPage({ searchParams }: PageProps) {
   const initialWizardBracketKind = progressContext
     ? resolveInitialWizardBracketKind(progressContext, sp.step)
     : null;
+
+  if (
+    ctx.selectedId &&
+    !ctx.loadError &&
+    tournamentPayload?.matches?.length &&
+    process.env.KNOCKOUT_R16_DEBUG_PARTICIPANT_ID?.trim() === ctx.selectedId
+  ) {
+    const diagnostic = diagnoseKnockoutR16MatchRow({
+      fifaMatchNo: 90,
+      slots: ctx.initialSlots,
+      teams: ctx.teams,
+      tournamentMatches: tournamentPayload.matches,
+      knockoutBracketPicksUnlocked: ctx.knockoutBracketPicksUnlocked,
+      participantId: ctx.selectedId,
+      poolId: ctx.selectedPoolId,
+      simulateWizardLoadRepair: true,
+    });
+    if (diagnostic) {
+      console.info(
+        "[knockout-r16-debug]",
+        formatKnockoutR16RowDiagnostic(diagnostic),
+      );
+    }
+  }
+
+  const deployCommitSha =
+    process.env.VERCEL_GIT_COMMIT_SHA?.trim() ??
+    process.env.NEXT_PUBLIC_VERCEL_GIT_COMMIT_SHA?.trim() ??
+    null;
 
   const knockoutSelectionCard =
     ctx.selectedId && !ctx.loadError
@@ -273,6 +306,15 @@ export default async function AccountPicksPage({ searchParams }: PageProps) {
                   No saved picks yet — every slot starts empty. Fill groups and
                   third-place advancers first, then save. Confirmed Round of 32
                   matchups will become pickable as they are official.
+                </p>
+              ) : null}
+
+              {deployCommitSha ? (
+                <p
+                  className="mb-2 font-mono text-[10px] text-ash-muted/80"
+                  data-deploy-commit={deployCommitSha}
+                >
+                  Build {deployCommitSha.slice(0, 7)}
                 </p>
               ) : null}
 
