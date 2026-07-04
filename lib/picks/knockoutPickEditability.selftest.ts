@@ -1380,7 +1380,6 @@ const existing: Prediction[] = [
     existing: partialExisting,
     teams: seemaTeams,
     matches: seemaMatches,
-    gradual: seemaGradual,
     fullRoundOf32Official: true,
     nowMs,
   });
