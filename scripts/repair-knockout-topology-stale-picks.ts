@@ -255,7 +255,7 @@ async function main(): Promise<void> {
         initial.actions.find((a) => a.poolId === poolId)?.poolName ?? poolId;
       console.log(`Recomputing standings for ${poolName} (${poolId})…`);
       const result = await recomputePoolLedgerWithClient(supabase, poolId, {
-        ledgerTrigger: "admin_topology_repair",
+        ledgerTrigger: "admin_pick_edit",
         skipRevalidation: true,
       });
       if (result.error) {
