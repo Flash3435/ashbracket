@@ -5,9 +5,9 @@ import { PicksDeadlineBannerFromPool } from "@/components/pool/PicksDeadlineBann
 import { buildKnockoutSelectionInstructionCard } from "@/lib/picks/knockoutSelectionWindow";
 import { shouldShowKnockoutInstructionOnPicksPage } from "@/lib/picks/buildPicksPageStatus";
 import {
-  getGradualKnockoutSelectionState,
-  hasEditableKnockoutPicks,
-} from "@/lib/picks/gradualKnockoutUnlock";
+  buildParticipantPicksPagePresentation,
+  targetKnockoutWizardStepForParticipant,
+} from "@/lib/picks/participantKnockoutEditMode";
 import { fetchPublicTournamentProgress } from "@/lib/tournament/fetchPublicTournamentProgress";
 import {
   ParticipantPoolPaymentPanel,
@@ -29,7 +29,11 @@ import { saveMyKnockoutPicksAction } from "./actions";
 export const dynamic = "force-dynamic";
 
 type PageProps = {
-  searchParams: Promise<{ participant?: string; joined?: string }>;
+  searchParams: Promise<{
+    participant?: string;
+    joined?: string;
+    step?: string;
+  }>;
 };
 
 export default async function AccountPicksPage({ searchParams }: PageProps) {
@@ -77,15 +81,26 @@ export default async function AccountPicksPage({ searchParams }: PageProps) {
       ? await fetchPublicTournamentProgress()
       : { data: null };
 
-  const gradualKnockout = getGradualKnockoutSelectionState({
-    matches: tournamentPayload?.matches ?? null,
-    fullRoundOf32Official: ctx.knockoutBracketPicksUnlocked,
-  });
-  const knockoutPicksEditable = hasEditableKnockoutPicks({
-    gradual: gradualKnockout,
-    fullRoundOf32Official: ctx.knockoutBracketPicksUnlocked,
-  });
-  const picksReadOnly = locked && !knockoutPicksEditable;
+  const progressContext =
+    ctx.selectedId && !ctx.loadError
+      ? {
+          slots: ctx.initialSlots,
+          teams: ctx.teams,
+          tournamentMatches: tournamentPayload?.matches ?? null,
+          officialRoundOf32Complete: ctx.knockoutBracketPicksUnlocked,
+        }
+      : null;
+  const picksPresentation = progressContext
+    ? buildParticipantPicksPagePresentation({
+        poolLocked: locked,
+        progressContext,
+      })
+    : null;
+  const picksReadOnly = picksPresentation?.picksReadOnly ?? locked;
+  const initialWizardBracketKind =
+    progressContext && !picksReadOnly && sp.step?.trim()
+      ? targetKnockoutWizardStepForParticipant(progressContext, sp.step)
+      : null;
 
   const knockoutSelectionCard =
     ctx.selectedId && !ctx.loadError
@@ -131,19 +146,23 @@ export default async function AccountPicksPage({ searchParams }: PageProps) {
       </div>
 
       <PageTitle
-        title={picksReadOnly ? "Your picks (read-only)" : "Your picks"}
+        title={picksPresentation?.title ?? (picksReadOnly ? "Your picks (read-only)" : "Your picks")}
         description={
-          picksReadOnly
+          picksPresentation?.description ??
+          (picksReadOnly
             ? "Picks are locked — this is a read-only view. Confirmed knockout matchups may still be editable until each match kicks off."
-            : locked && knockoutPicksEditable
-              ? "Update knockout picks until each match kicks off."
-              : locked
-                ? "Group stage, third-place, and bonus picks are locked."
-                : "Work through each stage step by step. Stage 1: 1st and 2nd in every group. Stage 2: one third-place advancer per group row (eight total). Stage 3: confirmed Round of 32 matchups unlock gradually, then the full knockout path once the bracket is official, plus bonus picks."
+            : "Work through each stage step by step. Stage 1: 1st and 2nd in every group. Stage 2: one third-place advancer per group row (eight total). Stage 3: confirmed Round of 32 matchups unlock gradually, then the full knockout path once the bracket is official, plus bonus picks.")
         }
       />
 
-      {picksReadOnly ? (
+      {picksPresentation?.banner ? (
+        <p
+          className="mb-6 rounded-md border border-amber-700/50 bg-amber-950/30 px-3 py-2 text-sm text-amber-100"
+          role="status"
+        >
+          {picksPresentation.banner}
+        </p>
+      ) : picksReadOnly ? (
         <p
           className="mb-6 rounded-md border border-amber-700/50 bg-amber-950/30 px-3 py-2 text-sm text-amber-100"
           role="status"
@@ -268,7 +287,9 @@ export default async function AccountPicksPage({ searchParams }: PageProps) {
                 groupTeamCountryCodesByLetter={ctx.groupTeamCountryCodesByLetter}
                 disabled={ctx.teams.length === 0}
                 readOnly={picksReadOnly}
-                preBracketSelectionsLocked={locked}
+                preBracketSelectionsLocked={
+                  picksPresentation?.preBracketSelectionsLocked ?? locked
+                }
                 poolLockAtIso={ctx.selectedLockAt}
                 savePicks={saveMyKnockoutPicksAction}
                 successMessage="Your picks were saved."
@@ -276,6 +297,7 @@ export default async function AccountPicksPage({ searchParams }: PageProps) {
                 saveHelpText="Saving writes every slot (including empty ones you cleared). Your bracket is stored immediately and the pool leaderboard is refreshed from the official results snapshot."
                 postSaveRedirectTo={postSaveRedirectTo}
                 picksPageLayout
+                initialWizardBracketKind={initialWizardBracketKind}
               />
 
               {ctx.teams.length === 0 ? (

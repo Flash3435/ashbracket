@@ -34,8 +34,11 @@ import { fetchPublicTournamentProgress } from "../../../lib/tournament/fetchPubl
 import { mapPoolPaymentFromPool, poolIsPaid } from "@/lib/pools/poolPayment";
 import {
   getGradualKnockoutSelectionState,
-  hasEditableKnockoutPicks,
 } from "@/lib/picks/gradualKnockoutUnlock";
+import {
+  buildParticipantKnockoutPicksHref,
+  participantKnockoutPicksEditable,
+} from "@/lib/picks/participantKnockoutEditMode";
 import type { TournamentMatchPublicRow } from "../../../types/tournamentPublic";
 
 export const dynamic = "force-dynamic";
@@ -167,9 +170,15 @@ export default async function AccountPage({ searchParams }: PageProps) {
       ? `/account/picks?participant=${list[0].id}`
       : "/account/picks";
 
-  const editPicksFromDashboardHref = picksCtx?.selectedParticipant?.id
-    ? `/account/picks?participant=${picksCtx.selectedParticipant.id}`
-    : picksHref;
+  const editPicksFromDashboardHref =
+    picksCtx?.selectedParticipant?.id && picksCtx.initialSlots.length > 0
+      ? buildParticipantKnockoutPicksHref(picksCtx.selectedParticipant.id, {
+          slots: picksCtx.initialSlots,
+          teams: picksCtx.teams,
+          tournamentMatches,
+          officialRoundOf32Complete: picksCtx.knockoutBracketPicksUnlocked,
+        })
+      : picksHref;
 
   const gradualKnockoutState =
     picksCtx && !picksCtx.loadError
@@ -231,14 +240,11 @@ export default async function AccountPage({ searchParams }: PageProps) {
       : null;
 
   const knockoutPicksEditable = picksCtx
-    ? hasEditableKnockoutPicks({
-        gradual:
-          gradualKnockoutState ??
-          getGradualKnockoutSelectionState({
-            matches: tournamentMatches,
-            fullRoundOf32Official: picksCtx.knockoutBracketPicksUnlocked,
-          }),
-        fullRoundOf32Official: picksCtx.knockoutBracketPicksUnlocked,
+    ? participantKnockoutPicksEditable({
+        slots: picksCtx.initialSlots,
+        teams: picksCtx.teams,
+        tournamentMatches,
+        officialRoundOf32Complete: picksCtx.knockoutBracketPicksUnlocked,
       })
     : true;
 

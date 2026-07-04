@@ -192,6 +192,8 @@ export type KnockoutPicksWizardProps = {
   rememberPicksMainView?: boolean;
   /** Account /account/picks layout — consolidated status card, no duplicate banners. */
   picksPageLayout?: boolean;
+  /** Deep-link target wizard knockout step (e.g. round_of_16 from dashboard CTA). */
+  initialWizardBracketKind?: import("../../lib/picks/knockoutMatchProgress").KnockoutWizardBracketKindId | null;
   /** Admin-only post-kickoff correction path (does not unlock participant rows). */
   adminKnockoutPickCorrection?: AdminKnockoutPickCorrectionFn;
 };
@@ -896,6 +898,7 @@ export function KnockoutPicksWizard({
   defaultPicksMainView = "bracket",
   rememberPicksMainView = false,
   picksPageLayout = false,
+  initialWizardBracketKind = null,
   adminKnockoutPickCorrection,
 }: KnockoutPicksWizardProps) {
   const router = useRouter();
@@ -1106,6 +1109,11 @@ export function KnockoutPicksWizard({
     : picksMainView;
   const lastParticipantIdRef = useRef(participantId);
   const userEditedPicksRef = useRef(false);
+  const initialWizardStepAppliedRef = useRef(false);
+
+  useEffect(() => {
+    initialWizardStepAppliedRef.current = false;
+  }, [participantId, initialWizardBracketKind]);
 
   useEffect(() => {
     if (!rememberPicksMainView || listOnlyLayout) return;
@@ -1149,6 +1157,27 @@ export function KnockoutPicksWizard({
       );
     });
   }
+
+  useEffect(() => {
+    if (!initialWizardBracketKind || initialWizardStepAppliedRef.current) return;
+    const stepIdx = wizardSteps.findIndex(
+      (wizardStep) =>
+        wizardStep.mode === "bracket" &&
+        wizardStep.bracketKind === initialWizardBracketKind,
+    );
+    if (stepIdx < 0) return;
+    initialWizardStepAppliedRef.current = true;
+    selectPicksMainView("list");
+    promoteGradualR32BeforeLaterKnockoutStep(stepIdx);
+    setStep(stepIdx);
+    setOpenRowKey(null);
+    setSearch("");
+    window.setTimeout(() => {
+      document
+        .getElementById("picks-progress-summary")
+        ?.scrollIntoView({ behavior: "smooth", block: "start" });
+    }, 0);
+  }, [initialWizardBracketKind, wizardSteps, participantId]);
 
   function continueToNextSection() {
     const next = picksProgress.nextSection;
