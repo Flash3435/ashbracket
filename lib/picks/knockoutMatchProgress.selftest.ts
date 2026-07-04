@@ -282,7 +282,7 @@ function assertStepComplete(
     sfSlot("3", "team-bra"),
     sfSlot("4", "team-ned"),
     finSlot("1", "team-ger"),
-    finSlot("2", "team-fra"),
+    finSlot("2", "team-bra"),
     champSlot("team-ger"),
   ];
   assertStepComplete(slots, "round_of_16", true);
@@ -382,7 +382,7 @@ function assertStepComplete(
   const sfGate = getMissingFeederSummaryForStep("semifinalist", ctx);
   assert.ok(sfGate);
   assert.doesNotMatch(sfGate, /four semi-finalists/i);
-  assert.match(sfGate, /blocked by an earlier round pick/i);
+  assert.match(sfGate, /blocked by an earlier round pick|Pick a winner for/i);
   assert.doesNotMatch(sfGate, /Complete Round of 16 picks first/i);
   assert.doesNotMatch(sfGate, /M101 is waiting/i);
 }

@@ -236,7 +236,7 @@ void (async function main() {
   {
     const slots: KnockoutPickSlotDraft[] = [
       slot("sf|1", "semifinalist", "team-fra", "1"),
-      slot("sf|3", "semifinalist", "team-ger", "3"),
+      slot("sf|2", "semifinalist", "team-ger", "2"),
       slot("f|1", "finalist", "team-fra", "1"),
     ];
 

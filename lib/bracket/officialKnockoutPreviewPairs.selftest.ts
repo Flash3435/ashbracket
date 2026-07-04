@@ -174,12 +174,12 @@ const previewInput = {
   assert.strictEqual(m97.awayTeamId, "team-can");
 }
 
-// M101 uses winners of M97 and M99.
+// M101 uses winners of M97 and M98.
 {
   const sf = buildOfficialKnockoutMatchRows("semifinalist", previewInput);
   const m101 = sf.find((r) => r.fifaMatchNo === 101)!;
   assert.strictEqual(m101.homeTeamId, "team-ger");
-  assert.strictEqual(m101.awayTeamId, "team-bra");
+  assert.strictEqual(m101.awayTeamId, "team-fra");
 }
 
 // Bracket preview pairs match knockoutMatchPickRows for the same picks.
@@ -223,7 +223,7 @@ const previewInput = {
   assert.strictEqual(bracket.quarterfinals[0]?.home.teamId, "team-ger");
   assert.strictEqual(bracket.quarterfinals[0]?.away.teamId, "team-can");
   assert.strictEqual(bracket.semifinals[0]?.home.teamId, "team-ger");
-  assert.strictEqual(bracket.semifinals[0]?.away.teamId, "team-bra");
+  assert.strictEqual(bracket.semifinals[0]?.away.teamId, "team-fra");
 }
 
 // Picking an R16 winner must not change official preview sides.

@@ -404,7 +404,7 @@ const r32OfficialResults: TournamentMatchPublicRow[] = [
     sfSlot("3", "team-bra"),
     sfSlot("4", "team-ned"),
     finSlot("1", "team-ger"),
-    finSlot("2", "team-fra"),
+    finSlot("2", "team-bra"),
     champSlot("team-ger"),
   ];
   const { slots: repaired, cleared } = pruneOfficialKnockoutPathPicks(before);

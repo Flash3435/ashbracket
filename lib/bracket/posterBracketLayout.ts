@@ -5,17 +5,29 @@ import {
   WC2026_SF_PARTICIPANT_SLOT_PAIRS,
 } from "./wc2026KnockoutPairings";
 
+function r32OrderForR16Order(r16Order: readonly number[]): readonly number[] {
+  const order: number[] = [];
+  for (const r16Idx of r16Order) {
+    const pair = WC2026_R16_R32_PARTICIPANT_PAIRS[r16Idx];
+    if (!pair) continue;
+    const [a, b] = pair;
+    if (!order.includes(a)) order.push(a);
+    if (!order.includes(b)) order.push(b);
+  }
+  return order;
+}
+
+/** R16 indices aligned with the QF pair groups on each half. */
+export const POSTER_LEFT_R16_ORDER = [1, 0, 5, 4] as const;
+export const POSTER_RIGHT_R16_ORDER = [3, 2, 7, 6] as const;
+
 /** Vertical R32 index order (top → bottom) for leftRing bracket tree on each half. */
-export const POSTER_LEFT_R32_ORDER = orderR32ForHalf(0, 8);
-export const POSTER_RIGHT_R32_ORDER = orderR32ForHalf(8, 16);
+export const POSTER_LEFT_R32_ORDER = r32OrderForR16Order(POSTER_LEFT_R16_ORDER);
+export const POSTER_RIGHT_R32_ORDER = r32OrderForR16Order(POSTER_RIGHT_R16_ORDER);
 
-/** R16 indices aligned with the R32 pair groups on each half. */
-export const POSTER_LEFT_R16_ORDER = [1, 0, 2, 3] as const;
-export const POSTER_RIGHT_R16_ORDER = [5, 4, 6, 7] as const;
-
-/** QF indices on each half (left: M97/M99, right: M98/M100). */
-export const POSTER_LEFT_QF_ORDER = [0, 2] as const;
-export const POSTER_RIGHT_QF_ORDER = [1, 3] as const;
+/** QF indices on each half (left: M97/M98 → SF101, right: M99/M100 → SF102). */
+export const POSTER_LEFT_QF_ORDER = [0, 1] as const;
+export const POSTER_RIGHT_QF_ORDER = [2, 3] as const;
 
 export const POSTER_LEFT_SF_INDEX = 0;
 export const POSTER_RIGHT_SF_INDEX = 1;
@@ -50,22 +62,6 @@ export const POSTER_CENTER_MIN_WIDTH_PX = 280;
 /** Intrinsic desktop poster width: both halves, center lane, connectors, and gaps. */
 export const POSTER_DESKTOP_MIN_WIDTH_PX =
   2 * (4 * 140 + 3 * 20) + POSTER_CENTER_MIN_WIDTH_PX + 2 * 12;
-
-function orderR32ForHalf(start: number, end: number): readonly number[] {
-  const halfStart = start === 0 ? 0 : 4;
-  const halfEnd = start === 0 ? 4 : 8;
-  const order: number[] = [];
-
-  for (let r16Idx = halfStart; r16Idx < halfEnd; r16Idx++) {
-    const pair = WC2026_R16_R32_PARTICIPANT_PAIRS[r16Idx];
-    if (!pair) continue;
-    const [a, b] = pair;
-    if (a >= start && a < end) order.push(a);
-    if (b >= start && b < end) order.push(b);
-  }
-
-  return order;
-}
 
 export function splitR32Indices(): { left: readonly number[]; right: readonly number[] } {
   return {

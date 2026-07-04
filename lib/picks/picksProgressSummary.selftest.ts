@@ -239,7 +239,7 @@ function fullMatchBasedKnockoutSlots(): KnockoutPickSlotDraft[] {
     sfSlot("3", "team-bra"),
     sfSlot("4", "team-ned"),
     finSlot("1", "team-ger"),
-    finSlot("2", "team-fra"),
+    finSlot("2", "team-bra"),
     champSlot("team-ger"),
     ...Array.from({ length: 4 }, (_, i) => r32Side(String(i + 1), "")),
   ];

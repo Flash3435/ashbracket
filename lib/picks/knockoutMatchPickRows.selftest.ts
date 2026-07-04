@@ -27,6 +27,10 @@ import {
 import {
   pruneOfficialKnockoutPathPicks,
 } from "../predictions/pruneOfficialKnockoutPathPicks";
+import {
+  canMeetInFinalByQfPath,
+  semifinalMatchIndexForR16Slot,
+} from "../bracket/wc2026KnockoutPairings";
 import { applyKnockoutPathInvalidation } from "../predictions/knockoutPathInvalidation";
 import { pruneParticipantPicks } from "../predictions/knockoutPickConsistency";
 import {
@@ -535,9 +539,9 @@ function r32Side(slotKey: string, teamId = ""): KnockoutPickSlotDraft {
   assert.strictEqual(rows.length, 2);
   assert.strictEqual(rows[0]!.fifaMatchNo, 101);
   assert.strictEqual(rows[0]!.homeTeamId, "team-ger");
-  assert.strictEqual(rows[0]!.awayTeamId, "team-bra");
+  assert.strictEqual(rows[0]!.awayTeamId, "team-fra");
   assert.strictEqual(rows[1]!.fifaMatchNo, 102);
-  assert.strictEqual(rows[1]!.homeTeamId, "team-fra");
+  assert.strictEqual(rows[1]!.homeTeamId, "team-bra");
   assert.strictEqual(rows[1]!.awayTeamId, "team-ned");
 }
 
@@ -545,7 +549,7 @@ function r32Side(slotKey: string, teamId = ""): KnockoutPickSlotDraft {
 {
   const slots: KnockoutPickSlotDraft[] = [
     sfSlot("1", "team-fra"),
-    sfSlot("3", "team-ger"),
+    sfSlot("2", "team-ger"),
     finSlot("1", "team-fra"),
   ];
   const rows = buildKnockoutMatchPickRows({
@@ -663,7 +667,7 @@ function r32Side(slotKey: string, teamId = ""): KnockoutPickSlotDraft {
     sfSlot("3", "team-bra"),
     sfSlot("4", "team-ned"),
     finSlot("1", "team-ger"),
-    finSlot("2", "team-fra"),
+    finSlot("2", "team-bra"),
     champSlot(),
   ];
   const rows = buildKnockoutMatchPickRows({
@@ -674,7 +678,7 @@ function r32Side(slotKey: string, teamId = ""): KnockoutPickSlotDraft {
   });
   assert.strictEqual(rows.length, 1);
   assert.strictEqual(rows[0]!.display.heading, "M104 · Final");
-  assert.strictEqual(rows[0]!.display.emptyPrimaryLine, "Germany vs France");
+  assert.strictEqual(rows[0]!.display.emptyPrimaryLine, "Germany vs Brazil");
   assert.strictEqual(rows[0]!.display.chooseButtonLabel, "Pick champion");
   assert.strictEqual(rows[0]!.savePredictionKind, "champion");
   assert.strictEqual(rows[0]!.lockReason, "pickable");
@@ -730,7 +734,7 @@ function r32Side(slotKey: string, teamId = ""): KnockoutPickSlotDraft {
     sfSlot("3", "team-bra"),
     sfSlot("4", "team-ned"),
     finSlot("1", "team-ger"),
-    finSlot("2", "team-fra"),
+    finSlot("2", "team-bra"),
     champSlot(),
   ];
   const rows = buildKnockoutMatchPickRows({
@@ -795,7 +799,7 @@ function r32Side(slotKey: string, teamId = ""): KnockoutPickSlotDraft {
     sfSlot("3", "team-bra"),
     sfSlot("4", "team-ned"),
     finSlot("1", "team-ger"),
-    finSlot("2", "team-fra"),
+    finSlot("2", "team-bra"),
   ];
   const rows = buildKnockoutMatchPickRows({
     bracketKind: "finalist",
@@ -804,10 +808,10 @@ function r32Side(slotKey: string, teamId = ""): KnockoutPickSlotDraft {
     gradual: emptyGradual,
   });
   const finalRow = rows[0]!;
-  const next = applyKnockoutMatchWinnerToSlots(slots, finalRow, "team-fra");
+  const next = applyKnockoutMatchWinnerToSlots(slots, finalRow, "team-bra");
   assert.strictEqual(
     next.find((s) => s.predictionKind === "champion")?.teamId,
-    "team-fra",
+    "team-bra",
   );
   assert.strictEqual(
     next.find((s) => s.predictionKind === "champion")?.rowKey,
@@ -912,11 +916,11 @@ function r32Side(slotKey: string, teamId = ""): KnockoutPickSlotDraft {
       ?.teamId,
     "team-ger",
   );
-  const afterBoth = applyKnockoutMatchWinnerToSlots(afterM101, m102, "team-fra");
+  const afterBoth = applyKnockoutMatchWinnerToSlots(afterM101, m102, "team-ned");
   assert.strictEqual(
     afterBoth.find((s) => s.predictionKind === "finalist" && s.slotKey === "2")
       ?.teamId,
-    "team-fra",
+    "team-ned",
   );
   const completedRows = buildKnockoutMatchPickRows({
     bracketKind: "semifinalist",
@@ -979,7 +983,7 @@ function r32Side(slotKey: string, teamId = ""): KnockoutPickSlotDraft {
     "M101 winner must not be pruned before M102 is picked",
   );
   const afterBoth = pruneParticipantPicks(
-    applyKnockoutMatchWinnerToSlots(afterM101, m102, "team-fra"),
+    applyKnockoutMatchWinnerToSlots(afterM101, m102, "team-ned"),
   );
   assert.strictEqual(
     afterBoth.find((s) => s.predictionKind === "finalist" && s.slotKey === "1")
@@ -989,7 +993,7 @@ function r32Side(slotKey: string, teamId = ""): KnockoutPickSlotDraft {
   assert.strictEqual(
     afterBoth.find((s) => s.predictionKind === "finalist" && s.slotKey === "2")
       ?.teamId,
-    "team-fra",
+    "team-ned",
   );
   const { cleared } = pruneOfficialKnockoutPathPicks(afterBoth);
   assert.strictEqual(cleared.length, 0);
@@ -1137,7 +1141,7 @@ function r32Side(slotKey: string, teamId = ""): KnockoutPickSlotDraft {
     sfSlot("2", "team-fra"),
     sfSlot("3", "team-bra"),
     sfSlot("4", "team-ned"),
-    finSlot("1", "team-can"), // stale: not in M101 (Germany vs Brazil)
+    finSlot("1", "team-can"), // stale: not in M101 (Germany vs France)
     finSlot("2"),
   ];
   const rows = buildKnockoutMatchPickRows({
@@ -2349,10 +2353,10 @@ function r32Side(slotKey: string, teamId = ""): KnockoutPickSlotDraft {
   const m102 = rows.find((r) => r.fifaMatchNo === 102)!;
   assert.strictEqual(m101.lockReason, "pickable");
   assert.strictEqual(m101.homeTeamId, "team-fra");
-  assert.strictEqual(m101.awayTeamId, "team-bra");
+  assert.strictEqual(m101.awayTeamId, "team-ger");
   assert.strictEqual(isKnockoutMatchDirectPickEligible(m101), true);
   assert.strictEqual(m102.lockReason, "pickable");
-  assert.strictEqual(m102.homeTeamId, "team-ger");
+  assert.strictEqual(m102.homeTeamId, "team-bra");
   assert.strictEqual(m102.awayTeamId, "team-arg");
   assert.doesNotMatch(
     blockedKnockoutRowUserCopy(m101, "semifinalist", input),
@@ -2407,11 +2411,11 @@ function r32Side(slotKey: string, teamId = ""): KnockoutPickSlotDraft {
   assert.strictEqual(m102.lockReason, "incomplete");
   assert.match(
     m101.display.emptyPrimaryLine!,
-    /Waiting for your M99 quarter-final pick/i,
+    /Waiting for your M98 quarter-final pick/i,
   );
   assert.match(
     m102.display.emptyPrimaryLine!,
-    /Waiting for your M98 quarter-final pick/i,
+    /Waiting for your M99 quarter-final pick/i,
   );
   assert.doesNotMatch(m101.display.emptyPrimaryLine!, /M91|M94/i);
   assert.doesNotMatch(m102.display.emptyPrimaryLine!, /M91|M94/i);
@@ -2467,6 +2471,77 @@ function r32Side(slotKey: string, teamId = ""): KnockoutPickSlotDraft {
   });
   assert.ok(gate);
   assert.doesNotMatch(gate!, /M91|M94/i);
+}
+
+// France (QF97) and Spain (QF98) share M101 — cannot meet in the Final.
+{
+  assert.strictEqual(semifinalMatchIndexForR16Slot("1"), 0);
+  assert.strictEqual(semifinalMatchIndexForR16Slot("6"), 0);
+  assert.strictEqual(canMeetInFinalByQfPath(0, 1), false);
+
+  const slots: KnockoutPickSlotDraft[] = [
+    r16Slot("2", "team-ger"),
+    r16Slot("5", "team-fra"),
+    r16Slot("9", "team-esp"),
+    r16Slot("10", "team-eng"),
+    qfSlot("1", "team-fra"),
+    qfSlot("6", "team-esp"),
+    sfSlot("1", "team-fra"),
+    sfSlot("2", "team-esp"),
+    sfSlot("3", "team-bra"),
+    sfSlot("4", "team-ned"),
+    finSlot("1", "team-fra"),
+    finSlot("2", "team-esp"),
+  ];
+  const sfRows = buildKnockoutMatchPickRows({
+    bracketKind: "semifinalist",
+    slots,
+    teams: [
+      ...teams,
+      {
+        id: "team-esp",
+        name: "Spain",
+        countryCode: "ESP",
+        fifaCode: "ESP",
+        fifaRank: 8,
+        fifaRankAsOf: null,
+        createdAt: "",
+        updatedAt: "",
+      },
+    ],
+    gradual: emptyGradual,
+  });
+  const m101 = sfRows.find((r) => r.fifaMatchNo === 101)!;
+  assert.strictEqual(m101.homeTeamId, "team-fra");
+  assert.strictEqual(m101.awayTeamId, "team-esp");
+
+  const { slots: pruned, cleared } = pruneOfficialKnockoutPathPicks(slots);
+  assert.ok(
+    cleared.some(
+      (c) =>
+        c.predictionKind === "finalist" &&
+        c.slotKey === "2" &&
+        c.teamId === "team-esp",
+    ),
+    "Spain on finalist slot 2 must be cleared — both teams share M101",
+  );
+  assert.strictEqual(
+    pruned.find((s) => s.predictionKind === "finalist" && s.slotKey === "2")
+      ?.teamId,
+    "",
+  );
+
+  const finalRows = buildKnockoutMatchPickRows({
+    bracketKind: "finalist",
+    slots: pruned,
+    teams,
+    gradual: emptyGradual,
+  });
+  assert.notStrictEqual(
+    finalRows[0]!.display.emptyPrimaryLine,
+    "France vs Spain",
+    "Final row must not pair France and Spain",
+  );
 }
 
 console.log("knockoutMatchPickRows.selftest.ts: ok");

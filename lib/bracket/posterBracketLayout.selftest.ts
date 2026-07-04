@@ -47,8 +47,6 @@ void (async function main() {
   const { left, right } = splitR32Indices();
   assert(left.length === 8, "left R32 has 8 matches");
   assert(right.length === 8, "right R32 has 8 matches");
-  assert(left.every((i) => i >= 0 && i < 8), "left R32 indices are first half");
-  assert(right.every((i) => i >= 8 && i < 16), "right R32 indices are second half");
   assert(new Set([...left, ...right]).size === 16, "R32 split covers all matches");
 
   assert(POSTER_LEFT_HALF.r16.length === 4, "left R16 has 4 matches");
