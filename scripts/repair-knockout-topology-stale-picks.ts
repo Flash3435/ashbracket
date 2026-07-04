@@ -262,7 +262,7 @@ async function main(): Promise<void> {
         console.error(`  Recompute failed: ${result.error}`);
         process.exit(1);
       }
-      console.log(`  Recompute ok (${result.rowCount ?? 0} ledger rows).`);
+      console.log("  Recompute ok.");
     }
   } else {
     console.log("Standings recompute: skipped (pass --recompute to run).");
