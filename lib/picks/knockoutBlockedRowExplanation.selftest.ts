@@ -490,7 +490,7 @@ const r32OfficialResults: TournamentMatchPublicRow[] = [
   const m101 = buildKnockoutMatchPickRows(sfInput).find((r) => r.fifaMatchNo === 101)!;
   assert.match(
     m101.display.emptyPrimaryLine!,
-    /This pick is out because the Germany vs Paraguay feeder pick was eliminated/i,
+    /This path is out because your M97 quarter-final pick was eliminated/i,
   );
   assert.strictEqual(m101.display.statusLine, null);
   assert.doesNotMatch(m101.display.emptyPrimaryLine!, /waiting for the winner/i);

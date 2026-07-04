@@ -727,10 +727,27 @@ function storedFeederSideTeamIds(
     return { homeTeamId: null, awayTeamId: null };
   }
   const [homeSlot, awaySlot] = slotPair;
-  return {
-    homeTeamId: slotTeamId(slots, feederKind, homeSlot) || null,
-    awayTeamId: slotTeamId(slots, feederKind, awaySlot) || null,
-  };
+  const homeRow = slots.find(
+    (s) => s.predictionKind === feederKind && s.slotKey === homeSlot,
+  );
+  const awayRow = slots.find(
+    (s) => s.predictionKind === feederKind && s.slotKey === awaySlot,
+  );
+  const homeTeamId =
+    homeRow?.teamId.trim() &&
+    !isKnockoutPickLockedOut(
+      homeRow ?? { pickStatus: null, teamId: "" },
+    )
+      ? homeRow.teamId.trim()
+      : null;
+  const awayTeamId =
+    awayRow?.teamId.trim() &&
+    !isKnockoutPickLockedOut(
+      awayRow ?? { pickStatus: null, teamId: "" },
+    )
+      ? awayRow.teamId.trim()
+      : null;
+  return { homeTeamId, awayTeamId };
 }
 
 export function storedFeederSideTeamIdsForMatch(
@@ -739,6 +756,52 @@ export function storedFeederSideTeamIdsForMatch(
   slots: KnockoutPickSlotDraft[],
 ): { homeTeamId: string | null; awayTeamId: string | null } {
   return storedFeederSideTeamIds(wizardKind, matchIndex, slots);
+}
+
+export type SavedUpstreamFeederPick = {
+  teamId: string;
+  pickStatus: import("../predictions/knockoutPickStatus").KnockoutPickStatus | null;
+  saveRowKey: string;
+};
+
+/** Saved winner for the immediate upstream matchup feeding a later-round row (QF→SF, SF→Final). */
+export function readSavedUpstreamFeederPick(
+  parentBracketKind: KnockoutWizardBracketKind,
+  feederMatchIndex: number,
+  slots: KnockoutPickSlotDraft[],
+): SavedUpstreamFeederPick | null {
+  const upstreamKind = upstreamWizardKindForMatchSides(parentBracketKind);
+  if (!upstreamKind) return null;
+  const upstreamDef = knockoutMatchStepDef(upstreamKind);
+  if (!upstreamDef) return null;
+  const slotKey = String(feederMatchIndex + 1);
+  const saveRow = slots.find(
+    (s) => s.predictionKind === upstreamDef.resultKind && s.slotKey === slotKey,
+  );
+  const teamId = saveRow?.teamId.trim() ?? "";
+  if (!teamId) return null;
+  return {
+    teamId,
+    pickStatus: saveRow?.pickStatus ?? null,
+    saveRowKey:
+      saveRow?.rowKey ?? `${upstreamDef.resultKind}|${slotKey}`,
+  };
+}
+
+export function immediateUpstreamFeederRoundLabel(
+  parentBracketKind: KnockoutWizardBracketKind,
+): string {
+  if (parentBracketKind === "semifinalist") return "quarter-final";
+  if (parentBracketKind === "finalist") return "semi-final";
+  return "feeder";
+}
+
+export function usesImmediateUpstreamFeederSavedPick(
+  parentBracketKind: KnockoutWizardBracketKind,
+): boolean {
+  return (
+    parentBracketKind === "semifinalist" || parentBracketKind === "finalist"
+  );
 }
 
 function slotStageForWizardKind(
@@ -889,17 +952,9 @@ function readMatchSides(
     ? readConfirmedKnockoutMatchWinner(awayRow, upstreamKind, upstreamInput)
     : null;
 
-  const upstreamFeederIncomplete =
-    homeRow?.lockReason === "incomplete" ||
-    awayRow?.lockReason === "incomplete" ||
-    !homeRow ||
-    !awayRow;
-
   if (
-    upstreamFeederIncomplete &&
-    (!homeTeamId || !awayTeamId) &&
-    (def.wizardBracketKind === "semifinalist" ||
-      def.wizardBracketKind === "finalist")
+    def.wizardBracketKind === "semifinalist" ||
+    def.wizardBracketKind === "finalist"
   ) {
     const stored = storedFeederSideTeamIds(
       def.wizardBracketKind,

@@ -4,16 +4,20 @@ import { KNOCKOUT_MISSING_PICK_AFTER_KICKOFF } from "./knockoutPickEditability";
 import {
   buildKnockoutMatchPickRows,
   formatMissingKnockoutDependencyLabel,
+  immediateUpstreamFeederRoundLabel,
   incompleteR16MatchMessage,
   knockoutMatchStepDef,
   officialKnockoutMatchResultWinner,
   readConfirmedKnockoutMatchWinner,
+  readSavedUpstreamFeederPick,
+  usesImmediateUpstreamFeederSavedPick,
   usesKnockoutMatchPickRows,
   validatedKnockoutMatchWinner,
   type BuildKnockoutMatchPickRowsInput,
   type KnockoutMatchPickRow,
   type KnockoutWizardBracketKind,
 } from "./knockoutMatchPickRows";
+import { isKnockoutPickLockedOut } from "../predictions/knockoutPickStatus";
 
 export type KnockoutFeederBlockState =
   | "missing_pick_editable"
@@ -305,12 +309,127 @@ function copyForBlockedDownstreamRow(
   }
 }
 
-function classifyUnresolvedFeeder(
+function immediateFeederSaveRowKey(
+  upstreamKind: KnockoutWizardBracketKind,
+  feederMatchIndex: number,
+): string | null {
+  const def = knockoutMatchStepDef(upstreamKind);
+  if (!def) return null;
+  return `${def.resultKind}|${feederMatchIndex + 1}`;
+}
+
+function classifyImmediateUpstreamFeeder(
   feeder: KnockoutMatchPickRow,
   upstreamKind: KnockoutWizardBracketKind,
+  parentBracketKind: KnockoutWizardBracketKind,
   upstreamInput: BuildKnockoutMatchPickRowsInput,
   options?: ExplainBlockedKnockoutRowOptions,
 ): Omit<BlockedKnockoutMatchExplanation, "blockedRowMatchNo"> | null {
+  const saved = readSavedUpstreamFeederPick(
+    parentBracketKind,
+    feeder.matchIndex,
+    upstreamInput.slots,
+  );
+  const missingFeederMatchNo = feeder.fifaMatchNo > 0 ? feeder.fifaMatchNo : null;
+  const feederRef =
+    missingFeederMatchNo != null ? `M${missingFeederMatchNo}` : "This matchup";
+  const roundLabel = immediateUpstreamFeederRoundLabel(parentBracketKind);
+  const saveRowKey = immediateFeederSaveRowKey(upstreamKind, feeder.matchIndex);
+  const clearedSave =
+    Boolean(saveRowKey && options?.clearedPickRowKeys?.has(saveRowKey)) ||
+    feederWasCleared(feeder, options);
+
+  if (saved) {
+    if (isKnockoutPickLockedOut(saved) || saved.pickStatus === "out") {
+      return {
+        missingFeederMatchNo,
+        missingFeederLabel: feederRef,
+        feederState: "cleared_pick_locked",
+        userAction: "locked_out",
+        userFacingCopy: `This path is out because your ${feederRef} ${roundLabel} pick was eliminated.`,
+      };
+    }
+    return null;
+  }
+
+  if (clearedSave) {
+    return {
+      missingFeederMatchNo,
+      missingFeederLabel: feederRef,
+      feederState: "cleared_pick_locked",
+      userAction: "locked_out",
+      userFacingCopy: `This path is out because your ${feederRef} ${roundLabel} pick was eliminated.`,
+    };
+  }
+
+  if (feeder.lockReason === "frozen" || feeder.lockReason === "started") {
+    const def = knockoutMatchStepDef(upstreamKind);
+    const feederLabel = feederMatchupLabel(feeder);
+    const official =
+      def != null
+        ? officialKnockoutMatchResultWinner(
+            feeder.fifaMatchNo,
+            def.stageCode,
+            upstreamInput.teams,
+            upstreamInput.tournamentMatches,
+          )
+        : null;
+
+    if (
+      official &&
+      feeder.homeTeamId &&
+      feeder.awayTeamId &&
+      official !== feeder.homeTeamId &&
+      official !== feeder.awayTeamId
+    ) {
+      return {
+        missingFeederMatchNo,
+        missingFeederLabel: feederLabel ?? feederRef,
+        feederState: "stale_or_invalid_team",
+        userAction: "wait_for_result",
+        userFacingCopy: feederLabel
+          ? `${feederRef} is waiting for a valid official winner from ${feederLabel}.`
+          : `${feederRef} is waiting for a valid official winner.`,
+      };
+    }
+
+    return {
+      missingFeederMatchNo,
+      missingFeederLabel: feederLabel ?? feederRef,
+      feederState: "official_result_missing",
+      userAction: "wait_for_result",
+      userFacingCopy: feederLabel
+        ? `${feederRef} is waiting for the official winner of ${feederLabel}.`
+        : `${feederRef} is waiting for an official result.`,
+    };
+  }
+
+  return {
+    missingFeederMatchNo,
+    missingFeederLabel: feederRef,
+    feederState: "missing_pick_editable",
+    userAction: "pick_upstream",
+    userFacingCopy: `Waiting for your ${feederRef} ${roundLabel} pick.`,
+  };
+}
+
+function classifyUnresolvedFeeder(
+  feeder: KnockoutMatchPickRow,
+  upstreamKind: KnockoutWizardBracketKind,
+  parentBracketKind: KnockoutWizardBracketKind,
+  upstreamInput: BuildKnockoutMatchPickRowsInput,
+  options?: ExplainBlockedKnockoutRowOptions,
+): Omit<BlockedKnockoutMatchExplanation, "blockedRowMatchNo"> | null {
+  if (usesImmediateUpstreamFeederSavedPick(parentBracketKind)) {
+    return classifyImmediateUpstreamFeeder(
+      feeder,
+      upstreamKind,
+      parentBracketKind,
+      upstreamInput,
+      options,
+    );
+  }
+
   if (readConfirmedKnockoutMatchWinner(feeder, upstreamKind, upstreamInput)) {
     return null;
   }
@@ -473,21 +592,27 @@ export function explainBlockedKnockoutMatchRow(
     const feederExplanation = classifyUnresolvedFeeder(
       feeder,
       upstreamKind,
+      bracketKind,
       upstreamInput,
       options,
     );
     if (!feederExplanation) continue;
 
+    const useImmediateFeederCopy =
+      usesImmediateUpstreamFeederSavedPick(bracketKind);
+
     return {
       blockedRowMatchNo,
       ...feederExplanation,
-      userFacingCopy: copyForBlockedDownstreamRow(
-        row,
-        feeder,
-        upstreamKind,
-        feederExplanation,
-        options,
-      ),
+      userFacingCopy: useImmediateFeederCopy
+        ? feederExplanation.userFacingCopy
+        : copyForBlockedDownstreamRow(
+            row,
+            feeder,
+            upstreamKind,
+            feederExplanation,
+            options,
+          ),
     };
   }
 

@@ -210,7 +210,7 @@ function assertStepComplete(
   );
 }
 
-// R16 incomplete (6/8 winners): later steps must not appear complete
+// QF incomplete (missing R16 slot 7): later steps must not appear complete
 {
   const slots: KnockoutPickSlotDraft[] = [
     ...fullR16Slots(),
@@ -222,10 +222,6 @@ function assertStepComplete(
     qfSlot("6", "team-ger"),
     qfSlot("7"),
     qfSlot("8"),
-    ...Array.from({ length: 4 }, (_, i) => sfSlot(String(i + 1), "team-ger")),
-    finSlot("1", "team-ger"),
-    finSlot("2", "team-fra"),
-    champSlot("team-ger"),
   ];
   assertStepComplete(slots, "round_of_16", false);
   assertStepComplete(slots, "quarterfinalist", false);

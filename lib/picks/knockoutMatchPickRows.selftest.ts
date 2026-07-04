@@ -17,6 +17,14 @@ import {
   validatedKnockoutMatchWinner,
 } from "./knockoutMatchPickRows";
 import {
+  blockedKnockoutRowUserCopy,
+  blockedKnockoutStepGateCopy,
+} from "./knockoutBlockedRowExplanation";
+import {
+  getKnockoutStepCompletionFromDraftState,
+  resolveKnockoutProgressContext,
+} from "./knockoutMatchProgress";
+import {
   pruneOfficialKnockoutPathPicks,
 } from "../predictions/pruneOfficialKnockoutPathPicks";
 import { applyKnockoutPathInvalidation } from "../predictions/knockoutPathInvalidation";
@@ -124,9 +132,33 @@ const teams: Team[] = [
     createdAt: "",
     updatedAt: "",
   },
+  {
+    id: "team-arg",
+    name: "Argentina",
+    countryCode: "ARG",
+    fifaCode: "ARG",
+    fifaRank: 1,
+    fifaRankAsOf: null,
+    createdAt: "",
+    updatedAt: "",
+  },
+  {
+    id: "team-col",
+    name: "Colombia",
+    countryCode: "COL",
+    fifaCode: "COL",
+    fifaRank: 11,
+    fifaRankAsOf: null,
+    createdAt: "",
+    updatedAt: "",
+  },
 ];
 
-function r16Slot(slotKey: string, teamId = ""): KnockoutPickSlotDraft {
+function r16Slot(
+  slotKey: string,
+  teamId = "",
+  pickStatus?: "out",
+): KnockoutPickSlotDraft {
   return {
     rowKey: `round_of_16|${slotKey}`,
     sectionLabel: "Round of 16",
@@ -137,6 +169,7 @@ function r16Slot(slotKey: string, teamId = ""): KnockoutPickSlotDraft {
     groupCode: null,
     bonusKey: null,
     teamId,
+    pickStatus: pickStatus ?? null,
   };
 }
 
@@ -2246,6 +2279,150 @@ function r32Side(slotKey: string, teamId = ""): KnockoutPickSlotDraft {
   assert.strictEqual(seemaPresentation.savedPickStatus, "missing");
   assert.strictEqual(seemaPresentation.savedPickSummaryLine, "No pick saved");
   assert.strictEqual(seemaPresentation.lockStatusLine, null);
+}
+
+// SF rows use saved QF winners even when upstream R16 feeders are out/missing
+{
+  const slots: KnockoutPickSlotDraft[] = [
+    ...Array.from({ length: 16 }, (_, i) => r16Slot(String(i + 1), "team-rsa")),
+    r16Slot("3", "team-bra", "out"), // M91 feeder path out
+    r16Slot("6", "team-ger", "out"), // M94 feeder path out
+    sfSlot("1", "team-fra"), // M97 winner France
+    sfSlot("2", "team-ger"), // M98 winner Germany
+    sfSlot("3", "team-bra"), // M99 winner Brazil
+    sfSlot("4", "team-arg"), // M100 winner Argentina
+    finSlot("1"),
+    finSlot("2"),
+  ];
+  const input = {
+    bracketKind: "semifinalist" as const,
+    slots,
+    teams,
+    knockoutBracketPicksUnlocked: true,
+  };
+  const rows = buildKnockoutMatchPickRows(input);
+  const m101 = rows.find((r) => r.fifaMatchNo === 101)!;
+  const m102 = rows.find((r) => r.fifaMatchNo === 102)!;
+  assert.strictEqual(m101.lockReason, "pickable");
+  assert.strictEqual(m101.homeTeamId, "team-fra");
+  assert.strictEqual(m101.awayTeamId, "team-bra");
+  assert.strictEqual(isKnockoutMatchDirectPickEligible(m101), true);
+  assert.strictEqual(m102.lockReason, "pickable");
+  assert.strictEqual(m102.homeTeamId, "team-ger");
+  assert.strictEqual(m102.awayTeamId, "team-arg");
+  assert.doesNotMatch(
+    blockedKnockoutRowUserCopy(m101, "semifinalist", input),
+    /M91|M94|Round of 32/i,
+  );
+  assert.doesNotMatch(
+    blockedKnockoutRowUserCopy(m102, "semifinalist", input),
+    /M91|M94|Round of 32/i,
+  );
+
+  const afterPick = applyKnockoutMatchWinnerToSlots(slots, m101, "team-fra");
+  assert.strictEqual(
+    validateKnockoutLaterMatchPick(m101, "team-fra"),
+    null,
+    "SF pick allowed from saved QF winners",
+  );
+  assert.ok(
+    afterPick.find((s) => s.predictionKind === "finalist" && s.slotKey === "1")
+      ?.teamId === "team-fra",
+  );
+
+  const sfStatus = getKnockoutStepCompletionFromDraftState(
+    "semifinalist",
+    resolveKnockoutProgressContext({
+      slots,
+      teams,
+      officialRoundOf32Complete: true,
+    }),
+  );
+  assert.strictEqual(sfStatus.complete, false);
+  assert.strictEqual(sfStatus.kind, "needs_pick");
+}
+
+// Missing QF winner blocks SF with immediate feeder copy, not stale R16 refs
+{
+  const slots: KnockoutPickSlotDraft[] = [
+    ...Array.from({ length: 16 }, (_, i) => r16Slot(String(i + 1), "team-rsa")),
+    r16Slot("3", "team-bra", "out"),
+    sfSlot("1", "team-fra"), // M97 saved
+    sfSlot("4", "team-arg"), // M100 saved
+  ];
+  const input = {
+    bracketKind: "semifinalist" as const,
+    slots,
+    teams,
+    knockoutBracketPicksUnlocked: true,
+  };
+  const rows = buildKnockoutMatchPickRows(input);
+  const m101 = rows.find((r) => r.fifaMatchNo === 101)!;
+  const m102 = rows.find((r) => r.fifaMatchNo === 102)!;
+  assert.strictEqual(m101.lockReason, "incomplete");
+  assert.strictEqual(m102.lockReason, "incomplete");
+  assert.match(
+    m101.display.emptyPrimaryLine!,
+    /Waiting for your M99 quarter-final pick/i,
+  );
+  assert.match(
+    m102.display.emptyPrimaryLine!,
+    /Waiting for your M98 quarter-final pick/i,
+  );
+  assert.doesNotMatch(m101.display.emptyPrimaryLine!, /M91|M94/i);
+  assert.doesNotMatch(m102.display.emptyPrimaryLine!, /M91|M94/i);
+}
+
+// Eliminated QF winner blocks SF with immediate feeder copy
+{
+  const slots: KnockoutPickSlotDraft[] = [
+    ...Array.from({ length: 16 }, (_, i) => r16Slot(String(i + 1), "team-rsa")),
+    {
+      ...sfSlot("1", "team-fra"),
+      pickStatus: "out" as const,
+    },
+    sfSlot("2", "team-ger"),
+    sfSlot("3", "team-bra"),
+    sfSlot("4", "team-arg"),
+  ];
+  const input = {
+    bracketKind: "semifinalist" as const,
+    slots,
+    teams,
+    knockoutBracketPicksUnlocked: true,
+  };
+  const m101 = buildKnockoutMatchPickRows(input).find((r) => r.fifaMatchNo === 101)!;
+  assert.strictEqual(m101.lockReason, "incomplete");
+  assert.match(
+    m101.display.emptyPrimaryLine!,
+    /This path is out because your M97 quarter-final pick was eliminated/i,
+  );
+  assert.doesNotMatch(m101.display.emptyPrimaryLine!, /M91|M89/i);
+}
+
+// SF step pill stays incomplete when rows are blocked upstream
+{
+  const slots: KnockoutPickSlotDraft[] = [
+    ...Array.from({ length: 16 }, (_, i) => r16Slot(String(i + 1), "team-rsa")),
+    sfSlot("1", "team-fra"),
+    sfSlot("4", "team-arg"),
+  ];
+  const ctx = resolveKnockoutProgressContext({
+    slots,
+    teams,
+    officialRoundOf32Complete: true,
+  });
+  const sfStatus = getKnockoutStepCompletionFromDraftState("semifinalist", ctx);
+  assert.strictEqual(sfStatus.complete, false);
+  assert.strictEqual(sfStatus.kind, "locked_upstream");
+  const gate = blockedKnockoutStepGateCopy("semifinalist", {
+    bracketKind: "semifinalist",
+    slots,
+    teams,
+    knockoutBracketPicksUnlocked: true,
+  });
+  assert.ok(gate);
+  assert.doesNotMatch(gate!, /M91|M94/i);
 }
 
 console.log("knockoutMatchPickRows.selftest.ts: ok");
