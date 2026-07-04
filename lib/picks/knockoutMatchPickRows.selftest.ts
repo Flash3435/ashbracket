@@ -2117,7 +2117,7 @@ function r32Side(slotKey: string, teamId = ""): KnockoutPickSlotDraft {
   assert.ok(backfillGuard.error, "server rejects swapping stale M94 pick to US");
 }
 
-// Seema-style partial-complete participant: missing M94 locked, no direct pick controls.
+// Seema-style partial-complete participant: missing M94 pickable before kickoff.
 {
   const seemaTeams: Team[] = [
     ...teams,
@@ -2189,6 +2189,29 @@ function r32Side(slotKey: string, teamId = ""): KnockoutPickSlotDraft {
       winner_team_name: "Belgium",
       winner_country_code: "BEL",
     },
+    {
+      match_id: "m94",
+      edition_id: "ed",
+      edition_code: "wc2026",
+      match_code: "M94",
+      stage_code: "round_of_16",
+      stage_label: "Round of 16",
+      stage_sort_order: 3,
+      group_code: null,
+      round_index: 0,
+      kickoff_at: "2026-07-06T19:00:00Z",
+      status: "scheduled",
+      home_goals: null,
+      away_goals: null,
+      home_penalties: null,
+      away_penalties: null,
+      home_team_name: "United States",
+      home_country_code: "USA",
+      away_team_name: "Belgium",
+      away_country_code: "BEL",
+      winner_team_name: null,
+      winner_country_code: null,
+    },
   ];
   const seemaGradual = getGradualKnockoutSelectionState({
     matches: seemaMatches,
@@ -2213,12 +2236,16 @@ function r32Side(slotKey: string, teamId = ""): KnockoutPickSlotDraft {
     knockoutBracketPicksUnlocked: true,
   });
   const seemaM94 = seemaRows.find((r) => r.fifaMatchNo === 94)!;
-  assert.strictEqual(seemaM94.lockReason, "frozen");
-  assert.strictEqual(isKnockoutMatchDirectPickEligible(seemaM94), false);
+  assert.strictEqual(seemaM94.lockReason, "pickable");
+  assert.strictEqual(isKnockoutMatchDirectPickEligible(seemaM94), true);
+  assert.strictEqual(
+    seemaM94.display.statusLine,
+    "Pick still open until this match kicks off.",
+  );
   const seemaPresentation = knockoutMatchSavedPickPresentation(seemaM94, seemaTeams);
   assert.strictEqual(seemaPresentation.savedPickStatus, "missing");
   assert.strictEqual(seemaPresentation.savedPickSummaryLine, "No pick saved");
-  assert.ok(seemaPresentation.savedPickWarning?.includes("already in progress"));
+  assert.strictEqual(seemaPresentation.lockStatusLine, null);
 }
 
 console.log("knockoutMatchPickRows.selftest.ts: ok");

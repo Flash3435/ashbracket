@@ -8,6 +8,7 @@ import {
   clearedPickRowKeySet,
   LOCKED_KNOCKOUT_NO_ACTION_HEADLINE,
   participantLockedKnockoutRowBody,
+  participantLockedKnockoutRowKind,
   participantLockedKnockoutStatusHeadline,
   participantNonActionableLockedKnockoutRows,
 } from "./knockoutBlockedRowExplanation";
@@ -418,7 +419,7 @@ const r32OfficialResults: TournamentMatchPublicRow[] = [
   assert.equal(repairSummary.headline, LOCKED_KNOCKOUT_NO_ACTION_HEADLINE);
   assert.match(
     repairSummary.detail,
-    /Germany vs Paraguay is locked with no pick saved/i,
+    /Germany vs Paraguay: No pick saved — match has kicked off/i,
   );
   assert.match(repairSummary.detail, /No action is needed/i);
   assert.equal(repairSummary.ctaLabel, null);
@@ -596,7 +597,7 @@ const r32OfficialResults: TournamentMatchPublicRow[] = [
   assert.doesNotMatch(qfGate, /M97 is waiting for the winner/i);
 }
 
-// Locked-empty M94 (Seema-style): matchup copy, no internal slot labels, R16 step complete
+// Missing M94 before kickoff (Seema-style): pickable, not a locked-empty row
 {
   const seemaTeams: Team[] = [
     ...teams,
@@ -743,22 +744,143 @@ const r32OfficialResults: TournamentMatchPublicRow[] = [
     ...matchInput,
     bracketKind: "round_of_16",
   }).find((r) => r.fifaMatchNo === 94)!;
-  assert.match(
-    participantLockedKnockoutRowBody(m94, seemaTeams),
-    /United States vs Belgium is locked with no pick saved/i,
-  );
-  assert.match(
-    participantLockedKnockoutRowBody(m94, seemaTeams),
-    /Round of 32 feeder results are already official/i,
-  );
-  assert.doesNotMatch(participantLockedKnockoutRowBody(m94, seemaTeams), /pick 6/i);
-  assert.doesNotMatch(participantLockedKnockoutRowBody(m94, seemaTeams), /pick is out/i);
+  assert.strictEqual(m94.lockReason, "pickable");
+  assert.strictEqual(participantLockedKnockoutRowKind(m94), null);
 
   const lockedRows = participantNonActionableLockedKnockoutRows(matchInput);
-  assert.ok(lockedRows.some((r) => r.fifaMatchNo === 94));
-  assert.equal(
-    participantLockedKnockoutStatusHeadline(lockedRows),
-    LOCKED_KNOCKOUT_NO_ACTION_HEADLINE,
+  assert.ok(!lockedRows.some((r) => r.fifaMatchNo === 94));
+}
+
+// Missing R16 pick after kickoff: locked-empty with kickoff copy
+{
+  const kickoffTeams: Team[] = [
+    ...teams,
+    {
+      id: "team-us",
+      name: "United States",
+      countryCode: "USA",
+      fifaCode: "USA",
+      fifaRank: 15,
+      fifaRankAsOf: null,
+      createdAt: "",
+      updatedAt: "",
+    },
+    {
+      id: "team-bel",
+      name: "Belgium",
+      countryCode: "BEL",
+      fifaCode: "BEL",
+      fifaRank: 12,
+      fifaRankAsOf: null,
+      createdAt: "",
+      updatedAt: "",
+    },
+  ];
+  const kickoffSlots: KnockoutPickSlotDraft[] = [
+    qfSlot("6", ""),
+    r16Slot("9", "team-us"),
+    r16Slot("10", "team-bel"),
+  ];
+  const kickoffPast = "2020-01-01T12:00:00Z";
+  const afterKickoffMatches: TournamentMatchPublicRow[] = [
+    {
+      match_id: "m81",
+      edition_id: "ed",
+      edition_code: "wc2026",
+      match_code: "M81",
+      stage_code: "round_of_32",
+      stage_label: "Round of 32",
+      stage_sort_order: 2,
+      group_code: null,
+      round_index: 0,
+      kickoff_at: "2019-06-01T19:00:00Z",
+      status: "finished",
+      home_goals: 2,
+      away_goals: 1,
+      home_penalties: null,
+      away_penalties: null,
+      home_team_name: "United States",
+      home_country_code: "USA",
+      away_team_name: "Bosnia and Herzegovina",
+      away_country_code: "BIH",
+      winner_team_name: "United States",
+      winner_country_code: "USA",
+    },
+    {
+      match_id: "m82",
+      edition_id: "ed",
+      edition_code: "wc2026",
+      match_code: "M82",
+      stage_code: "round_of_32",
+      stage_label: "Round of 32",
+      stage_sort_order: 2,
+      group_code: null,
+      round_index: 0,
+      kickoff_at: "2019-06-01T22:00:00Z",
+      status: "finished",
+      home_goals: 1,
+      away_goals: 0,
+      home_penalties: null,
+      away_penalties: null,
+      home_team_name: "Belgium",
+      home_country_code: "BEL",
+      away_team_name: "Senegal",
+      away_country_code: "SEN",
+      winner_team_name: "Belgium",
+      winner_country_code: "BEL",
+    },
+    {
+      match_id: "m94",
+      edition_id: "ed",
+      edition_code: "wc2026",
+      match_code: "M94",
+      stage_code: "round_of_16",
+      stage_label: "Round of 16",
+      stage_sort_order: 3,
+      group_code: null,
+      round_index: 0,
+      kickoff_at: kickoffPast,
+      status: "live",
+      home_goals: null,
+      away_goals: null,
+      home_penalties: null,
+      away_penalties: null,
+      home_team_name: "United States",
+      home_country_code: "USA",
+      away_team_name: "Belgium",
+      away_country_code: "BEL",
+      winner_team_name: null,
+      winner_country_code: null,
+    },
+  ];
+  const afterKickoffGradual = getGradualKnockoutSelectionState({
+    matches: afterKickoffMatches,
+    teams: kickoffTeams,
+    nowMs: Date.parse("2020-06-01T12:00:00Z"),
+    fullRoundOf32Official: true,
+  });
+  const afterKickoffInput = {
+    slots: kickoffSlots,
+    teams: kickoffTeams,
+    tournamentMatches: afterKickoffMatches,
+    gradual: afterKickoffGradual,
+    knockoutBracketPicksUnlocked: true,
+    nowMs: Date.parse("2020-06-01T12:00:00Z"),
+  };
+  const m94After = buildKnockoutMatchPickRows({
+    ...afterKickoffInput,
+    bracketKind: "round_of_16",
+  }).find((r) => r.fifaMatchNo === 94)!;
+  assert.strictEqual(m94After.lockReason, "started");
+  assert.strictEqual(participantLockedKnockoutRowKind(m94After), "locked_empty");
+  assert.match(
+    participantLockedKnockoutRowBody(m94After, kickoffTeams),
+    /No pick saved — match has kicked off/i,
+  );
+  assert.ok(
+    participantNonActionableLockedKnockoutRows(afterKickoffInput).some(
+      (r) => r.fifaMatchNo === 94,
+    ),
   );
 }
 

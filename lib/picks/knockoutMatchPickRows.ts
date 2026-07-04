@@ -16,7 +16,9 @@ import {
 import {
   isKnockoutMatchLockedForParticipant,
   isKnockoutSlotFrozenByOfficialFeeders,
+  KNOCKOUT_MISSING_PICK_AFTER_KICKOFF,
   KNOCKOUT_MISSING_PICK_PROGRESS_LOCK_HELPER,
+  KNOCKOUT_R16_MISSING_PICK_OPEN_UNTIL_KICKOFF,
   shouldFreezeLaterRoundKnockoutMatchRow,
 } from "./knockoutPickEditability";
 import { isMatchStarted } from "./knockoutSelectionWindow";
@@ -583,7 +585,9 @@ export function knockoutMatchSavedPickPresentation(
 
   const savedPickSummaryLine =
     savedPickStatus === "missing"
-      ? "No pick saved"
+      ? row.lockReason === "started"
+        ? KNOCKOUT_MISSING_PICK_AFTER_KICKOFF
+        : "No pick saved"
       : `Saved pick: ${savedPickLabel ?? savedPickTeamId}`;
 
   let savedPickWarning: string | null = null;
@@ -1040,6 +1044,52 @@ export function buildKnockoutMatchPickRows(
           )
         : INCOMPLETE_UPSTREAM_MSG;
 
+    const r16MissingPickOpenUntilKickoff =
+      lockReason === "pickable" &&
+      def.wizardBracketKind === "round_of_16" &&
+      !winnerTeamId.trim() &&
+      isKnockoutSlotFrozenByOfficialFeeders({
+        predictionKind: def.resultKind,
+        slotKey: saveSlotKey,
+        tournamentMatches: input.tournamentMatches,
+        gradual,
+      });
+
+    const baseDisplay = pickOut
+      ? {
+          heading: matchRowDisplay(
+            def.stageLabel,
+            fifaMatchNo,
+            homeName,
+            awayName,
+            lockReason,
+          ).heading,
+          emptyPrimaryLine: `${teamName(winnerTeamId, input.teams)} · Out`,
+          kickoffIso,
+          statusLine: "Pick out",
+          chooseButtonLabel: matchRowDisplay(
+            def.stageLabel,
+            fifaMatchNo,
+            homeName,
+            awayName,
+            lockReason,
+          ).chooseButtonLabel,
+        }
+      : {
+          ...matchRowDisplay(
+            def.stageLabel,
+            fifaMatchNo,
+            homeName,
+            awayName,
+            lockReason,
+            {
+              championPick: def.resultKind === "champion",
+              incompleteMsg,
+            },
+          ),
+          kickoffIso,
+        };
+
     return {
       matchIndex,
       fifaMatchNo,
@@ -1057,42 +1107,12 @@ export function buildKnockoutMatchPickRows(
       pickStatus,
       lockReason,
       kickoffIso,
-      display: {
-        ...(pickOut
-          ? {
-              heading: matchRowDisplay(
-                def.stageLabel,
-                fifaMatchNo,
-                homeName,
-                awayName,
-                lockReason,
-              ).heading,
-              emptyPrimaryLine: `${teamName(winnerTeamId, input.teams)} · Out`,
-              kickoffIso,
-              statusLine: "Pick out",
-              chooseButtonLabel: matchRowDisplay(
-                def.stageLabel,
-                fifaMatchNo,
-                homeName,
-                awayName,
-                lockReason,
-              ).chooseButtonLabel,
-            }
-          : {
-              ...matchRowDisplay(
-                def.stageLabel,
-                fifaMatchNo,
-                homeName,
-                awayName,
-                lockReason,
-                {
-                  championPick: def.resultKind === "champion",
-                  incompleteMsg,
-                },
-              ),
-              kickoffIso,
-            }),
-      },
+      display: r16MissingPickOpenUntilKickoff
+        ? {
+            ...baseDisplay,
+            statusLine: KNOCKOUT_R16_MISSING_PICK_OPEN_UNTIL_KICKOFF,
+          }
+        : baseDisplay,
     };
   });
 }

@@ -1,5 +1,6 @@
 import { knockoutParticipantSlotPair } from "../bracket/wc2026KnockoutPairings";
 import type { ClearedKnockoutPathPick } from "../predictions/pruneOfficialKnockoutPathPicks";
+import { KNOCKOUT_MISSING_PICK_AFTER_KICKOFF } from "./knockoutPickEditability";
 import {
   buildKnockoutMatchPickRows,
   formatMissingKnockoutDependencyLabel,
@@ -109,6 +110,9 @@ export function participantLockedKnockoutRowBody(
     return `Your saved pick for ${matchup} is out and can no longer advance. No action is needed.`;
   }
   if (kind === "locked_empty") {
+    if (row.lockReason === "started") {
+      return `${matchup}: ${KNOCKOUT_MISSING_PICK_AFTER_KICKOFF} No action is needed.`;
+    }
     const feederStage = feederStageLabelForSavedPickKind(row.savePredictionKind);
     return `${matchup} is locked with no pick saved because the ${feederStage} feeder results are already official. No action is needed.`;
   }

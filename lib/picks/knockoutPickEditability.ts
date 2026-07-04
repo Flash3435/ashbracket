@@ -27,6 +27,12 @@ export const KNOCKOUT_PICK_LOCKED_FEEDER_RESULTS =
 export const KNOCKOUT_MISSING_PICK_PROGRESS_LOCK_HELPER =
   "This matchup is locked because this part of the bracket was already in progress after official feeder results.";
 
+export const KNOCKOUT_R16_MISSING_PICK_OPEN_UNTIL_KICKOFF =
+  "Pick still open until this match kicks off.";
+
+export const KNOCKOUT_MISSING_PICK_AFTER_KICKOFF =
+  "No pick saved — match has kicked off.";
+
 /** Result kinds stored by M89+ wizard match rows (not R32 gradual rows). */
 export const LATER_ROUND_KNOCKOUT_RESULT_KINDS = [
   "quarterfinalist",
@@ -96,6 +102,8 @@ export function isLaterRoundKnockoutRowFrozenForMissingBackfill(input: {
   progressionRows: readonly KnockoutProgressionRowRef[];
 }): boolean {
   if (!isLaterRoundKnockoutResultKind(input.resultKind)) return false;
+  // R16 rows (quarterfinalist): missing picks stay open until that match kicks off.
+  if (input.resultKind === "quarterfinalist") return false;
   if (
     !isKnockoutSlotFrozenByOfficialFeeders({
       predictionKind: input.resultKind,
@@ -137,6 +145,8 @@ export function shouldFreezeLaterRoundKnockoutMatchRow(input: {
   if (input.savedTeamId?.trim()) return true;
   if (input.pickStatus === "out" && input.savedTeamId?.trim()) return true;
   if (input.clearedByPathRepair) return true;
+  // R16 rows (quarterfinalist): missing picks stay open until that match kicks off.
+  if (input.resultKind === "quarterfinalist") return false;
   return participantHasKnockoutProgressPastStage(
     input.progressionRows,
     input.resultKind,

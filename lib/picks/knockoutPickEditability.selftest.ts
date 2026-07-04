@@ -1151,7 +1151,7 @@ const existing: Prediction[] = [
   );
 }
 
-// Partial-complete participant: missing M94 frozen when other QF/SF/F picks exist
+// Partial-complete participant: missing M94 stays pickable until R16 kickoff
 {
   const teamUs: Team = {
     id: "team-us",
@@ -1216,7 +1216,21 @@ const existing: Prediction[] = [
     away_team_name: "Senegal",
     winner_country_code: "BEL",
   });
-  const seemaMatches = [m81, m82];
+  const seemaMatches = [
+    m81,
+    m82,
+    match({
+      match_code: "M94",
+      stage_code: "round_of_16",
+      kickoff_at: "2026-07-06T19:00:00Z",
+      status: "scheduled",
+      home_country_code: "USA",
+      away_country_code: "BEL",
+      home_team_name: "United States",
+      away_team_name: "Belgium",
+      winner_country_code: null,
+    }),
+  ];
   const seemaGradual = getGradualKnockoutSelectionState({
     matches: seemaMatches,
     teams: seemaTeams,
@@ -1249,18 +1263,16 @@ const existing: Prediction[] = [
   assert.strictEqual(m94.homeTeamId, "team-us");
   assert.strictEqual(m94.awayTeamId, "team-bel");
   assert.strictEqual(m94.winnerTeamId, "");
-  assert.strictEqual(m94.lockReason, "frozen");
-  assert.strictEqual(isKnockoutMatchDirectPickEligible(m94), false);
+  assert.strictEqual(m94.lockReason, "pickable");
+  assert.strictEqual(isKnockoutMatchDirectPickEligible(m94), true);
+  assert.strictEqual(
+    m94.display.statusLine,
+    "Pick still open until this match kicks off.",
+  );
   const missingPresentation = knockoutMatchSavedPickPresentation(m94, seemaTeams);
   assert.strictEqual(missingPresentation.savedPickStatus, "missing");
   assert.strictEqual(missingPresentation.savedPickSummaryLine, "No pick saved");
-  assert.strictEqual(
-    missingPresentation.lockStatusLine,
-    "Locked — feeder results are official.",
-  );
-  assert.ok(
-    missingPresentation.savedPickWarning?.includes("already in progress"),
-  );
+  assert.strictEqual(missingPresentation.lockStatusLine, null);
   assert.strictEqual(
     isKnockoutPickEditableForParticipant({
       predictionKind: "quarterfinalist",
@@ -1272,7 +1284,7 @@ const existing: Prediction[] = [
       progressionRows: partialCompleteSlots,
       nowMs,
     }),
-    false,
+    true,
   );
   assert.strictEqual(
     isKnockoutPickFrozenForParticipant({
@@ -1284,7 +1296,7 @@ const existing: Prediction[] = [
       progressionRows: partialCompleteSlots,
       nowMs,
     }),
-    true,
+    false,
   );
   const partialExisting: Prediction[] = [
     {
@@ -1347,7 +1359,41 @@ const existing: Prediction[] = [
     fullRoundOf32Official: true,
     nowMs,
   });
-  assert.ok(backfillErr, "server rejects M94 backfill for partial-complete participant");
+  assert.strictEqual(backfillErr, null, "server allows M94 backfill before kickoff");
+  assert.strictEqual(
+    partialExisting.find(
+      (p) => p.predictionKind === "quarterfinalist" && p.slotKey === "6",
+    )?.teamId,
+    undefined,
+  );
+  const backfillApplied = applyGradualKnockoutPickSaveGuards({
+    incoming: [
+      {
+        predictionKind: "quarterfinalist",
+        tournamentStageId: stageR16,
+        slotKey: "6",
+        groupCode: null,
+        bonusKey: null,
+        teamId: "team-bel",
+      },
+    ],
+    existing: partialExisting,
+    teams: seemaTeams,
+    matches: seemaMatches,
+    gradual: seemaGradual,
+    fullRoundOf32Official: true,
+    nowMs,
+  });
+  assert.strictEqual(backfillApplied.error, null, "server saves missing M94 pick");
+  assert.strictEqual(
+    backfillApplied.slots.find(
+      (s) => s.predictionKind === "quarterfinalist" && s.slotKey === "6",
+    )?.teamId,
+    "team-bel",
+  );
+
+  // After kickoff, missing M94 is locked and admin can still backfill.
+  const afterKickoffMs = Date.parse("2026-07-07T12:00:00Z");
   const adminResolved = resolveKnockoutPickCorrectionMatch({
     matchCode: "M94",
     slots: partialCompleteSlots,
@@ -1355,9 +1401,9 @@ const existing: Prediction[] = [
     tournamentMatches: seemaMatches,
     fullRoundOf32Official: true,
     knockoutBracketPicksUnlocked: true,
-    nowMs,
+    nowMs: afterKickoffMs,
   });
-  assert.ok(!("error" in adminResolved), "admin can open correction on frozen missing M94");
+  assert.ok(!("error" in adminResolved), "admin can open correction on started missing M94");
   const adminApplied = applyKnockoutPickCorrection({
     slots: partialCompleteSlots,
     match: adminResolved.match,
@@ -1365,13 +1411,14 @@ const existing: Prediction[] = [
     teams: seemaTeams,
     tournamentMatches: seemaMatches,
     fullRoundOf32Official: true,
+    nowMs: afterKickoffMs,
   });
   assert.strictEqual(
     adminApplied.slots.find(
       (s) => s.predictionKind === "quarterfinalist" && s.slotKey === "6",
     )?.teamId,
     "team-us",
-    "admin can backfill frozen missing M94 row",
+    "admin can backfill started missing M94 row",
   );
 }
 
