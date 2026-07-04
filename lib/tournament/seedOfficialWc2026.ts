@@ -1,6 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { applyFifaRankSnapshot } from "./applyFifaRankSnapshot";
 import { seedOfficialWc2026KnockoutFixtures } from "./seedOfficialWc2026KnockoutFixtures";
+import { seedOfficialWc2026LaterKnockoutFixtures } from "./seedOfficialWc2026LaterKnockoutFixtures";
 import { validateKickoffAtUtc } from "./validateWc2026KickoffAt";
 import wc from "./wc2026Data.json";
 import groupFixtures from "./wc2026GroupFixtures.json";
@@ -193,9 +194,12 @@ export async function seedOfficialWc2026(
   const koOut = await seedOfficialWc2026KnockoutFixtures(supabase, { editionId });
   if (!koOut.ok) return { ok: false, error: koOut.error };
 
+  const laterKoOut = await seedOfficialWc2026LaterKnockoutFixtures(supabase, { editionId });
+  if (!laterKoOut.ok) return { ok: false, error: laterKoOut.error };
+
   return {
     ok: true,
     editionId,
-    matchCount: matchRows.length + koOut.summary.r32RowCount,
+    matchCount: matchRows.length + koOut.summary.r32RowCount + laterKoOut.summary.laterKnockoutRowCount,
   };
 }

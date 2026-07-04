@@ -1,0 +1,98 @@
+[
+  {
+    "fifa_match_no": 89,
+    "kickoff_at": "2026-07-04T21:00:00Z",
+    "stadium": "Philadelphia Stadium",
+    "city": "Philadelphia"
+  },
+  {
+    "fifa_match_no": 90,
+    "kickoff_at": "2026-07-04T17:00:00Z",
+    "stadium": "Houston Stadium",
+    "city": "Houston"
+  },
+  {
+    "fifa_match_no": 91,
+    "kickoff_at": "2026-07-05T20:00:00Z",
+    "stadium": "New York New Jersey Stadium",
+    "city": "East Rutherford"
+  },
+  {
+    "fifa_match_no": 92,
+    "kickoff_at": "2026-07-06T00:00:00Z",
+    "stadium": "Mexico City Stadium",
+    "city": "Mexico City"
+  },
+  {
+    "fifa_match_no": 93,
+    "kickoff_at": "2026-07-06T19:00:00Z",
+    "stadium": "Dallas Stadium",
+    "city": "Arlington"
+  },
+  {
+    "fifa_match_no": 94,
+    "kickoff_at": "2026-07-07T00:00:00Z",
+    "stadium": "Seattle Stadium",
+    "city": "Seattle"
+  },
+  {
+    "fifa_match_no": 95,
+    "kickoff_at": "2026-07-07T16:00:00Z",
+    "stadium": "Atlanta Stadium",
+    "city": "Atlanta"
+  },
+  {
+    "fifa_match_no": 96,
+    "kickoff_at": "2026-07-07T20:00:00Z",
+    "stadium": "BC Place Vancouver",
+    "city": "Vancouver"
+  },
+  {
+    "fifa_match_no": 97,
+    "kickoff_at": "2026-07-09T20:00:00Z",
+    "stadium": "Boston Stadium",
+    "city": "Boston"
+  },
+  {
+    "fifa_match_no": 98,
+    "kickoff_at": "2026-07-10T20:00:00Z",
+    "stadium": "Los Angeles Stadium",
+    "city": "Los Angeles"
+  },
+  {
+    "fifa_match_no": 99,
+    "kickoff_at": "2026-07-11T18:00:00Z",
+    "stadium": "Miami Stadium",
+    "city": "Miami"
+  },
+  {
+    "fifa_match_no": 100,
+    "kickoff_at": "2026-07-12T00:00:00Z",
+    "stadium": "Kansas City Stadium",
+    "city": "Kansas City"
+  },
+  {
+    "fifa_match_no": 101,
+    "kickoff_at": "2026-07-14T20:00:00Z",
+    "stadium": "Dallas Stadium",
+    "city": "Arlington"
+  },
+  {
+    "fifa_match_no": 102,
+    "kickoff_at": "2026-07-15T20:00:00Z",
+    "stadium": "Atlanta Stadium",
+    "city": "Atlanta"
+  },
+  {
+    "fifa_match_no": 103,
+    "kickoff_at": "2026-07-18T20:00:00Z",
+    "stadium": "Miami Stadium",
+    "city": "Miami"
+  },
+  {
+    "fifa_match_no": 104,
+    "kickoff_at": "2026-07-19T19:00:00Z",
+    "stadium": "New York New Jersey Stadium",
+    "city": "East Rutherford"
+  }
+]

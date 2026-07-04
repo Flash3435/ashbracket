@@ -19,6 +19,7 @@ function matchRow(
   overrides: Partial<TournamentMatchForLiveScores> & Pick<TournamentMatchForLiveScores, "id" | "matchCode">,
 ): TournamentMatchForLiveScores {
   return {
+    stageCode: "group",
     kickoffAt: "2026-07-01T20:00:00.000Z",
     providerFixtureId: null,
     homeTeamId: "home-1",

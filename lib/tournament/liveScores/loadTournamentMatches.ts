@@ -5,6 +5,7 @@ import type { TournamentMatchForLiveScores } from "./types";
 type MatchRow = {
   id: string;
   match_code: string;
+  stage_code: string;
   kickoff_at: string;
   provider_fixture_id: string | null;
   home_team_id: string | null;
@@ -31,7 +32,7 @@ export async function loadTournamentMatchesForLiveScores(
   const { data: rawMatches, error } = await supabase
     .from("tournament_matches")
     .select(
-      "id, match_code, kickoff_at, provider_fixture_id, home_team_id, away_team_id, home_goals, away_goals, home_penalties, away_penalties, status, sync_locked",
+      "id, match_code, stage_code, kickoff_at, provider_fixture_id, home_team_id, away_team_id, home_goals, away_goals, home_penalties, away_penalties, status, sync_locked",
     )
     .eq("edition_id", editionId)
     .order("kickoff_at", { ascending: true });
@@ -64,6 +65,7 @@ export async function loadTournamentMatchesForLiveScores(
       return {
         id: row.id,
         matchCode: row.match_code,
+        stageCode: row.stage_code,
         kickoffAt: row.kickoff_at,
         providerFixtureId: row.provider_fixture_id,
         homeTeamId: row.home_team_id,

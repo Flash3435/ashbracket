@@ -17,6 +17,11 @@ import {
 import { loadMatchCardStatsForLiveScores } from "./loadMatchCardStatsForLiveScores";
 import { buildScoreChangePreview } from "./matchMapping";
 import { fetchLiveWorldCupScores, getLiveScoresProviderConfig } from "./provider";
+import {
+  buildLiveScoresSyncDiagnostics,
+  mappedProviderFixtureIdsFromPreviewRows,
+} from "./buildLiveScoresSyncDiagnostics";
+import { ensureOfficialWc2026LaterKnockoutFixtures } from "../seedOfficialWc2026LaterKnockoutFixtures";
 import { loadTournamentMatchesForLiveScores } from "./loadTournamentMatches";
 import type { ScoreChangePreview, TournamentMatchForLiveScores } from "./types";
 
@@ -51,6 +56,11 @@ async function buildLiveScoresPreviewWithCardsInternal(
       error: config.configWarning ?? "Live scores provider is not configured.",
       configWarning: config.configWarning,
     };
+  }
+
+  const ensureOut = await ensureOfficialWc2026LaterKnockoutFixtures(supabase, editionId);
+  if (!ensureOut.ok) {
+    return { ok: false, error: ensureOut.error };
   }
 
   const loaded = await loadTournamentMatchesForLiveScores(supabase, editionId);
@@ -122,7 +132,17 @@ async function buildLiveScoresPreviewWithCardsInternal(
     eventFetchFailures: fetchFailures,
   });
 
-  return { ok: true, preview, matches: loaded.matches };
+  const previewWithDiagnostics = {
+    ...preview,
+    syncDiagnostics: buildLiveScoresSyncDiagnostics({
+      matches: loaded.matches,
+      preview,
+      fixtures: fetchResult.fixtures,
+      mappedProviderFixtureIds: mappedProviderFixtureIdsFromPreviewRows(preview.rows),
+    }),
+  };
+
+  return { ok: true, preview: previewWithDiagnostics, matches: loaded.matches };
 }
 
 export async function buildLiveScoresPreviewWithCards(

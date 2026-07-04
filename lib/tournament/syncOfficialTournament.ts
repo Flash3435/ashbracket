@@ -10,6 +10,7 @@ import {
   publishConfirmedRoundOf32Fixtures,
   type PublishRoundOf32FixturesSummary,
 } from "./publishRoundOf32Fixtures";
+import { ensureOfficialWc2026LaterKnockoutFixtures } from "./seedOfficialWc2026LaterKnockoutFixtures";
 import {
   computeGroupStandings,
   type FinishedGroupMatch,
@@ -596,6 +597,13 @@ export async function syncOfficialTournament(
       publishOut.summary.confirmedFixturesPublished > 0
     ) {
       console.info("[ashbracket:sync] round of 32 fixture publish", publishOut.summary);
+    }
+  }
+
+  if (!editionIsSimulation) {
+    const laterKoOut = await ensureOfficialWc2026LaterKnockoutFixtures(supabase, editionId);
+    if (!laterKoOut.ok) {
+      return { ok: false, error: laterKoOut.error };
     }
   }
 

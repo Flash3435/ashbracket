@@ -12,6 +12,7 @@ import type {
   ScoreChangePreview,
   ScoreChangePreviewRow,
 } from "@/lib/tournament/liveScores/types";
+import type { LiveScoresSyncDiagnostics } from "@/lib/tournament/liveScores/buildLiveScoresSyncDiagnostics";
 import { formatCardTotals } from "@/lib/tournament/liveScores/loadMatchCardStatsForLiveScores";
 import { extractApplyPlanOperations, type ApplyPlanMismatch } from "@/lib/tournament/liveScores/applyPlanSignature";
 import {
@@ -24,6 +25,7 @@ import {
   postLiveScoresRecalculatePool,
 } from "@/lib/tournament/liveScores/liveScoresApplyClient";
 import { buildStepAImpactLines } from "@/lib/tournament/liveScores/liveScoresHttpClient";
+import { formatLiveScoresSyncDiagnosticsSummary } from "@/lib/tournament/liveScores/buildLiveScoresSyncDiagnostics";
 import { interpretStepAResponse } from "@/lib/tournament/liveScores/liveScoresStepAUi";
 import { AdminRiskConfirmPanel } from "./AdminRiskConfirmPanel";
 
@@ -182,6 +184,54 @@ function reasonLabel(reason: ScoreChangePreviewRow["reason"]): string {
     default:
       return reason;
   }
+}
+
+function SyncDiagnosticsPanel({ diagnostics }: { diagnostics: LiveScoresSyncDiagnostics }) {
+  const summaryLines = formatLiveScoresSyncDiagnosticsSummary(diagnostics);
+  const knockoutMissing = diagnostics.knockoutMissingProviderFixtureId.filter(
+    (row) => row.matchCode >= "M89",
+  );
+  const unmapped = diagnostics.unmappedProviderFixtures;
+
+  return (
+    <details className="mt-2 rounded-md border border-ash-border/60 bg-ash-body/20 px-3 py-2 text-xs text-ash-muted">
+      <summary className="cursor-pointer font-medium text-ash-text">
+        Sync diagnostics
+      </summary>
+      <ul className="mt-2 list-disc space-y-1 pl-4">
+        {summaryLines.map((line) => (
+          <li key={line}>{line}</li>
+        ))}
+      </ul>
+      {knockoutMissing.length > 0 ? (
+        <div className="mt-3">
+          <p className="font-medium text-amber-100">
+            Knockout rows missing provider_fixture_id (M89+)
+          </p>
+          <ul className="mt-1 max-h-40 overflow-y-auto font-mono text-[11px] text-ash-muted">
+            {knockoutMissing.map((row) => (
+              <li key={row.matchCode}>
+                {row.matchCode} · {row.stageCode} · {row.homeTeamName} vs {row.awayTeamName} ·{" "}
+                {row.status}
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
+      {unmapped.length > 0 ? (
+        <div className="mt-3">
+          <p className="font-medium text-amber-100">Provider fixtures not matched to DB</p>
+          <ul className="mt-1 max-h-40 overflow-y-auto font-mono text-[11px] text-ash-muted">
+            {unmapped.map((row) => (
+              <li key={row.providerFixtureId}>
+                {row.providerFixtureId} · {row.label} · {row.kickoffAt} · {row.status}
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
+    </details>
+  );
 }
 
 function PreviewTable({ rows }: { rows: ScoreChangePreviewRow[] }) {
@@ -714,10 +764,18 @@ export function LiveScoresFetchPanel({
 
       {preview ? (
         <div className="space-y-4 border-t border-ash-border/60 pt-4">
-          <div className="text-sm text-ash-muted">
+          <div className="text-sm text-ash-muted space-y-1">
             <p>
               <span className="font-medium text-ash-text">Matches checked:</span>{" "}
               {preview.summary.matchesChecked}
+              {preview.syncDiagnostics ? (
+                <>
+                  {" "}
+                  <span className="text-ash-muted">
+                    (DB eligible: {preview.syncDiagnostics.totalDbMatchesEligible})
+                  </span>
+                </>
+              ) : null}
             </p>
             <p>
               <span className="font-medium text-ash-text">Scores will update:</span>{" "}
@@ -726,6 +784,9 @@ export function LiveScoresFetchPanel({
               <span className="font-medium text-ash-text">Cards will update:</span>{" "}
               {preview.summary.cardsWillUpdate}
             </p>
+            {preview.syncDiagnostics ? (
+              <SyncDiagnosticsPanel diagnostics={preview.syncDiagnostics} />
+            ) : null}
           </div>
 
           <PreviewTable rows={preview.rows} />

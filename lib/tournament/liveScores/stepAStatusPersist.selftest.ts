@@ -18,6 +18,7 @@ function koMatchRow(
   overrides: Partial<TournamentMatchForLiveScores> & Pick<TournamentMatchForLiveScores, "id" | "matchCode">,
 ): TournamentMatchForLiveScores {
   return {
+    stageCode: "round_of_32",
     kickoffAt: "2026-07-01T20:00:00.000Z",
     providerFixtureId: "provider-r32-1",
     homeTeamId: "team-rsa",

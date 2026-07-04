@@ -65,6 +65,7 @@ export type MatchCardStatsSnapshot = {
 export type TournamentMatchForLiveScores = {
   id: string;
   matchCode: string;
+  stageCode: string;
   kickoffAt: string;
   providerFixtureId: string | null;
   homeTeamId: string | null;
@@ -112,6 +113,8 @@ export type ScoreChangePreviewRow = {
   warnings: string[];
 };
 
+export type LiveScoresSyncDiagnostics = import("./buildLiveScoresSyncDiagnostics").LiveScoresSyncDiagnostics;
+
 export type ScoreChangePreview = {
   previewId: string;
   provider: string;
@@ -119,6 +122,8 @@ export type ScoreChangePreview = {
   configWarning: string | null;
   fetchedAt: string;
   rows: ScoreChangePreviewRow[];
+  /** Populated by {@link buildLiveScoresPreviewWithCards} for admin diagnostics. */
+  syncDiagnostics?: LiveScoresSyncDiagnostics;
   summary: {
     matchesChecked: number;
     willUpdate: number;
