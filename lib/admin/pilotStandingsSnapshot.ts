@@ -68,10 +68,15 @@ export async function capturePoolStandingsState(
     });
   });
 
-  const rows: PilotStandingsRow[] = withNames.map((r, i) => ({
-    ...r,
-    rank: i + 1,
-  }));
+  const rows: PilotStandingsRow[] = [];
+  for (let i = 0; i < withNames.length; i++) {
+    const row = withNames[i]!;
+    const rank =
+      i === 0 || row.totalPoints !== withNames[i - 1]!.totalPoints
+        ? i + 1
+        : rows[i - 1]!.rank;
+    rows.push({ ...row, rank });
+  }
 
   const { rows: diagRows } = await fetchWcLedgerRecomputeDiagnosticsForPools(
     supabase,

@@ -57,16 +57,23 @@ export function buildLeaderboardMomentum(input: {
     input.previousRows.map((row) => [row.participantId, row.totalPoints]),
   );
   const previousRanks = assignCompetitionRanks(input.previousRows);
+  const currentPointRows = input.currentRows.map((row) => ({
+    participantId: row.participantId,
+    totalPoints: row.totalPoints,
+  }));
+  const currentRanks = assignCompetitionRanks(currentPointRows);
 
   const rows: LeaderboardMomentumRow[] = input.currentRows.map((current) => {
     const previousPoints = previousById.get(current.participantId);
     const isNewEntry = previousPoints == null;
+    const currentRank =
+      currentRanks.get(current.participantId) ?? current.rank;
 
     if (isNewEntry) {
       return {
         participantId: current.participantId,
         previousRank: null,
-        currentRank: current.rank,
+        currentRank,
         rankChange: 0,
         previousPoints: null,
         currentPoints: current.totalPoints,
@@ -75,14 +82,14 @@ export function buildLeaderboardMomentum(input: {
       };
     }
 
-    const previousRank = previousRanks.get(current.participantId) ?? current.rank;
+    const previousRank = previousRanks.get(current.participantId) ?? currentRank;
     const pointsGained = Math.max(0, current.totalPoints - previousPoints);
 
     return {
       participantId: current.participantId,
       previousRank,
-      currentRank: current.rank,
-      rankChange: previousRank - current.rank,
+      currentRank,
+      rankChange: previousRank - currentRank,
       previousPoints,
       currentPoints: current.totalPoints,
       recentPointsGained: pointsGained,

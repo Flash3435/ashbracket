@@ -190,6 +190,57 @@ import {
   assert.equal(movers.some((row) => row.participantId === "fraser" && row.rankChange === -1), true);
 }
 
+// uniform +4 with ties: rank arrows stay neutral (ordinal position must not drive movement)
+{
+  const momentum = buildLeaderboardMomentum({
+    currentRows: [
+      { participantId: "neal", totalPoints: 123, rank: 5 },
+      { participantId: "winner", totalPoints: 123, rank: 5 },
+      { participantId: "joel", totalPoints: 122, rank: 7 },
+      { participantId: "sanjay", totalPoints: 122, rank: 7 },
+      { participantId: "yellow", totalPoints: 122, rank: 7 },
+    ],
+    previousRows: [
+      { participantId: "neal", totalPoints: 119 },
+      { participantId: "winner", totalPoints: 119 },
+      { participantId: "joel", totalPoints: 118 },
+      { participantId: "sanjay", totalPoints: 118 },
+      { participantId: "yellow", totalPoints: 118 },
+    ],
+  });
+  for (const row of momentum.rows) {
+    assert.equal(row.recentPointsGained, 4, `${row.participantId} points delta`);
+    assert.equal(row.rankChange, 0, `${row.participantId} rank change`);
+    assert.equal(formatRankMovementIndicator(row), "→", `${row.participantId} arrow`);
+  }
+  assert.equal(pickBiggestMovers(momentum).length, 0);
+}
+
+// participant-specific deltas with mixed movement
+{
+  const momentum = buildLeaderboardMomentum({
+    currentRows: [
+      { participantId: "a", totalPoints: 81, rank: 1 },
+      { participantId: "b", totalPoints: 80, rank: 2 },
+      { participantId: "c", totalPoints: 75, rank: 3 },
+    ],
+    previousRows: [
+      { participantId: "a", totalPoints: 77 },
+      { participantId: "b", totalPoints: 80 },
+      { participantId: "c", totalPoints: 73 },
+    ],
+  });
+  const a = momentum.rows.find((row) => row.participantId === "a");
+  const b = momentum.rows.find((row) => row.participantId === "b");
+  const c = momentum.rows.find((row) => row.participantId === "c");
+  assert.equal(a?.recentPointsGained, 4);
+  assert.equal(b?.recentPointsGained, 0);
+  assert.equal(c?.recentPointsGained, 2);
+  assert.equal(a?.rankChange, 1);
+  assert.equal(b?.rankChange, -1);
+  assert.equal(c?.rankChange, 0);
+}
+
 // expanded movement copy
 {
   assert.match(
