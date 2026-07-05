@@ -25,6 +25,8 @@ export type PathValidRaceOutlook = {
   pathValidLivePickCount: number;
   topRemainingPicks: PathValidRemainingPick[];
   championPathDead: boolean;
+  hasLiveFinalistPick: boolean;
+  hasLiveSemifinalistPick: boolean;
 };
 
 function teamNameForId(teamId: string, teamById: Map<string, Team>): string {
@@ -254,10 +256,16 @@ export function buildPathValidRaceOutlookForParticipant(input: {
   );
 
   const topRemainingPicks = sortAndLimitTopPicks(livePicks);
+  const hasLiveFinalistPick = livePicks.some((pick) => pick.predictionKind === "finalist");
+  const hasLiveSemifinalistPick = livePicks.some(
+    (pick) => pick.predictionKind === "semifinalist",
+  );
 
   return {
     pathValidLivePickCount: livePicks.length,
     topRemainingPicks,
     championPathDead,
+    hasLiveFinalistPick,
+    hasLiveSemifinalistPick,
   };
 }

@@ -21,6 +21,7 @@ import { ViewerLeaderComparisonSummary } from "./ViewerLeaderComparisonSummary";
 import { LeaderboardParticipantCell } from "./LeaderboardParticipantCell";
 import { LeaderboardRankMovementIndicator } from "./LeaderboardRankMovementIndicator";
 import { LeaderboardBiggestMoversCard } from "./LeaderboardBiggestMoversCard";
+import { LeaderboardBiggestBracketImpactCard } from "./LeaderboardBiggestBracketImpactCard";
 import { LiveScoresUpdateNotice } from "../tournament/LiveScoresUpdateNotice";
 import type { LeaderboardPublicRow } from "../../types/leaderboard";
 import type { PoolPublicStats } from "../../lib/pool/fetchPoolPublicStats";
@@ -36,6 +37,7 @@ import type { TournamentStatLeadersView } from "@/lib/tournament/matchTeamStats/
 import { ChampionPickExposureCard } from "@/components/pool/ChampionPickExposureCard";
 import type { ChampionPickExposure } from "@/lib/pool/buildChampionPickExposure";
 import type { ParticipantRaceOutlook } from "@/lib/pool/buildParticipantRaceOutlook";
+import type { LeaderboardBracketImpactResult } from "@/lib/leaderboard/fetchLeaderboardBracketImpactForPool";
 
 function summaryCard(label: string, value: string, hint: string) {
   return (
@@ -147,6 +149,7 @@ type Props = {
   showChampionPickExposure?: boolean;
   participantRaceOutlook?: ParticipantRaceOutlook | null;
   leaderboardMomentum?: LeaderboardMomentumResult | null;
+  leaderboardBracketImpact?: LeaderboardBracketImpactResult | null;
 };
 
 export function PublicPoolLeaderboardView({
@@ -168,6 +171,7 @@ export function PublicPoolLeaderboardView({
   showChampionPickExposure = false,
   participantRaceOutlook = null,
   leaderboardMomentum = null,
+  leaderboardBracketImpact = null,
 }: Props) {
   if (leaderboardError) {
     return (
@@ -190,6 +194,12 @@ export function PublicPoolLeaderboardView({
   const raceOutlookByParticipantId = mapRaceOutlookByParticipantId(participantRaceOutlook);
   const momentumByParticipantId = mapLeaderboardMomentumByParticipantId(leaderboardMomentum);
   const biggestMovers = pickBiggestMovers(leaderboardMomentum ?? { hasPreviousSnapshot: false, rows: [] });
+  const bracketImpactByParticipantId =
+    leaderboardBracketImpact?.rowsByParticipantId ?? new Map();
+  const showBracketImpactCard =
+    biggestMovers.length === 0 &&
+    leaderboardBracketImpact?.hasBracketImpact === true &&
+    leaderboardBracketImpact.summary != null;
   const displayNameByParticipantId = new Map(
     presentation.rows.map((row) => [row.participantId, row.displayName]),
   );
@@ -328,6 +338,12 @@ export function PublicPoolLeaderboardView({
             movers={biggestMovers}
             displayNameByParticipantId={displayNameByParticipantId}
           />
+        ) : showBracketImpactCard ? (
+          <LeaderboardBiggestBracketImpactCard
+            summary={leaderboardBracketImpact!.summary!}
+            uniformPointsDelta={leaderboardBracketImpact!.uniformPointsDelta}
+            affectedCount={presentation.participantCount}
+          />
         ) : null}
 
         <div className="hidden overflow-hidden rounded-xl border border-ash-border/70 md:block">
@@ -349,6 +365,8 @@ export function PublicPoolLeaderboardView({
                   raceOutlookByParticipantId.get(row.participantId) ?? null;
                 const momentum =
                   momentumByParticipantId.get(row.participantId) ?? null;
+                const bracketImpact =
+                  bracketImpactByParticipantId.get(row.participantId) ?? null;
 
                 return (
                   <tr
@@ -365,6 +383,7 @@ export function PublicPoolLeaderboardView({
                         isViewerRow={isViewerRow}
                         raceOutlook={raceOutlook}
                         momentum={momentum}
+                        bracketImpact={bracketImpact}
                         layout="table"
                       />
                     </td>
@@ -392,6 +411,8 @@ export function PublicPoolLeaderboardView({
               raceOutlookByParticipantId.get(row.participantId) ?? null;
             const momentum =
               momentumByParticipantId.get(row.participantId) ?? null;
+            const bracketImpact =
+              bracketImpactByParticipantId.get(row.participantId) ?? null;
 
             return (
               <li
@@ -409,6 +430,7 @@ export function PublicPoolLeaderboardView({
                     isViewerRow={isViewerRow}
                     raceOutlook={raceOutlook}
                     momentum={momentum}
+                    bracketImpact={bracketImpact}
                     layout="mobile"
                     rankCell={rankCell(row, momentum)}
                   />

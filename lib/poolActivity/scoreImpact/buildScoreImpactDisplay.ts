@@ -1,4 +1,5 @@
 import type {
+  BracketImpactActivityMetadata,
   ScoreImpactLeaderboardMovementMetadata,
   ScoreImpactReason,
   ScoreImpactSoftImpactMetadata,
@@ -9,6 +10,7 @@ import {
   formatSoftImpactCountLine,
   formatSoftImpactNamesLine,
 } from "./buildSoftImpact";
+import { formatBracketImpactSummaryLines } from "@/lib/leaderboard/leaderboardBracketImpactDisplay";
 
 export type ParsedScoreImpactMetadata = {
   matchLabel: string | null;
@@ -100,6 +102,25 @@ function readSoftImpact(raw: unknown): ScoreImpactSoftImpactMetadata | null {
     affected_count: affectedCount,
     sample_names: readSampleNames(row.sample_names),
     reason: readSoftImpactReason(row.reason),
+  };
+}
+
+function readBracketImpactSummary(raw: unknown): {
+  uniformPointsDelta: number | null;
+  summary: BracketImpactActivityMetadata["summary"] | null;
+} {
+  if (raw == null || typeof raw !== "object") {
+    return { uniformPointsDelta: null, summary: null };
+  }
+  const row = raw as BracketImpactActivityMetadata;
+  const uniformPointsDelta =
+    typeof row.uniform_points_delta === "number" &&
+    Number.isFinite(row.uniform_points_delta)
+      ? row.uniform_points_delta
+      : null;
+  return {
+    uniformPointsDelta,
+    summary: row.summary ?? null,
   };
 }
 
@@ -247,21 +268,40 @@ export function buildScoreImpactDisplayLines(
 
     const detailLines: string[] = [];
     const bracketCount = parsed.affectedCount;
-    const bracketLabel =
-      bracketCount === 1 ? "1 bracket gained points." : `${bracketCount} brackets gained points.`;
-    detailLines.push(bracketLabel);
+    const { uniformPointsDelta, summary } = readBracketImpactSummary(
+      metadata.bracket_impact,
+    );
+
+    if (uniformPointsDelta == null) {
+      const bracketLabel =
+        bracketCount === 1
+          ? "1 bracket gained points."
+          : `${bracketCount} brackets gained points.`;
+      detailLines.push(bracketLabel);
+    }
 
     if (reason === "group_complete" && groupCode) {
       detailLines.push(`Group ${groupCode} advancement points are in.`);
     }
 
-    const showGainerNames = options.allowParticipantNames && parsed.topGainers.length > 0;
+    const showGainerNames =
+      options.allowParticipantNames &&
+      parsed.topGainers.length > 0 &&
+      uniformPointsDelta == null;
     if (showGainerNames) {
       const gainerLine = formatGainerLine(parsed.topGainers);
       if (gainerLine) {
         detailLines.push(`Biggest boost: ${gainerLine}.`);
       }
     }
+
+    const bracketImpactLines = formatBracketImpactSummaryLines({
+      uniformPointsDelta,
+      affectedCount: bracketCount,
+      summary,
+      hasRankMovement: parsed.leaderboardMovement != null,
+    });
+    detailLines.push(...bracketImpactLines);
 
     if (options.allowParticipantNames && parsed.leaderboardMovement) {
       const m = parsed.leaderboardMovement;
@@ -315,14 +355,22 @@ export function clientSafeScoreImpactMetadata(
     leaderboard_momentum: _lm,
     previous_standings: _ps,
     soft_impact: rawSoftImpact,
+    bracket_impact: rawBracketImpact,
     ...rest
   } = metadata;
   void _pg;
   void _lm;
   void _ps;
 
+  let safeBracketImpact: Record<string, unknown> | undefined;
+  if (rawBracketImpact != null && typeof rawBracketImpact === "object") {
+    const { rows: _rows, ...bracketSummary } = rawBracketImpact as Record<string, unknown>;
+    void _rows;
+    safeBracketImpact = bracketSummary;
+  }
+
   if (rawSoftImpact == null || typeof rawSoftImpact !== "object") {
-    return rest;
+    return safeBracketImpact ? { ...rest, bracket_impact: safeBracketImpact } : rest;
   }
 
   const soft = { ...(rawSoftImpact as Record<string, unknown>) };
@@ -330,6 +378,7 @@ export function clientSafeScoreImpactMetadata(
 
   return {
     ...rest,
+    ...(safeBracketImpact ? { bracket_impact: safeBracketImpact } : {}),
     soft_impact: soft,
   };
 }

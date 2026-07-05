@@ -3,8 +3,9 @@ import type {
   ParticipantRaceOutlookRow,
   RaceOutlookStatus,
 } from "@/lib/pool/buildParticipantRaceOutlook";
+import type { BracketImpactParticipantRow } from "@/lib/poolActivity/scoreImpact/buildBracketImpact";
 import type { LeaderboardMomentumRow } from "./buildLeaderboardMomentum";
-import { formatPointsWithRecentDelta } from "./leaderboardMomentumDisplay";
+import { formatLeaderboardRaceSummaryWithImpact } from "./leaderboardBracketImpactDisplay";
 
 export const EXPANDED_TOP_REMAINING_PICKS_LIMIT = 3;
 
@@ -22,26 +23,9 @@ export function mapRaceOutlookByParticipantId(
 export function formatLeaderboardRaceSummary(
   outlook: ParticipantRaceOutlookRow,
   momentum?: LeaderboardMomentumRow | null,
+  bracketImpact?: BracketImpactParticipantRow | null,
 ): string {
-  const parts: string[] = [
-    formatPointsWithRecentDelta(outlook.totalPoints, momentum, { showZero: true }),
-  ];
-
-  if (outlook.hasChampionPick) {
-    if (!outlook.championAlive) {
-      parts.push("Champion dead");
-    } else {
-      parts.push(`${outlook.championTeamName ?? "Champion"} champion alive`);
-    }
-  }
-
-  const pathLabel =
-    outlook.pathValidLivePickCount === 1
-      ? "1 live path"
-      : `${outlook.pathValidLivePickCount} live paths`;
-  parts.push(pathLabel);
-
-  return parts.join(" · ");
+  return formatLeaderboardRaceSummaryWithImpact(outlook, momentum, bracketImpact);
 }
 
 export function formatTopRemainingPickLine(

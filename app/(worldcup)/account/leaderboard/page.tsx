@@ -10,6 +10,7 @@ import { fetchBracketOutlookForPool } from "@/lib/leaderboard/fetchBracketOutloo
 import { fetchChampionPickExposureForPool } from "@/lib/pool/fetchChampionPickExposureForPool";
 import { fetchParticipantRaceOutlookForPool } from "@/lib/pool/fetchParticipantRaceOutlookForPool";
 import { fetchLeaderboardMomentumForPool } from "@/lib/leaderboard/fetchLeaderboardMomentumForPool";
+import { fetchLeaderboardBracketImpactForPool } from "@/lib/leaderboard/fetchLeaderboardBracketImpactForPool";
 import { createServiceRoleClient } from "@/lib/supabase/service";
 import { computeBracketOutlookSummary } from "@/lib/leaderboard/bracketOutlookSeparation";
 import {
@@ -159,6 +160,15 @@ export default async function AccountLeaderboardPage({ searchParams }: PageProps
         ).catch(() => null)
       : null;
 
+  const leaderboardBracketImpact =
+    standings.ok && standingsRows.length > 0
+      ? await fetchLeaderboardBracketImpactForPool(
+          createServiceRoleClient(),
+          selectedPoolId,
+          standingsRows,
+        ).catch(() => null)
+      : null;
+
   const revealHref = `/account/reveal?participant=${ctx.selectedId}`;
   const activityHref = `/account/activity?participant=${ctx.selectedId}`;
   const dashboardHref = `/account?participant=${ctx.selectedId}`;
@@ -228,6 +238,7 @@ export default async function AccountLeaderboardPage({ searchParams }: PageProps
           showChampionPickExposure={showChampionPickExposure}
           participantRaceOutlook={participantRaceOutlook}
           leaderboardMomentum={leaderboardMomentum}
+          leaderboardBracketImpact={leaderboardBracketImpact}
         />
       )}
     </PageContainer>

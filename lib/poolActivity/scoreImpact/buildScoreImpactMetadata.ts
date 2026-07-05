@@ -4,6 +4,10 @@ import {
   STANDINGS_CAPTURE_VERSION,
   STANDINGS_CAPTURE_VERSION_KEY,
 } from "@/lib/leaderboard/validateLeaderboardMomentumSnapshot";
+import {
+  bracketImpactToMetadata,
+  buildBracketImpactForPool,
+} from "./buildBracketImpact";
 import { formatBiggestMover } from "./detectScoreImpact";
 import type {
   ScoreImpactActivityMetadata,
@@ -13,6 +17,7 @@ import type {
   ScoreImpactSoftImpactMetadata,
   ScoreImpactTopGainerMetadata,
 } from "./types";
+import type { BracketImpactResult } from "./buildBracketImpact";
 
 function stageLabelFromCode(stageCode: string | null): string | undefined {
   if (!stageCode) return undefined;
@@ -57,6 +62,7 @@ export function buildScoreImpactMetadata(input: {
   standingsHash: string;
   scoreSignature: string;
   softImpact?: ScoreImpactSoftImpactMetadata | null;
+  bracketImpact?: BracketImpactResult | null;
 }): ScoreImpactActivityMetadata {
   const { analysis, matchResults } = input;
   const primaryMatch = matchResults[0] ?? null;
@@ -128,6 +134,10 @@ export function buildScoreImpactMetadata(input: {
     !analysis.pointsChanged
   ) {
     metadata.soft_impact = input.softImpact;
+  }
+
+  if (input.bracketImpact) {
+    metadata.bracket_impact = bracketImpactToMetadata(input.bracketImpact);
   }
 
   return metadata;

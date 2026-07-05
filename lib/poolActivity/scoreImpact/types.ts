@@ -95,6 +95,49 @@ export type ScoreImpactSoftImpactMetadata = {
   reason: ScoreImpactSoftImpactReason;
 };
 
+export type BracketImpactUpsetLabel = "benefited" | "hurt" | "neutral";
+
+export type BracketImpactParticipantMetadata = {
+  participant_id: string;
+  live_paths_before: number;
+  live_paths_after: number;
+  live_paths_delta: number;
+  champion_alive_before: boolean;
+  champion_alive_after: boolean;
+  finalist_path_alive_before: boolean;
+  finalist_path_alive_after: boolean;
+  semifinalist_path_alive_before: boolean;
+  semifinalist_path_alive_after: boolean;
+  picked_upset_winner: boolean;
+  picked_eliminated_team: boolean;
+  upset_impact: BracketImpactUpsetLabel;
+};
+
+export type BracketImpactNamedDeltaMetadata = {
+  display_name: string;
+  live_paths_delta: number;
+};
+
+export type BracketImpactSummaryMetadata = {
+  champion_lost_count: number;
+  finalist_lost_count: number;
+  upset_winner_kept_count: number;
+  benefited_count: number;
+  hurt_count: number;
+  biggest_winners: BracketImpactNamedDeltaMetadata[];
+  biggest_losers: BracketImpactNamedDeltaMetadata[];
+};
+
+/** Future-path impact from a scoring update (server-side rows + client-safe summary). */
+export type BracketImpactActivityMetadata = {
+  match_winner_team_id?: string;
+  match_loser_team_id?: string;
+  uniform_points_delta?: number;
+  summary: BracketImpactSummaryMetadata;
+  /** Server-side only — stripped before client serialization. */
+  rows?: BracketImpactParticipantMetadata[];
+};
+
 export type ScoreImpactActivityMetadata = {
   source_key: string;
   score_impact_label: "SCORE IMPACT";
@@ -130,6 +173,7 @@ export type ScoreImpactActivityMetadata = {
   }>;
   reason: ScoreImpactReason;
   soft_impact?: ScoreImpactSoftImpactMetadata;
+  bracket_impact?: BracketImpactActivityMetadata;
   /** >= 2 when before/after standings used paginated ledger capture. */
   standings_capture_version?: number;
 };

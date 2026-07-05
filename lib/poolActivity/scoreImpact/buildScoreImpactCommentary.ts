@@ -8,7 +8,12 @@ import {
   formatSoftImpactCountLine,
   formatSoftImpactNamesLine,
 } from "./buildSoftImpact";
-import type { ScoreImpactAnalysis, ScoreImpactSoftImpactMetadata } from "./types";
+import { formatBracketImpactSummaryLines } from "@/lib/leaderboard/leaderboardBracketImpactDisplay";
+import type {
+  BracketImpactSummaryMetadata,
+  ScoreImpactAnalysis,
+  ScoreImpactSoftImpactMetadata,
+} from "./types";
 
 function formatBracketCount(n: number): string {
   return n === 1 ? "1 bracket" : `${n} brackets`;
@@ -30,6 +35,8 @@ function headlineForAnalysis(analysis: ScoreImpactAnalysis): string | null {
 export function buildScoreImpactCommentary(
   analysis: ScoreImpactAnalysis,
   softImpact?: ScoreImpactSoftImpactMetadata | null,
+  bracketImpactSummary?: BracketImpactSummaryMetadata | null,
+  uniformPointsDelta?: number | null,
 ): string | null {
   if (!scoreImpactHasMeaningfulChange(analysis)) return null;
 
@@ -40,10 +47,12 @@ export function buildScoreImpactCommentary(
     if (headline) sentences.push(headline);
 
     const scored = analysis.bracketsScoredCount;
-    sentences.push(`${formatBracketCount(scored)} gained points.`);
+    if (uniformPointsDelta == null) {
+      sentences.push(`${formatBracketCount(scored)} gained points.`);
+    }
 
     const gainers = formatTopPointGainers(analysis.pointGainers);
-    if (gainers) {
+    if (gainers && uniformPointsDelta == null) {
       sentences.push(`Biggest boost: ${gainers}.`);
     }
 
@@ -52,7 +61,17 @@ export function buildScoreImpactCommentary(
       sentences.push(`Leaderboard shakeup: ${mover}.`);
     }
 
-    return trimSentences(sentences, 4);
+    if (bracketImpactSummary) {
+      const bracketLines = formatBracketImpactSummaryLines({
+        uniformPointsDelta: uniformPointsDelta ?? null,
+        affectedCount: analysis.bracketsScoredCount,
+        summary: bracketImpactSummary,
+        hasRankMovement: analysis.movers.some((moverRow) => moverRow.rankDelta !== 0),
+      });
+      sentences.push(...bracketLines);
+    }
+
+    return trimSentences(sentences, 6);
   }
 
   if (headline) {

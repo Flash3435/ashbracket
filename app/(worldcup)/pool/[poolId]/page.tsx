@@ -13,6 +13,7 @@ import { fetchBracketOutlookForPool } from "@/lib/leaderboard/fetchBracketOutloo
 import { fetchChampionPickExposureForPool } from "@/lib/pool/fetchChampionPickExposureForPool";
 import { fetchParticipantRaceOutlookForPool } from "@/lib/pool/fetchParticipantRaceOutlookForPool";
 import { fetchLeaderboardMomentumForPool } from "@/lib/leaderboard/fetchLeaderboardMomentumForPool";
+import { fetchLeaderboardBracketImpactForPool } from "@/lib/leaderboard/fetchLeaderboardBracketImpactForPool";
 import { computeBracketOutlookSummary } from "@/lib/leaderboard/bracketOutlookSeparation";
 import { TournamentStatLeadersPanel } from "@/components/tournament/TournamentStatLeadersPanel";
 import { loadTournamentTeamStatLeaders } from "@/lib/tournament/matchTeamStats/loadTournamentTeamStatLeaders";
@@ -126,6 +127,13 @@ export default async function PublicPoolLeaderboardPage({ params }: PageProps) {
         )
       : null;
 
+  const leaderboardBracketImpact =
+    picksLocked && rows.length > 0
+      ? await fetchLeaderboardBracketImpactForPool(service, poolIdTrimmed, rows).catch(
+          () => null,
+        )
+      : null;
+
   return (
     <PageContainer>
       <PicksDeadlineBannerFromPool poolId={poolIdTrimmed} className="mb-6" />
@@ -156,6 +164,7 @@ export default async function PublicPoolLeaderboardPage({ params }: PageProps) {
         showChampionPickExposure={showChampionPickExposure}
         participantRaceOutlook={participantRaceOutlook}
         leaderboardMomentum={leaderboardMomentum}
+        leaderboardBracketImpact={leaderboardBracketImpact}
       />
     </PageContainer>
   );

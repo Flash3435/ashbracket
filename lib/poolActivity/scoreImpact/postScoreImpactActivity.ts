@@ -1,5 +1,7 @@
 import { createServiceRoleClient } from "@/lib/supabase/service";
 import type { WcLedgerRecomputeTrigger } from "@/lib/scoring/recomputePoolLedger";
+import { loadPoolExposureContext } from "@/lib/pool/loadPoolExposureContext";
+import { buildBracketImpactForPool } from "./buildBracketImpact";
 import { buildSoftImpactForMatch } from "./buildSoftImpact";
 import { buildScoreImpactCommentary } from "./buildScoreImpactCommentary";
 import { buildScoreImpactMetadata } from "./buildScoreImpactMetadata";
@@ -156,6 +158,7 @@ export async function postScoreImpactActivityForPool(input: {
   if (!scoreImpactHasMeaningfulChange(analysis)) return "none";
 
   let softImpact = null;
+  let bracketImpact = null;
   if (!analysis.pointsChanged && primaryMatch) {
     const participantPicks = await loadParticipantTeamPicksById(supabase, input.poolId);
     softImpact = buildSoftImpactForMatch({
@@ -166,7 +169,32 @@ export async function postScoreImpactActivityForPool(input: {
     });
   }
 
-  const bodyText = buildScoreImpactCommentary(analysis, softImpact);
+  if (analysis.pointsChanged && matchResults.length > 0) {
+    const exposure = await loadPoolExposureContext(input.poolId);
+    if (exposure.ok) {
+      const participantPicks = await loadParticipantTeamPicksById(supabase, input.poolId);
+      bracketImpact = buildBracketImpactForPool({
+        participantBrackets: exposure.context.allParticipantBrackets,
+        participantNames,
+        participantPicks,
+        championPicks: exposure.context.championPicks,
+        teams: exposure.context.teams,
+        tournamentMatches: exposure.context.matches,
+        knockoutBracketPicksUnlocked: exposure.context.knockoutBracketPicksUnlocked,
+        matchResults,
+        beforeRows: input.before.rows,
+        afterRows: input.after.rows,
+        pointGainers: analysis.pointGainers,
+      });
+    }
+  }
+
+  const bodyText = buildScoreImpactCommentary(
+    analysis,
+    softImpact,
+    bracketImpact?.summary ?? null,
+    bracketImpact?.uniformPointsDelta ?? null,
+  );
   if (!bodyText) return "none";
 
   const scoreSignature =
@@ -190,6 +218,7 @@ export async function postScoreImpactActivityForPool(input: {
     standingsHash: input.after.summaryHash,
     scoreSignature,
     softImpact,
+    bracketImpact,
   });
 
   return upsertScoreImpactActivity({

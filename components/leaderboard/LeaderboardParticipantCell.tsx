@@ -2,6 +2,7 @@ import Link from "next/link";
 import type { ReactNode } from "react";
 import type { PublicPoolLeaderboardRowDisplay } from "@/lib/leaderboard/buildPublicPoolLeaderboardPresentation";
 import type { LeaderboardMomentumRow } from "@/lib/leaderboard/buildLeaderboardMomentum";
+import type { BracketImpactParticipantRow } from "@/lib/poolActivity/scoreImpact/buildBracketImpact";
 import {
   expandedTopRemainingPicks,
   formatExpandedRemainingPicksMoreLine,
@@ -15,6 +16,7 @@ import {
   formatExpandedMomentumContext,
   formatPointsWithRecentDelta,
 } from "@/lib/leaderboard/leaderboardMomentumDisplay";
+import { formatExpandedBracketImpactContext, formatMinimalBracketImpactLine } from "@/lib/leaderboard/leaderboardBracketImpactDisplay";
 import type { ParticipantRaceOutlookRow } from "@/lib/pool/buildParticipantRaceOutlook";
 import { participantPublicProfileHref } from "@/lib/participant/participantProfileRouting";
 import { ViewerYouChip } from "../ui/ViewerYouChip";
@@ -24,6 +26,7 @@ type Props = {
   isViewerRow: boolean;
   raceOutlook?: ParticipantRaceOutlookRow | null;
   momentum?: LeaderboardMomentumRow | null;
+  bracketImpact?: BracketImpactParticipantRow | null;
   layout: "table" | "mobile";
   rankCell?: ReactNode;
 };
@@ -41,14 +44,17 @@ function RaceStatusBadge({ outlook }: { outlook: ParticipantRaceOutlookRow }) {
 function RaceOutlookDetails({
   outlook,
   momentum = null,
+  bracketImpact = null,
 }: {
   outlook: ParticipantRaceOutlookRow;
   momentum?: LeaderboardMomentumRow | null;
+  bracketImpact?: BracketImpactParticipantRow | null;
 }) {
   const topPicks = expandedTopRemainingPicks(outlook);
   const moreLine = formatExpandedRemainingPicksMoreLine(outlook);
   const leaderComparison = formatRaceOutlookLeaderComparison(outlook);
   const momentumLine = formatExpandedMomentumContext(momentum);
+  const bracketImpactLine = formatExpandedBracketImpactContext(bracketImpact);
 
   return (
     <details className="mt-1.5">
@@ -72,6 +78,7 @@ function RaceOutlookDetails({
           <p>{raceOutlookExpandedFallbackCopy(outlook)}</p>
         )}
         {momentumLine ? <p>{momentumLine}</p> : null}
+        {bracketImpactLine ? <p>{bracketImpactLine}</p> : null}
         <p>{leaderComparison}</p>
       </div>
     </details>
@@ -118,6 +125,7 @@ export function LeaderboardParticipantCell({
   isViewerRow,
   raceOutlook = null,
   momentum = null,
+  bracketImpact = null,
   layout,
   rankCell = null,
 }: Props) {
@@ -132,10 +140,18 @@ export function LeaderboardParticipantCell({
   const raceContext = raceOutlook ? (
     <div className="mt-1 space-y-1">
       <p className="text-xs leading-relaxed text-ash-muted">
-        {formatLeaderboardRaceSummary(raceOutlook, momentum)}
+        {formatLeaderboardRaceSummary(raceOutlook, momentum, bracketImpact)}
       </p>
-      <RaceOutlookDetails outlook={raceOutlook} momentum={momentum} />
+      <RaceOutlookDetails
+        outlook={raceOutlook}
+        momentum={momentum}
+        bracketImpact={bracketImpact}
+      />
     </div>
+  ) : bracketImpact ? (
+    <p className="mt-1 text-xs leading-relaxed text-ash-muted">
+      {formatMinimalBracketImpactLine(momentum, bracketImpact, row.totalPoints)}
+    </p>
   ) : null;
 
   if (layout === "mobile") {
