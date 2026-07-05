@@ -22,6 +22,7 @@ import {
   loadParticipantNamesById,
   loadParticipantTeamPicksById,
 } from "../poolActivity/scoreImpact/loadScoreImpactContext";
+import { enrichScoreImpactEventMetadata } from "./enrichScoreImpactEventMetadata";
 import {
   parseLatestScoreEventContext,
   type LeaderboardLatestScoreEventContext,
@@ -233,7 +234,7 @@ export async function fetchLeaderboardLatestScoreImpactForPool(
 ): Promise<LeaderboardLatestScoreImpactResult> {
   const { data, error } = await supabase
     .from("pool_activity")
-    .select("metadata_json")
+    .select("metadata_json, created_at")
     .eq("pool_id", poolId)
     .eq("type", "ash_score_impact")
     .order("created_at", { ascending: false })
@@ -245,7 +246,12 @@ export async function fetchLeaderboardLatestScoreImpactForPool(
     return { momentum: null, bracketImpact: null, event: null };
   }
 
-  const metadata = data.metadata_json as Record<string, unknown>;
+  const metadata = await enrichScoreImpactEventMetadata(
+    supabase,
+    poolId,
+    data.metadata_json as Record<string, unknown>,
+    { eventCreatedAt: data.created_at as string | null },
+  );
   const displayNameByParticipantId = new Map(
     currentRows.map((row) => [row.participantId, row.displayName]),
   );

@@ -8,6 +8,7 @@ import {
   buildScoreImpactMatchResultsFromMatchCodes,
   scoreImpactSignatureFromMatchResults,
 } from "@/lib/poolActivity/scoreImpact/buildScoreImpactMatchResults";
+import { inferRecentAppliedMatchCodes } from "@/lib/poolActivity/scoreImpact/inferRecentAppliedMatchCodes";
 import { loadTeamNameMapForEdition } from "@/lib/poolActivity/scoreImpact/loadScoreImpactContext";
 import { recomputePoolLedgersWithScoreImpact } from "@/lib/poolActivity/scoreImpact/recomputeWithScoreImpact";
 import type { SupabaseClient } from "@supabase/supabase-js";
@@ -506,10 +507,23 @@ export async function runLiveScoresRecalculateOnePool(
     }
 
     const teamNameById = await loadTeamNameMapForEdition(supabase, input.editionId);
-    const matchResults = input.appliedMatchCodes?.length
+    let appliedMatchCodes = input.appliedMatchCodes?.filter(
+      (code): code is string => typeof code === "string" && code.trim().length > 0,
+    );
+    if (!appliedMatchCodes?.length) {
+      appliedMatchCodes = await inferRecentAppliedMatchCodes(supabase, input.editionId);
+      if (appliedMatchCodes.length > 0) {
+        logger.log("recalc.pool.inferredMatchCodes", {
+          poolId: input.poolId,
+          matchCodes: appliedMatchCodes,
+        });
+      }
+    }
+
+    const matchResults = appliedMatchCodes.length
       ? buildScoreImpactMatchResultsFromMatchCodes({
           matches: rawMatches ?? [],
-          matchCodes: input.appliedMatchCodes,
+          matchCodes: appliedMatchCodes,
           teamNameById,
         })
       : buildScoreImpactMatchResults({

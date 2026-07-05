@@ -136,6 +136,8 @@ function resolveEventKind(input: {
   if (input.matchCount >= 2) return "multi_match";
   if (input.matchCount === 1 || input.hasResolvableSingleMatch) return "single_match";
   if (isScoringRefreshTrigger(input.trigger)) return "scoring_refresh";
+  // Pool-wide ledger recalc without match attribution — not a labeled match result.
+  if (input.trigger === "tournament_sync") return "scoring_refresh";
   return "generic_update";
 }
 

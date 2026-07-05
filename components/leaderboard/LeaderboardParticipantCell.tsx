@@ -24,7 +24,16 @@ import type { ParticipantRaceOutlookRow } from "@/lib/pool/buildParticipantRaceO
 import { participantPublicProfileHref } from "@/lib/participant/participantProfileRouting";
 import { ViewerYouChip } from "../ui/ViewerYouChip";
 
-const LATEST_POINTS_OPTIONS = { showZero: true, latestSuffix: true } as const;
+function latestPointsOptions(
+  event: LeaderboardLatestScoreEventContext | null | undefined,
+): { showZero?: boolean; latestSuffix?: boolean } {
+  const isMatchAttributed =
+    event?.eventKind === "single_match" || event?.eventKind === "multi_match";
+  return {
+    showZero: true,
+    latestSuffix: isMatchAttributed,
+  };
+}
 
 type Props = {
   row: PublicPoolLeaderboardRowDisplay;
@@ -189,7 +198,7 @@ export function LeaderboardParticipantCell({
   const pointsLabel = formatPointsWithRecentDelta(
     row.totalPoints,
     latestScoreEvent?.hasValidSnapshot ? momentum : null,
-    LATEST_POINTS_OPTIONS,
+    latestPointsOptions(latestScoreEvent),
   );
 
   const impactContext = showLatestImpact ? (

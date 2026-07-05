@@ -99,10 +99,10 @@ const noMatchEvent = parseLatestScoreEventContext(
   },
   { hasValidSnapshot: true },
 );
-assert.equal(noMatchEvent.eventKind, "generic_update");
+assert.equal(noMatchEvent.eventKind, "scoring_refresh");
 assert.equal(noMatchEvent.matchCount, 0);
 const noMatchLine = formatLatestMatchScoringLine(momentum(4), noMatchEvent);
-assert.equal(noMatchLine, "Latest update: +4", "zero-match fallback without match count");
+assert.equal(noMatchLine, "Scoring refresh: +4", "pool recalc without match metadata");
 assert.ok(
   !noMatchLine?.includes("0-match"),
   "must never show 0-match update copy",
@@ -243,5 +243,47 @@ const persistedMetadata = buildScoreImpactMetadata({
 assert.deepEqual(persistedMetadata.match_codes, ["M90"]);
 assert.equal(persistedMetadata.match_id, "M90");
 assert.match(persistedMetadata.match_label ?? "", /Morocco 2–1 Canada/);
+
+// Single-match upset: mixed +4 / +0 with match label
+const norwayEvent = parseLatestScoreEventContext(
+  {
+    match_label: "Brazil 1–2 Norway",
+    scoreline: "Brazil 1–2 Norway",
+    match_codes: ["M91"],
+  },
+  { hasValidSnapshot: true },
+);
+assert.equal(norwayEvent.matchupShortLabel, "Norway def. Brazil");
+assert.equal(
+  formatLatestMatchScoringLine(momentum(4), norwayEvent),
+  "Norway def. Brazil: +4",
+);
+assert.equal(
+  formatLatestMatchScoringLine(momentum(0), norwayEvent),
+  "Norway def. Brazil: +0",
+);
+
+// Generic recompute without match metadata
+const genericRecompute = parseLatestScoreEventContext(
+  { match_codes: [], trigger: "admin_manual_recompute" },
+  { hasValidSnapshot: true },
+);
+assert.equal(genericRecompute.eventKind, "scoring_refresh");
+assert.equal(
+  formatLatestMatchScoringLine(momentum(4), genericRecompute),
+  "Scoring refresh: +4",
+);
+
+// Missing match metadata on tournament_sync — no match implication
+const missingMeta = parseLatestScoreEventContext(
+  { match_codes: [], trigger: "tournament_sync" },
+  { hasValidSnapshot: true },
+);
+assert.equal(missingMeta.eventKind, "scoring_refresh");
+assert.equal(missingMeta.isSingleMatch, false);
+assert.equal(
+  formatLatestMatchScoringLine(momentum(4), missingMeta),
+  "Scoring refresh: +4",
+);
 
 console.log("leaderboardLatestScoreImpactDisplay.selftest.ts: ok");
