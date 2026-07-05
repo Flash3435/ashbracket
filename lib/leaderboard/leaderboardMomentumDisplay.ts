@@ -23,20 +23,21 @@ export function rankMovementIndicatorClass(
 
 export function formatRecentPointsDelta(
   momentum: LeaderboardMomentumRow | null | undefined,
-  options?: { showZero?: boolean },
+  options?: { showZero?: boolean; latestSuffix?: boolean },
 ): string | null {
   if (!momentum) return null;
+  const suffix = options?.latestSuffix ? " latest" : "";
   if (momentum.recentPointsGained <= 0) {
-    return options?.showZero ? "(+0)" : null;
+    return options?.showZero ? `(+0${suffix})` : null;
   }
   const delta = formatPoolPoints(momentum.recentPointsGained);
-  return `(+${delta})`;
+  return `(+${delta}${suffix})`;
 }
 
 export function formatPointsWithRecentDelta(
   totalPoints: number,
   momentum: LeaderboardMomentumRow | null | undefined,
-  options?: { showZero?: boolean },
+  options?: { showZero?: boolean; latestSuffix?: boolean },
 ): string {
   const base = `${formatPoolPoints(totalPoints)} pts`;
   const delta = formatRecentPointsDelta(momentum, options);

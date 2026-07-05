@@ -9,6 +9,7 @@ import {
   formatSoftImpactNamesLine,
 } from "./buildSoftImpact";
 import { formatBracketImpactSummaryLines } from "@/lib/leaderboard/leaderboardBracketImpactDisplay";
+import { parseLatestScoreEventContext } from "@/lib/leaderboard/parseLatestScoreEventContext";
 import type {
   BracketImpactSummaryMetadata,
   ScoreImpactAnalysis,
@@ -67,6 +68,14 @@ export function buildScoreImpactCommentary(
         affectedCount: analysis.bracketsScoredCount,
         summary: bracketImpactSummary,
         hasRankMovement: analysis.movers.some((moverRow) => moverRow.rankDelta !== 0),
+        event: parseLatestScoreEventContext(
+          {
+            match_label: analysis.primaryMatchLabel ?? undefined,
+            scoreline: analysis.scoreline ?? undefined,
+            match_codes: analysis.primaryMatchCode ? [analysis.primaryMatchCode] : [],
+          },
+          { hasValidSnapshot: true },
+        ),
       });
       sentences.push(...bracketLines);
     }

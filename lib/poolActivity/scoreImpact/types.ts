@@ -132,6 +132,8 @@ export type BracketImpactSummaryMetadata = {
 export type BracketImpactActivityMetadata = {
   match_winner_team_id?: string;
   match_loser_team_id?: string;
+  winner_team_name?: string;
+  loser_team_name?: string;
   uniform_points_delta?: number;
   summary: BracketImpactSummaryMetadata;
   /** Server-side only — stripped before client serialization. */

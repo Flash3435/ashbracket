@@ -15,8 +15,8 @@ import {
 } from "./buildBracketImpact";
 import { buildParticipantTeamPicksFromPredictions as buildPicks } from "./buildSoftImpact";
 import type { ParticipantBracketForExposure } from "@/lib/pool/buildKnockoutMatchExposure";
-import { formatLeaderboardRaceSummaryWithImpact } from "@/lib/leaderboard/leaderboardBracketImpactDisplay";
-import type { ParticipantRaceOutlookRow } from "@/lib/pool/buildParticipantRaceOutlook";
+import { formatLeaderboardLatestImpactSummary } from "@/lib/leaderboard/leaderboardBracketImpactDisplay";
+import { parseLatestScoreEventContext } from "@/lib/leaderboard/parseLatestScoreEventContext";
 
 function team(id: string, name: string, code: string): Team {
   return {
@@ -207,26 +207,18 @@ const reverted = revertMatchesToBeforeResult([upsetMatch], ["M-UPSET"]);
 assert.equal(reverted[0]!.status, "scheduled", "reverted match is no longer finished");
 assert.equal(reverted[0]!.home_goals, null, "reverted match clears goals");
 
-const outlookRow = (participantId: string, championAlive: boolean, livePaths: number): ParticipantRaceOutlookRow => ({
-  participantId,
-  displayName: participantNames.get(participantId) ?? participantId,
-  rank: 1,
-  totalPoints: 138,
-  championTeamName: championAlive ? "Favorite" : "Favorite",
-  championTeamCode: "FAV",
-  championAlive,
-  hasChampionPick: true,
-  pathValidLivePickCount: livePaths,
-  topRemainingPicks: [],
-  statusLabel: championAlive ? "Close behind" : "Champion dead",
-  leaderDisplayName: "Leader",
-  leaderLivePathCount: 6,
-  pointsBehindLeader: 0,
-});
-
-const hurtSummary = formatLeaderboardRaceSummaryWithImpact(
-  outlookRow("p-hurt", false, 3),
+const event = parseLatestScoreEventContext(
   {
+    match_label: "Underdog 2–1 Favorite",
+    scoreline: "Underdog 2–1 Favorite",
+    match_codes: ["M-UPSET"],
+  },
+  { hasValidSnapshot: true },
+);
+
+const hurtSummary = formatLeaderboardLatestImpactSummary({
+  totalPoints: 138,
+  momentum: {
     participantId: "p-hurt",
     previousRank: 1,
     currentRank: 1,
@@ -236,12 +228,12 @@ const hurtSummary = formatLeaderboardRaceSummaryWithImpact(
     recentPointsGained: 4,
     isNewEntry: false,
   },
-  hurt!,
-);
-assert.match(hurtSummary, /138 pts \(\+4\)/, "summary still shows score delta");
-assert.match(hurtSummary, /3 live paths \(−\d+\)/, "summary shows live path damage");
-assert.match(hurtSummary, /Champion dead/, "summary shows champion dead");
-assert.match(hurtSummary, /Hurt by upset/, "summary shows upset hurt label");
+  event,
+  bracketImpact: hurt!,
+});
+assert.match(hurtSummary.latestLine ?? "", /Underdog def\. Favorite: \+4/);
+assert.match(hurtSummary.impactLine ?? "", /Hurt by upset/);
+assert.match(hurtSummary.impactLine ?? "", /Champion dead/);
 
 assert.equal(
   classifyUpsetImpact({

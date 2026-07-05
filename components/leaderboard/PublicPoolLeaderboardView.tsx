@@ -38,6 +38,7 @@ import { ChampionPickExposureCard } from "@/components/pool/ChampionPickExposure
 import type { ChampionPickExposure } from "@/lib/pool/buildChampionPickExposure";
 import type { ParticipantRaceOutlook } from "@/lib/pool/buildParticipantRaceOutlook";
 import type { LeaderboardBracketImpactResult } from "@/lib/leaderboard/fetchLeaderboardBracketImpactForPool";
+import type { LeaderboardLatestScoreEventContext } from "@/lib/leaderboard/parseLatestScoreEventContext";
 
 function summaryCard(label: string, value: string, hint: string) {
   return (
@@ -150,6 +151,7 @@ type Props = {
   participantRaceOutlook?: ParticipantRaceOutlook | null;
   leaderboardMomentum?: LeaderboardMomentumResult | null;
   leaderboardBracketImpact?: LeaderboardBracketImpactResult | null;
+  latestScoreEvent?: LeaderboardLatestScoreEventContext | null;
 };
 
 export function PublicPoolLeaderboardView({
@@ -172,6 +174,7 @@ export function PublicPoolLeaderboardView({
   participantRaceOutlook = null,
   leaderboardMomentum = null,
   leaderboardBracketImpact = null,
+  latestScoreEvent = null,
 }: Props) {
   if (leaderboardError) {
     return (
@@ -384,14 +387,17 @@ export function PublicPoolLeaderboardView({
                         raceOutlook={raceOutlook}
                         momentum={momentum}
                         bracketImpact={bracketImpact}
+                        latestScoreEvent={latestScoreEvent}
                         layout="table"
                       />
                     </td>
                     <td className="px-4 py-3.5 text-right align-top">
                       <span className="text-lg font-bold tabular-nums text-ash-text">
-                        {formatPointsWithRecentDelta(row.totalPoints, momentum, {
-                          showZero: true,
-                        })}
+                        {formatPointsWithRecentDelta(
+                          row.totalPoints,
+                          latestScoreEvent?.hasValidSnapshot ? momentum : null,
+                          { showZero: true, latestSuffix: true },
+                        )}
                       </span>
                     </td>
                   </tr>
@@ -431,6 +437,7 @@ export function PublicPoolLeaderboardView({
                     raceOutlook={raceOutlook}
                     momentum={momentum}
                     bracketImpact={bracketImpact}
+                    latestScoreEvent={latestScoreEvent}
                     layout="mobile"
                     rankCell={rankCell(row, momentum)}
                   />

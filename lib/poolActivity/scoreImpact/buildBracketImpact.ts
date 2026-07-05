@@ -52,6 +52,8 @@ export type BracketImpactResult = {
   uniformPointsDelta: number | null;
   winnerTeamId: string | null;
   loserTeamId: string | null;
+  winnerTeamName: string | null;
+  loserTeamName: string | null;
   hasMeaningfulBracketChange: boolean;
 };
 
@@ -418,12 +420,22 @@ export function buildBracketImpactForPool(input: {
     pointGainers: input.pointGainers,
   });
 
+  const teamById = new Map(input.teams.map((team) => [team.id, team]));
+  const winnerTeamName = winnerTeamId
+    ? teamById.get(winnerTeamId)?.name?.trim() ?? null
+    : null;
+  const loserTeamName = loserTeamId
+    ? teamById.get(loserTeamId)?.name?.trim() ?? null
+    : null;
+
   return {
     rows,
     summary: buildSummary(rows),
     uniformPointsDelta,
     winnerTeamId,
     loserTeamId,
+    winnerTeamName,
+    loserTeamName,
     hasMeaningfulBracketChange,
   };
 }
@@ -434,6 +446,8 @@ export function bracketImpactToMetadata(
   return {
     match_winner_team_id: result.winnerTeamId ?? undefined,
     match_loser_team_id: result.loserTeamId ?? undefined,
+    winner_team_name: result.winnerTeamName ?? undefined,
+    loser_team_name: result.loserTeamName ?? undefined,
     uniform_points_delta: result.uniformPointsDelta ?? undefined,
     summary: result.summary,
     rows: result.rows.map(

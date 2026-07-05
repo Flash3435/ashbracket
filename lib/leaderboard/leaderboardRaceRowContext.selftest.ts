@@ -60,7 +60,7 @@ const baseOutlook = outlookRow();
 {
   assert.equal(
     formatLeaderboardRaceSummary(baseOutlook),
-    "62 pts · France champion alive · 11 live paths",
+    "62 pts · 11 live paths · Champion alive",
   );
   assert.equal(
     formatLeaderboardRaceSummary(
@@ -74,7 +74,7 @@ const baseOutlook = outlookRow();
         pathValidLivePickCount: 2,
       }),
     ),
-    "59 pts · Champion dead · 2 live paths",
+    "59 pts · 2 live paths · Champion dead",
   );
   assert.equal(
     formatLeaderboardRaceSummary(

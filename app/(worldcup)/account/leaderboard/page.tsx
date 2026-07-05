@@ -9,8 +9,7 @@ import { fetchMemberPoolStandings } from "@/lib/leaderboard/fetchMemberPoolStand
 import { fetchBracketOutlookForPool } from "@/lib/leaderboard/fetchBracketOutlookForPool";
 import { fetchChampionPickExposureForPool } from "@/lib/pool/fetchChampionPickExposureForPool";
 import { fetchParticipantRaceOutlookForPool } from "@/lib/pool/fetchParticipantRaceOutlookForPool";
-import { fetchLeaderboardMomentumForPool } from "@/lib/leaderboard/fetchLeaderboardMomentumForPool";
-import { fetchLeaderboardBracketImpactForPool } from "@/lib/leaderboard/fetchLeaderboardBracketImpactForPool";
+import { fetchLeaderboardLatestScoreImpactForPool } from "@/lib/leaderboard/fetchLeaderboardLatestScoreImpactForPool";
 import { createServiceRoleClient } from "@/lib/supabase/service";
 import { computeBracketOutlookSummary } from "@/lib/leaderboard/bracketOutlookSeparation";
 import {
@@ -151,23 +150,17 @@ export default async function AccountLeaderboardPage({ searchParams }: PageProps
       ? raceOutlookRes.outlook
       : null;
 
-  const leaderboardMomentum =
+  const latestScoreImpact =
     standings.ok && standingsRows.length > 0
-      ? await fetchLeaderboardMomentumForPool(
+      ? await fetchLeaderboardLatestScoreImpactForPool(
           createServiceRoleClient(),
           selectedPoolId,
           standingsRows,
         ).catch(() => null)
       : null;
-
-  const leaderboardBracketImpact =
-    standings.ok && standingsRows.length > 0
-      ? await fetchLeaderboardBracketImpactForPool(
-          createServiceRoleClient(),
-          selectedPoolId,
-          standingsRows,
-        ).catch(() => null)
-      : null;
+  const leaderboardMomentum = latestScoreImpact?.momentum ?? null;
+  const leaderboardBracketImpact = latestScoreImpact?.bracketImpact ?? null;
+  const latestScoreEvent = latestScoreImpact?.event ?? null;
 
   const revealHref = `/account/reveal?participant=${ctx.selectedId}`;
   const activityHref = `/account/activity?participant=${ctx.selectedId}`;
@@ -239,6 +232,7 @@ export default async function AccountLeaderboardPage({ searchParams }: PageProps
           participantRaceOutlook={participantRaceOutlook}
           leaderboardMomentum={leaderboardMomentum}
           leaderboardBracketImpact={leaderboardBracketImpact}
+          latestScoreEvent={latestScoreEvent}
         />
       )}
     </PageContainer>

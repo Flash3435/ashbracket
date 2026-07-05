@@ -12,8 +12,7 @@ import { poolLocked } from "@/lib/pools/poolLocked";
 import { fetchBracketOutlookForPool } from "@/lib/leaderboard/fetchBracketOutlookForPool";
 import { fetchChampionPickExposureForPool } from "@/lib/pool/fetchChampionPickExposureForPool";
 import { fetchParticipantRaceOutlookForPool } from "@/lib/pool/fetchParticipantRaceOutlookForPool";
-import { fetchLeaderboardMomentumForPool } from "@/lib/leaderboard/fetchLeaderboardMomentumForPool";
-import { fetchLeaderboardBracketImpactForPool } from "@/lib/leaderboard/fetchLeaderboardBracketImpactForPool";
+import { fetchLeaderboardLatestScoreImpactForPool } from "@/lib/leaderboard/fetchLeaderboardLatestScoreImpactForPool";
 import { computeBracketOutlookSummary } from "@/lib/leaderboard/bracketOutlookSeparation";
 import { TournamentStatLeadersPanel } from "@/components/tournament/TournamentStatLeadersPanel";
 import { loadTournamentTeamStatLeaders } from "@/lib/tournament/matchTeamStats/loadTournamentTeamStatLeaders";
@@ -120,19 +119,15 @@ export default async function PublicPoolLeaderboardPage({ params }: PageProps) {
       ? raceOutlookRes.outlook
       : null;
 
-  const leaderboardMomentum =
+  const latestScoreImpact =
     picksLocked && rows.length > 0
-      ? await fetchLeaderboardMomentumForPool(service, poolIdTrimmed, rows).catch(
+      ? await fetchLeaderboardLatestScoreImpactForPool(service, poolIdTrimmed, rows).catch(
           () => null,
         )
       : null;
-
-  const leaderboardBracketImpact =
-    picksLocked && rows.length > 0
-      ? await fetchLeaderboardBracketImpactForPool(service, poolIdTrimmed, rows).catch(
-          () => null,
-        )
-      : null;
+  const leaderboardMomentum = latestScoreImpact?.momentum ?? null;
+  const leaderboardBracketImpact = latestScoreImpact?.bracketImpact ?? null;
+  const latestScoreEvent = latestScoreImpact?.event ?? null;
 
   return (
     <PageContainer>
@@ -165,6 +160,7 @@ export default async function PublicPoolLeaderboardPage({ params }: PageProps) {
         participantRaceOutlook={participantRaceOutlook}
         leaderboardMomentum={leaderboardMomentum}
         leaderboardBracketImpact={leaderboardBracketImpact}
+        latestScoreEvent={latestScoreEvent}
       />
     </PageContainer>
   );

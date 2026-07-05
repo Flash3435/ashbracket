@@ -11,6 +11,7 @@ import {
   formatSoftImpactNamesLine,
 } from "./buildSoftImpact";
 import { formatBracketImpactSummaryLines } from "@/lib/leaderboard/leaderboardBracketImpactDisplay";
+import { parseLatestScoreEventContext } from "@/lib/leaderboard/parseLatestScoreEventContext";
 
 export type ParsedScoreImpactMetadata = {
   matchLabel: string | null;
@@ -300,6 +301,7 @@ export function buildScoreImpactDisplayLines(
       affectedCount: bracketCount,
       summary,
       hasRankMovement: parsed.leaderboardMovement != null,
+      event: parseLatestScoreEventContext(metadata, { hasValidSnapshot: true }),
     });
     detailLines.push(...bracketImpactLines);
 
