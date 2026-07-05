@@ -5,6 +5,7 @@ import { isGlobalAdmin } from "@/lib/auth/permissions";
 import { OFFICIAL_EDITION_CODE } from "@/lib/config/officialTournament";
 import {
   buildScoreImpactMatchResults,
+  buildScoreImpactMatchResultsFromMatchCodes,
   scoreImpactSignatureFromMatchResults,
 } from "@/lib/poolActivity/scoreImpact/buildScoreImpactMatchResults";
 import { loadTeamNameMapForEdition } from "@/lib/poolActivity/scoreImpact/loadScoreImpactContext";
@@ -59,6 +60,7 @@ export type LiveScoresApplyScoresResult =
       standingsRecalculationPending: boolean;
       pendingPoolIds: string[];
       pendingPoolCount: number;
+      appliedMatchCodes: string[];
     }
   | {
       ok: false;
@@ -341,6 +343,7 @@ export async function runLiveScoresApplyScoresOnly(
 
     const standingsRecalculationPending =
       scoresWereApplied && pendingPoolIds.length > 0;
+    const appliedMatchCodes = patches.map((patch) => patch.matchCode);
 
     const message = standingsRecalculationPending
       ? buildLiveScoresScoresSavedMessage({
@@ -399,6 +402,7 @@ export async function runLiveScoresApplyScoresOnly(
       standingsRecalculationPending,
       pendingPoolIds,
       pendingPoolCount: pendingPoolIds.length,
+      appliedMatchCodes,
     };
   } catch (e) {
     logger.log("action.failed", { error: messageFromUnknown(e) });
@@ -420,6 +424,7 @@ export async function runLiveScoresRecalculateOnePool(
     poolIndex: number;
     poolTotal: number;
     productionAcknowledged?: boolean;
+    appliedMatchCodes?: string[];
     logger?: ApplyPhaseLogger;
   },
 ): Promise<LiveScoresRecalculatePoolResult> {
@@ -501,11 +506,17 @@ export async function runLiveScoresRecalculateOnePool(
     }
 
     const teamNameById = await loadTeamNameMapForEdition(supabase, input.editionId);
-    const matchResults = buildScoreImpactMatchResults({
-      matches: rawMatches ?? [],
-      patches: [],
-      teamNameById,
-    });
+    const matchResults = input.appliedMatchCodes?.length
+      ? buildScoreImpactMatchResultsFromMatchCodes({
+          matches: rawMatches ?? [],
+          matchCodes: input.appliedMatchCodes,
+          teamNameById,
+        })
+      : buildScoreImpactMatchResults({
+          matches: rawMatches ?? [],
+          patches: [],
+          teamNameById,
+        });
     const scoreSignature = scoreImpactSignatureFromMatchResults(matchResults);
 
     const ledgerOut = await logger.time(

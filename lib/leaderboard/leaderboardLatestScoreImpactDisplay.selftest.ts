@@ -10,6 +10,9 @@ import {
 import { parseLatestScoreEventContext } from "./parseLatestScoreEventContext";
 import type { LeaderboardMomentumRow } from "./buildLeaderboardMomentum";
 import type { BracketImpactParticipantRow } from "@/lib/poolActivity/scoreImpact/buildBracketImpact";
+import { buildScoreImpactMetadata } from "@/lib/poolActivity/scoreImpact/buildScoreImpactMetadata";
+import { detectScoreImpact } from "@/lib/poolActivity/scoreImpact/detectScoreImpact";
+import { buildScoreImpactMatchResultsFromMatchCodes } from "@/lib/poolActivity/scoreImpact/buildScoreImpactMatchResults";
 
 function momentum(points: number, rankChange = 0): LeaderboardMomentumRow {
   return {
@@ -28,11 +31,12 @@ const event = parseLatestScoreEventContext(
   {
     match_label: "Morocco 2–1 Canada",
     scoreline: "Morocco 2–1 Canada",
-    match_codes: ["M-UPSET"],
+    match_codes: ["M90"],
   },
   { hasValidSnapshot: true },
 );
 
+assert.equal(event.eventKind, "single_match");
 assert.equal(event.isSingleMatch, true);
 assert.equal(event.winnerTeamName, "Morocco");
 assert.equal(event.loserTeamName, "Canada");
@@ -75,15 +79,64 @@ assert.equal(
 
 const multiEvent = parseLatestScoreEventContext(
   {
-    match_codes: ["M1", "M2"],
+    match_codes: ["M89", "M90"],
     match_label: "Knockout results",
   },
   { hasValidSnapshot: true },
 );
+assert.equal(multiEvent.eventKind, "multi_match");
 assert.equal(
   formatLatestMatchScoringLine(momentum(8), multiEvent),
-  "Latest: +8 from 2-match update",
+  "Latest update: +8 from 2 matches",
   "multi-match update label",
+);
+
+const noMatchEvent = parseLatestScoreEventContext(
+  {
+    match_codes: [],
+    trigger: "tournament_sync",
+    has_previous_snapshot: true,
+  },
+  { hasValidSnapshot: true },
+);
+assert.equal(noMatchEvent.eventKind, "generic_update");
+assert.equal(noMatchEvent.matchCount, 0);
+const noMatchLine = formatLatestMatchScoringLine(momentum(4), noMatchEvent);
+assert.equal(noMatchLine, "Latest update: +4", "zero-match fallback without match count");
+assert.ok(
+  !noMatchLine?.includes("0-match"),
+  "must never show 0-match update copy",
+);
+
+const refreshEvent = parseLatestScoreEventContext(
+  {
+    match_codes: [],
+    trigger: "admin_manual_recompute",
+  },
+  { hasValidSnapshot: true },
+);
+assert.equal(refreshEvent.eventKind, "scoring_refresh");
+assert.equal(
+  formatLatestMatchScoringLine(momentum(4), refreshEvent),
+  "Scoring refresh: +4",
+  "manual recompute without match metadata",
+);
+
+const bracketImpactEvent = parseLatestScoreEventContext(
+  {
+    match_codes: [],
+    bracket_impact: {
+      winner_team_name: "Morocco",
+      loser_team_name: "Canada",
+    },
+  },
+  { hasValidSnapshot: true },
+);
+assert.equal(bracketImpactEvent.eventKind, "single_match");
+assert.equal(
+  formatLatestMatchScoringLine(momentum(4), bracketImpactEvent),
+  "Morocco def. Canada: +4",
+  "bracket_impact winner/loser fills single-match label",
 );
 
 const hurtImpact: BracketImpactParticipantRow = {
@@ -133,5 +186,62 @@ assert.match(
   /All 42 participants gained \+4 from Morocco def\. Canada/,
 );
 assert.match(uniformLines[1] ?? "", /race changed through bracket paths/i);
+
+const moroccoMatchResults = buildScoreImpactMatchResultsFromMatchCodes({
+  matches: [
+    {
+      match_code: "M90",
+      group_code: null,
+      stage_code: "knockout",
+      home_team_id: "team-morocco",
+      away_team_id: "team-canada",
+      home_goals: 2,
+      away_goals: 1,
+      winner_team_id: "team-morocco",
+    },
+  ],
+  matchCodes: ["M90"],
+  teamNameById: new Map([
+    ["team-morocco", "Morocco"],
+    ["team-canada", "Canada"],
+  ]),
+});
+assert.equal(moroccoMatchResults.length, 1);
+assert.equal(moroccoMatchResults[0]!.matchCode, "M90");
+assert.match(moroccoMatchResults[0]!.label, /Morocco 2–1 Canada/);
+
+const row = (
+  participantId: string,
+  displayName: string,
+  totalPoints: number,
+  rank: number,
+) => ({
+  participantId,
+  displayName,
+  totalPoints,
+  rank,
+});
+
+const beforeRows = [row("p1", "Emil", 134, 1)];
+const afterRows = [row("p1", "Emil", 138, 1)];
+const analysis = detectScoreImpact({
+  beforeRows,
+  afterRows,
+  matchResults: moroccoMatchResults,
+});
+const persistedMetadata = buildScoreImpactMetadata({
+  analysis,
+  beforeRows,
+  afterRows,
+  matchResults: moroccoMatchResults,
+  participantNames: new Map([["p1", "Emil"]]),
+  trigger: "tournament_sync",
+  sourceKey: "test",
+  standingsHash: "hash",
+  scoreSignature: "sig",
+});
+assert.deepEqual(persistedMetadata.match_codes, ["M90"]);
+assert.equal(persistedMetadata.match_id, "M90");
+assert.match(persistedMetadata.match_label ?? "", /Morocco 2–1 Canada/);
 
 console.log("leaderboardLatestScoreImpactDisplay.selftest.ts: ok");

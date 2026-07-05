@@ -16,6 +16,7 @@ type RecalculateRequestBody = {
   poolId?: string;
   poolIndex?: number;
   poolTotal?: number;
+  appliedMatchCodes?: string[];
   productionAcknowledged?: boolean;
   revalidateWhenComplete?: boolean;
 };
@@ -64,11 +65,18 @@ export async function POST(req: Request) {
     const poolIndex = Number.isFinite(body.poolIndex) ? Number(body.poolIndex) : 0;
     const poolTotal = Number.isFinite(body.poolTotal) ? Number(body.poolTotal) : 1;
 
+    const appliedMatchCodes = Array.isArray(body.appliedMatchCodes)
+      ? body.appliedMatchCodes.filter(
+          (code): code is string => typeof code === "string" && code.trim().length > 0,
+        )
+      : undefined;
+
     const result = await runLiveScoresRecalculateOnePool(supabase, {
       editionId,
       poolId,
       poolIndex,
       poolTotal,
+      appliedMatchCodes,
       productionAcknowledged: body.productionAcknowledged,
     });
 

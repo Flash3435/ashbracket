@@ -56,6 +56,7 @@ export async function postLiveScoresRecalculatePool(input: {
   poolId: string;
   poolIndex: number;
   poolTotal: number;
+  appliedMatchCodes?: string[];
   productionAcknowledged: boolean;
   revalidateWhenComplete?: boolean;
 }): Promise<LiveScoresClientCallResult<LiveScoresRecalculatePoolResult>> {

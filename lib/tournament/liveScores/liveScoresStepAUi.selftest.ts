@@ -86,12 +86,14 @@ const success = interpretStepAResponse({
     standingsRecalculationPending: true,
     pendingPoolIds: ["p1", "p2"],
     pendingPoolCount: 2,
+    appliedMatchCodes: ["M90", "M91"],
   },
 });
 assert.equal(success.kind, "success");
 if (success.kind === "success") {
   assert.equal(success.showStepB, true);
   assert.equal(success.pendingPoolIds.length, 2);
+  assert.deepEqual(success.appliedMatchCodes, ["M90", "M91"]);
 }
 
 console.log("liveScoresStepAUi.selftest.ts: all assertions passed");

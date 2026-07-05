@@ -1,9 +1,17 @@
+export type LatestScoreEventKind =
+  | "single_match"
+  | "multi_match"
+  | "generic_update"
+  | "scoring_refresh";
+
 export type LeaderboardLatestScoreEventContext = {
   hasValidSnapshot: boolean;
+  eventKind: LatestScoreEventKind;
   matchLabel: string | null;
   scoreline: string | null;
   matchCodes: string[];
   matchCount: number;
+  /** True when the update can be attributed to one match (code or resolvable label). */
   isSingleMatch: boolean;
   winnerTeamName: string | null;
   loserTeamName: string | null;
@@ -14,11 +22,43 @@ function readString(v: unknown): string | null {
   return typeof v === "string" && v.trim() ? v.trim() : null;
 }
 
-function readMatchCodes(raw: unknown): string[] {
+function readMatchCodesArray(raw: unknown): string[] {
   if (!Array.isArray(raw)) return [];
   return raw
     .filter((code): code is string => typeof code === "string" && code.trim().length > 0)
     .map((code) => code.trim());
+}
+
+function readMatchCodesFromMetadata(metadata: Record<string, unknown>): string[] {
+  const fromArray = readMatchCodesArray(metadata.match_codes);
+  if (fromArray.length > 0) return fromArray;
+
+  const fromResult = readMatchCodesArray(metadata.result_match_codes);
+  if (fromResult.length > 0) return fromResult;
+
+  const single = readString(metadata.match_id) ?? readString(metadata.match_code);
+  if (single) return [single];
+
+  if (Array.isArray(metadata.matches)) {
+    const codes = metadata.matches
+      .map((entry) => {
+        if (entry == null || typeof entry !== "object") return null;
+        return readString((entry as { match_code?: unknown }).match_code);
+      })
+      .filter((code): code is string => Boolean(code));
+    if (codes.length > 0) return codes;
+  }
+
+  return [];
+}
+
+const SCORING_REFRESH_TRIGGERS = new Set([
+  "admin_manual_recompute",
+  "admin_recompute_all_pools",
+]);
+
+function isScoringRefreshTrigger(trigger: string | null): boolean {
+  return trigger != null && SCORING_REFRESH_TRIGGERS.has(trigger);
 }
 
 /** Parse "Morocco 2–1 Canada" into winner/loser team names when possible. */
@@ -50,6 +90,28 @@ export function parseMatchupFromScoreLabel(
   return { winnerTeamName: away, loserTeamName: home };
 }
 
+function parseDefPatternLabel(text: string): string | null {
+  const defMatch = text.match(/([A-Za-z][\w\s.'-]+?)\s+def\.\s+([A-Za-z][\w\s.'-]+)/u);
+  if (!defMatch) return null;
+  return `${defMatch[1]!.trim()} def. ${defMatch[2]!.trim()}`;
+}
+
+function readLabelFromBodyOrTitle(metadata: Record<string, unknown>): string | null {
+  const candidates = [
+    readString(metadata.title),
+    readString(metadata.body),
+    readString(metadata.headline),
+  ];
+  for (const text of candidates) {
+    if (!text) continue;
+    const parsed = parseMatchupFromScoreLabel(text);
+    if (parsed.winnerTeamName) return text;
+    const defLabel = parseDefPatternLabel(text);
+    if (defLabel) return defLabel;
+  }
+  return null;
+}
+
 export function formatMatchupShortLabel(input: {
   winnerTeamName: string | null;
   loserTeamName: string | null;
@@ -58,15 +120,32 @@ export function formatMatchupShortLabel(input: {
   if (input.winnerTeamName && input.loserTeamName) {
     return `${input.winnerTeamName} def. ${input.loserTeamName}`;
   }
-  return input.fallbackLabel?.trim() || null;
+  const fallback = input.fallbackLabel?.trim() || null;
+  if (fallback) {
+    const defLabel = parseDefPatternLabel(fallback);
+    if (defLabel) return defLabel;
+  }
+  return fallback;
+}
+
+function resolveEventKind(input: {
+  matchCount: number;
+  hasResolvableSingleMatch: boolean;
+  trigger: string | null;
+}): LatestScoreEventKind {
+  if (input.matchCount >= 2) return "multi_match";
+  if (input.matchCount === 1 || input.hasResolvableSingleMatch) return "single_match";
+  if (isScoringRefreshTrigger(input.trigger)) return "scoring_refresh";
+  return "generic_update";
 }
 
 export function parseLatestScoreEventContext(
   metadata: Record<string, unknown>,
   options?: { hasValidSnapshot?: boolean },
 ): LeaderboardLatestScoreEventContext {
-  const matchCodes = readMatchCodes(metadata.match_codes);
-  const matchLabel = readString(metadata.match_label);
+  const matchCodes = readMatchCodesFromMetadata(metadata);
+  const matchLabel =
+    readString(metadata.match_label) ?? readLabelFromBodyOrTitle(metadata);
   const scoreline = readString(metadata.scoreline) ?? matchLabel;
   const parsed = parseMatchupFromScoreLabel(scoreline);
 
@@ -90,13 +169,25 @@ export function parseLatestScoreEventContext(
     fallbackLabel: matchLabel,
   });
 
+  const hasResolvableSingleMatch = Boolean(
+    matchupShortLabel || (matchLabel && parseMatchupFromScoreLabel(matchLabel).winnerTeamName),
+  );
+  const trigger = readString(metadata.trigger);
+  const matchCount = matchCodes.length;
+  const eventKind = resolveEventKind({
+    matchCount,
+    hasResolvableSingleMatch,
+    trigger,
+  });
+
   return {
     hasValidSnapshot: options?.hasValidSnapshot ?? false,
+    eventKind,
     matchLabel,
     scoreline,
     matchCodes,
-    matchCount: matchCodes.length,
-    isSingleMatch: matchCodes.length === 1,
+    matchCount,
+    isSingleMatch: eventKind === "single_match",
     winnerTeamName,
     loserTeamName,
     matchupShortLabel,

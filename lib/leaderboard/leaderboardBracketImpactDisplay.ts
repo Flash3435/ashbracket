@@ -66,8 +66,16 @@ export function formatLatestMatchScoringLine(
   const pointsToken = formatLatestPointsToken(momentum);
   if (!pointsToken) return null;
 
-  if (!event.isSingleMatch) {
-    return `Latest: ${pointsToken} from ${event.matchCount}-match update`;
+  switch (event.eventKind) {
+    case "multi_match":
+      return `Latest update: ${pointsToken} from ${event.matchCount} matches`;
+    case "scoring_refresh":
+      return `Scoring refresh: ${pointsToken}`;
+    case "generic_update":
+      return `Latest update: ${pointsToken}`;
+    case "single_match":
+    default:
+      break;
   }
 
   if (
@@ -86,7 +94,11 @@ export function formatLatestMatchScoringLine(
     return `Latest: ${event.matchLabel} ${pointsToken}`;
   }
 
-  return `Latest result: ${pointsToken}`;
+  if (event.winnerTeamName) {
+    return `Latest: ${event.winnerTeamName} result ${pointsToken}`;
+  }
+
+  return `Latest update: ${pointsToken}`;
 }
 
 export function formatLeaderboardBracketImpactLine(input: {
@@ -216,7 +228,9 @@ export function formatBracketImpactSummaryLines(input: {
     const resultLabel =
       event?.matchupShortLabel ??
       event?.matchLabel ??
-      "this result";
+      (event?.eventKind === "scoring_refresh" || event?.eventKind === "generic_update"
+        ? "this scoring update"
+        : "this result");
     const bracketLabel =
       affectedCount === 1
         ? "Everyone gained"
@@ -325,7 +339,7 @@ export function formatExpandedBracketImpactContext(
     parts.push("Semifinal path lost.");
   }
 
-  if (event && event.matchCount > 1) {
+  if (event?.eventKind === "multi_match" && event.matchCount >= 2) {
     parts.push(`${event.matchCount} matches scored in the latest update.`);
   }
 

@@ -49,6 +49,7 @@ export async function recalculateLivePoolStandingsAction(input: {
   poolId: string;
   poolIndex: number;
   poolTotal: number;
+  appliedMatchCodes?: string[];
   productionAcknowledged?: boolean;
 }): Promise<LiveScoresRecalculatePoolActionResult> {
   const supabase = await createClient();

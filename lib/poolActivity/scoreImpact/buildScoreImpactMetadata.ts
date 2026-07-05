@@ -76,9 +76,14 @@ export function buildScoreImpactMetadata(input: {
     trigger: input.trigger,
     standings_hash: input.standingsHash,
     score_signature: input.scoreSignature,
-    match_id: primaryMatch?.matchCode,
+    match_id: primaryMatch?.matchCode ?? analysis.primaryMatchCode ?? undefined,
     match_label: analysis.primaryMatchLabel ?? undefined,
-    match_codes: matchResults.map((m) => m.matchCode),
+    match_codes:
+      matchResults.length > 0
+        ? matchResults.map((m) => m.matchCode)
+        : analysis.primaryMatchCode
+          ? [analysis.primaryMatchCode]
+          : [],
     stage_label: stageLabelFromCode(analysis.stageCode),
     group_code: analysis.groupCode ?? undefined,
     scoreline: analysis.scoreline ?? undefined,

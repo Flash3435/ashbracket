@@ -81,6 +81,7 @@ function storePreviewDebug(debug: string | null) {
 type StandingsRecalcState = {
   editionId: string;
   poolIds: string[];
+  appliedMatchCodes: string[];
   completed: number;
   failedPoolId?: string;
   error?: string;
@@ -547,6 +548,7 @@ export function LiveScoresFetchPanel({
         setStandingsRecalc({
           editionId: outcome.editionId,
           poolIds: outcome.pendingPoolIds,
+          appliedMatchCodes: outcome.appliedMatchCodes,
           completed: 0,
         });
       } else {
@@ -592,6 +594,7 @@ export function LiveScoresFetchPanel({
           poolId,
           poolIndex: index,
           poolTotal: total,
+          appliedMatchCodes: standingsRecalc.appliedMatchCodes,
           productionAcknowledged,
           revalidateWhenComplete: index === total - 1,
         });
@@ -616,6 +619,7 @@ export function LiveScoresFetchPanel({
         setStandingsRecalc({
           editionId: standingsRecalc.editionId,
           poolIds: standingsRecalc.poolIds,
+          appliedMatchCodes: standingsRecalc.appliedMatchCodes,
           completed,
         });
       }

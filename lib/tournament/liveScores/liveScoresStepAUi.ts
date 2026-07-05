@@ -21,6 +21,7 @@ export type StepAUiOutcome =
       showStepB: boolean;
       editionId: string;
       pendingPoolIds: string[];
+      appliedMatchCodes: string[];
     };
 
 export function interpretStepAResponse(input: {
@@ -71,5 +72,6 @@ export function interpretStepAResponse(input: {
     showStepB,
     editionId: payload.editionId,
     pendingPoolIds: payload.pendingPoolIds ?? [],
+    appliedMatchCodes: payload.appliedMatchCodes ?? [],
   };
 }
