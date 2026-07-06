@@ -24,6 +24,8 @@ import {
   type KnockoutMatchPickRow,
   type KnockoutWizardBracketKind,
 } from "../picks/knockoutMatchPickRows";
+import { isKnockoutMatchLockedForParticipant } from "../picks/knockoutPickEditability";
+import { evaluateMatchSlotSavedPick } from "../picks/knockoutStrictBracketPath";
 
 export const KNOCKOUT_PICK_CORRECTION_REASON_REQUIRED =
   "A reason is required for admin pick corrections.";
@@ -205,12 +207,39 @@ function resolveLaterKnockoutCorrectionMatch(input: {
   if (!row) {
     return { error: `Could not resolve ${input.matchCode} in the bracket model.` };
   }
+
+  const pubMatch =
+    input.tournamentMatches.find((m) => m.match_code === input.matchCode) ??
+    input.tournamentMatches.find((m) =>
+      m.match_code.endsWith(`-${input.fifaMatchNo}`),
+    ) ??
+    null;
+  const slotEval = evaluateMatchSlotSavedPick({
+    wizardKind: range.bracketKind,
+    matchIndex,
+    slots: input.slots,
+    teams: input.teams,
+    tournamentMatches: input.tournamentMatches,
+    gradual: input.gradual,
+    knockoutBracketPicksUnlocked: input.knockoutBracketPicksUnlocked,
+  });
+  const liveSavedBeforeKickoff =
+    row.lockReason === "frozen" &&
+    slotEval?.status === "live" &&
+    pubMatch != null &&
+    !isKnockoutMatchLockedForParticipant(pubMatch, input.nowMs);
+
   if (row.lockReason !== "started" && row.lockReason !== "frozen") {
     if (row.lockReason === "incomplete") {
       return {
         error: `${input.matchCode} is not ready for correction — upstream picks are incomplete.`,
       };
     }
+    return {
+      error: `${input.matchCode} has not kicked off yet; use the normal pick editor.`,
+    };
+  }
+  if (liveSavedBeforeKickoff) {
     return {
       error: `${input.matchCode} has not kicked off yet; use the normal pick editor.`,
     };

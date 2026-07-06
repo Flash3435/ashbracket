@@ -1187,15 +1187,23 @@ export function buildKnockoutMatchPickRows(
       lockReason = "started";
     } else if (
       matchSlotPickEvaluation?.status === "out" &&
-      Boolean(winnerTeamId)
+      Boolean(matchSlotPickEvaluation.savedTeamId)
+    ) {
+      lockReason = "frozen";
+    } else if (
+      matchSlotPickEvaluation?.status === "live" &&
+      Boolean(matchSlotPickEvaluation.savedTeamId) &&
+      def.wizardBracketKind !== "round_of_16"
     ) {
       lockReason = "frozen";
     }
 
     const matchSlotStatusMessage =
       matchSlotPickEvaluation &&
-      matchSlotPickEvaluation.status === "out" &&
-      Boolean(winnerTeamId)
+      Boolean(matchSlotPickEvaluation.savedTeamId) &&
+      (matchSlotPickEvaluation.status === "out" ||
+        (matchSlotPickEvaluation.status === "live" &&
+          def.wizardBracketKind !== "round_of_16"))
         ? matchSlotSavedPickStatusCopy(
             matchSlotPickEvaluation,
             input.teams,

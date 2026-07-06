@@ -340,7 +340,13 @@ export function isStrictBracketPathBlockedForParticipant(input: {
   knockoutBracketPicksUnlocked?: boolean;
   nowMs?: number;
 }): boolean {
-  return false;
+  if (input.wizardKind === "round_of_16") return false;
+  const evaluation = evaluateMatchSlotSavedPick(input);
+  return (
+    evaluation?.status === "live" ||
+    evaluation?.status === "out" ||
+    false
+  );
 }
 
 /** Map a saved progression slot to the wizard match row it updates. */

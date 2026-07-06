@@ -166,7 +166,7 @@ const gradual = {
       gradual,
       knockoutBracketPicksUnlocked: true,
     }),
-    false,
+    true,
   );
 }
 
@@ -207,7 +207,7 @@ const gradual = {
       gradual,
       knockoutBracketPicksUnlocked: true,
     }),
-    false,
+    true,
   );
 }
 
