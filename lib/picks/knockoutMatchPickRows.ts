@@ -775,6 +775,7 @@ export function storedFeederSideTeamIdsForMatch(
 export type SavedUpstreamFeederPick = {
   teamId: string;
   pickStatus: import("../predictions/knockoutPickStatus").KnockoutPickStatus | null;
+  invalidReason: import("../predictions/pruneOfficialKnockoutPathPicks").KnockoutPathPickClearReason | null;
   saveRowKey: string;
 };
 
@@ -797,6 +798,7 @@ export function readSavedUpstreamFeederPick(
   return {
     teamId,
     pickStatus: saveRow?.pickStatus ?? null,
+    invalidReason: saveRow?.invalidReason ?? null,
     saveRowKey:
       saveRow?.rowKey ?? `${upstreamDef.resultKind}|${slotKey}`,
   };

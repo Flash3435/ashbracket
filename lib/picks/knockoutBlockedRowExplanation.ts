@@ -1,4 +1,5 @@
 import { knockoutParticipantSlotPair } from "../bracket/wc2026KnockoutPairings";
+import { eliminatedTeamIdsFromMatches } from "../participant/bracketMatchImpact";
 import type { ClearedKnockoutPathPick } from "../predictions/pruneOfficialKnockoutPathPicks";
 import { KNOCKOUT_MISSING_PICK_AFTER_KICKOFF } from "./knockoutPickEditability";
 import {
@@ -177,14 +178,31 @@ function downstreamPathStageLabel(
   return "path";
 }
 
-function eliminatedImmediateFeederCopy(
+function isTeamEliminatedFromTournament(
+  teamId: string,
+  input: BuildKnockoutMatchPickRowsInput,
+): boolean {
+  const matches = input.tournamentMatches;
+  if (!teamId.trim() || !matches?.length || !input.teams?.length) return false;
+  return eliminatedTeamIdsFromMatches(matches, input.teams).has(teamId.trim());
+}
+
+function blockedImmediateFeederCopy(
   parentBracketKind: KnockoutWizardBracketKind,
   pickTeamName: string | null,
+  teamId: string | null,
   roundLabel: string,
+  upstreamInput: BuildKnockoutMatchPickRowsInput,
 ): string {
   const pathStage = downstreamPathStageLabel(parentBracketKind);
   const pickLabel = pickTeamName ?? "your pick";
-  return `This ${pathStage} path is unavailable because your ${roundLabel} pick ${pickLabel} has been eliminated.`;
+  if (teamId && isTeamEliminatedFromTournament(teamId, upstreamInput)) {
+    return `This ${pathStage} path is unavailable because your ${roundLabel} pick ${pickLabel} has been eliminated.`;
+  }
+  if (pickTeamName || teamId) {
+    return `This ${pathStage} path is unavailable because your ${roundLabel} pick ${pickLabel} no longer feeds this matchup.`;
+  }
+  return `No ${pathStage} pick can be saved for this matchup right now.`;
 }
 
 function otherFeederStillAliveCopy(
@@ -215,7 +233,7 @@ function otherFeederStillAliveCopy(
       upstreamInput.teams,
     );
     if (otherTeamName) {
-      return `Your other ${roundLabel} pick ${otherTeamName} is still alive, but this matchup needs both feeder winners to be valid.`;
+      return `Your other ${roundLabel} pick ${otherTeamName} is still alive, but this matchup needs both feeder winners to come from the correct bracket paths.`;
     }
   }
   return null;
@@ -257,9 +275,9 @@ function lockedOutIndirectBlockedCopy(
   feederLabel: string | null,
 ): string {
   if (feederLabel) {
-    return `This pick is out because the ${feederLabel} feeder pick was eliminated.`;
+    return `This pick is out because the ${feederLabel} feeder pick no longer feeds this matchup.`;
   }
-  return "This pick is out because the feeder pick was eliminated.";
+  return "This pick is out because the feeder pick no longer feeds this matchup.";
 }
 
 export function clearedPickRowKeySet(
@@ -439,10 +457,12 @@ function classifyImmediateUpstreamFeeder(
         missingFeederLabel: pickTeamName ?? feederMatchup,
         feederState: "cleared_pick_locked",
         userAction: "locked_out",
-        userFacingCopy: eliminatedImmediateFeederCopy(
+        userFacingCopy: blockedImmediateFeederCopy(
           parentBracketKind,
           pickTeamName,
+          saved.teamId,
           roundLabel,
+          upstreamInput,
         ),
       };
     }
@@ -454,6 +474,7 @@ function classifyImmediateUpstreamFeeder(
       feeder.winnerTeamId,
       upstreamInput.teams,
     );
+    const clearedTeamId = feeder.winnerTeamId?.trim() || null;
     const pathStage = downstreamPathStageLabel(parentBracketKind);
     const usableMatchup =
       feederMatchup && !/^M\d+$/.test(feederMatchup) ? feederMatchup : null;
@@ -463,10 +484,12 @@ function classifyImmediateUpstreamFeeder(
       feederState: "cleared_pick_locked",
       userAction: "locked_out",
       userFacingCopy: clearedTeamName
-        ? eliminatedImmediateFeederCopy(
+        ? blockedImmediateFeederCopy(
             parentBracketKind,
             clearedTeamName,
+            clearedTeamId,
             roundLabel,
+            upstreamInput,
           )
         : usableMatchup
           ? `This ${pathStage} path is unavailable because your ${roundLabel} pick for ${usableMatchup} is no longer valid.`

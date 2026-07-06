@@ -2421,13 +2421,14 @@ function r32Side(slotKey: string, teamId = ""): KnockoutPickSlotDraft {
   assert.doesNotMatch(m102.display.emptyPrimaryLine!, /M91|M94/i);
 }
 
-// Eliminated QF winner blocks SF with immediate feeder copy
+// Invalid QF feeder path blocks SF — alive team, wrong bracket topology
 {
   const slots: KnockoutPickSlotDraft[] = [
     ...Array.from({ length: 16 }, (_, i) => r16Slot(String(i + 1), "team-rsa")),
     {
       ...sfSlot("1", "team-fra"),
       pickStatus: "out" as const,
+      invalidReason: "not_in_official_matchup" as const,
     },
     sfSlot("2", "team-ger"),
     sfSlot("3", "team-bra"),
@@ -2443,13 +2444,67 @@ function r32Side(slotKey: string, teamId = ""): KnockoutPickSlotDraft {
   assert.strictEqual(m101.lockReason, "incomplete");
   assert.match(
     m101.display.emptyPrimaryLine!,
-    /This semi-final path is unavailable because your quarter-final pick France has been eliminated/i,
+    /This semi-final path is unavailable because your quarter-final pick France no longer feeds this matchup/i,
   );
+  assert.doesNotMatch(m101.display.emptyPrimaryLine!, /France has been eliminated/i);
   assert.doesNotMatch(m101.display.emptyPrimaryLine!, /M91|M89/i);
   assert.doesNotMatch(m101.display.emptyPrimaryLine!, /\bM97\b/i);
 }
 
-// Mixed QF feeders: one eliminated, one still alive — SF blocked with team names
+// Truly eliminated QF pick blocks SF when official results confirm elimination
+{
+  const tournamentMatches: TournamentMatchPublicRow[] = [
+    {
+      match_id: "m89",
+      edition_id: "ed",
+      edition_code: "2026",
+      match_code: "M89",
+      stage_code: "round_of_16",
+      stage_label: "Round of 16",
+      stage_sort_order: 3,
+      group_code: null,
+      round_index: 0,
+      kickoff_at: "2026-07-08T18:00:00Z",
+      status: "finished",
+      home_goals: 0,
+      away_goals: 2,
+      home_penalties: null,
+      away_penalties: null,
+      home_team_name: "France",
+      home_country_code: "FRA",
+      away_team_name: "Germany",
+      away_country_code: "GER",
+      winner_team_name: "Germany",
+      winner_country_code: "GER",
+    },
+  ];
+  const slots: KnockoutPickSlotDraft[] = [
+    ...Array.from({ length: 16 }, (_, i) => r16Slot(String(i + 1), "team-rsa")),
+    {
+      ...sfSlot("1", "team-fra"),
+      pickStatus: "out" as const,
+      invalidReason: "not_in_official_matchup" as const,
+    },
+    sfSlot("2", "team-ger"),
+    sfSlot("3", "team-bra"),
+    sfSlot("4", "team-arg"),
+  ];
+  const input = {
+    bracketKind: "semifinalist" as const,
+    slots,
+    teams,
+    tournamentMatches,
+    knockoutBracketPicksUnlocked: true,
+  };
+  const m101 = buildKnockoutMatchPickRows(input).find((r) => r.fifaMatchNo === 101)!;
+  assert.strictEqual(m101.lockReason, "incomplete");
+  assert.match(
+    m101.display.emptyPrimaryLine!,
+    /This semi-final path is unavailable because your quarter-final pick France has been eliminated/i,
+  );
+}
+
+// Mixed QF feeders: one wrong-path pick, one still alive — SF blocked with team names
 {
   const mixedTeams: Team[] = [
     ...teams,
@@ -2506,10 +2561,16 @@ function r32Side(slotKey: string, teamId = ""): KnockoutPickSlotDraft {
   ];
   const slots: KnockoutPickSlotDraft[] = [
     ...Array.from({ length: 16 }, (_, i) => r16Slot(String(i + 1), "team-ger")),
+    {
+      ...sfSlot("1", "team-fra"),
+      pickStatus: "out" as const,
+      invalidReason: "not_in_official_matchup" as const,
+    },
     sfSlot("2", "team-esp"),
     {
       ...sfSlot("3", "team-eng"),
       pickStatus: "out" as const,
+      invalidReason: "not_in_official_matchup" as const,
     },
     sfSlot("4", "team-arg"),
   ];
@@ -2519,29 +2580,31 @@ function r32Side(slotKey: string, teamId = ""): KnockoutPickSlotDraft {
     teams: mixedTeams,
     knockoutBracketPicksUnlocked: true,
   };
-  const m102 = buildKnockoutMatchPickRows(sfInput).find((r) => r.fifaMatchNo === 102)!;
-  assert.strictEqual(m102.lockReason, "incomplete");
-  assert.match(
-    m102.display.emptyPrimaryLine!,
-    /This semi-final path is unavailable because your quarter-final pick England has been eliminated/i,
-  );
-  assert.match(
-    m102.display.emptyPrimaryLine!,
-    /Your other quarter-final pick Argentina is still alive/i,
-  );
-  assert.doesNotMatch(m102.display.emptyPrimaryLine!, /\bM99\b/i);
-  assert.doesNotMatch(m102.display.emptyPrimaryLine!, /Spain is still alive/i);
-
   const m101 = buildKnockoutMatchPickRows(sfInput).find((r) => r.fifaMatchNo === 101)!;
   assert.strictEqual(m101.lockReason, "incomplete");
   assert.match(
     m101.display.emptyPrimaryLine!,
-    /Waiting for your quarter-final pick/i,
+    /This semi-final path is unavailable because your quarter-final pick France no longer feeds this matchup/i,
   );
-  assert.doesNotMatch(
+  assert.match(
     m101.display.emptyPrimaryLine!,
-    /England has been eliminated/i,
+    /Your other quarter-final pick Spain is still alive, but this matchup needs both feeder winners to come from the correct bracket paths/i,
   );
+  assert.doesNotMatch(m101.display.emptyPrimaryLine!, /France has been eliminated/i);
+
+  const m102 = buildKnockoutMatchPickRows(sfInput).find((r) => r.fifaMatchNo === 102)!;
+  assert.strictEqual(m102.lockReason, "incomplete");
+  assert.match(
+    m102.display.emptyPrimaryLine!,
+    /This semi-final path is unavailable because your quarter-final pick England no longer feeds this matchup/i,
+  );
+  assert.match(
+    m102.display.emptyPrimaryLine!,
+    /Your other quarter-final pick Argentina is still alive, but this matchup needs both feeder winners to come from the correct bracket paths/i,
+  );
+  assert.doesNotMatch(m102.display.emptyPrimaryLine!, /\bM99\b/i);
+  assert.doesNotMatch(m102.display.emptyPrimaryLine!, /England has been eliminated/i);
+  assert.doesNotMatch(m102.display.emptyPrimaryLine!, /Spain is still alive/i);
 
   const sfStatus = getKnockoutStepCompletionFromDraftState(
     "semifinalist",
