@@ -1,5 +1,7 @@
 import { formatPoolPoints } from "@/lib/format/poolPoints";
 import type { LeaderboardMomentumRow } from "./buildLeaderboardMomentum";
+import type { LeaderboardLatestPointsBreakdown } from "./computeLatestMatchPointsBreakdown";
+import type { LeaderboardLatestScoreEventContext } from "./parseLatestScoreEventContext";
 
 export function formatRankMovementIndicator(
   momentum: LeaderboardMomentumRow | null | undefined,
@@ -23,10 +25,33 @@ export function rankMovementIndicatorClass(
 
 export function formatRecentPointsDelta(
   momentum: LeaderboardMomentumRow | null | undefined,
-  options?: { showZero?: boolean; latestSuffix?: boolean },
+  options?: {
+    showZero?: boolean;
+    latestSuffix?: boolean;
+    refreshSuffix?: boolean;
+    pointsBreakdown?: LeaderboardLatestPointsBreakdown | null;
+    event?: LeaderboardLatestScoreEventContext | null;
+  },
 ): string | null {
   if (!momentum) return null;
-  const suffix = options?.latestSuffix ? " latest" : "";
+
+  const isMatchAttributed =
+    options?.event?.eventKind === "single_match" ||
+    options?.event?.eventKind === "multi_match";
+  const isMixed = options?.pointsBreakdown?.isMixedUpdate === true;
+  const matchEqualsTotal =
+    options?.pointsBreakdown?.latestMatchPointsDelta != null &&
+    options.pointsBreakdown.latestMatchPointsDelta === momentum.recentPointsGained;
+
+  let suffix = "";
+  if (options?.refreshSuffix || isMixed) {
+    suffix = " refresh";
+  } else if (options?.latestSuffix && isMatchAttributed && matchEqualsTotal) {
+    suffix = " latest";
+  } else if (options?.latestSuffix && !isMatchAttributed) {
+    suffix = " latest";
+  }
+
   if (momentum.recentPointsGained <= 0) {
     return options?.showZero ? `(+0${suffix})` : null;
   }
@@ -37,7 +62,13 @@ export function formatRecentPointsDelta(
 export function formatPointsWithRecentDelta(
   totalPoints: number,
   momentum: LeaderboardMomentumRow | null | undefined,
-  options?: { showZero?: boolean; latestSuffix?: boolean },
+  options?: {
+    showZero?: boolean;
+    latestSuffix?: boolean;
+    refreshSuffix?: boolean;
+    pointsBreakdown?: LeaderboardLatestPointsBreakdown | null;
+    event?: LeaderboardLatestScoreEventContext | null;
+  },
 ): string {
   const base = `${formatPoolPoints(totalPoints)} pts`;
   const delta = formatRecentPointsDelta(momentum, options);

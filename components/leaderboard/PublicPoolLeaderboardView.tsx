@@ -39,6 +39,7 @@ import type { ChampionPickExposure } from "@/lib/pool/buildChampionPickExposure"
 import type { ParticipantRaceOutlook } from "@/lib/pool/buildParticipantRaceOutlook";
 import type { LeaderboardBracketImpactResult } from "@/lib/leaderboard/fetchLeaderboardBracketImpactForPool";
 import type { LeaderboardLatestScoreEventContext } from "@/lib/leaderboard/parseLatestScoreEventContext";
+import type { LeaderboardLatestPointsBreakdown } from "@/lib/leaderboard/computeLatestMatchPointsBreakdown";
 
 function summaryCard(label: string, value: string, hint: string) {
   return (
@@ -152,6 +153,7 @@ type Props = {
   leaderboardMomentum?: LeaderboardMomentumResult | null;
   leaderboardBracketImpact?: LeaderboardBracketImpactResult | null;
   latestScoreEvent?: LeaderboardLatestScoreEventContext | null;
+  pointsBreakdownByParticipantId?: Map<string, LeaderboardLatestPointsBreakdown>;
 };
 
 export function PublicPoolLeaderboardView({
@@ -175,6 +177,7 @@ export function PublicPoolLeaderboardView({
   leaderboardMomentum = null,
   leaderboardBracketImpact = null,
   latestScoreEvent = null,
+  pointsBreakdownByParticipantId = new Map(),
 }: Props) {
   if (leaderboardError) {
     return (
@@ -370,6 +373,11 @@ export function PublicPoolLeaderboardView({
                   momentumByParticipantId.get(row.participantId) ?? null;
                 const bracketImpact =
                   bracketImpactByParticipantId.get(row.participantId) ?? null;
+                const pointsBreakdown =
+                  pointsBreakdownByParticipantId.get(row.participantId) ?? null;
+                const isMatchAttributed =
+                  latestScoreEvent?.eventKind === "single_match" ||
+                  latestScoreEvent?.eventKind === "multi_match";
 
                 return (
                   <tr
@@ -388,6 +396,7 @@ export function PublicPoolLeaderboardView({
                         momentum={momentum}
                         bracketImpact={bracketImpact}
                         latestScoreEvent={latestScoreEvent}
+                        pointsBreakdown={pointsBreakdown}
                         layout="table"
                       />
                     </td>
@@ -396,7 +405,12 @@ export function PublicPoolLeaderboardView({
                         {formatPointsWithRecentDelta(
                           row.totalPoints,
                           latestScoreEvent?.hasValidSnapshot ? momentum : null,
-                          { showZero: true, latestSuffix: true },
+                          {
+                            showZero: true,
+                            latestSuffix: isMatchAttributed,
+                            pointsBreakdown,
+                            event: latestScoreEvent ?? undefined,
+                          },
                         )}
                       </span>
                     </td>
@@ -419,6 +433,8 @@ export function PublicPoolLeaderboardView({
               momentumByParticipantId.get(row.participantId) ?? null;
             const bracketImpact =
               bracketImpactByParticipantId.get(row.participantId) ?? null;
+            const pointsBreakdown =
+              pointsBreakdownByParticipantId.get(row.participantId) ?? null;
 
             return (
               <li
@@ -438,6 +454,7 @@ export function PublicPoolLeaderboardView({
                     momentum={momentum}
                     bracketImpact={bracketImpact}
                     latestScoreEvent={latestScoreEvent}
+                    pointsBreakdown={pointsBreakdown}
                     layout="mobile"
                     rankCell={rankCell(row, momentum)}
                   />

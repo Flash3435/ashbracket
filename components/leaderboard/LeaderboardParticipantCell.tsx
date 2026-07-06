@@ -4,6 +4,7 @@ import type { PublicPoolLeaderboardRowDisplay } from "@/lib/leaderboard/buildPub
 import type { LeaderboardMomentumRow } from "@/lib/leaderboard/buildLeaderboardMomentum";
 import type { BracketImpactParticipantRow } from "@/lib/poolActivity/scoreImpact/buildBracketImpact";
 import type { LeaderboardLatestScoreEventContext } from "@/lib/leaderboard/parseLatestScoreEventContext";
+import type { LeaderboardLatestPointsBreakdown } from "@/lib/leaderboard/computeLatestMatchPointsBreakdown";
 import {
   expandedTopRemainingPicks,
   formatExpandedRemainingPicksMoreLine,
@@ -26,12 +27,20 @@ import { ViewerYouChip } from "../ui/ViewerYouChip";
 
 function latestPointsOptions(
   event: LeaderboardLatestScoreEventContext | null | undefined,
-): { showZero?: boolean; latestSuffix?: boolean } {
+  pointsBreakdown?: LeaderboardLatestPointsBreakdown | null,
+): {
+  showZero?: boolean;
+  latestSuffix?: boolean;
+  pointsBreakdown?: LeaderboardLatestPointsBreakdown | null;
+  event?: LeaderboardLatestScoreEventContext | null;
+} {
   const isMatchAttributed =
     event?.eventKind === "single_match" || event?.eventKind === "multi_match";
   return {
     showZero: true,
     latestSuffix: isMatchAttributed,
+    pointsBreakdown,
+    event: event ?? undefined,
   };
 }
 
@@ -42,6 +51,7 @@ type Props = {
   momentum?: LeaderboardMomentumRow | null;
   bracketImpact?: BracketImpactParticipantRow | null;
   latestScoreEvent?: LeaderboardLatestScoreEventContext | null;
+  pointsBreakdown?: LeaderboardLatestPointsBreakdown | null;
   layout: "table" | "mobile";
   rankCell?: ReactNode;
 };
@@ -62,20 +72,23 @@ function LatestImpactLines({
   bracketImpact = null,
   latestScoreEvent = null,
   outlook = null,
+  pointsBreakdown = null,
 }: {
   totalPoints: number;
   momentum?: LeaderboardMomentumRow | null;
   bracketImpact?: BracketImpactParticipantRow | null;
   latestScoreEvent?: LeaderboardLatestScoreEventContext | null;
   outlook?: ParticipantRaceOutlookRow | null;
+  pointsBreakdown?: LeaderboardLatestPointsBreakdown | null;
 }) {
   const showLatest = momentum != null && latestScoreEvent?.hasValidSnapshot === true;
-  const { latestLine, impactLine } = formatLeaderboardLatestImpactSummary({
+  const { latestLine, impactLine, otherScoringLine } = formatLeaderboardLatestImpactSummary({
     totalPoints,
     momentum,
     event: latestScoreEvent,
     outlook,
     bracketImpact,
+    pointsBreakdown,
   });
 
   if (!showLatest && !impactLine) return null;
@@ -84,6 +97,9 @@ function LatestImpactLines({
     <div className="mt-1 space-y-0.5">
       {showLatest && latestLine ? (
         <p className="text-xs leading-relaxed text-ash-text/90">{latestLine}</p>
+      ) : null}
+      {showLatest && otherScoringLine ? (
+        <p className="text-xs leading-relaxed text-ash-muted">{otherScoringLine}</p>
       ) : null}
       {impactLine ? (
         <p className="text-xs leading-relaxed text-ash-muted">{impactLine}</p>
@@ -97,11 +113,13 @@ function RaceOutlookDetails({
   momentum = null,
   bracketImpact = null,
   latestScoreEvent = null,
+  pointsBreakdown = null,
 }: {
   outlook: ParticipantRaceOutlookRow;
   momentum?: LeaderboardMomentumRow | null;
   bracketImpact?: BracketImpactParticipantRow | null;
   latestScoreEvent?: LeaderboardLatestScoreEventContext | null;
+  pointsBreakdown?: LeaderboardLatestPointsBreakdown | null;
 }) {
   const topPicks = expandedTopRemainingPicks(outlook);
   const moreLine = formatExpandedRemainingPicksMoreLine(outlook);
@@ -111,6 +129,7 @@ function RaceOutlookDetails({
     bracketImpact,
     latestScoreEvent,
     momentum,
+    pointsBreakdown,
   );
 
   return (
@@ -184,6 +203,7 @@ export function LeaderboardParticipantCell({
   momentum = null,
   bracketImpact = null,
   latestScoreEvent = null,
+  pointsBreakdown = null,
   layout,
   rankCell = null,
 }: Props) {
@@ -198,7 +218,7 @@ export function LeaderboardParticipantCell({
   const pointsLabel = formatPointsWithRecentDelta(
     row.totalPoints,
     latestScoreEvent?.hasValidSnapshot ? momentum : null,
-    latestPointsOptions(latestScoreEvent),
+    latestPointsOptions(latestScoreEvent, pointsBreakdown),
   );
 
   const impactContext = showLatestImpact ? (
@@ -209,6 +229,7 @@ export function LeaderboardParticipantCell({
         bracketImpact={bracketImpact}
         latestScoreEvent={latestScoreEvent}
         outlook={raceOutlook}
+        pointsBreakdown={pointsBreakdown}
       />
       {raceOutlook ? (
         <RaceOutlookDetails
@@ -216,6 +237,7 @@ export function LeaderboardParticipantCell({
           momentum={momentum}
           bracketImpact={bracketImpact}
           latestScoreEvent={latestScoreEvent}
+          pointsBreakdown={pointsBreakdown}
         />
       ) : null}
     </>
@@ -225,6 +247,7 @@ export function LeaderboardParticipantCell({
       momentum={momentum}
       bracketImpact={bracketImpact}
       latestScoreEvent={latestScoreEvent}
+      pointsBreakdown={pointsBreakdown}
     />
   ) : null;
 

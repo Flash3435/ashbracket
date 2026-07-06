@@ -128,6 +128,8 @@ export default async function PublicPoolLeaderboardPage({ params }: PageProps) {
   const leaderboardMomentum = latestScoreImpact?.momentum ?? null;
   const leaderboardBracketImpact = latestScoreImpact?.bracketImpact ?? null;
   const latestScoreEvent = latestScoreImpact?.event ?? null;
+  const pointsBreakdownByParticipantId =
+    latestScoreImpact?.pointsBreakdownByParticipantId ?? new Map();
 
   return (
     <PageContainer>
@@ -161,6 +163,7 @@ export default async function PublicPoolLeaderboardPage({ params }: PageProps) {
         leaderboardMomentum={leaderboardMomentum}
         leaderboardBracketImpact={leaderboardBracketImpact}
         latestScoreEvent={latestScoreEvent}
+        pointsBreakdownByParticipantId={pointsBreakdownByParticipantId}
       />
     </PageContainer>
   );

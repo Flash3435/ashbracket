@@ -4,6 +4,7 @@ import type { BracketImpactSummaryMetadata } from "@/lib/poolActivity/scoreImpac
 import type { ParticipantRaceOutlookRow } from "@/lib/pool/buildParticipantRaceOutlook";
 import type { LeaderboardLatestScoreEventContext } from "./parseLatestScoreEventContext";
 import type { LeaderboardMomentumRow } from "./buildLeaderboardMomentum";
+import type { LeaderboardLatestPointsBreakdown } from "./computeLatestMatchPointsBreakdown";
 import { formatPointsWithRecentDelta } from "./leaderboardMomentumDisplay";
 
 const LATEST_POINTS_OPTIONS = { showZero: true, latestSuffix: true } as const;
@@ -49,30 +50,55 @@ export function formatChampionStatusAfterImpact(
 }
 
 function formatLatestPointsToken(
-  momentum: LeaderboardMomentumRow | null | undefined,
+  points: number,
 ): string | null {
-  if (!momentum) return null;
-  const pts = formatPoolPoints(momentum.recentPointsGained);
-  return momentum.recentPointsGained > 0 ? `+${pts}` : "+0";
+  const pts = formatPoolPoints(points);
+  return points > 0 ? `+${pts}` : "+0";
+}
+
+function resolveMatchLinePoints(
+  momentum: LeaderboardMomentumRow,
+  breakdown?: LeaderboardLatestPointsBreakdown | null,
+  event?: LeaderboardLatestScoreEventContext | null,
+): number {
+  if (
+    breakdown?.latestMatchPointsDelta != null &&
+    (event?.eventKind === "single_match" || event?.eventKind === "multi_match")
+  ) {
+    return breakdown.latestMatchPointsDelta;
+  }
+  return momentum.recentPointsGained;
+}
+
+export function formatOtherScoringAdjustmentsLine(
+  breakdown: LeaderboardLatestPointsBreakdown | null | undefined,
+): string | null {
+  if (!breakdown?.isMixedUpdate || breakdown.otherScoringDelta == null) {
+    return null;
+  }
+  const token = formatLatestPointsToken(breakdown.otherScoringDelta);
+  return token ? `Other scoring adjustments: ${token}` : null;
 }
 
 export function formatLatestMatchScoringLine(
   momentum: LeaderboardMomentumRow | null | undefined,
   event: LeaderboardLatestScoreEventContext | null | undefined,
   bracketImpact?: BracketImpactParticipantRow | null,
+  breakdown?: LeaderboardLatestPointsBreakdown | null,
 ): string | null {
   if (!momentum || !event?.hasValidSnapshot) return null;
 
-  const pointsToken = formatLatestPointsToken(momentum);
+  const matchPoints = resolveMatchLinePoints(momentum, breakdown, event);
+  const pointsToken = formatLatestPointsToken(matchPoints);
   if (!pointsToken) return null;
 
   switch (event.eventKind) {
     case "multi_match":
       return `Latest update: ${pointsToken} from ${event.matchCount} matches`;
     case "scoring_refresh":
-      return `Scoring refresh: ${pointsToken}`;
+      return `Scoring refresh: ${formatLatestPointsToken(momentum.recentPointsGained)}`;
     case "generic_update":
-      return `Latest update: ${pointsToken}`;
+      return `Latest update: ${formatLatestPointsToken(momentum.recentPointsGained)}`;
     case "single_match":
     default:
       break;
@@ -177,12 +203,15 @@ export function formatLeaderboardLatestImpactSummary(input: {
   event?: LeaderboardLatestScoreEventContext | null;
   outlook?: ParticipantRaceOutlookRow | null;
   bracketImpact?: BracketImpactParticipantRow | null;
-}): { latestLine: string | null; impactLine: string | null } {
+  pointsBreakdown?: LeaderboardLatestPointsBreakdown | null;
+}): { latestLine: string | null; impactLine: string | null; otherScoringLine: string | null } {
   const latestLine = formatLatestMatchScoringLine(
     input.momentum,
     input.event,
     input.bracketImpact,
+    input.pointsBreakdown,
   );
+  const otherScoringLine = formatOtherScoringAdjustmentsLine(input.pointsBreakdown);
   const impactLine = formatLeaderboardBracketImpactLine({
     outlook: input.outlook,
     bracketImpact: input.bracketImpact,
@@ -190,7 +219,7 @@ export function formatLeaderboardLatestImpactSummary(input: {
       input.outlook?.pathValidLivePickCount ?? input.bracketImpact?.livePathsAfter,
   });
 
-  return { latestLine, impactLine };
+  return { latestLine, impactLine, otherScoringLine };
 }
 
 export function formatBiggestBracketImpactWinnerLine(input: {
@@ -302,11 +331,20 @@ export function formatExpandedBracketImpactContext(
   bracketImpact?: BracketImpactParticipantRow | null,
   event?: LeaderboardLatestScoreEventContext | null,
   momentum?: LeaderboardMomentumRow | null,
+  pointsBreakdown?: LeaderboardLatestPointsBreakdown | null,
 ): string | null {
   const parts: string[] = [];
 
-  const latestLine = formatLatestMatchScoringLine(momentum, event, bracketImpact);
+  const latestLine = formatLatestMatchScoringLine(
+    momentum,
+    event,
+    bracketImpact,
+    pointsBreakdown,
+  );
   if (latestLine) parts.push(latestLine);
+
+  const otherLine = formatOtherScoringAdjustmentsLine(pointsBreakdown);
+  if (otherLine) parts.push(otherLine);
 
   if (!bracketImpact) {
     return parts.length > 0 ? parts.join(" ") : null;

@@ -27,6 +27,9 @@ import {
   parseLatestScoreEventContext,
   type LeaderboardLatestScoreEventContext,
 } from "./parseLatestScoreEventContext";
+import { mapLeaderboardMomentumByParticipantId } from "./buildLeaderboardMomentum";
+import { fetchLatestMatchPointsBreakdownForPool } from "./fetchLatestMatchPointsBreakdownForPool";
+import type { LeaderboardLatestPointsBreakdown } from "./computeLatestMatchPointsBreakdown";
 
 export type LeaderboardBracketImpactResult = {
   hasBracketImpact: boolean;
@@ -39,6 +42,7 @@ export type LeaderboardLatestScoreImpactResult = {
   momentum: LeaderboardMomentumResult | null;
   bracketImpact: LeaderboardBracketImpactResult | null;
   event: LeaderboardLatestScoreEventContext | null;
+  pointsBreakdownByParticipantId: Map<string, LeaderboardLatestPointsBreakdown>;
 };
 
 function readBracketImpactSummary(metadata: Record<string, unknown>): {
@@ -243,7 +247,12 @@ export async function fetchLeaderboardLatestScoreImpactForPool(
 
   if (error) throw new Error(error.message);
   if (!data?.metadata_json || typeof data.metadata_json !== "object") {
-    return { momentum: null, bracketImpact: null, event: null };
+    return {
+      momentum: null,
+      bracketImpact: null,
+      event: null,
+      pointsBreakdownByParticipantId: new Map(),
+    };
   }
 
   const metadata = await enrichScoreImpactEventMetadata(
@@ -290,7 +299,23 @@ export async function fetchLeaderboardLatestScoreImpactForPool(
     );
   }
 
-  return { momentum, bracketImpact, event };
+  const momentumByParticipantId = mapLeaderboardMomentumByParticipantId(momentum);
+  const pointsBreakdownByParticipantId =
+    hasValidSnapshot && event
+      ? await fetchLatestMatchPointsBreakdownForPool(supabase, poolId, {
+          participantIds: currentRows.map((row) => row.participantId),
+          momentumByParticipantId,
+          event,
+        }).catch((err) => {
+          console.warn("[ashbracket:leaderboard-match-points] breakdown failed", {
+            poolId,
+            error: err instanceof Error ? err.message : String(err),
+          });
+          return new Map<string, LeaderboardLatestPointsBreakdown>();
+        })
+      : new Map<string, LeaderboardLatestPointsBreakdown>();
+
+  return { momentum, bracketImpact, event, pointsBreakdownByParticipantId };
 }
 
 /** @deprecated Prefer fetchLeaderboardLatestScoreImpactForPool for a single query. */

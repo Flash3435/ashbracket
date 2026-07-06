@@ -161,6 +161,7 @@ const summary = formatLeaderboardLatestImpactSummary({
 });
 
 assert.equal(summary.latestLine, "Morocco def. Canada: +4");
+assert.equal(summary.otherScoringLine, null);
 assert.match(summary.impactLine ?? "", /6 live paths \(−3\)/);
 assert.match(summary.impactLine ?? "", /Champion dead/);
 assert.match(summary.impactLine ?? "", /Hurt by upset/);

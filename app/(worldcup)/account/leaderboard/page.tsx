@@ -161,6 +161,8 @@ export default async function AccountLeaderboardPage({ searchParams }: PageProps
   const leaderboardMomentum = latestScoreImpact?.momentum ?? null;
   const leaderboardBracketImpact = latestScoreImpact?.bracketImpact ?? null;
   const latestScoreEvent = latestScoreImpact?.event ?? null;
+  const pointsBreakdownByParticipantId =
+    latestScoreImpact?.pointsBreakdownByParticipantId ?? new Map();
 
   const revealHref = `/account/reveal?participant=${ctx.selectedId}`;
   const activityHref = `/account/activity?participant=${ctx.selectedId}`;
@@ -233,6 +235,7 @@ export default async function AccountLeaderboardPage({ searchParams }: PageProps
           leaderboardMomentum={leaderboardMomentum}
           leaderboardBracketImpact={leaderboardBracketImpact}
           latestScoreEvent={latestScoreEvent}
+          pointsBreakdownByParticipantId={pointsBreakdownByParticipantId}
         />
       )}
     </PageContainer>

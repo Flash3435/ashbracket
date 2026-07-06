@@ -7,6 +7,7 @@
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { buildLeaderboardMomentum } from "../lib/leaderboard/buildLeaderboardMomentum";
 import { buildPoolStandingsFromLedger } from "../lib/leaderboard/buildPoolStandingsFromLedger";
+import { buildLatestPointsBreakdownByParticipantId } from "../lib/leaderboard/computeLatestMatchPointsBreakdown";
 import { enrichScoreImpactEventMetadata } from "../lib/leaderboard/enrichScoreImpactEventMetadata";
 import { fetchPoolLedgerLinesForStandings } from "../lib/leaderboard/fetchPoolLedgerLinesForStandings";
 import {
@@ -357,6 +358,58 @@ async function main() {
     .select("participant_id, prediction_kind, team_id, slot_key")
     .eq("pool_id", poolId);
 
+  const { data: rulesRaw } = await supabase
+    .from("scoring_rules")
+    .select("prediction_kind, points")
+    .eq("pool_id", poolId);
+  const rulesByKind = new Map(
+    (rulesRaw ?? []).map((r) => [r.prediction_kind as string, Number(r.points)]),
+  );
+
+  const eventMatchCodes = event?.matchCodes ?? [];
+  const { data: eventMatchesRaw } =
+    eventMatchCodes.length > 0
+      ? await supabase
+          .from("tournament_matches")
+          .select(
+            "match_code, stage_code, group_code, home_team_id, away_team_id, winner_team_id, scoring_result_kind, scoring_slot_key",
+          )
+          .eq("edition_id", editionId)
+          .in("match_code", eventMatchCodes)
+      : { data: [] };
+  const eventMatches = (eventMatchesRaw ?? []).map((row) => ({
+    matchCode: row.match_code as string,
+    stageCode: (row.stage_code as string | null) ?? null,
+    groupCode: (row.group_code as string | null) ?? null,
+    homeTeamId: (row.home_team_id as string | null) ?? null,
+    awayTeamId: (row.away_team_id as string | null) ?? null,
+    winnerTeamId: (row.winner_team_id as string | null) ?? null,
+    scoringResultKind: (row.scoring_result_kind as string | null) ?? null,
+    scoringSlotKey: (row.scoring_slot_key as string | null) ?? null,
+  }));
+
+  const momentumByParticipantId = new Map(
+    momentum.rows.map((row) => [row.participantId, row]),
+  );
+  const pointsBreakdownByParticipantId = event
+    ? buildLatestPointsBreakdownByParticipantId({
+        participantIds: standings.map((r) => r.participantId),
+        momentumByParticipantId,
+        event,
+        predictions: (preds ?? []).map((p) => ({
+          participantId: p.participant_id as string,
+          predictionKind: p.prediction_kind as string,
+          teamId: (p.team_id as string | null) ?? null,
+          slotKey: (p.slot_key as string | null) ?? null,
+        })),
+        matches: eventMatches,
+        rulesByKind,
+      })
+    : new Map();
+
+  const slotPickKind = match?.scoring_result_kind ?? null;
+  const slotPickKey = match?.scoring_slot_key ?? null;
+
   const warnings: string[] = [];
   if (
     rawMetadata &&
@@ -376,11 +429,13 @@ async function main() {
   console.log("\n--- Per participant ---");
   const headers = [
     "display_name",
+    "slot_pick",
     "picked_winner",
     "picked_loser",
-    "match_ledger_pts",
-    "computed_delta",
-    "displayed_delta",
+    "expected_match_pts",
+    "match_pts_delta",
+    "total_delta",
+    "other_delta",
     "latest_line",
     "pts_column_suffix",
     "mismatch",
@@ -389,11 +444,23 @@ async function main() {
 
   let uniformDelta: number | null = null;
   const deltaSpread = new Set<number>();
+  const matchDeltaSpread = new Set<number>();
 
   for (const row of standings.sort((a, b) => a.rank - b.rank)) {
-    const stored = storedMomentum.find((m) => m.participant_id === row.participantId);
     const mom = momentum.rows.find((m) => m.participantId === row.participantId);
+    const breakdown = pointsBreakdownByParticipantId.get(row.participantId) ?? null;
     const participantPreds = (preds ?? []).filter((p) => p.participant_id === row.participantId);
+
+    const slotPick =
+      slotPickKind && slotPickKey
+        ? participantPreds.find(
+            (p) =>
+              p.prediction_kind === slotPickKind && p.slot_key === slotPickKey,
+          )
+        : null;
+    const slotPickTeamId = slotPick?.team_id ?? null;
+    const slotPickName = slotPickTeamId ? teamName(teams, slotPickTeamId) : "—";
+
     const knockoutPreds = participantPreds.filter((p) =>
       ["round_of_16", "round_of_32", "quarterfinalist"].includes(String(p.prediction_kind)),
     );
@@ -404,68 +471,94 @@ async function main() {
       loserId && knockoutPreds.some((p) => p.team_id === loserId),
     );
 
-    const matchLedgerPts = matchResultIds.length
-      ? fullLedger
-          .filter(
-            (l) =>
-              l.participant_id === row.participantId &&
-              l.result_id &&
-              matchResultIds.includes(l.result_id),
-          )
-          .reduce((sum, l) => sum + Number(l.points_delta ?? 0), 0)
-      : null;
+    const expectedMatchPts =
+      slotPickTeamId && winnerId
+        ? slotPickTeamId === winnerId
+          ? rulesByKind.get("round_of_16") ?? 0
+          : 0
+        : null;
 
+    const matchPtsDelta = breakdown?.latestMatchPointsDelta ?? null;
     const computedDelta = mom?.recentPointsGained ?? null;
-    const displayedDelta =
-      typeof stored?.points_gained === "number"
-        ? stored.points_gained
-        : computedDelta;
+    const otherDelta = breakdown?.otherScoringDelta ?? null;
+
     if (computedDelta != null) deltaSpread.add(computedDelta);
+    if (matchPtsDelta != null) matchDeltaSpread.add(matchPtsDelta);
     if (uniformDelta == null && computedDelta != null) uniformDelta = computedDelta;
     else if (computedDelta != null && uniformDelta !== computedDelta) uniformDelta = NaN;
 
-    const latestLine = formatLatestMatchScoringLine(mom ?? null, event);
+    const latestLine = formatLatestMatchScoringLine(mom ?? null, event, null, breakdown);
     const suffix = formatRecentPointsDelta(mom ?? null, {
       showZero: true,
       latestSuffix: event?.isSingleMatch === true,
+      pointsBreakdown: breakdown,
+      event: event ?? undefined,
     });
-    const mismatch =
-      computedDelta != null &&
-      displayedDelta != null &&
-      computedDelta !== displayedDelta
-        ? "delta"
-        : "";
 
-    if (mismatch) {
+    const legacyLine = formatLatestMatchScoringLine(mom ?? null, event);
+    const mismatchParts: string[] = [];
+    if (
+      expectedMatchPts != null &&
+      matchPtsDelta != null &&
+      expectedMatchPts !== matchPtsDelta
+    ) {
+      mismatchParts.push("expected-vs-match");
+    }
+    if (
+      event?.isSingleMatch &&
+      legacyLine &&
+      latestLine &&
+      legacyLine !== latestLine &&
+      computedDelta != null &&
+      matchPtsDelta != null &&
+      computedDelta !== matchPtsDelta
+    ) {
+      mismatchParts.push("legacy-total-as-match");
+    }
+    const mismatch = mismatchParts.join(",") || "—";
+    if (mismatch !== "—") {
       warnings.push(`${row.displayName}: ${mismatch}`);
     }
 
     console.log(
       [
         row.displayName,
+        slotPickName,
         pickedWinner ? "yes" : "no",
         pickedLoser ? "yes" : "no",
-        matchLedgerPts ?? "—",
+        expectedMatchPts ?? "—",
+        matchPtsDelta ?? "—",
         computedDelta,
-        displayedDelta,
+        otherDelta ?? "—",
         latestLine ?? "—",
         suffix ?? "—",
-        mismatch || "—",
+        mismatch,
       ].join("\t"),
     );
   }
 
   console.log("\n--- Summary ---");
   console.log(`Participants: ${standings.length}`);
-  console.log(`Unique displayed deltas: ${[...deltaSpread].join(", ")}`);
+  console.log(`Unique total deltas: ${[...deltaSpread].join(", ")}`);
+  console.log(`Unique match-specific deltas: ${[...matchDeltaSpread].join(", ")}`);
+  if (
+    event?.isSingleMatch &&
+    deltaSpread.size === 1 &&
+    matchDeltaSpread.size > 1
+  ) {
+    warnings.push(
+      "Uniform total delta but mixed match-specific deltas — UI must not label total as match points.",
+    );
+  }
   if (
     event?.isSingleMatch &&
     deltaSpread.size === 1 &&
     [...deltaSpread][0] === 4 &&
-    standings.length > 1
+    standings.length > 1 &&
+    matchDeltaSpread.size <= 1
   ) {
     warnings.push(
-      "All participants share the same +4 delta — verify this is expected for the attributed match.",
+      "All participants share the same +4 match delta — verify this is expected for the attributed match.",
     );
   }
   if (Number.isNaN(uniformDelta)) {
