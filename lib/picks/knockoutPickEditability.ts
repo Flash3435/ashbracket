@@ -15,12 +15,6 @@ import {
   type GradualKnockoutSelectionState,
 } from "./gradualKnockoutUnlock";
 import { isMatchStarted } from "./knockoutSelectionWindow";
-import {
-  isStrictBracketPathBlockedForParticipant,
-  strictBracketPathBlockedCopy,
-  wizardMatchRefForSavedSlot,
-  evaluateStrictBracketPathForMatch,
-} from "./knockoutStrictBracketPath";
 import type { KnockoutPickSlotDraft } from "../../types/adminKnockoutPicks";
 
 export const KNOCKOUT_PICK_LOCKED_AT_KICKOFF =
@@ -543,34 +537,6 @@ export function knockoutPickEditBlockedMessage(input: {
   if (match && isMatchStarted(match, nowMs)) {
     return `${rowLabel}: ${KNOCKOUT_PICK_LOCKED_AT_KICKOFF}`;
   }
-  const matchRef = wizardMatchRefForSavedSlot(input.predictionKind, input.slotKey);
-  if (
-    matchRef &&
-    input.teams?.length &&
-    input.slots?.length &&
-    input.knockoutBracketPicksUnlocked !== false
-  ) {
-    const evaluation = evaluateStrictBracketPathForMatch({
-      wizardKind: matchRef.wizardKind,
-      matchIndex: matchRef.matchIndex,
-      slots: [...input.slots],
-      teams: input.teams,
-      tournamentMatches: input.tournamentMatches,
-      gradual: input.gradual,
-      knockoutBracketPicksUnlocked: input.knockoutBracketPicksUnlocked,
-      nowMs,
-    });
-    if (
-      evaluation &&
-      (evaluation.hasStalePath || evaluation.hasMissingRequiredPick)
-    ) {
-      return `${rowLabel}: ${strictBracketPathBlockedCopy(
-        evaluation,
-        input.teams,
-        matchRef.wizardKind,
-      )}`;
-    }
-  }
   if (isKnockoutSlotFrozenByOfficialFeeders(input)) {
     return `${rowLabel}: ${KNOCKOUT_PICK_LOCKED_FEEDER_RESULTS}`;
   }
@@ -636,34 +602,7 @@ export function isKnockoutPickEditableForParticipant(input: {
 
   if (input.pickStatus === "out" && input.savedTeamId?.trim()) return false;
 
-  const matchRef = wizardMatchRefForSavedSlot(
-    input.predictionKind,
-    input.slotKey,
-  );
-  const slotDrafts =
-    input.slots ??
-    (input.progressionRows as readonly KnockoutPickSlotDraft[] | undefined);
-  if (
-    matchRef &&
-    input.teams?.length &&
-    slotDrafts?.length &&
-    input.fullRoundOf32Official
-  ) {
-    if (
-      isStrictBracketPathBlockedForParticipant({
-        wizardKind: matchRef.wizardKind,
-        matchIndex: matchRef.matchIndex,
-        slots: [...slotDrafts],
-        teams: input.teams,
-        tournamentMatches: input.tournamentMatches,
-        gradual: input.gradual,
-        knockoutBracketPicksUnlocked: input.fullRoundOf32Official,
-        nowMs,
-      })
-    ) {
-      return false;
-    }
-  }
+  if (input.savedTeamId?.trim()) return false;
 
   return true;
 }
@@ -720,34 +659,7 @@ export function isKnockoutPickFrozenForParticipant(input: {
 
   if (input.pickStatus === "out" && input.savedTeamId?.trim()) return true;
 
-  const matchRef = wizardMatchRefForSavedSlot(
-    input.predictionKind,
-    input.slotKey,
-  );
-  const slotDrafts =
-    input.slots ??
-    (input.progressionRows as readonly KnockoutPickSlotDraft[] | undefined);
-  if (
-    matchRef &&
-    input.teams?.length &&
-    slotDrafts?.length &&
-    input.fullRoundOf32Official !== false
-  ) {
-    if (
-      isStrictBracketPathBlockedForParticipant({
-        wizardKind: matchRef.wizardKind,
-        matchIndex: matchRef.matchIndex,
-        slots: [...slotDrafts],
-        teams: input.teams,
-        tournamentMatches: input.tournamentMatches,
-        gradual: input.gradual,
-        knockoutBracketPicksUnlocked: input.fullRoundOf32Official ?? true,
-        nowMs,
-      })
-    ) {
-      return true;
-    }
-  }
+  if (input.savedTeamId?.trim()) return true;
 
   return false;
 }

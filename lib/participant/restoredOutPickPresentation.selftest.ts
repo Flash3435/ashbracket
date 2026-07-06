@@ -97,7 +97,7 @@ const pred: Prediction = {
   createdAt: "",
   updatedAt: "",
 };
-assert.equal(isKnockoutPredictionScoringEligible(pred), false);
+assert.equal(isKnockoutPredictionScoringEligible(pred), true);
 
 const missing = buildParticipantDashboardMissingKnockoutPicks({
   slots: [

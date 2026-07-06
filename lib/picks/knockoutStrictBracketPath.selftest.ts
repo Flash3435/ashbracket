@@ -3,9 +3,10 @@ import type { Team } from "../../src/types/domain";
 import type { KnockoutPickSlotDraft } from "../../types/adminKnockoutPicks";
 import type { TournamentMatchPublicRow } from "../../types/tournamentPublic";
 import {
+  evaluateMatchSlotSavedPick,
   evaluateStrictBracketPathForMatch,
   isStrictBracketPathBlockedForParticipant,
-  strictBracketPathBlockedCopy,
+  matchSlotSavedPickStatusCopy,
 } from "./knockoutStrictBracketPath";
 
 const teams: Team[] = [
@@ -41,12 +42,12 @@ const teams: Team[] = [
   },
 ];
 
-function qfSlot(slotKey: string, teamId = ""): KnockoutPickSlotDraft {
+function sfSlot(slotKey: string, teamId = ""): KnockoutPickSlotDraft {
   return {
-    rowKey: `quarterfinalist|${slotKey}`,
+    rowKey: `semifinalist|${slotKey}`,
     sectionLabel: "Quarter-finals",
     slotLabel: slotKey,
-    predictionKind: "quarterfinalist",
+    predictionKind: "semifinalist",
     tournamentStageId: "qf",
     slotKey,
     groupCode: null,
@@ -102,6 +103,29 @@ const tournamentMatches: TournamentMatchPublicRow[] = [
     winner_team_name: "England",
     winner_country_code: "ENG",
   },
+  {
+    match_id: "m99",
+    edition_id: "ed",
+    edition_code: "2026",
+    match_code: "M99",
+    stage_code: "quarterfinal",
+    stage_label: "Quarter-finals",
+    stage_sort_order: 4,
+    group_code: null,
+    round_index: 0,
+    kickoff_at: "2026-07-11T18:00:00Z",
+    status: "scheduled",
+    home_goals: null,
+    away_goals: null,
+    home_penalties: null,
+    away_penalties: null,
+    home_team_name: "Norway",
+    home_country_code: "NOR",
+    away_team_name: "England",
+    away_country_code: "ENG",
+    winner_team_name: null,
+    winner_country_code: null,
+  },
 ];
 
 const gradual = {
@@ -115,24 +139,28 @@ const gradual = {
   matchStates: [],
 };
 
-// Valid upstream path for M99 (QF match index 2).
+// M99: Norway saved winner, official Norway vs England — live even with wrong upstream R16 path.
 {
-  const evaluation = evaluateStrictBracketPathForMatch({
+  const evaluation = evaluateMatchSlotSavedPick({
     wizardKind: "quarterfinalist",
     matchIndex: 2,
-    slots: [qfSlot("3", "team-nor"), qfSlot("4", "team-eng")],
+    slots: [sfSlot("3", "team-nor")],
     teams,
     tournamentMatches,
     gradual,
     knockoutBracketPicksUnlocked: true,
   });
-  assert.ok(evaluation?.allFeedersValid);
-  assert.strictEqual(evaluation?.hasStalePath, false);
+  assert.strictEqual(evaluation?.status, "live");
+  assert.strictEqual(evaluation?.savedTeamInOfficialMatchup, true);
+  assert.match(
+    matchSlotSavedPickStatusCopy(evaluation!, teams, "quarterfinalist")!,
+    /still alive because Norway is in this match/i,
+  );
   assert.strictEqual(
     isStrictBracketPathBlockedForParticipant({
       wizardKind: "quarterfinalist",
       matchIndex: 2,
-      slots: [qfSlot("3", "team-nor"), qfSlot("4", "team-eng")],
+      slots: [sfSlot("3", "team-nor")],
       teams,
       tournamentMatches,
       gradual,
@@ -142,34 +170,44 @@ const gradual = {
   );
 }
 
-// Stale Mexico upstream blocks M99.
+// M99: Mexico saved — out because Mexico is not in official M99 matchup.
 {
-  const slots = [qfSlot("3", "team-nor"), qfSlot("4", "team-mex")];
-  const evaluation = evaluateStrictBracketPathForMatch({
+  const evaluation = evaluateMatchSlotSavedPick({
     wizardKind: "quarterfinalist",
     matchIndex: 2,
-    slots,
+    slots: [sfSlot("3", "team-mex")],
     teams,
     tournamentMatches,
     gradual,
     knockoutBracketPicksUnlocked: true,
   });
-  assert.strictEqual(evaluation?.hasStalePath, true);
+  assert.strictEqual(evaluation?.status, "out");
+  assert.strictEqual(evaluation?.savedTeamInOfficialMatchup, false);
   assert.match(
-    strictBracketPathBlockedCopy(evaluation!, teams, "quarterfinalist"),
-    /Mexico did not advance/i,
+    matchSlotSavedPickStatusCopy(evaluation!, teams, "quarterfinalist")!,
+    /Mexico did not reach this match/i,
   );
+  const legacy = evaluateStrictBracketPathForMatch({
+    wizardKind: "quarterfinalist",
+    matchIndex: 2,
+    slots: [sfSlot("3", "team-mex")],
+    teams,
+    tournamentMatches,
+    gradual,
+    knockoutBracketPicksUnlocked: true,
+  });
+  assert.strictEqual(legacy?.hasStalePath, true);
   assert.strictEqual(
     isStrictBracketPathBlockedForParticipant({
       wizardKind: "quarterfinalist",
       matchIndex: 2,
-      slots,
+      slots: [sfSlot("3", "team-mex")],
       teams,
       tournamentMatches,
       gradual,
       knockoutBracketPicksUnlocked: true,
     }),
-    true,
+    false,
   );
 }
 

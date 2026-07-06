@@ -29,9 +29,8 @@ import {
 } from "./knockoutBlockedRowExplanation";
 import { isKnockoutPickLockedOut } from "../predictions/knockoutPickStatus";
 import {
-  evaluateStrictBracketPathForMatch,
-  strictBracketPathBlockedCopy,
-  strictPathMissingUpstreamStillWaiting,
+  evaluateMatchSlotSavedPick,
+  matchSlotSavedPickStatusCopy,
 } from "./knockoutStrictBracketPath";
 
 export type KnockoutWizardBracketKind =
@@ -645,10 +644,11 @@ export function knockoutMatchSavedPickPresentation(
 
   let savedPickWarning: string | null = null;
   if (savedPickStatus === "stale") {
+    const savedName = savedPickLabel ?? savedPickTeamId ?? "That team";
     savedPickWarning =
       row.lockReason === "frozen" || row.lockReason === "started"
-        ? "Saved pick is eliminated or no longer matches this matchup."
-        : "That pick is out — it no longer matches this matchup.";
+        ? `Your original pick is out because ${savedName} did not reach this match.`
+        : `Your original pick is out because ${savedName} is not in this match.`;
   } else if (
     row.pickStatus === "out" &&
     savedPickTeamId &&
@@ -659,9 +659,11 @@ export function knockoutMatchSavedPickPresentation(
 
   let lockStatusLine: string | null = null;
   if (row.lockReason === "started") {
-    lockStatusLine = row.display.statusLine ?? "Locked at kickoff";
+    lockStatusLine = row.display.statusLine ?? "This pick is locked.";
   } else if (row.lockReason === "frozen") {
-    lockStatusLine = "Locked — feeder results are official.";
+    lockStatusLine = savedPickTeamId ? "This pick is locked." : "Locked — feeder results are official.";
+  } else if (savedPickTeamId && rowPickValid && row.lockReason === "pickable") {
+    lockStatusLine = `Pick still alive: ${savedPickLabel ?? savedPickTeamId}`;
   }
 
   if (
@@ -724,6 +726,7 @@ function buildInputForBracketKind(
 export function isKnockoutMatchDirectPickEligible(
   row: KnockoutMatchPickRow,
 ): boolean {
+  if (row.winnerTeamId.trim()) return false;
   return (
     row.lockReason === "pickable" &&
     (Boolean(row.homeTeamId?.trim()) || Boolean(row.awayTeamId?.trim()))
@@ -1156,19 +1159,15 @@ export function buildKnockoutMatchPickRows(
     let lockReason: KnockoutMatchLockReason = "pickable";
     const hasHome = Boolean(homeTeamId?.trim());
     const hasAway = Boolean(awayTeamId?.trim());
-    const strictPathEvaluation =
-      hasHome && hasAway
-        ? evaluateStrictBracketPathForMatch({
-            wizardKind: def.wizardBracketKind,
-            matchIndex,
-            slots: input.slots,
-            teams: input.teams,
-            tournamentMatches: input.tournamentMatches,
-            gradual,
-            knockoutBracketPicksUnlocked: input.knockoutBracketPicksUnlocked,
-            nowMs,
-          })
-        : null;
+    const matchSlotPickEvaluation = evaluateMatchSlotSavedPick({
+      wizardKind: def.wizardBracketKind,
+      matchIndex,
+      slots: input.slots,
+      teams: input.teams,
+      tournamentMatches: input.tournamentMatches,
+      gradual,
+      knockoutBracketPicksUnlocked: input.knockoutBracketPicksUnlocked,
+    });
     if (!hasHome && !hasAway) {
       lockReason = "incomplete";
     } else if (!hasHome || !hasAway) {
@@ -1186,24 +1185,19 @@ export function buildKnockoutMatchPickRows(
       isKnockoutMatchLockedForParticipant(publicMatch, nowMs)
     ) {
       lockReason = "started";
-    } else if (strictPathEvaluation?.hasStalePath) {
+    } else if (
+      matchSlotPickEvaluation?.status === "out" &&
+      Boolean(winnerTeamId)
+    ) {
       lockReason = "frozen";
-    } else if (strictPathEvaluation?.hasMissingRequiredPick) {
-      const waiting = strictPathMissingUpstreamStillWaiting(
-        strictPathEvaluation,
-        def.wizardBracketKind,
-        upstreamRows,
-        gradual,
-      );
-      lockReason = waiting ? "incomplete" : "frozen";
     }
 
-    const strictPathBlockedMessage =
-      strictPathEvaluation &&
-      (strictPathEvaluation.hasStalePath ||
-        (strictPathEvaluation.hasMissingRequiredPick && lockReason === "frozen"))
-        ? strictBracketPathBlockedCopy(
-            strictPathEvaluation,
+    const matchSlotStatusMessage =
+      matchSlotPickEvaluation &&
+      matchSlotPickEvaluation.status === "out" &&
+      Boolean(winnerTeamId)
+        ? matchSlotSavedPickStatusCopy(
+            matchSlotPickEvaluation,
             input.teams,
             def.wizardBracketKind,
           )
@@ -1271,7 +1265,6 @@ export function buildKnockoutMatchPickRows(
     const r16OpenPickUntilKickoff =
       lockReason === "pickable" &&
       !hasValidSavedPick &&
-      (strictPathEvaluation == null || strictPathEvaluation.allFeedersValid) &&
       isKnockoutSlotFrozenByOfficialFeeders({
         predictionKind: def.resultKind,
         slotKey: saveSlotKey,
@@ -1324,12 +1317,12 @@ export function buildKnockoutMatchPickRows(
         ? { ...baseDisplay, emptyPrimaryLine: matchupLineForRow }
         : baseDisplay;
 
-    const displayWithStrictPath =
-      strictPathBlockedMessage && lockReason === "frozen"
+    const displayWithMatchSlotStatus =
+      matchSlotStatusMessage && lockReason === "frozen"
         ? {
             ...displayWithPartialMatchup,
-            statusLine: strictPathBlockedMessage,
-            emptyPrimaryLine: matchupLineForRow ?? strictPathBlockedMessage,
+            statusLine: matchSlotStatusMessage,
+            emptyPrimaryLine: matchupLineForRow ?? matchSlotStatusMessage,
           }
         : displayWithPartialMatchup;
 
@@ -1353,10 +1346,10 @@ export function buildKnockoutMatchPickRows(
       kickoffIso,
       display: r16OpenPickUntilKickoff
         ? {
-            ...displayWithStrictPath,
+            ...displayWithMatchSlotStatus,
             statusLine: KNOCKOUT_R16_MISSING_PICK_OPEN_UNTIL_KICKOFF,
           }
-        : displayWithStrictPath,
+        : displayWithMatchSlotStatus,
     };
   });
 }

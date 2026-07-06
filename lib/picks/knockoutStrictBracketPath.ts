@@ -3,32 +3,31 @@ import type { KnockoutPickSlotDraft } from "../../types/adminKnockoutPicks";
 import type { TournamentMatchPublicRow } from "../../types/tournamentPublic";
 import {
   knockoutParticipantSlotPair,
-  r16R32ParticipantPair,
 } from "../bracket/wc2026KnockoutPairings";
 import { isKnockoutPickLockedOut } from "../predictions/knockoutPickStatus";
 import {
-  r16SlotKeyForR32MatchIndex,
   type GradualKnockoutSelectionState,
 } from "./gradualKnockoutUnlock";
 import {
   isKnockoutMatchLockedForParticipant,
+  isValidSavedPickForMatchup,
+  resolveOfficialKnockoutSlotMatchupTeamIds,
 } from "./knockoutPickEditability";
 import {
   knockoutMatchStepDef,
-  officialKnockoutMatchResultWinner,
   officialR32ParticipantIds,
-  readOfficialR32MatchResultWinner,
-  readParticipantR32MatchWinnerPick,
   type ConfirmedR32WinnerContext,
   type KnockoutMatchPickRow,
   type KnockoutWizardBracketKind,
 } from "./knockoutMatchPickRows";
 
+/** @deprecated Renamed concept — kept for import stability. */
 export type StrictBracketFeederIssueKind =
   | "valid"
   | "missing_pick"
   | "stale_path";
 
+/** @deprecated Use {@link MatchSlotSavedPickIssue} instead. */
 export type StrictBracketFeederIssue = {
   kind: StrictBracketFeederIssueKind;
   feederSlotKey: string;
@@ -37,13 +36,22 @@ export type StrictBracketFeederIssue = {
   officialWinnerTeamId: string | null;
 };
 
+/** @deprecated Use {@link MatchSlotSavedPickEvaluation} instead. */
 export type StrictBracketPathEvaluation = {
   issues: StrictBracketFeederIssue[];
   hasStalePath: boolean;
   hasMissingRequiredPick: boolean;
   allFeedersValid: boolean;
-  /** First stale participant pick for user-facing copy. */
   primaryStalePickTeamId: string | null;
+};
+
+export type MatchSlotSavedPickStatus = "live" | "out" | "missing";
+
+export type MatchSlotSavedPickEvaluation = {
+  status: MatchSlotSavedPickStatus;
+  savedTeamId: string | null;
+  /** True when the saved team is one of the official matchup sides. */
+  savedTeamInOfficialMatchup: boolean;
 };
 
 function teamName(teamId: string | null, teams: Team[]): string | null {
@@ -70,154 +78,166 @@ function publicMatchForFifaNo(
   );
 }
 
-function upstreamFeederSlotKeys(
+function resultKindForWizardKind(
+  wizardKind: KnockoutWizardBracketKind,
+): string | null {
+  return knockoutMatchStepDef(wizardKind)?.resultKind ?? null;
+}
+
+function slotKeyForMatchIndex(
   wizardKind: KnockoutWizardBracketKind,
   matchIndex: number,
-): readonly [string, string] | null {
-  if (wizardKind === "round_of_16") {
-    const pair = r16R32ParticipantPair(matchIndex);
-    if (!pair) return null;
-    return [
-      r16SlotKeyForR32MatchIndex(pair[0]),
-      r16SlotKeyForR32MatchIndex(pair[1]),
-    ] as const;
-  }
-  const slotStage =
-    wizardKind === "quarterfinalist"
-      ? "quarterfinal"
-      : wizardKind === "semifinalist"
-        ? "semifinal"
-        : wizardKind === "finalist"
-          ? "final"
-          : null;
-  if (!slotStage) return null;
-  const pair = knockoutParticipantSlotPair(slotStage, matchIndex);
-  return pair ?? null;
-}
-
-function feederMatchNoForSlot(
-  wizardKind: KnockoutWizardBracketKind,
-  feederSlotKey: string,
-): number | null {
-  if (wizardKind === "round_of_16") {
-    const r32Index = parseInt(feederSlotKey, 10) - 1;
-    if (!Number.isFinite(r32Index) || r32Index < 0) return null;
-    return 73 + r32Index;
-  }
-  const def = knockoutMatchStepDef(
-    wizardKind === "quarterfinalist"
-      ? "round_of_16"
-      : wizardKind === "semifinalist"
-        ? "quarterfinalist"
-        : wizardKind === "finalist"
-          ? "semifinalist"
-          : "round_of_16",
-  );
-  if (!def) return null;
-  const slotNo = parseInt(feederSlotKey, 10);
-  if (!Number.isFinite(slotNo) || slotNo < 1) return null;
-  return def.firstFifaMatchNo + slotNo - 1;
-}
-
-function officialWinnerForFeeder(
-  wizardKind: KnockoutWizardBracketKind,
-  feederSlotKey: string,
-  teams: Team[],
-  tournamentMatches: TournamentMatchPublicRow[] | null | undefined,
-  gradual: GradualKnockoutSelectionState,
-  r32Ctx: ConfirmedR32WinnerContext,
 ): string | null {
-  if (wizardKind === "round_of_16") {
-    const r32Index = parseInt(feederSlotKey, 10) - 1;
-    if (!Number.isFinite(r32Index) || r32Index < 0) return null;
-    return readOfficialR32MatchResultWinner(r32Index, r32Ctx);
-  }
-  const upstreamDef = knockoutMatchStepDef(
-    wizardKind === "quarterfinalist"
-      ? "round_of_16"
-      : wizardKind === "semifinalist"
-        ? "quarterfinalist"
-        : "semifinalist",
-  );
-  if (!upstreamDef) return null;
-  const fifaMatchNo = feederMatchNoForSlot(wizardKind, feederSlotKey);
-  if (fifaMatchNo == null) return null;
-  return officialKnockoutMatchResultWinner(
-    fifaMatchNo,
-    upstreamDef.stageCode,
-    teams,
-    tournamentMatches,
-  );
+  const kind = resultKindForWizardKind(wizardKind);
+  if (!kind || kind === "champion") return null;
+  return String(matchIndex + 1);
 }
 
-function participantPickForFeeder(
+function savedPickForMatchSlot(
   wizardKind: KnockoutWizardBracketKind,
-  feederSlotKey: string,
+  matchIndex: number,
   slots: KnockoutPickSlotDraft[],
-  r32Ctx: ConfirmedR32WinnerContext,
 ): { teamId: string | null; pickStatus: "active" | "out" | null } {
-  if (wizardKind === "round_of_16") {
-    const r32Index = parseInt(feederSlotKey, 10) - 1;
-    if (!Number.isFinite(r32Index) || r32Index < 0) {
-      return { teamId: null, pickStatus: null };
-    }
-    const teamId = readParticipantR32MatchWinnerPick(
-      r32Index,
-      slots,
-      r32Ctx,
-    ).trim();
-    const saveRow = slots.find(
-      (s) =>
-        s.predictionKind === "round_of_16" &&
-        s.slotKey === feederSlotKey,
-    );
+  const resultKind = resultKindForWizardKind(wizardKind);
+  if (!resultKind) return { teamId: null, pickStatus: null };
+
+  if (resultKind === "champion") {
+    const row = slots.find((s) => s.predictionKind === "champion");
+    const teamId = row?.teamId.trim() ?? "";
     return {
       teamId: teamId || null,
-      pickStatus: saveRow?.pickStatus ?? null,
+      pickStatus: row?.pickStatus ?? null,
     };
   }
-  const feederKind =
-    wizardKind === "quarterfinalist"
-      ? "quarterfinalist"
-      : wizardKind === "semifinalist"
-        ? "semifinalist"
-        : "finalist";
-  const saveRow = slots.find(
-    (s) => s.predictionKind === feederKind && s.slotKey === feederSlotKey,
+
+  const slotKey = slotKeyForMatchIndex(wizardKind, matchIndex);
+  if (!slotKey) return { teamId: null, pickStatus: null };
+  const row = slots.find(
+    (s) => s.predictionKind === resultKind && s.slotKey === slotKey,
   );
-  const teamId = saveRow?.teamId.trim() ?? "";
+  const teamId = row?.teamId.trim() ?? "";
   return {
     teamId: teamId || null,
-    pickStatus: saveRow?.pickStatus ?? null,
+    pickStatus: row?.pickStatus ?? null,
   };
 }
 
-function classifyFeederSide(input: {
-  participantPickTeamId: string | null;
-  pickStatus: "active" | "out" | null;
-  officialWinnerTeamId: string | null;
-}): StrictBracketFeederIssueKind {
-  const official = input.officialWinnerTeamId?.trim() ?? "";
-  if (!official) return "valid";
+function officialMatchupSidesForWizardMatch(input: {
+  wizardKind: KnockoutWizardBracketKind;
+  matchIndex: number;
+  slots: KnockoutPickSlotDraft[];
+  teams: Team[];
+  tournamentMatches?: TournamentMatchPublicRow[] | null;
+  gradual: GradualKnockoutSelectionState;
+}): { homeTeamId: string | null; awayTeamId: string | null } {
+  const def = knockoutMatchStepDef(input.wizardKind);
+  if (!def) return { homeTeamId: null, awayTeamId: null };
 
-  const saved = input.participantPickTeamId?.trim() ?? "";
-  if (!saved) return "missing_pick";
-  if (
-    input.pickStatus === "out" ||
-    isKnockoutPickLockedOut({
-      teamId: saved,
-      pickStatus: input.pickStatus,
-    })
-  ) {
-    return "stale_path";
+  const fifaMatchNo = def.firstFifaMatchNo + input.matchIndex;
+  const stageMatches = (input.tournamentMatches ?? []).filter(
+    (m) => m.stage_code === def.stageCode,
+  );
+  const pub = publicMatchForFifaNo(stageMatches, def.stageCode, fifaMatchNo);
+  if (pub && input.teams.length) {
+    const homeFromFixture = input.teams.find(
+      (t) =>
+        (t.countryCode ?? "").trim().toUpperCase() ===
+        (pub.home_country_code ?? "").trim().toUpperCase(),
+    )?.id;
+    const awayFromFixture = input.teams.find(
+      (t) =>
+        (t.countryCode ?? "").trim().toUpperCase() ===
+        (pub.away_country_code ?? "").trim().toUpperCase(),
+    )?.id;
+    if (homeFromFixture || awayFromFixture) {
+      return {
+        homeTeamId: homeFromFixture ?? null,
+        awayTeamId: awayFromFixture ?? null,
+      };
+    }
   }
-  if (saved !== official) return "stale_path";
-  return "valid";
+
+  const resultKind = def.resultKind;
+  const slotKey = slotKeyForMatchIndex(input.wizardKind, input.matchIndex);
+  if (!resultKind || !slotKey) {
+    return { homeTeamId: null, awayTeamId: null };
+  }
+
+  return resolveOfficialKnockoutSlotMatchupTeamIds({
+    predictionKind: resultKind,
+    slotKey,
+    tournamentMatches: input.tournamentMatches,
+    gradual: input.gradual,
+    teams: input.teams,
+  });
 }
 
 /**
- * Strict bracket continuity: downstream rows are pickable only when each
- * official feeder side matches the participant's saved upstream winner.
+ * Match-slot pick health: saved winner vs official matchup sides for this FIFA slot.
+ * Upstream predicted opponents/paths do not affect validity.
+ */
+export function evaluateMatchSlotSavedPick(input: {
+  wizardKind: KnockoutWizardBracketKind;
+  matchIndex: number;
+  slots: KnockoutPickSlotDraft[];
+  teams: Team[];
+  tournamentMatches?: TournamentMatchPublicRow[] | null;
+  gradual: GradualKnockoutSelectionState;
+  knockoutBracketPicksUnlocked?: boolean;
+}): MatchSlotSavedPickEvaluation | null {
+  if (input.knockoutBracketPicksUnlocked === false) return null;
+
+  const { teamId: savedTeamId, pickStatus } = savedPickForMatchSlot(
+    input.wizardKind,
+    input.matchIndex,
+    input.slots,
+  );
+  if (!savedTeamId) {
+    return {
+      status: "missing",
+      savedTeamId: null,
+      savedTeamInOfficialMatchup: false,
+    };
+  }
+
+  const { homeTeamId, awayTeamId } = officialMatchupSidesForWizardMatch(input);
+  const bothSidesKnown = Boolean(homeTeamId?.trim() && awayTeamId?.trim());
+  const inMatchup = isValidSavedPickForMatchup({
+    savedTeamId,
+    homeTeamId,
+    awayTeamId,
+    pickStatus,
+  });
+
+  if (!bothSidesKnown) {
+    return {
+      status: pickStatus === "out" ? "out" : "live",
+      savedTeamId,
+      savedTeamInOfficialMatchup: false,
+    };
+  }
+
+  if (
+    pickStatus === "out" ||
+    isKnockoutPickLockedOut({ teamId: savedTeamId, pickStatus })
+  ) {
+    return {
+      status: "out",
+      savedTeamId,
+      savedTeamInOfficialMatchup: inMatchup,
+    };
+  }
+
+  return {
+    status: inMatchup ? "live" : "out",
+    savedTeamId,
+    savedTeamInOfficialMatchup: inMatchup,
+  };
+}
+
+/**
+ * @deprecated Upstream bracket-path validation removed — use
+ * {@link evaluateMatchSlotSavedPick} for match-slot pick status.
  */
 export function evaluateStrictBracketPathForMatch(input: {
   wizardKind: KnockoutWizardBracketKind;
@@ -229,71 +249,32 @@ export function evaluateStrictBracketPathForMatch(input: {
   knockoutBracketPicksUnlocked?: boolean;
   nowMs?: number;
 }): StrictBracketPathEvaluation | null {
-  if (input.knockoutBracketPicksUnlocked === false) return null;
+  const slotEval = evaluateMatchSlotSavedPick(input);
+  if (!slotEval) return null;
 
-  const feederSlotKeys = upstreamFeederSlotKeys(
-    input.wizardKind,
-    input.matchIndex,
-  );
-  if (!feederSlotKeys) return null;
-
-  const r32Ctx: ConfirmedR32WinnerContext = {
-    teams: input.teams,
-    tournamentMatches: input.tournamentMatches,
-    gradual: input.gradual,
-    knockoutBracketPicksUnlocked: input.knockoutBracketPicksUnlocked,
-  };
+  const { homeTeamId, awayTeamId } = officialMatchupSidesForWizardMatch(input);
+  if (!homeTeamId?.trim() || !awayTeamId?.trim()) return null;
 
   const issues: StrictBracketFeederIssue[] = [];
-  let anyOfficialFeeder = false;
-
-  for (const feederSlotKey of feederSlotKeys) {
-    const officialWinnerTeamId = officialWinnerForFeeder(
-      input.wizardKind,
-      feederSlotKey,
-      input.teams,
-      input.tournamentMatches,
-      input.gradual,
-      r32Ctx,
-    );
-    if (officialWinnerTeamId) anyOfficialFeeder = true;
-
-    const { teamId: participantPickTeamId, pickStatus } =
-      participantPickForFeeder(
-        input.wizardKind,
-        feederSlotKey,
-        input.slots,
-        r32Ctx,
-      );
-
-    const kind = classifyFeederSide({
-      participantPickTeamId,
-      pickStatus,
-      officialWinnerTeamId,
-    });
-
+  if (slotEval.status === "out" && slotEval.savedTeamId) {
     issues.push({
-      kind,
-      feederSlotKey,
-      feederMatchNo: feederMatchNoForSlot(input.wizardKind, feederSlotKey),
-      participantPickTeamId,
-      officialWinnerTeamId,
+      kind: "stale_path",
+      feederSlotKey: slotKeyForMatchIndex(input.wizardKind, input.matchIndex) ?? "",
+      feederMatchNo:
+        (knockoutMatchStepDef(input.wizardKind)?.firstFifaMatchNo ?? 0) +
+        input.matchIndex,
+      participantPickTeamId: slotEval.savedTeamId,
+      officialWinnerTeamId: null,
     });
   }
 
-  if (!anyOfficialFeeder) return null;
-
-  const hasStalePath = issues.some((i) => i.kind === "stale_path");
-  const hasMissingRequiredPick = issues.some((i) => i.kind === "missing_pick");
-  const allFeedersValid = issues.every((i) => i.kind === "valid");
-  const primaryStale = issues.find((i) => i.kind === "stale_path");
-
   return {
     issues,
-    hasStalePath,
-    hasMissingRequiredPick,
-    allFeedersValid,
-    primaryStalePickTeamId: primaryStale?.participantPickTeamId ?? null,
+    hasStalePath: slotEval.status === "out" && Boolean(slotEval.savedTeamId),
+    hasMissingRequiredPick: slotEval.status === "missing",
+    allFeedersValid: slotEval.status === "live" || slotEval.status === "missing",
+    primaryStalePickTeamId:
+      slotEval.status === "out" ? slotEval.savedTeamId : null,
   };
 }
 
@@ -303,26 +284,52 @@ export function strictBracketStageLabel(
   return knockoutMatchStepDef(wizardKind)?.stageLabel ?? "match";
 }
 
-/** Participant-facing copy when strict path blocks a future confirmed matchup. */
+/** Participant-facing copy when a saved pick is not in the official match slot. */
+export function matchSlotSavedPickStatusCopy(
+  evaluation: MatchSlotSavedPickEvaluation,
+  teams: Team[],
+  wizardKind: KnockoutWizardBracketKind,
+): string | null {
+  if (evaluation.status === "missing") return null;
+  const name =
+    teamName(evaluation.savedTeamId, teams) ?? evaluation.savedTeamId ?? "That team";
+  if (evaluation.status === "live") {
+    return `Your original pick is still alive because ${name} is in this match.`;
+  }
+  if (evaluation.savedTeamInOfficialMatchup) {
+    return `Your original pick is out — ${name} did not win this match.`;
+  }
+  return `Your original pick is out because ${name} did not reach this match.`;
+}
+
+/** @deprecated Use {@link matchSlotSavedPickStatusCopy}. */
 export function strictBracketPathBlockedCopy(
   evaluation: StrictBracketPathEvaluation,
   teams: Team[],
   wizardKind: KnockoutWizardBracketKind,
 ): string {
-  const stage = strictBracketStageLabel(wizardKind).toLowerCase();
   if (evaluation.hasStalePath && evaluation.primaryStalePickTeamId) {
     const name =
       teamName(evaluation.primaryStalePickTeamId, teams) ??
       evaluation.primaryStalePickTeamId;
-    return `This ${stage} is unavailable because your earlier pick ${name} did not advance.`;
+    return `Your original pick is out because ${name} did not reach this match.`;
   }
   if (evaluation.hasMissingRequiredPick) {
-    return `Your bracket path for this ${stage} is incomplete — pick the required earlier-round winners first.`;
+    const stage = strictBracketStageLabel(wizardKind).toLowerCase();
+    return `No saved pick for this ${stage} yet.`;
   }
-  return `Your bracket path for this ${stage} is broken because an earlier pick did not advance.`;
+  return matchSlotSavedPickStatusCopy(
+    {
+      status: "out",
+      savedTeamId: evaluation.primaryStalePickTeamId,
+      savedTeamInOfficialMatchup: false,
+    },
+    teams,
+    wizardKind,
+  )!;
 }
 
-/** True when participant must not save a winner on this row (strict path broken). */
+/** True when participant must not save a new winner on this row (pick is locked). */
 export function isStrictBracketPathBlockedForParticipant(input: {
   wizardKind: KnockoutWizardBracketKind;
   matchIndex: number;
@@ -333,28 +340,7 @@ export function isStrictBracketPathBlockedForParticipant(input: {
   knockoutBracketPicksUnlocked?: boolean;
   nowMs?: number;
 }): boolean {
-  const def = knockoutMatchStepDef(input.wizardKind);
-  if (!def) return false;
-  const publicMatch = publicMatchForFifaNo(
-    (input.tournamentMatches ?? []).filter((m) => m.stage_code === def.stageCode),
-    def.stageCode,
-    def.firstFifaMatchNo + input.matchIndex,
-  );
-  if (publicMatch && isKnockoutMatchLockedForParticipant(publicMatch, input.nowMs)) {
-    return false;
-  }
-  const evaluation = evaluateStrictBracketPathForMatch(input);
-  if (!evaluation) return false;
-  return evaluation.hasStalePath || evaluation.hasMissingRequiredPick;
-}
-
-function upstreamWizardKindForStrictPath(
-  wizardKind: KnockoutWizardBracketKind,
-): KnockoutWizardBracketKind | null {
-  if (wizardKind === "quarterfinalist") return "round_of_16";
-  if (wizardKind === "semifinalist") return "quarterfinalist";
-  if (wizardKind === "finalist") return "semifinalist";
-  return null;
+  return false;
 }
 
 /** Map a saved progression slot to the wizard match row it updates. */
@@ -383,39 +369,13 @@ export function wizardMatchRefForSavedSlot(
   return null;
 }
 
-/**
- * True when a missing strict-path feeder can still be filled via an editable
- * upstream wizard row (participant should pick upstream first).
- */
+/** @deprecated Upstream missing-feeder gating removed under match-slot pick rules. */
 export function strictPathMissingUpstreamStillWaiting(
-  evaluation: StrictBracketPathEvaluation,
-  wizardKind: KnockoutWizardBracketKind,
-  upstreamRows: (kind: KnockoutWizardBracketKind) => KnockoutMatchPickRow[],
-  gradual: GradualKnockoutSelectionState,
+  _evaluation: StrictBracketPathEvaluation,
+  _wizardKind: KnockoutWizardBracketKind,
+  _upstreamRows: (kind: KnockoutWizardBracketKind) => KnockoutMatchPickRow[],
+  _gradual: GradualKnockoutSelectionState,
 ): boolean {
-  for (const issue of evaluation.issues) {
-    if (issue.kind !== "missing_pick") continue;
-
-    if (wizardKind === "round_of_16") {
-      const r32Index = parseInt(issue.feederSlotKey, 10) - 1;
-      if (!Number.isFinite(r32Index) || r32Index < 0) continue;
-      const ms = gradual.matchStates[r32Index];
-      if (ms?.pickable && !ms.started) return true;
-      continue;
-    }
-
-    const upstreamKind = upstreamWizardKindForStrictPath(wizardKind);
-    if (!upstreamKind) continue;
-    const feederMatchIndex = parseInt(issue.feederSlotKey, 10) - 1;
-    if (!Number.isFinite(feederMatchIndex) || feederMatchIndex < 0) continue;
-    const upstreamRow = upstreamRows(upstreamKind)[feederMatchIndex];
-    if (
-      upstreamRow?.lockReason === "pickable" ||
-      upstreamRow?.lockReason === "incomplete"
-    ) {
-      return true;
-    }
-  }
   return false;
 }
 
@@ -438,14 +398,17 @@ export function participantR16SlotSidesMatchOfficial(input: {
   };
   const official = officialR32ParticipantIds(slotNo - 1, input.slots, r32Ctx);
   if (!official.topId && !official.bottomId) return true;
-  const eval_ = evaluateStrictBracketPathForMatch({
-    wizardKind: "round_of_16",
-    matchIndex: slotNo - 1,
-    slots: input.slots,
-    teams: input.teams,
-    tournamentMatches: input.tournamentMatches,
-    gradual: input.gradual,
-    knockoutBracketPicksUnlocked: input.knockoutBracketPicksUnlocked,
+
+  const saved = savedPickForMatchSlot(
+    "round_of_16",
+    slotNo - 1,
+    input.slots,
+  ).teamId;
+  if (!saved) return true;
+
+  return isValidSavedPickForMatchup({
+    savedTeamId: saved,
+    homeTeamId: official.topId,
+    awayTeamId: official.bottomId,
   });
-  return eval_?.allFeedersValid ?? true;
 }

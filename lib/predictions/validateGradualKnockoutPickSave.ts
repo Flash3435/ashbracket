@@ -15,10 +15,6 @@ import {
   isKnockoutPickFrozenForParticipant,
   knockoutPickEditBlockedMessage,
 } from "../picks/knockoutPickEditability";
-import {
-  isStrictBracketPathBlockedForParticipant,
-  wizardMatchRefForSavedSlot,
-} from "../picks/knockoutStrictBracketPath";
 import { pickStatusFromPrediction } from "./knockoutPickStatus";
 import { isKnockoutProgressionKind } from "./knockoutProgressionKinds";
 import { mergeKnockoutProgressionSlotsFromPredictions } from "./mergeKnockoutProgressionFromExistingPredictions";
@@ -117,7 +113,7 @@ function mergedSlotsAsDrafts(
   }));
 }
 
-function validateStrictBracketKnockoutPickChanges(input: {
+function validateStrictBracketKnockoutPickChanges(_input: {
   incoming: ParticipantPickSlotPayload[];
   existing: Prediction[];
   matches: TournamentMatchPublicRow[];
@@ -125,72 +121,6 @@ function validateStrictBracketKnockoutPickChanges(input: {
   teams?: Team[];
   nowMs?: number;
 }): string | null {
-  if (!input.teams?.length) return null;
-
-  const priorByKey = existingTeamIdByKey(input.existing);
-  const mergedSlots: ParticipantPickSlotPayload[] = input.existing.map((p) => ({
-    predictionKind: p.predictionKind,
-    tournamentStageId: p.tournamentStageId ?? "",
-    slotKey: p.slotKey,
-    groupCode: p.groupCode,
-    bonusKey: p.bonusKey,
-    teamId: p.teamId?.trim() ?? "",
-  }));
-
-  for (const slot of input.incoming) {
-    if (!isKnockoutProgressionKind(slot.predictionKind)) continue;
-    const incomingId = slot.teamId.trim();
-    if (!incomingId) continue;
-    const k = progressionKey({
-      predictionKind: slot.predictionKind,
-      tournamentStageId: slot.tournamentStageId,
-      slotKey: slot.slotKey,
-    });
-    const keep = priorByKey.get(k) ?? "";
-    if (incomingId === keep) continue;
-
-    const idx = mergedSlots.findIndex(
-      (s) =>
-        s.predictionKind === slot.predictionKind &&
-        s.tournamentStageId === slot.tournamentStageId &&
-        s.slotKey === slot.slotKey,
-    );
-    if (idx >= 0) {
-      mergedSlots[idx] = { ...mergedSlots[idx]!, teamId: incomingId };
-    } else {
-      mergedSlots.push(slot);
-    }
-
-    const matchRef = wizardMatchRefForSavedSlot(
-      slot.predictionKind,
-      slot.slotKey,
-    );
-    if (!matchRef) continue;
-
-    if (
-      isStrictBracketPathBlockedForParticipant({
-        wizardKind: matchRef.wizardKind,
-        matchIndex: matchRef.matchIndex,
-        slots: mergedSlotsAsDrafts(mergedSlots),
-        teams: input.teams,
-        tournamentMatches: input.matches,
-        gradual: input.gradual,
-        knockoutBracketPicksUnlocked: true,
-        nowMs: input.nowMs,
-      })
-    ) {
-      return knockoutPickEditBlockedMessage({
-        predictionKind: slot.predictionKind,
-        slotKey: slot.slotKey,
-        tournamentMatches: input.matches,
-        gradual: input.gradual,
-        teams: input.teams,
-        slots: mergedSlotsAsDrafts(mergedSlots),
-        knockoutBracketPicksUnlocked: true,
-        nowMs: input.nowMs,
-      });
-    }
-  }
   return null;
 }
 

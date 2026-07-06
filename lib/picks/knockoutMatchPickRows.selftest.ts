@@ -1008,7 +1008,7 @@ function r32Side(slotKey: string, teamId = ""): KnockoutPickSlotDraft {
   assert.strictEqual(cleared.length, 0);
 }
 
-// Semi-final winner not in the official matchup is pruned
+// Semi-final winner not in the official matchup is flagged out (Canada on M101)
 {
   const slots: KnockoutPickSlotDraft[] = [
     r16Slot("1", "team-can"),
@@ -1019,14 +1019,6 @@ function r32Side(slotKey: string, teamId = ""): KnockoutPickSlotDraft {
     r16Slot("6", "team-rsa"),
     r16Slot("7", "team-ned"),
     r16Slot("8", "team-bra"),
-    r16Slot("9", "team-ned"),
-    r16Slot("10", "team-ger"),
-    r16Slot("11", "team-fra"),
-    r16Slot("12", "team-ger"),
-    r16Slot("13", "team-can"),
-    r16Slot("14", "team-ned"),
-    r16Slot("15", "team-bra"),
-    r16Slot("16", "team-rsa"),
     qfSlot("1", "team-ger"),
     qfSlot("2", "team-can"),
     qfSlot("3", "team-bra"),
@@ -1042,21 +1034,30 @@ function r32Side(slotKey: string, teamId = ""): KnockoutPickSlotDraft {
     finSlot("1", "team-can"),
     finSlot("2"),
   ];
-  const { slots: pruned, cleared } = pruneOfficialKnockoutPathPicks(slots);
+  const sfRows = buildKnockoutMatchPickRows({
+    bracketKind: "semifinalist",
+    slots,
+    teams,
+    knockoutBracketPicksUnlocked: true,
+  });
+  const m101 = sfRows.find((r) => r.fifaMatchNo === 101)!;
   assert.ok(
-    cleared.some(
-      (c) =>
-        c.predictionKind === "finalist" &&
-        c.slotKey === "1" &&
-        c.teamId === "team-can",
-    ),
-    "Canada is not in M101 and must be cleared from finalist slot 1",
+    savedPickIsStaleForKnockoutRow({
+      winnerTeamId: "team-can",
+      homeTeamId: m101.homeTeamId,
+      awayTeamId: m101.awayTeamId,
+      officialWinnerTeamId: null,
+    }),
+    "Canada is not in M101 and must be out",
   );
+  const { slots: pruned, cleared } = pruneOfficialKnockoutPathPicks(slots);
   assert.strictEqual(
     pruned.find((s) => s.predictionKind === "finalist" && s.slotKey === "1")
       ?.teamId,
-    "",
+    "team-can",
+    "participant picks are preserved — audit only",
   );
+  assert.strictEqual(cleared.length, 0, "no official results — audit skips incomplete feeders");
 }
 
 // Accessibility labels include match code for later-round picks
@@ -1307,7 +1308,7 @@ function r32Side(slotKey: string, teamId = ""): KnockoutPickSlotDraft {
   assert.strictEqual(validatedKnockoutMatchWinner(m89), null);
 }
 
-// Stale M77 participant pick blocks M89 under strict bracket continuity.
+// Wrong upstream R16 pick does not block M89 — official sides still resolve.
 {
   const tournamentMatches: TournamentMatchPublicRow[] = [
     {
@@ -1336,7 +1337,7 @@ function r32Side(slotKey: string, teamId = ""): KnockoutPickSlotDraft {
   ];
   const slots: KnockoutPickSlotDraft[] = [
     r16Slot("2", "team-ger"),
-    r16Slot("5", "team-fra"), // stale upstream slot
+    r16Slot("5", "team-fra"), // wrong upstream slot vs official Sweden
     ...Array.from({ length: 14 }, (_, i) =>
       r16Slot(String(i < 1 ? i + 1 : i + 2)),
     ),
@@ -1353,13 +1354,13 @@ function r32Side(slotKey: string, teamId = ""): KnockoutPickSlotDraft {
   const m89 = rows.find((r) => r.fifaMatchNo === 89)!;
   assert.strictEqual(m89.homeTeamId, "team-ger");
   assert.strictEqual(m89.awayTeamId, "team-swe");
-  assert.strictEqual(m89.lockReason, "frozen");
-  assert.match(m89.display.statusLine!, /France did not advance/i);
-  assert.ok(
+  assert.strictEqual(m89.lockReason, "pickable");
+  assert.strictEqual(
     validateKnockoutLaterMatchPick(m89, "team-swe"),
-    "participant cannot save when strict path is broken",
+    null,
+    "participant can save M89 winner from official matchup",
   );
-  assert.strictEqual(isKnockoutMatchDirectPickEligible(m89), false);
+  assert.strictEqual(isKnockoutMatchDirectPickEligible(m89), true);
 }
 
 // Valid M77 winner France stays stable through M89 selection.
@@ -1869,7 +1870,7 @@ function r32Side(slotKey: string, teamId = ""): KnockoutPickSlotDraft {
   assert.strictEqual(validPick.savedPickStatus, "valid");
   assert.strictEqual(validPick.savedPickSummaryLine, "Saved pick: Sweden");
   assert.strictEqual(validPick.savedPickTeamId, "team-swe");
-  assert.strictEqual(validPick.lockStatusLine, null);
+  assert.strictEqual(validPick.lockStatusLine, "Pick still alive: Sweden");
   assert.strictEqual(validPick.savedPickWarning, null);
 
   const staleSlots = [
@@ -1894,9 +1895,9 @@ function r32Side(slotKey: string, teamId = ""): KnockoutPickSlotDraft {
     stalePick.savedPickSummaryLine,
     "Previous saved pick: Brazil",
   );
-  assert.strictEqual(
-    stalePick.savedPickWarning,
-    "That pick is out — it no longer matches this matchup.",
+  assert.match(
+    stalePick.savedPickWarning!,
+    /Your original pick is out because Brazil is not in this match/i,
   );
   assert.strictEqual(stalePick.lockStatusLine, null);
   assert.strictEqual(stalePick.savedPickTeamId, "team-bra");
@@ -2031,7 +2032,7 @@ function r32Side(slotKey: string, teamId = ""): KnockoutPickSlotDraft {
     cleared.some(
       (c) => c.predictionKind === "quarterfinalist" && c.slotKey === "6",
     ),
-    "stale France M94 pick should be cleared by path repair",
+    "France M94 pick flagged as not in official matchup",
   );
   const afterInvalidation = applyKnockoutPathInvalidation(pruned, cleared, {
     teams: m94Teams,
@@ -2042,8 +2043,12 @@ function r32Side(slotKey: string, teamId = ""): KnockoutPickSlotDraft {
   const qf6After = afterInvalidation.find(
     (s) => s.predictionKind === "quarterfinalist" && s.slotKey === "6",
   );
-  assert.strictEqual(qf6After?.teamId, "", "stale M94 pick cleared before kickoff");
-  assert.strictEqual(qf6After?.pickStatus ?? null, null);
+  assert.strictEqual(
+    qf6After?.teamId,
+    "team-fra",
+    "original France M94 pick preserved",
+  );
+  assert.strictEqual(qf6After?.pickStatus, "out");
 
   const displaySlots = pruneParticipantPicks(afterInvalidation, {
     r32WinnerContext: m94Ctx,
@@ -2060,16 +2065,17 @@ function r32Side(slotKey: string, teamId = ""): KnockoutPickSlotDraft {
   const m94Row = m94Rows.find((r) => r.fifaMatchNo === 94)!;
   assert.strictEqual(m94Row.homeTeamId, "team-us");
   assert.strictEqual(m94Row.awayTeamId, "team-bel");
-  assert.strictEqual(m94Row.lockReason, "pickable");
-  assert.strictEqual(m94Row.winnerTeamId, "");
-  assert.strictEqual(m94Row.pickStatus, null);
-  assert.strictEqual(isKnockoutMatchDirectPickEligible(m94Row), true);
-  assert.strictEqual(m94Row.display.emptyPrimaryLine, "United States vs Belgium");
+  assert.strictEqual(m94Row.lockReason, "frozen");
+  assert.strictEqual(m94Row.winnerTeamId, "team-fra");
+  assert.strictEqual(m94Row.pickStatus, "out");
+  assert.strictEqual(isKnockoutMatchDirectPickEligible(m94Row), false);
 
   const presentation = knockoutMatchSavedPickPresentation(m94Row, m94Teams);
-  assert.strictEqual(presentation.savedPickStatus, "missing");
-  assert.strictEqual(presentation.savedPickSummaryLine, "No pick saved");
-  assert.strictEqual(presentation.lockStatusLine, null);
+  assert.strictEqual(presentation.savedPickStatus, "stale");
+  assert.match(
+    presentation.savedPickWarning!,
+    /France did not reach this match/i,
+  );
 
   const swapOk = validateKnockoutParticipantPickChanges({
     incoming: [
@@ -2132,10 +2138,9 @@ function r32Side(slotKey: string, teamId = ""): KnockoutPickSlotDraft {
     teams: m94Teams,
     nowMs: m94NowMs,
   });
-  assert.strictEqual(
+  assert.ok(
     swapOk,
-    null,
-    "server allows replacing stale M94 pick with Belgium before kickoff",
+    "server blocks replacing locked original M94 pick before kickoff",
   );
 
   const backfillGuard = applyGradualKnockoutPickSaveGuards({
@@ -2198,10 +2203,9 @@ function r32Side(slotKey: string, teamId = ""): KnockoutPickSlotDraft {
     fullRoundOf32Official: true,
     nowMs: m94NowMs,
   });
-  assert.strictEqual(
+  assert.ok(
     backfillGuard.error,
-    null,
-    "server allows swapping stale M94 pick to US before kickoff",
+    "server blocks swapping locked original M94 pick before kickoff",
   );
 
   const outValueText = encodeKnockoutPickStatusMetadata({
@@ -2770,19 +2774,12 @@ function r32Side(slotKey: string, teamId = ""): KnockoutPickSlotDraft {
   assert.strictEqual(m101.awayTeamId, "team-esp");
 
   const { slots: pruned, cleared } = pruneOfficialKnockoutPathPicks(slots);
-  assert.ok(
-    cleared.some(
-      (c) =>
-        c.predictionKind === "finalist" &&
-        c.slotKey === "2" &&
-        c.teamId === "team-esp",
-    ),
-    "Spain on finalist slot 2 must be cleared — both teams share M101",
-  );
+  assert.strictEqual(cleared.length, 0, "no official results — audit preserves all picks");
   assert.strictEqual(
     pruned.find((s) => s.predictionKind === "finalist" && s.slotKey === "2")
       ?.teamId,
-    "",
+    "team-esp",
+    "Spain pick preserved until official M102 sides resolve",
   );
 
   const finalRows = buildKnockoutMatchPickRows({
@@ -2867,10 +2864,7 @@ function r32Side(slotKey: string, teamId = ""): KnockoutPickSlotDraft {
   assert.strictEqual(m97Presentation.savedPickStatus, "valid");
   assert.strictEqual(m97Presentation.savedPickSummaryLine, "Saved pick: France");
   assert.strictEqual(m97Presentation.savedPickWarning, null);
-  assert.strictEqual(
-    m97Presentation.lockStatusLine,
-    "Locked — feeder results are official.",
-  );
+  assert.strictEqual(m97Presentation.lockStatusLine, "This pick is locked.");
   assert.ok(savedPickMatchesRowMatchup(frozenQfRow));
   assert.ok(!savedPickIsStaleForKnockoutRow(frozenQfRow));
   assert.strictEqual(validatedKnockoutMatchWinner(frozenQfRow), "team-fra");
@@ -3060,7 +3054,7 @@ function r32Side(slotKey: string, teamId = ""): KnockoutPickSlotDraft {
   assert.ok(presentation.savedPickWarning);
   assert.match(
     presentation.savedPickWarning!,
-    /no longer matches this matchup/i,
+    /did not reach this match/i,
   );
 }
 
@@ -3093,7 +3087,7 @@ function r32Side(slotKey: string, teamId = ""): KnockoutPickSlotDraft {
   assert.strictEqual(presentation.savedPickStatus, "stale");
   assert.match(
     presentation.savedPickWarning!,
-    /no longer matches this matchup/i,
+    /did not reach this match/i,
   );
   assert.strictEqual(validatedKnockoutMatchWinner(finishedLoserRow), null);
 }
@@ -3349,23 +3343,23 @@ function r32Side(slotKey: string, teamId = ""): KnockoutPickSlotDraft {
     ...baseR16,
     qfSlot("3", "team-jpn"),
     qfSlot("4", "team-eng"),
+    sfSlot("3", "team-nor"),
   ];
   const staleRows = buildKnockoutMatchPickRows({
     ...qfInput,
     slots: staleJapanSlots,
   });
   const staleM99 = staleRows.find((r) => r.fifaMatchNo === 99)!;
-  assert.strictEqual(staleM99.lockReason, "frozen");
+  assert.strictEqual(staleM99.lockReason, "pickable");
+  assert.strictEqual(staleM99.winnerTeamId, "team-nor");
+  assert.strictEqual(validatedKnockoutMatchWinner(staleM99), "team-nor");
   assert.strictEqual(isKnockoutMatchDirectPickEligible(staleM99), false);
-  assert.match(
-    staleM99.display.statusLine!,
-    /Japan did not advance/i,
-  );
 
   const staleMexicoSlots = [
     ...baseR16,
     qfSlot("3", "team-nor"),
     qfSlot("4", "team-mex"),
+    sfSlot("3", "team-mex"),
   ];
   const staleMexicoRows = buildKnockoutMatchPickRows({
     ...qfInput,
@@ -3388,7 +3382,7 @@ function r32Side(slotKey: string, teamId = ""): KnockoutPickSlotDraft {
   assert.strictEqual(staleMexicoM99.lockReason, "frozen");
   assert.match(
     staleMexicoM99.display.statusLine!,
-    /Mexico did not advance/i,
+    /Mexico did not reach this match/i,
   );
 
   const kickedOffMatches = tournamentMatches.map((m) =>

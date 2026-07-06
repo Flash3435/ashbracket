@@ -1166,13 +1166,13 @@ function stepGateSummaryFromExplanation(
       }
       if (bracketKind === "finalist") {
         return blockedCount === 1
-          ? "The final is blocked by an earlier bracket-path issue."
-          : "The final is blocked by earlier bracket-path issues.";
+          ? "The final is waiting on an earlier result."
+          : "The final is waiting on earlier results.";
       }
       if (bracketKind === "quarterfinalist") {
         return blockedCount === 1
-          ? "One quarter-final path is blocked."
-          : `${blockedCount} quarter-final paths are blocked.`;
+          ? "One quarter-final is waiting on an earlier result."
+          : `${blockedCount} quarter-finals are waiting on earlier results.`;
       }
       return `${countLabel} ${blockedCount === 1 ? "pick is" : "picks are"} out.`;
     case "pick_upstream":

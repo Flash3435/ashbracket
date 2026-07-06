@@ -94,10 +94,9 @@ export function clearedOutPickRowKeys(
   return keys;
 }
 
-/** Knockout progression picks marked out must not earn advancement points. */
+/** Knockout progression picks score by saved teamId vs official results (pickStatus out is display-only). */
 export function isKnockoutPredictionScoringEligible(pred: Prediction): boolean {
-  const meta = decodeKnockoutPickStatusMetadata(pred.valueText);
-  return meta?.status !== "out";
+  return Boolean(pred.teamId?.trim());
 }
 
 export function participantPickSlotPayloadFromDraft(

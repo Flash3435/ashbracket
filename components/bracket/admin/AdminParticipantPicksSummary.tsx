@@ -117,7 +117,7 @@ export function AdminParticipantPicksSummary({ tracker, teamById }: Props) {
           tone="muted"
         />
         <SummaryList
-          label="Stale / path-invalid picks"
+          label="Out picks (not in match slot)"
           count={summary.stalePicks.length}
           items={summary.stalePicks}
           emptyText="None"

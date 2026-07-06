@@ -272,7 +272,9 @@ function resolveParticipantPickDisplay(args: {
   if (!participantPickId) return { displayPickId: null, lockedOut: false };
   const onSide =
     participantPickId === args.homeId || participantPickId === args.awayId;
-  if (!onSide) return { displayPickId: null, lockedOut: false };
+  if (!onSide) {
+    return { displayPickId: participantPickId, lockedOut: true };
+  }
   return {
     displayPickId: participantPickId,
     lockedOut: args.pickLockedOut,

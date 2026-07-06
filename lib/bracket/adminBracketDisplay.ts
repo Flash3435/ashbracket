@@ -112,7 +112,7 @@ export function resolveAdminMatchOutcomeSummary(
   );
 
   if (pickLockedOut && pickId) {
-    return { text: "Pick no longer reachable", tone: "warning" };
+    return { text: "Pick out — team not in this match", tone: "warning" };
   }
 
   if (!pickId) {
@@ -164,7 +164,7 @@ export function resolveAdminChampionSummaryLine(
     champion.participantPickBadge === "your_pick_wrong_path" ||
     champion.eliminatedFromTournament
   ) {
-    return { line: "Champion pick no longer reachable", tone: "warning" };
+    return { line: "Champion pick out — team not in the final", tone: "warning" };
   }
 
   return { line: `Champion pick: ${name}`, tone: "success" };

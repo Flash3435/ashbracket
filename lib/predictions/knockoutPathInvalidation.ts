@@ -108,9 +108,9 @@ export function applyKnockoutPathInvalidation(
 
     return {
       ...row,
-      teamId: "",
-      pickStatus: null,
-      invalidReason: null,
+      teamId: inv.teamId.trim() || row.teamId.trim(),
+      pickStatus: inv.reason === "not_in_official_matchup" ? "out" : row.pickStatus,
+      invalidReason: inv.reason,
     };
   });
 }

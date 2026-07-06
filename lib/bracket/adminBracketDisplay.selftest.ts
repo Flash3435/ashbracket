@@ -199,7 +199,10 @@ void (async function main() {
     },
     teamById,
   );
-  assert(unreachable.line === "Champion pick no longer reachable", "unreachable champion");
+  assert(
+    unreachable.line === "Champion pick out — team not in the final",
+    "unreachable champion",
+  );
 
   const tracker: LiveBracketTrackerModel = {
     roundOf32: [

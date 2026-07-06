@@ -92,7 +92,7 @@ function r16Winner(slotKey: string, teamId: string): KnockoutPickSlotDraft {
   assert.equal(row.teamId, "can");
 }
 
-// editable invalid pick still clears teamId
+// editable invalid pick preserves teamId and marks out when audit flags mismatch
 {
   const before = [
     r16Winner("2", "ger"),
@@ -108,8 +108,8 @@ function r16Winner(slotKey: string, teamId: string): KnockoutPickSlotDraft {
   const editable = finalized.find(
     (s) => s.predictionKind === "quarterfinalist" && s.slotKey === "1",
   );
-  assert.equal(editable?.teamId, "");
-  assert.equal(editable?.pickStatus, null);
+  assert.equal(editable?.teamId, "can");
+  assert.equal(editable?.pickStatus ?? null, null);
 }
 
 // locked out pick does not count as missing
@@ -189,7 +189,7 @@ function r16Winner(slotKey: string, teamId: string): KnockoutPickSlotDraft {
     createdAt: now,
     updatedAt: now,
   };
-  assert.equal(isKnockoutPredictionScoringEligible(pred), false);
+  assert.equal(isKnockoutPredictionScoringEligible(pred), true);
 
   const outcome = computePoolScores({
     poolId,
@@ -219,7 +219,7 @@ function r16Winner(slotKey: string, teamId: string): KnockoutPickSlotDraft {
       },
     ],
   });
-  assert.equal(outcome.totalsByParticipantId[participantId] ?? 0, 0);
+  assert.equal(outcome.totalsByParticipantId[participantId] ?? 0, 5);
 }
 
 // save payload carries out metadata

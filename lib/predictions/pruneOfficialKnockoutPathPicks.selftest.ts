@@ -120,7 +120,7 @@ function groupWinner(groupCode: string, teamId: string): KnockoutPickSlotDraft {
   assert.strictEqual(next.find((s) => s.slotKey === "1")?.teamId, "can");
 }
 
-// Old invalid QF slot 1: Canada picked when official M89 is GER vs FRA
+// Invalid QF picks are audit-flagged only when official match sides are known.
 {
   const slots = [
     r16Winner("1", "can"),
@@ -132,13 +132,13 @@ function groupWinner(groupCode: string, teamId: string): KnockoutPickSlotDraft {
     fin("1", "can"),
     champ("can"),
   ];
-  const { cleared } = pruneOfficialKnockoutPathPicks(slots);
-  assert.ok(
-    cleared.some((c) => c.predictionKind === "quarterfinalist" && c.teamId === "can"),
+  const { cleared, slots: preserved } = pruneOfficialKnockoutPathPicks(slots);
+  assert.strictEqual(cleared.length, 0, "no official results yet — audit skips");
+  assert.strictEqual(
+    preserved.find((s) => s.predictionKind === "quarterfinalist")?.teamId,
+    "can",
+    "participant picks preserved",
   );
-  assert.ok(cleared.some((c) => c.predictionKind === "semifinalist"));
-  assert.ok(cleared.some((c) => c.predictionKind === "finalist"));
-  assert.ok(cleared.some((c) => c.predictionKind === "champion"));
 }
 
 // Valid QF under official path preserved
@@ -171,7 +171,7 @@ function groupWinner(groupCode: string, teamId: string): KnockoutPickSlotDraft {
   );
 }
 
-// pruneParticipantPicks chains official path validation
+// pruneParticipantPicks preserves knockout progression picks (audit-only path validation).
 {
   const slots = [
     r16Winner("1", "can"),
@@ -183,7 +183,7 @@ function groupWinner(groupCode: string, teamId: string): KnockoutPickSlotDraft {
   assert.strictEqual(
     next.find((s) => s.predictionKind === "quarterfinalist" && s.slotKey === "1")
       ?.teamId,
-    "",
+    "can",
   );
 }
 
@@ -245,7 +245,7 @@ function groupWinner(groupCode: string, teamId: string): KnockoutPickSlotDraft {
   );
 }
 
-assert.ok(KNOCKOUT_BRACKET_PATH_REVIEW_MESSAGE.includes("FIFA"));
+assert.ok(KNOCKOUT_BRACKET_PATH_REVIEW_MESSAGE.includes("original picks"));
 assert.strictEqual(
   participantNeedsKnockoutPathReview([
     {

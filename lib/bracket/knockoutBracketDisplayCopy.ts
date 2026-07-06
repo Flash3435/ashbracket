@@ -10,8 +10,8 @@ export const AWAITING_RESULT_BRACKET_LABEL = "Awaiting result";
 /** Compact badge when an official advancer was not the participant's saved pick. */
 export const NOT_YOUR_PICK_BADGE_LABEL = "Not your pick";
 
-/** Saved pick is still in the tournament but no longer on this bracket path. */
-export const WRONG_PATH_PICK_BADGE_LABEL = "Wrong path";
+/** Saved pick is out of the official match slot — not a wrong upstream bracket path. */
+export const WRONG_PATH_PICK_BADGE_LABEL = "Pick out";
 
 /** Tooltip for official advancers the participant did not pick. */
 export const OFFICIAL_ADVANCED_NOT_YOUR_PICK_TOOLTIP =
