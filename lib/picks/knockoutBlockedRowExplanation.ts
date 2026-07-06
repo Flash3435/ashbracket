@@ -11,6 +11,8 @@ import {
   officialKnockoutMatchResultWinner,
   readConfirmedKnockoutMatchWinner,
   readSavedUpstreamFeederPick,
+  savedPickMatchesRowMatchup,
+  savedPickIsStaleForKnockoutRow,
   usesImmediateUpstreamFeederSavedPick,
   usesKnockoutMatchPickRows,
   validatedKnockoutMatchWinner,
@@ -64,12 +66,17 @@ export type ParticipantLockedKnockoutRowKind =
 export function participantLockedKnockoutRowKind(
   row: Pick<
     KnockoutMatchPickRow,
-    "lockReason" | "winnerTeamId" | "pickStatus"
+    | "lockReason"
+    | "winnerTeamId"
+    | "pickStatus"
+    | "homeTeamId"
+    | "awayTeamId"
+    | "officialWinnerTeamId"
   >,
 ): ParticipantLockedKnockoutRowKind | null {
   if (row.lockReason !== "frozen" && row.lockReason !== "started") return null;
   const saved = row.winnerTeamId.trim();
-  if (row.pickStatus === "out" && saved) return "saved_out";
+  if (saved && savedPickIsStaleForKnockoutRow(row)) return "saved_out";
   if (!saved) return "locked_empty";
   return "saved_locked";
 }
@@ -452,7 +459,15 @@ function classifyImmediateUpstreamFeeder(
 
   if (saved) {
     const pickTeamName = participantTeamName(saved.teamId, upstreamInput.teams);
-    if (isKnockoutPickLockedOut(saved) || saved.pickStatus === "out") {
+    const savedInFeederMatchup = savedPickMatchesRowMatchup({
+      winnerTeamId: saved.teamId,
+      homeTeamId: feeder.homeTeamId,
+      awayTeamId: feeder.awayTeamId,
+    });
+    if (
+      (isKnockoutPickLockedOut(saved) || saved.pickStatus === "out") &&
+      !savedInFeederMatchup
+    ) {
       return {
         missingFeederMatchNo,
         missingFeederLabel: pickTeamName ?? feederMatchup,
@@ -467,7 +482,7 @@ function classifyImmediateUpstreamFeeder(
         ),
       };
     }
-    return null;
+    if (savedInFeederMatchup) return null;
   }
 
   if (clearedSave) {

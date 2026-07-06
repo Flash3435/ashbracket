@@ -52,6 +52,8 @@ export type KnockoutMatchPickRow = {
   winnerTeamId: string;
   pickStatus: import("../predictions/knockoutPickStatus").KnockoutPickStatus | null;
   lockReason: KnockoutMatchLockReason;
+  /** Published fixture winner for this match, when known. */
+  officialWinnerTeamId?: string | null;
   display: R32SlotRowDisplay;
   kickoffIso: string | null;
 };
@@ -524,12 +526,40 @@ export function incompleteR16MatchMessage(
   return `Complete Round of 32 first — pick winners for ${list}.`;
 }
 
+/** Whether the saved team is one of this row's displayed matchup sides. */
+export function savedPickMatchesRowMatchup(
+  row: Pick<
+    KnockoutMatchPickRow,
+    "winnerTeamId" | "homeTeamId" | "awayTeamId"
+  >,
+): boolean {
+  return isValidSavedPickForMatchup({
+    savedTeamId: row.winnerTeamId,
+    homeTeamId: row.homeTeamId,
+    awayTeamId: row.awayTeamId,
+  });
+}
+
+/** Row-level stale/out: not in the matchup, or eliminated by a finished official result. */
+export function savedPickIsStaleForKnockoutRow(
+  row: Pick<
+    KnockoutMatchPickRow,
+    "winnerTeamId" | "homeTeamId" | "awayTeamId" | "officialWinnerTeamId"
+  >,
+): boolean {
+  const saved = row.winnerTeamId.trim();
+  if (!saved) return false;
+  if (!savedPickMatchesRowMatchup(row)) return true;
+  const official = row.officialWinnerTeamId?.trim();
+  return Boolean(official && official !== saved);
+}
+
 /** Winner pick counts only when it matches that row's official matchup. */
 export function validatedKnockoutMatchWinner(
   row: KnockoutMatchPickRow | undefined,
 ): string | null {
   if (!row) return null;
-  if (row.pickStatus === "out") return null;
+  if (savedPickIsStaleForKnockoutRow(row)) return null;
   const w = row.winnerTeamId.trim();
   if (!w || !row.homeTeamId || !row.awayTeamId) return null;
   if (w === row.homeTeamId || w === row.awayTeamId) return w;
@@ -584,12 +614,13 @@ export function knockoutMatchSavedPickPresentation(
   const savedPickLabel = savedPickTeamId
     ? teamName(savedPickTeamId, teams)
     : null;
-  const validatedId = validatedKnockoutMatchWinner(row);
+  const rowPickValid =
+    Boolean(savedPickTeamId) && !savedPickIsStaleForKnockoutRow(row);
 
   let savedPickStatus: KnockoutMatchSavedPickStatus;
   if (!savedPickTeamId) {
     savedPickStatus = "missing";
-  } else if (validatedId) {
+  } else if (rowPickValid) {
     savedPickStatus = "valid";
   } else {
     savedPickStatus = "stale";
@@ -605,16 +636,17 @@ export function knockoutMatchSavedPickPresentation(
         : `Saved pick: ${savedPickLabel ?? savedPickTeamId}`;
 
   let savedPickWarning: string | null = null;
-  if (row.pickStatus === "out" && savedPickTeamId) {
-    savedPickWarning =
-      row.lockReason === "frozen" || row.lockReason === "started"
-        ? "Saved pick is eliminated or no longer matches this matchup."
-        : (row.display.statusLine ?? "Pick out");
-  } else if (savedPickStatus === "stale") {
+  if (savedPickStatus === "stale") {
     savedPickWarning =
       row.lockReason === "frozen" || row.lockReason === "started"
         ? "Saved pick is eliminated or no longer matches this matchup."
         : "That pick is out — it no longer matches this matchup.";
+  } else if (
+    row.pickStatus === "out" &&
+    savedPickTeamId &&
+    row.lockReason === "pickable"
+  ) {
+    savedPickWarning = row.display.statusLine ?? "Pick out";
   }
 
   let lockStatusLine: string | null = null;
@@ -1054,9 +1086,20 @@ export function buildKnockoutMatchPickRows(
     const saveRow = findSaveRow(input.slots, def.resultKind, saveSlotKey);
     const winnerTeamId = saveRow?.teamId.trim() ?? "";
     const pickStatus = saveRow?.pickStatus ?? null;
-    const pickOut = isKnockoutPickLockedOut(
-      saveRow ?? { pickStatus: null, teamId: "" },
+    const officialWinnerTeamId = officialKnockoutMatchResultWinner(
+      fifaMatchNo,
+      def.stageCode,
+      input.teams,
+      input.tournamentMatches,
     );
+    const pickOut =
+      Boolean(winnerTeamId) &&
+      savedPickIsStaleForKnockoutRow({
+        winnerTeamId,
+        homeTeamId,
+        awayTeamId,
+        officialWinnerTeamId,
+      });
 
     let lockReason: KnockoutMatchLockReason = "pickable";
     if (!homeTeamId || !awayTeamId) {
@@ -1191,6 +1234,7 @@ export function buildKnockoutMatchPickRows(
       awayTeamId,
       winnerTeamId,
       pickStatus,
+      officialWinnerTeamId,
       lockReason,
       kickoffIso,
       display: r16OpenPickUntilKickoff

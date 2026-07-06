@@ -41,7 +41,6 @@ export function isValidSavedPickForMatchup(input: {
   awayTeamId?: string | null;
   pickStatus?: "active" | "out" | null;
 }): boolean {
-  if (input.pickStatus === "out") return false;
   const saved = input.savedTeamId?.trim() ?? "";
   if (!saved) return false;
   const home = input.homeTeamId?.trim() ?? "";
@@ -289,7 +288,6 @@ export function shouldFreezeLaterRoundKnockoutMatchRow(input: {
   ) {
     return false;
   }
-  if (input.pickStatus === "out" && input.savedTeamId?.trim()) return true;
   if (
     isValidSavedPickForMatchup({
       savedTeamId: input.savedTeamId,
@@ -300,6 +298,7 @@ export function shouldFreezeLaterRoundKnockoutMatchRow(input: {
   ) {
     return true;
   }
+  if (input.pickStatus === "out" && input.savedTeamId?.trim()) return true;
   if (input.clearedByPathRepair) return true;
   // R16 rows (quarterfinalist): missing picks stay open until that match kicks off.
   if (input.resultKind === "quarterfinalist") return false;
@@ -582,19 +581,21 @@ function savedPickBlocksLaterRoundFeederEdit(input: {
   matchupHomeTeamId?: string | null;
   matchupAwayTeamId?: string | null;
 }): boolean {
-  if (input.pickStatus === "out" && input.savedTeamId?.trim()) return true;
+  const saved = input.savedTeamId?.trim() ?? "";
+  if (!saved) return false;
+
+  let inMatchup = false;
   if (
     input.matchupHomeTeamId != null ||
     input.matchupAwayTeamId != null
   ) {
-    return isValidSavedPickForMatchup({
+    inMatchup = isValidSavedPickForMatchup({
       savedTeamId: input.savedTeamId,
       homeTeamId: input.matchupHomeTeamId,
       awayTeamId: input.matchupAwayTeamId,
       pickStatus: input.pickStatus,
     });
-  }
-  if (input.teams?.length && isLaterRoundKnockoutResultKind(input.predictionKind)) {
+  } else if (input.teams?.length && isLaterRoundKnockoutResultKind(input.predictionKind)) {
     const sides = resolveOfficialKnockoutSlotMatchupTeamIds({
       predictionKind: input.predictionKind,
       slotKey: input.slotKey,
@@ -602,14 +603,19 @@ function savedPickBlocksLaterRoundFeederEdit(input: {
       gradual: input.gradual,
       teams: input.teams,
     });
-    return isValidSavedPickForMatchup({
+    inMatchup = isValidSavedPickForMatchup({
       savedTeamId: input.savedTeamId,
       homeTeamId: sides.homeTeamId,
       awayTeamId: sides.awayTeamId,
       pickStatus: input.pickStatus,
     });
+  } else {
+    return true;
   }
-  return Boolean(input.savedTeamId?.trim());
+
+  if (inMatchup) return true;
+  if (input.pickStatus === "out") return true;
+  return false;
 }
 
 export function isKnockoutPickEditableForParticipant(input: {

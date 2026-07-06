@@ -13,6 +13,8 @@ import {
   mergeKnockoutMatchRowSavedPickFromSlots,
   readConfirmedR32MatchWinner,
   readR32MatchWinnerForBracket,
+  savedPickMatchesRowMatchup,
+  savedPickIsStaleForKnockoutRow,
   validateKnockoutLaterMatchPick,
   validatedKnockoutMatchWinner,
 } from "./knockoutMatchPickRows";
@@ -192,7 +194,11 @@ function qfSlot(slotKey: string, teamId = ""): KnockoutPickSlotDraft {
   };
 }
 
-function sfSlot(slotKey: string, teamId = ""): KnockoutPickSlotDraft {
+function sfSlot(
+  slotKey: string,
+  teamId = "",
+  pickStatus?: "out",
+): KnockoutPickSlotDraft {
   return {
     rowKey: `semifinalist|${slotKey}`,
     sectionLabel: "Semi-finals",
@@ -203,6 +209,8 @@ function sfSlot(slotKey: string, teamId = ""): KnockoutPickSlotDraft {
     groupCode: null,
     bonusKey: null,
     teamId,
+    pickStatus: pickStatus ?? null,
+    invalidReason: pickStatus === "out" ? "not_in_official_matchup" : null,
   };
 }
 
@@ -2758,6 +2766,306 @@ function r32Side(slotKey: string, teamId = ""): KnockoutPickSlotDraft {
     "France vs Spain",
     "Final row must not pair France and Spain",
   );
+}
+
+// QF locked/frozen with pickStatus out still valid when saved team is in the matchup (M97/M99 regression).
+{
+  const frozenQfRow = {
+    matchIndex: 0,
+    fifaMatchNo: 97,
+    rowKey: "quarterfinalist|match|1",
+    saveRowKey: "semifinalist|1",
+    savePredictionKind: "semifinalist" as const,
+    saveSlotKey: "1",
+    homeTeamId: "team-fra",
+    awayTeamId: "team-mar",
+    winnerTeamId: "team-fra",
+    pickStatus: "out" as const,
+    officialWinnerTeamId: null,
+    lockReason: "frozen" as const,
+    kickoffIso: "2026-07-11T18:00:00Z",
+    display: {
+      heading: "M97 · Quarter-finals",
+      emptyPrimaryLine: "France vs Morocco",
+      kickoffIso: "2026-07-11T18:00:00Z",
+      statusLine: "Locked — feeder results are official.",
+      chooseButtonLabel: "Pick winner",
+    },
+  };
+  const frozenM99Row = {
+    ...frozenQfRow,
+    matchIndex: 2,
+    fifaMatchNo: 99,
+    rowKey: "quarterfinalist|match|3",
+    saveRowKey: "semifinalist|3",
+    saveSlotKey: "3",
+    homeTeamId: "team-nor",
+    awayTeamId: "team-eng",
+    winnerTeamId: "team-eng",
+    display: {
+      ...frozenQfRow.display,
+      heading: "M99 · Quarter-finals",
+      emptyPrimaryLine: "Norway vs England",
+    },
+  };
+
+  const rowTeams: Team[] = [
+    ...teams,
+    {
+      id: "team-eng",
+      name: "England",
+      countryCode: "ENG",
+      fifaCode: "ENG",
+      fifaRank: 4,
+      fifaRankAsOf: null,
+      createdAt: "",
+      updatedAt: "",
+    },
+    {
+      id: "team-nor",
+      name: "Norway",
+      countryCode: "NOR",
+      fifaCode: "NOR",
+      fifaRank: 45,
+      fifaRankAsOf: null,
+      createdAt: "",
+      updatedAt: "",
+    },
+  ];
+
+  const m97Presentation = knockoutMatchSavedPickPresentation(frozenQfRow, rowTeams);
+  assert.strictEqual(m97Presentation.savedPickStatus, "valid");
+  assert.strictEqual(m97Presentation.savedPickSummaryLine, "Saved pick: France");
+  assert.strictEqual(m97Presentation.savedPickWarning, null);
+  assert.strictEqual(
+    m97Presentation.lockStatusLine,
+    "Locked — feeder results are official.",
+  );
+  assert.ok(savedPickMatchesRowMatchup(frozenQfRow));
+  assert.ok(!savedPickIsStaleForKnockoutRow(frozenQfRow));
+  assert.strictEqual(validatedKnockoutMatchWinner(frozenQfRow), "team-fra");
+
+  const m99Presentation = knockoutMatchSavedPickPresentation(frozenM99Row, rowTeams);
+  assert.strictEqual(m99Presentation.savedPickStatus, "valid");
+  assert.strictEqual(m99Presentation.savedPickSummaryLine, "Saved pick: England");
+  assert.strictEqual(m99Presentation.savedPickWarning, null);
+}
+
+// Built QF rows: locked frozen pick with pickStatus out stays valid in the displayed matchup.
+{
+  const slots: KnockoutPickSlotDraft[] = [
+    r16Slot("1", "team-can"),
+    r16Slot("2", "team-ger"),
+    r16Slot("3", "team-ned"),
+    r16Slot("4", "team-bra"),
+    r16Slot("5", "team-fra"),
+    r16Slot("6", "team-rsa"),
+    r16Slot("7", "team-ned"),
+    r16Slot("8", "team-bra"),
+    r16Slot("9", "team-ned"),
+    r16Slot("10", "team-ger"),
+    r16Slot("11", "team-fra"),
+    r16Slot("12", "team-ger"),
+    r16Slot("13", "team-can"),
+    r16Slot("14", "team-ned"),
+    r16Slot("15", "team-bra"),
+    r16Slot("16", "team-rsa"),
+    qfSlot("1", "team-ger"),
+    qfSlot("2", "team-can"),
+    qfSlot("3", "team-bra"),
+    qfSlot("4", "team-ned"),
+    qfSlot("5", "team-fra"),
+    qfSlot("6", "team-ger"),
+    qfSlot("7", "team-ned"),
+    qfSlot("8", "team-can"),
+    sfSlot("1", "team-ger", "out"),
+    sfSlot("2", "team-fra"),
+    sfSlot("3", "team-bra"),
+    sfSlot("4", "team-ned"),
+  ];
+  const tournamentMatches: TournamentMatchPublicRow[] = [
+    {
+      match_id: "m89",
+      edition_id: "ed",
+      edition_code: "2026",
+      match_code: "M89",
+      stage_code: "round_of_16",
+      stage_label: "Round of 16",
+      stage_sort_order: 3,
+      group_code: null,
+      round_index: 0,
+      kickoff_at: "2026-07-09T18:00:00Z",
+      status: "finished",
+      home_goals: 2,
+      away_goals: 1,
+      home_penalties: null,
+      away_penalties: null,
+      home_team_name: "Germany",
+      home_country_code: "GER",
+      away_team_name: "France",
+      away_country_code: "FRA",
+      winner_team_name: "Germany",
+      winner_country_code: "GER",
+    },
+    {
+      match_id: "m90",
+      edition_id: "ed",
+      edition_code: "2026",
+      match_code: "M90",
+      stage_code: "round_of_16",
+      stage_label: "Round of 16",
+      stage_sort_order: 3,
+      group_code: null,
+      round_index: 0,
+      kickoff_at: "2026-07-09T20:00:00Z",
+      status: "finished",
+      home_goals: 1,
+      away_goals: 0,
+      home_penalties: null,
+      away_penalties: null,
+      home_team_name: "Canada",
+      home_country_code: "CAN",
+      away_team_name: "Netherlands",
+      away_country_code: "NED",
+      winner_team_name: "Canada",
+      winner_country_code: "CAN",
+    },
+    {
+      match_id: "m97",
+      edition_id: "ed",
+      edition_code: "2026",
+      match_code: "M97",
+      stage_code: "quarterfinal",
+      stage_label: "Quarter-finals",
+      stage_sort_order: 4,
+      group_code: null,
+      round_index: 0,
+      kickoff_at: "2026-07-11T18:00:00Z",
+      status: "scheduled",
+      home_goals: null,
+      away_goals: null,
+      home_penalties: null,
+      away_penalties: null,
+      home_team_name: "Germany",
+      home_country_code: "GER",
+      away_team_name: "Canada",
+      away_country_code: "CAN",
+      winner_team_name: null,
+      winner_country_code: null,
+    },
+  ];
+  const qfInput = {
+    bracketKind: "quarterfinalist" as const,
+    slots,
+    teams,
+    tournamentMatches,
+    knockoutBracketPicksUnlocked: true,
+  };
+  const m97 = buildKnockoutMatchPickRows(qfInput).find((r) => r.fifaMatchNo === 97)!;
+  assert.strictEqual(m97.homeTeamId, "team-ger");
+  assert.strictEqual(m97.awayTeamId, "team-can");
+  assert.strictEqual(m97.lockReason, "frozen");
+  assert.strictEqual(m97.winnerTeamId, "team-ger");
+  assert.strictEqual(m97.pickStatus, "out");
+
+  const presentation = knockoutMatchSavedPickPresentation(m97, teams);
+  assert.strictEqual(presentation.savedPickStatus, "valid");
+  assert.strictEqual(presentation.savedPickWarning, null);
+  assert.strictEqual(validatedKnockoutMatchWinner(m97), "team-ger");
+
+  const sfInput = { ...qfInput, bracketKind: "semifinalist" as const };
+  const m101 = buildKnockoutMatchPickRows(sfInput).find((r) => r.fifaMatchNo === 101)!;
+  assert.strictEqual(m101.homeTeamId, "team-ger");
+  assert.strictEqual(m101.awayTeamId, "team-fra");
+  assert.strictEqual(m101.lockReason, "pickable");
+  assert.doesNotMatch(
+    blockedKnockoutRowUserCopy(m101, "semifinalist", sfInput),
+    /no longer on the path|no longer feeds this matchup/i,
+  );
+}
+
+// Wrong-path QF saved pick not in displayed matchup still shows stale on the QF row.
+{
+  const slots: KnockoutPickSlotDraft[] = [
+    r16Slot("1", "team-can"),
+    r16Slot("2", "team-ger"),
+    r16Slot("3", "team-ned"),
+    r16Slot("4", "team-bra"),
+    r16Slot("5", "team-fra"),
+    r16Slot("6", "team-rsa"),
+    r16Slot("7", "team-ned"),
+    r16Slot("8", "team-bra"),
+    r16Slot("9", "team-ned"),
+    r16Slot("10", "team-ger"),
+    r16Slot("11", "team-fra"),
+    r16Slot("12", "team-ger"),
+    r16Slot("13", "team-can"),
+    r16Slot("14", "team-ned"),
+    r16Slot("15", "team-bra"),
+    r16Slot("16", "team-rsa"),
+    qfSlot("1", "team-ger"),
+    qfSlot("2", "team-can"),
+    qfSlot("3", "team-bra"),
+    qfSlot("4", "team-ned"),
+    qfSlot("5", "team-fra"),
+    qfSlot("6", "team-ger"),
+    qfSlot("7", "team-ned"),
+    qfSlot("8", "team-can"),
+    sfSlot("1", "team-bra", "out"),
+    sfSlot("2", "team-fra"),
+    sfSlot("3", "team-bra"),
+    sfSlot("4", "team-arg"),
+  ];
+  const qfRows = buildKnockoutMatchPickRows({
+    bracketKind: "quarterfinalist",
+    slots,
+    teams,
+    knockoutBracketPicksUnlocked: true,
+  });
+  const m97 = qfRows.find((r) => r.fifaMatchNo === 97)!;
+  assert.strictEqual(m97.homeTeamId, "team-ger");
+  assert.strictEqual(m97.awayTeamId, "team-can");
+  const presentation = knockoutMatchSavedPickPresentation(m97, teams);
+  assert.strictEqual(presentation.savedPickStatus, "stale");
+  assert.ok(presentation.savedPickWarning);
+  assert.match(
+    presentation.savedPickWarning!,
+    /no longer matches this matchup/i,
+  );
+}
+
+// Finished QF loser pick shows stale/eliminated warning.
+{
+  const finishedLoserRow = {
+    matchIndex: 0,
+    fifaMatchNo: 97,
+    rowKey: "quarterfinalist|match|1",
+    saveRowKey: "semifinalist|1",
+    savePredictionKind: "semifinalist" as const,
+    saveSlotKey: "1",
+    homeTeamId: "team-fra",
+    awayTeamId: "team-mar",
+    winnerTeamId: "team-fra",
+    pickStatus: null,
+    officialWinnerTeamId: "team-mar",
+    lockReason: "started" as const,
+    kickoffIso: "2026-07-11T18:00:00Z",
+    display: {
+      heading: "M97 · Quarter-finals",
+      emptyPrimaryLine: "France vs Morocco",
+      kickoffIso: "2026-07-11T18:00:00Z",
+      statusLine: "Locked at kickoff",
+      chooseButtonLabel: "Pick winner",
+    },
+  };
+  assert.ok(savedPickIsStaleForKnockoutRow(finishedLoserRow));
+  const presentation = knockoutMatchSavedPickPresentation(finishedLoserRow, teams);
+  assert.strictEqual(presentation.savedPickStatus, "stale");
+  assert.match(
+    presentation.savedPickWarning!,
+    /no longer matches this matchup/i,
+  );
+  assert.strictEqual(validatedKnockoutMatchWinner(finishedLoserRow), null);
 }
 
 console.log("knockoutMatchPickRows.selftest.ts: ok");
