@@ -128,6 +128,12 @@ export function participantLockedKnockoutRowBody(
     if (row.lockReason === "started") {
       return `${matchup}: ${KNOCKOUT_MISSING_PICK_AFTER_KICKOFF} No action is needed.`;
     }
+    if (
+      row.lockReason === "frozen" &&
+      row.display.statusLine?.includes("did not advance")
+    ) {
+      return `${row.display.statusLine} No action is needed.`;
+    }
     const feederStage = feederStageLabelForSavedPickKind(row.savePredictionKind);
     return `${matchup} is locked with no pick saved because the ${feederStage} feeder results are already official. No action is needed.`;
   }
@@ -1104,6 +1110,9 @@ export function blockedKnockoutRowUserCopy(
   input: BuildKnockoutMatchPickRowsInput,
   options?: ExplainBlockedKnockoutRowOptions,
 ): string {
+  if (row.lockReason === "frozen" && row.display.statusLine?.includes("did not advance")) {
+    return row.display.statusLine;
+  }
   if (row.lockReason !== "incomplete") {
     return (
       row.display.statusLine ??

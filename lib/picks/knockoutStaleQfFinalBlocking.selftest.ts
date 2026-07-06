@@ -106,6 +106,25 @@ function r16Slot(slotKey: string, teamId = ""): KnockoutPickSlotDraft {
   };
 }
 
+function qfSlot(
+  slotKey: string,
+  teamId = "",
+  extra: Partial<KnockoutPickSlotDraft> = {},
+): KnockoutPickSlotDraft {
+  return {
+    rowKey: `quarterfinalist|${slotKey}`,
+    sectionLabel: "Quarter-finals",
+    slotLabel: slotKey,
+    predictionKind: "quarterfinalist",
+    tournamentStageId: "qf",
+    slotKey,
+    groupCode: null,
+    bonusKey: null,
+    teamId,
+    ...extra,
+  };
+}
+
 function sfSlot(
   slotKey: string,
   teamId = "",
@@ -145,6 +164,8 @@ function productionStaleJapanSlots(includeFin2 = false): KnockoutPickSlotDraft[]
     ...Array.from({ length: 16 }, (_, i) => r16Slot(String(i + 1), "team-ger")),
     r16Slot("3", "team-nor"),
     r16Slot("4", "team-eng"),
+    qfSlot("3", "team-nor"),
+    qfSlot("4", "team-eng"),
     sfSlot("1", "team-fra"),
     sfSlot("2", "team-esp"),
     sfSlot("3", "team-jpn", {

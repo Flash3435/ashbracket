@@ -15,6 +15,13 @@ import {
   type GradualKnockoutSelectionState,
 } from "./gradualKnockoutUnlock";
 import { isMatchStarted } from "./knockoutSelectionWindow";
+import {
+  isStrictBracketPathBlockedForParticipant,
+  strictBracketPathBlockedCopy,
+  wizardMatchRefForSavedSlot,
+  evaluateStrictBracketPathForMatch,
+} from "./knockoutStrictBracketPath";
+import type { KnockoutPickSlotDraft } from "../../types/adminKnockoutPicks";
 
 export const KNOCKOUT_PICK_LOCKED_AT_KICKOFF =
   "This match has already kicked off and can no longer be edited.";
@@ -523,6 +530,9 @@ export function knockoutPickEditBlockedMessage(input: {
   tournamentMatches?: TournamentMatchPublicRow[] | null;
   gradual: GradualKnockoutSelectionState;
   nowMs?: number;
+  teams?: Team[];
+  slots?: readonly KnockoutPickSlotDraft[];
+  knockoutBracketPicksUnlocked?: boolean;
 }): string {
   const rowLabel = knockoutPickEditBlockedRowLabel(input);
   const match = resolveTournamentMatchForKnockoutSlot(input);
@@ -532,6 +542,34 @@ export function knockoutPickEditBlockedMessage(input: {
   }
   if (match && isMatchStarted(match, nowMs)) {
     return `${rowLabel}: ${KNOCKOUT_PICK_LOCKED_AT_KICKOFF}`;
+  }
+  const matchRef = wizardMatchRefForSavedSlot(input.predictionKind, input.slotKey);
+  if (
+    matchRef &&
+    input.teams?.length &&
+    input.slots?.length &&
+    input.knockoutBracketPicksUnlocked !== false
+  ) {
+    const evaluation = evaluateStrictBracketPathForMatch({
+      wizardKind: matchRef.wizardKind,
+      matchIndex: matchRef.matchIndex,
+      slots: [...input.slots],
+      teams: input.teams,
+      tournamentMatches: input.tournamentMatches,
+      gradual: input.gradual,
+      knockoutBracketPicksUnlocked: input.knockoutBracketPicksUnlocked,
+      nowMs,
+    });
+    if (
+      evaluation &&
+      (evaluation.hasStalePath || evaluation.hasMissingRequiredPick)
+    ) {
+      return `${rowLabel}: ${strictBracketPathBlockedCopy(
+        evaluation,
+        input.teams,
+        matchRef.wizardKind,
+      )}`;
+    }
   }
   if (isKnockoutSlotFrozenByOfficialFeeders(input)) {
     return `${rowLabel}: ${KNOCKOUT_PICK_LOCKED_FEEDER_RESULTS}`;
@@ -551,6 +589,7 @@ export function isKnockoutPickEditableForParticipant(input: {
   matchupHomeTeamId?: string | null;
   matchupAwayTeamId?: string | null;
   progressionRows?: readonly KnockoutProgressionRowRef[];
+  slots?: readonly KnockoutPickSlotDraft[];
   nowMs?: number;
 }): boolean {
   if (!isKnockoutProgressionKind(input.predictionKind)) return true;
@@ -597,6 +636,35 @@ export function isKnockoutPickEditableForParticipant(input: {
 
   if (input.pickStatus === "out" && input.savedTeamId?.trim()) return false;
 
+  const matchRef = wizardMatchRefForSavedSlot(
+    input.predictionKind,
+    input.slotKey,
+  );
+  const slotDrafts =
+    input.slots ??
+    (input.progressionRows as readonly KnockoutPickSlotDraft[] | undefined);
+  if (
+    matchRef &&
+    input.teams?.length &&
+    slotDrafts?.length &&
+    input.fullRoundOf32Official
+  ) {
+    if (
+      isStrictBracketPathBlockedForParticipant({
+        wizardKind: matchRef.wizardKind,
+        matchIndex: matchRef.matchIndex,
+        slots: [...slotDrafts],
+        teams: input.teams,
+        tournamentMatches: input.tournamentMatches,
+        gradual: input.gradual,
+        knockoutBracketPicksUnlocked: input.fullRoundOf32Official,
+        nowMs,
+      })
+    ) {
+      return false;
+    }
+  }
+
   return true;
 }
 
@@ -612,6 +680,8 @@ export function isKnockoutPickFrozenForParticipant(input: {
   matchupHomeTeamId?: string | null;
   matchupAwayTeamId?: string | null;
   progressionRows?: readonly KnockoutProgressionRowRef[];
+  slots?: readonly KnockoutPickSlotDraft[];
+  fullRoundOf32Official?: boolean;
   nowMs?: number;
 }): boolean {
   if (!isKnockoutProgressionKind(input.predictionKind)) return false;
@@ -649,6 +719,35 @@ export function isKnockoutPickFrozenForParticipant(input: {
   if (match && isKnockoutMatchLockedForParticipant(match, nowMs)) return true;
 
   if (input.pickStatus === "out" && input.savedTeamId?.trim()) return true;
+
+  const matchRef = wizardMatchRefForSavedSlot(
+    input.predictionKind,
+    input.slotKey,
+  );
+  const slotDrafts =
+    input.slots ??
+    (input.progressionRows as readonly KnockoutPickSlotDraft[] | undefined);
+  if (
+    matchRef &&
+    input.teams?.length &&
+    slotDrafts?.length &&
+    input.fullRoundOf32Official !== false
+  ) {
+    if (
+      isStrictBracketPathBlockedForParticipant({
+        wizardKind: matchRef.wizardKind,
+        matchIndex: matchRef.matchIndex,
+        slots: [...slotDrafts],
+        teams: input.teams,
+        tournamentMatches: input.tournamentMatches,
+        gradual: input.gradual,
+        knockoutBracketPicksUnlocked: input.fullRoundOf32Official ?? true,
+        nowMs,
+      })
+    ) {
+      return true;
+    }
+  }
 
   return false;
 }

@@ -512,7 +512,36 @@ const existing: Prediction[] = [
         teamId: "team-can",
       },
     ],
-    existing: [],
+    existing: [
+      {
+        id: "p-r16-1",
+        poolId: "pool",
+        participantId: "par",
+        predictionKind: "round_of_16",
+        teamId: "team-can",
+        tournamentStageId: stageR16,
+        groupCode: null,
+        slotKey: "1",
+        bonusKey: null,
+        valueText: null,
+        createdAt: "",
+        updatedAt: "",
+      },
+      {
+        id: "p-r16-3",
+        poolId: "pool",
+        participantId: "par",
+        predictionKind: "round_of_16",
+        teamId: "team-mar",
+        tournamentStageId: stageR16,
+        groupCode: null,
+        slotKey: "3",
+        bonusKey: null,
+        valueText: null,
+        createdAt: "",
+        updatedAt: "",
+      },
+    ],
     teams,
     matches: tournamentMatches,
     fullRoundOf32Official: true,
@@ -526,7 +555,7 @@ const existing: Prediction[] = [
   );
 }
 
-// Canada R16 pick stays editable before M90 kickoff when R32 feeders are official
+// Broken upstream Netherlands blocks M90 under strict bracket continuity.
 {
   const slots = [r16Slot("3", "team-ned"), qfSlot("2", "team-can")];
   const existingQf: Prediction[] = [
@@ -558,8 +587,9 @@ const existing: Prediction[] = [
   assert.strictEqual(m90.homeTeamId, "team-can");
   assert.strictEqual(m90.awayTeamId, "team-mar");
   assert.strictEqual(m90.winnerTeamId, "team-can");
-  assert.strictEqual(m90.lockReason, "pickable");
-  assert.strictEqual(isKnockoutMatchDirectPickEligible(m90), true);
+  assert.strictEqual(m90.lockReason, "frozen");
+  assert.match(m90.display.statusLine!, /Netherlands did not advance/i);
+  assert.strictEqual(isKnockoutMatchDirectPickEligible(m90), false);
   assert.strictEqual(
     isKnockoutPickEditableForParticipant({
       predictionKind: "quarterfinalist",
@@ -568,9 +598,11 @@ const existing: Prediction[] = [
       gradual,
       fullRoundOf32Official: true,
       savedTeamId: "team-can",
+      progressionRows: slots,
+      teams,
       nowMs,
     }),
-    true,
+    false,
   );
   const swapErr = validateKnockoutParticipantPickChanges({
     incoming: [
@@ -583,16 +615,33 @@ const existing: Prediction[] = [
         teamId: "team-mar",
       },
     ],
-    existing: existingQf,
+    existing: [
+      {
+        id: "p-r16-3",
+        poolId: "pool",
+        participantId: "par",
+        predictionKind: "round_of_16",
+        teamId: "team-ned",
+        tournamentStageId: stageR16,
+        groupCode: null,
+        slotKey: "3",
+        bonusKey: null,
+        valueText: null,
+        createdAt: "",
+        updatedAt: "",
+      },
+      ...existingQf,
+    ],
     matches: tournamentMatches,
     gradual,
     fullRoundOf32Official: true,
+    teams,
     nowMs,
   });
-  assert.strictEqual(swapErr, null, "can switch R16 winner before M90 kickoff");
+  assert.ok(swapErr, "cannot switch M90 winner when upstream path is broken");
 }
 
-// 2. Saved M90 Canada, feeders official, M90 not started → can switch or clear
+// 2. Saved M90 Canada with valid upstream, feeders official, M90 not started → can switch or clear
 {
   const clearErr = validateKnockoutParticipantPickChanges({
     incoming: [
@@ -606,6 +655,34 @@ const existing: Prediction[] = [
       },
     ],
     existing: [
+      {
+        id: "p-r16-1",
+        poolId: "pool",
+        participantId: "par",
+        predictionKind: "round_of_16",
+        teamId: "team-can",
+        tournamentStageId: stageR16,
+        groupCode: null,
+        slotKey: "1",
+        bonusKey: null,
+        valueText: null,
+        createdAt: "",
+        updatedAt: "",
+      },
+      {
+        id: "p-r16-3",
+        poolId: "pool",
+        participantId: "par",
+        predictionKind: "round_of_16",
+        teamId: "team-mar",
+        tournamentStageId: stageR16,
+        groupCode: null,
+        slotKey: "3",
+        bonusKey: null,
+        valueText: null,
+        createdAt: "",
+        updatedAt: "",
+      },
       {
         id: "p-qf",
         poolId: "pool",
@@ -624,12 +701,13 @@ const existing: Prediction[] = [
     matches: tournamentMatches,
     gradual,
     fullRoundOf32Official: true,
+    teams,
     nowMs,
   });
   assert.strictEqual(clearErr, null, "clear allowed before M90 kickoff");
 }
 
-// 3. Saved stale M90 Netherlands, feeders official → stale but editable before kickoff
+// 3. Saved stale M90 Netherlands with broken upstream → blocked under strict bracket rules
 {
   const staleSlots = [r16Slot("3", "team-ned"), qfSlot("2", "team-ned")];
   const staleRows = buildKnockoutMatchPickRows({
@@ -645,27 +723,14 @@ const existing: Prediction[] = [
   assert.strictEqual(staleM90.homeTeamId, "team-can");
   assert.strictEqual(staleM90.awayTeamId, "team-mar");
   assert.strictEqual(staleM90.winnerTeamId, "team-ned");
-  assert.strictEqual(staleM90.lockReason, "pickable");
-  assert.strictEqual(isKnockoutMatchDirectPickEligible(staleM90), true);
-  assert.strictEqual(
-    staleM90.display.statusLine,
-    "Pick still open until this match kicks off.",
-  );
+  assert.strictEqual(staleM90.lockReason, "frozen");
+  assert.match(staleM90.display.statusLine!, /Netherlands did not advance/i);
+  assert.strictEqual(isKnockoutMatchDirectPickEligible(staleM90), false);
   const presentation = knockoutMatchSavedPickPresentation(staleM90, teams);
   assert.strictEqual(presentation.savedPickStatus, "stale");
-  assert.strictEqual(
-    presentation.savedPickSummaryLine,
-    "Previous saved pick: Netherlands",
-  );
-  assert.strictEqual(
-    presentation.savedPickWarning,
-    "That pick is out — it no longer matches this matchup.",
-  );
-  assert.strictEqual(presentation.lockStatusLine, null);
-  assert.strictEqual(
+  assert.ok(
     validateKnockoutLaterMatchPick(staleM90, "team-mar"),
-    null,
-    "can pick Morocco on stale M90 row",
+    "participant cannot repair stale M90 when upstream path is broken",
   );
   const repairOk = applyGradualKnockoutPickSaveGuards({
     incoming: [
@@ -679,6 +744,20 @@ const existing: Prediction[] = [
       },
     ],
     existing: [
+      {
+        id: "p-r16-3",
+        poolId: "pool",
+        participantId: "par",
+        predictionKind: "round_of_16",
+        teamId: "team-ned",
+        tournamentStageId: stageR16,
+        groupCode: null,
+        slotKey: "3",
+        bonusKey: null,
+        valueText: null,
+        createdAt: "",
+        updatedAt: "",
+      },
       {
         id: "p-stale",
         poolId: "pool",
@@ -699,15 +778,9 @@ const existing: Prediction[] = [
     fullRoundOf32Official: true,
     nowMs,
   });
-  assert.strictEqual(
+  assert.ok(
     repairOk.error,
-    null,
-    "server allows replacing stale Netherlands pick with Morocco",
-  );
-  assert.strictEqual(
-    repairOk.slots.find((s) => s.predictionKind === "quarterfinalist" && s.slotKey === "2")
-      ?.teamId,
-    "team-mar",
+    "server blocks replacing stale Netherlands pick when upstream path is broken",
   );
 }
 
@@ -729,11 +802,11 @@ const existing: Prediction[] = [
   assert.strictEqual(diagnostic.resolvedSideTeamIds.awayTeamId, "team-mar");
   assert.strictEqual(diagnostic.matchupLine, "Canada vs Morocco");
   assert.strictEqual(diagnostic.validSavedPick, false);
-  assert.strictEqual(diagnostic.lockReason, "pickable");
-  assert.strictEqual(diagnostic.directPickEligible, true);
+  assert.strictEqual(diagnostic.lockReason, "frozen");
+  assert.strictEqual(diagnostic.directPickEligible, false);
   assert.strictEqual(
     diagnostic.editabilityReason,
-    "open_until_kickoff_missing_or_stale_pick",
+    "frozen_without_valid_saved_pick",
   );
   assert.strictEqual(diagnostic.storedPickStatus, null);
   assert.strictEqual(diagnostic.feederOfficialWinners.M73, "Canada");
@@ -765,13 +838,13 @@ const existing: Prediction[] = [
   const wizardM90 = wizardRows.find((r) => r.fifaMatchNo === 90)!;
   assert.strictEqual(wizardM90.homeTeamId, "team-can");
   assert.strictEqual(wizardM90.awayTeamId, "team-mar");
-  assert.strictEqual(wizardM90.lockReason, "pickable");
+  assert.strictEqual(wizardM90.lockReason, "frozen");
   assert.strictEqual(wizardM90.display.emptyPrimaryLine, "Canada vs Morocco");
-  assert.strictEqual(isKnockoutMatchDirectPickEligible(wizardM90), true);
+  assert.strictEqual(isKnockoutMatchDirectPickEligible(wizardM90), false);
   assert.strictEqual(validatedKnockoutMatchWinner(wizardM90), null);
-  assert.ok(
-    !wizardM90.display.statusLine?.includes("Locked — feeder results are official"),
-    "editable M90 must not show feeder-official lock copy",
+  assert.match(
+    wizardM90.display.statusLine!,
+    /Netherlands did not advance/i,
   );
 }
 
@@ -995,7 +1068,7 @@ const existing: Prediction[] = [
   );
 }
 
-// 3. Clear is allowed on later-round rows before kickoff
+// 3. Clear is allowed on later-round rows before kickoff when upstream path is valid
 {
   const clearErr = validateKnockoutParticipantPickChanges({
     incoming: [
@@ -1009,6 +1082,34 @@ const existing: Prediction[] = [
       },
     ],
     existing: [
+      {
+        id: "p-r16-1",
+        poolId: "pool",
+        participantId: "par",
+        predictionKind: "round_of_16",
+        teamId: "team-can",
+        tournamentStageId: stageR16,
+        groupCode: null,
+        slotKey: "1",
+        bonusKey: null,
+        valueText: null,
+        createdAt: "",
+        updatedAt: "",
+      },
+      {
+        id: "p-r16-3",
+        poolId: "pool",
+        participantId: "par",
+        predictionKind: "round_of_16",
+        teamId: "team-mar",
+        tournamentStageId: stageR16,
+        groupCode: null,
+        slotKey: "3",
+        bonusKey: null,
+        valueText: null,
+        createdAt: "",
+        updatedAt: "",
+      },
       {
         id: "p-qf",
         poolId: "pool",
@@ -1027,6 +1128,7 @@ const existing: Prediction[] = [
     matches: tournamentMatches,
     gradual,
     fullRoundOf32Official: true,
+    teams,
     nowMs,
   });
   assert.strictEqual(clearErr, null, "clear allowed before M90 kickoff");
@@ -1042,6 +1144,34 @@ const existing: Prediction[] = [
       },
     ],
     existing: [
+      {
+        id: "p-r16-1",
+        poolId: "pool",
+        participantId: "par",
+        predictionKind: "round_of_16",
+        teamId: "team-can",
+        tournamentStageId: stageR16,
+        groupCode: null,
+        slotKey: "1",
+        bonusKey: null,
+        valueText: null,
+        createdAt: "",
+        updatedAt: "",
+      },
+      {
+        id: "p-r16-3",
+        poolId: "pool",
+        participantId: "par",
+        predictionKind: "round_of_16",
+        teamId: "team-mar",
+        tournamentStageId: stageR16,
+        groupCode: null,
+        slotKey: "3",
+        bonusKey: null,
+        valueText: null,
+        createdAt: "",
+        updatedAt: "",
+      },
       {
         id: "p-qf",
         poolId: "pool",
@@ -1122,8 +1252,8 @@ const existing: Prediction[] = [
   const m90 = futureRows.find((r) => r.fifaMatchNo === 90)!;
   assert.strictEqual(
     m90.lockReason,
-    "pickable",
-    "M90 stays editable when saved pick exists before kickoff",
+    "frozen",
+    "M90 is blocked when upstream R32 pick does not match official feeders",
   );
   assert.strictEqual(m89.lockReason, "pickable", "M89 stays editable before feeder results");
   assert.strictEqual(m89.homeTeamId, "team-can");
@@ -1154,8 +1284,8 @@ const existing: Prediction[] = [
     nowMs,
   });
   assert.ok(
-    "error" in preKickoff,
-    "admin correction deferred to normal editor before kickoff",
+    !("error" in preKickoff),
+    "admin correction available when strict path blocks normal participant editing",
   );
 
   const liveM90 = {
@@ -1231,6 +1361,34 @@ const existing: Prediction[] = [
     fullRoundOf32Official: true,
   });
   const existingQf: Prediction[] = [
+    {
+      id: "p-r16-1",
+      poolId: "pool",
+      participantId: "par",
+      predictionKind: "round_of_16",
+      teamId: "team-can",
+      tournamentStageId: stageR16,
+      groupCode: null,
+      slotKey: "1",
+      bonusKey: null,
+      valueText: null,
+      createdAt: "",
+      updatedAt: "",
+    },
+    {
+      id: "p-r16-3",
+      poolId: "pool",
+      participantId: "par",
+      predictionKind: "round_of_16",
+      teamId: "team-mar",
+      tournamentStageId: stageR16,
+      groupCode: null,
+      slotKey: "3",
+      bonusKey: null,
+      valueText: null,
+      createdAt: "",
+      updatedAt: "",
+    },
     {
       id: "p-qf2",
       poolId: "pool",
@@ -1933,7 +2091,7 @@ const existing: Prediction[] = [
     knockoutBracketPicksUnlocked: true,
     nowMs,
   });
-  assert.ok("error" in preKickoff, "pre-kickoff M90 uses normal editor");
+  assert.ok(!("error" in preKickoff), "pre-kickoff M90 with broken path uses admin correction");
 
   const liveMatches = [m73, m75, { ...m90, status: "live" as const }];
   const resolved = resolveKnockoutPickCorrectionMatch({

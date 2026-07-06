@@ -22,6 +22,7 @@ import {
   blockedKnockoutRowUserCopy,
   blockedKnockoutStepGateCopy,
 } from "./knockoutBlockedRowExplanation";
+import { KNOCKOUT_R16_MISSING_PICK_OPEN_UNTIL_KICKOFF } from "./knockoutPickEditability";
 import {
   getKnockoutStepCompletionFromDraftState,
   resolveKnockoutProgressContext,
@@ -1306,7 +1307,7 @@ function r32Side(slotKey: string, teamId = ""): KnockoutPickSlotDraft {
   assert.strictEqual(validatedKnockoutMatchWinner(m89), null);
 }
 
-// Stale M77 slot ignored when official tournament result is Sweden (initial render).
+// Stale M77 participant pick blocks M89 under strict bracket continuity.
 {
   const tournamentMatches: TournamentMatchPublicRow[] = [
     {
@@ -1352,36 +1353,13 @@ function r32Side(slotKey: string, teamId = ""): KnockoutPickSlotDraft {
   const m89 = rows.find((r) => r.fifaMatchNo === 89)!;
   assert.strictEqual(m89.homeTeamId, "team-ger");
   assert.strictEqual(m89.awayTeamId, "team-swe");
-  assert.strictEqual(m89.lockReason, "pickable");
-  assert.strictEqual(
+  assert.strictEqual(m89.lockReason, "frozen");
+  assert.match(m89.display.statusLine!, /France did not advance/i);
+  assert.ok(
     validateKnockoutLaterMatchPick(m89, "team-swe"),
-    null,
-    "first-time pick allowed when feeders official and match not started",
+    "participant cannot save when strict path is broken",
   );
-  assert.strictEqual(isKnockoutMatchDirectPickEligible(m89), true);
-
-  const afterPick = pruneParticipantPicks(
-    applyKnockoutMatchWinnerToSlots(slots, m89, "team-swe"),
-    { r32WinnerContext: { teams, tournamentMatches, knockoutBracketPicksUnlocked: true } },
-  );
-  assert.strictEqual(
-    afterPick.find(
-      (s) => s.predictionKind === "quarterfinalist" && s.slotKey === "1",
-    )?.teamId,
-    "team-swe",
-  );
-  const afterRows = buildKnockoutMatchPickRows({
-    bracketKind: "round_of_16",
-    slots: afterPick,
-    teams,
-    tournamentMatches,
-    gradual: emptyGradual,
-    knockoutBracketPicksUnlocked: true,
-  });
-  const m89After = afterRows.find((r) => r.fifaMatchNo === 89)!;
-  assert.strictEqual(m89After.homeTeamId, "team-ger");
-  assert.strictEqual(m89After.awayTeamId, "team-swe");
-  assert.strictEqual(validatedKnockoutMatchWinner(m89After), "team-swe");
+  assert.strictEqual(isKnockoutMatchDirectPickEligible(m89), false);
 }
 
 // Valid M77 winner France stays stable through M89 selection.
@@ -1817,7 +1795,7 @@ function r32Side(slotKey: string, teamId = ""): KnockoutPickSlotDraft {
   );
 }
 
-// Locked Round of 16 rows expose saved pick state for admin display.
+// Round of 16 rows expose saved pick state for participant display.
 {
   const tournamentMatches: TournamentMatchPublicRow[] = [
     {
@@ -1846,13 +1824,13 @@ function r32Side(slotKey: string, teamId = ""): KnockoutPickSlotDraft {
   ];
   const baseSlots: KnockoutPickSlotDraft[] = [
     r16Slot("2", "team-ger"),
-    r16Slot("5", "team-fra"),
+    r16Slot("5", "team-swe"),
     ...Array.from({ length: 14 }, (_, i) =>
       r16Slot(String(i < 1 ? i + 1 : i + 2)),
     ),
     ...Array.from({ length: 8 }, (_, i) => qfSlot(String(i + 1))),
   ];
-  const frozenRows = buildKnockoutMatchPickRows({
+  const openRows = buildKnockoutMatchPickRows({
     bracketKind: "round_of_16",
     slots: baseSlots,
     teams,
@@ -1860,10 +1838,10 @@ function r32Side(slotKey: string, teamId = ""): KnockoutPickSlotDraft {
     gradual: emptyGradual,
     knockoutBracketPicksUnlocked: true,
   });
-  const frozenM89 = frozenRows.find((r) => r.fifaMatchNo === 89)!;
-  assert.strictEqual(frozenM89.lockReason, "pickable");
+  const openM89 = openRows.find((r) => r.fifaMatchNo === 89)!;
+  assert.strictEqual(openM89.lockReason, "pickable");
 
-  const missingPick = knockoutMatchSavedPickPresentation(frozenM89, teams);
+  const missingPick = knockoutMatchSavedPickPresentation(openM89, teams);
   assert.strictEqual(missingPick.savedPickStatus, "missing");
   assert.strictEqual(missingPick.savedPickSummaryLine, "No pick saved");
   assert.strictEqual(missingPick.lockStatusLine, null);
@@ -1875,7 +1853,7 @@ function r32Side(slotKey: string, teamId = ""): KnockoutPickSlotDraft {
 
   const withValidPick = applyKnockoutMatchWinnerToSlots(
     baseSlots,
-    frozenM89,
+    openM89,
     "team-swe",
   );
   const validRows = buildKnockoutMatchPickRows({
@@ -2106,6 +2084,34 @@ function r32Side(slotKey: string, teamId = ""): KnockoutPickSlotDraft {
     ],
     existing: [
       {
+        id: "p-m94-r16-9",
+        poolId: "pool",
+        participantId: "par",
+        predictionKind: "round_of_16",
+        teamId: "team-us",
+        tournamentStageId: "qf",
+        groupCode: null,
+        slotKey: "9",
+        bonusKey: null,
+        valueText: null,
+        createdAt: "",
+        updatedAt: "",
+      },
+      {
+        id: "p-m94-r16-10",
+        poolId: "pool",
+        participantId: "par",
+        predictionKind: "round_of_16",
+        teamId: "team-bel",
+        tournamentStageId: "qf",
+        groupCode: null,
+        slotKey: "10",
+        bonusKey: null,
+        valueText: null,
+        createdAt: "",
+        updatedAt: "",
+      },
+      {
         id: "p-m94",
         poolId: "pool",
         participantId: "par",
@@ -2144,6 +2150,34 @@ function r32Side(slotKey: string, teamId = ""): KnockoutPickSlotDraft {
       },
     ],
     existing: [
+      {
+        id: "p-m94-r16-9",
+        poolId: "pool",
+        participantId: "par",
+        predictionKind: "round_of_16",
+        teamId: "team-us",
+        tournamentStageId: "qf",
+        groupCode: null,
+        slotKey: "9",
+        bonusKey: null,
+        valueText: null,
+        createdAt: "",
+        updatedAt: "",
+      },
+      {
+        id: "p-m94-r16-10",
+        poolId: "pool",
+        participantId: "par",
+        predictionKind: "round_of_16",
+        teamId: "team-bel",
+        tournamentStageId: "qf",
+        groupCode: null,
+        slotKey: "10",
+        bonusKey: null,
+        valueText: null,
+        createdAt: "",
+        updatedAt: "",
+      },
       {
         id: "p-m94",
         poolId: "pool",
@@ -3256,6 +3290,8 @@ function r32Side(slotKey: string, teamId = ""): KnockoutPickSlotDraft {
   );
   const missingPickSlots: KnockoutPickSlotDraft[] = [
     ...baseR16,
+    qfSlot("3", "team-nor"),
+    qfSlot("4", "team-eng"),
     qfSlot("7", "team-arg"),
     qfSlot("8", "team-fra"),
     sfSlot("1", "team-ger"),
@@ -3287,12 +3323,17 @@ function r32Side(slotKey: string, teamId = ""): KnockoutPickSlotDraft {
       "already in progress after official feeder results",
     ),
   );
+  assert.strictEqual(
+    m99.display.statusLine,
+    KNOCKOUT_R16_MISSING_PICK_OPEN_UNTIL_KICKOFF,
+  );
   assert.strictEqual(m100.lockReason, "pickable");
 
   const savedNorwaySlots = [
     ...baseR16,
+    qfSlot("3", "team-nor"),
+    qfSlot("4", "team-eng"),
     sfSlot("3", "team-nor"),
-    sfSlot("4", "team-eng"),
     finSlot("2", "team-eng"),
   ];
   const savedRows = buildKnockoutMatchPickRows({
@@ -3306,17 +3347,49 @@ function r32Side(slotKey: string, teamId = ""): KnockoutPickSlotDraft {
 
   const staleJapanSlots = [
     ...baseR16,
-    sfSlot("3", "team-jpn"),
-    sfSlot("4", "team-eng"),
+    qfSlot("3", "team-jpn"),
+    qfSlot("4", "team-eng"),
   ];
   const staleRows = buildKnockoutMatchPickRows({
     ...qfInput,
     slots: staleJapanSlots,
   });
   const staleM99 = staleRows.find((r) => r.fifaMatchNo === 99)!;
-  assert.strictEqual(staleM99.lockReason, "pickable");
-  assert.strictEqual(savedPickIsStaleForKnockoutRow(staleM99), true);
-  assert.strictEqual(isKnockoutMatchDirectPickEligible(staleM99), true);
+  assert.strictEqual(staleM99.lockReason, "frozen");
+  assert.strictEqual(isKnockoutMatchDirectPickEligible(staleM99), false);
+  assert.match(
+    staleM99.display.statusLine!,
+    /Japan did not advance/i,
+  );
+
+  const staleMexicoSlots = [
+    ...baseR16,
+    qfSlot("3", "team-nor"),
+    qfSlot("4", "team-mex"),
+  ];
+  const staleMexicoRows = buildKnockoutMatchPickRows({
+    ...qfInput,
+    slots: staleMexicoSlots,
+    teams: [
+      ...allTeams,
+      {
+        id: "team-mex",
+        name: "Mexico",
+        countryCode: "MEX",
+        fifaCode: "MEX",
+        fifaRank: 14,
+        fifaRankAsOf: null,
+        createdAt: "",
+        updatedAt: "",
+      },
+    ],
+  });
+  const staleMexicoM99 = staleMexicoRows.find((r) => r.fifaMatchNo === 99)!;
+  assert.strictEqual(staleMexicoM99.lockReason, "frozen");
+  assert.match(
+    staleMexicoM99.display.statusLine!,
+    /Mexico did not advance/i,
+  );
 
   const kickedOffMatches = tournamentMatches.map((m) =>
     m.match_code === "M99"

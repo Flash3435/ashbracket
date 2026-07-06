@@ -28,6 +28,11 @@ import {
   blockedKnockoutStepGateCopy,
 } from "./knockoutBlockedRowExplanation";
 import { isKnockoutPickLockedOut } from "../predictions/knockoutPickStatus";
+import {
+  evaluateStrictBracketPathForMatch,
+  strictBracketPathBlockedCopy,
+  strictPathMissingUpstreamStillWaiting,
+} from "./knockoutStrictBracketPath";
 
 export type KnockoutWizardBracketKind =
   | "round_of_16"
@@ -1151,6 +1156,19 @@ export function buildKnockoutMatchPickRows(
     let lockReason: KnockoutMatchLockReason = "pickable";
     const hasHome = Boolean(homeTeamId?.trim());
     const hasAway = Boolean(awayTeamId?.trim());
+    const strictPathEvaluation =
+      hasHome && hasAway
+        ? evaluateStrictBracketPathForMatch({
+            wizardKind: def.wizardBracketKind,
+            matchIndex,
+            slots: input.slots,
+            teams: input.teams,
+            tournamentMatches: input.tournamentMatches,
+            gradual,
+            knockoutBracketPicksUnlocked: input.knockoutBracketPicksUnlocked,
+            nowMs,
+          })
+        : null;
     if (!hasHome && !hasAway) {
       lockReason = "incomplete";
     } else if (!hasHome || !hasAway) {
@@ -1168,7 +1186,31 @@ export function buildKnockoutMatchPickRows(
       isKnockoutMatchLockedForParticipant(publicMatch, nowMs)
     ) {
       lockReason = "started";
-    } else if (
+    } else if (strictPathEvaluation?.hasStalePath) {
+      lockReason = "frozen";
+    } else if (strictPathEvaluation?.hasMissingRequiredPick) {
+      const waiting = strictPathMissingUpstreamStillWaiting(
+        strictPathEvaluation,
+        def.wizardBracketKind,
+        upstreamRows,
+        gradual,
+      );
+      lockReason = waiting ? "incomplete" : "frozen";
+    }
+
+    const strictPathBlockedMessage =
+      strictPathEvaluation &&
+      (strictPathEvaluation.hasStalePath ||
+        (strictPathEvaluation.hasMissingRequiredPick && lockReason === "frozen"))
+        ? strictBracketPathBlockedCopy(
+            strictPathEvaluation,
+            input.teams,
+            def.wizardBracketKind,
+          )
+        : null;
+
+    if (
+      lockReason === "pickable" &&
       shouldFreezeLaterRoundKnockoutMatchRow({
         resultKind: def.resultKind,
         slotKey: saveSlotKey,
@@ -1229,6 +1271,7 @@ export function buildKnockoutMatchPickRows(
     const r16OpenPickUntilKickoff =
       lockReason === "pickable" &&
       !hasValidSavedPick &&
+      (strictPathEvaluation == null || strictPathEvaluation.allFeedersValid) &&
       isKnockoutSlotFrozenByOfficialFeeders({
         predictionKind: def.resultKind,
         slotKey: saveSlotKey,
@@ -1281,6 +1324,15 @@ export function buildKnockoutMatchPickRows(
         ? { ...baseDisplay, emptyPrimaryLine: matchupLineForRow }
         : baseDisplay;
 
+    const displayWithStrictPath =
+      strictPathBlockedMessage && lockReason === "frozen"
+        ? {
+            ...displayWithPartialMatchup,
+            statusLine: strictPathBlockedMessage,
+            emptyPrimaryLine: matchupLineForRow ?? strictPathBlockedMessage,
+          }
+        : displayWithPartialMatchup;
+
     return {
       matchIndex,
       fifaMatchNo,
@@ -1301,10 +1353,10 @@ export function buildKnockoutMatchPickRows(
       kickoffIso,
       display: r16OpenPickUntilKickoff
         ? {
-            ...displayWithPartialMatchup,
+            ...displayWithStrictPath,
             statusLine: KNOCKOUT_R16_MISSING_PICK_OPEN_UNTIL_KICKOFF,
           }
-        : displayWithPartialMatchup,
+        : displayWithStrictPath,
     };
   });
 }
