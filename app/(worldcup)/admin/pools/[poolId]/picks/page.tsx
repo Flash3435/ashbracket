@@ -4,6 +4,7 @@ import { ParticipantBracketView } from "@/components/bracket/ParticipantBracketV
 import { PicksViewToggle } from "@/components/picks/PicksViewToggle";
 import { PageContainer } from "@/components/ui/PageContainer";
 import { PageTitle } from "@/components/ui/PageTitle";
+import { WideSectionBreakout } from "@/components/ui/WideSectionBreakout";
 import { requireManagedPool } from "@/lib/admin/requireManagedPool";
 import { ACCOUNT_TOURNAMENT_STAGE_CODES } from "../../../../../../lib/account/loadAccountKnockoutSelection";
 import {
@@ -395,15 +396,17 @@ export default async function AdminPoolPicksPage({ params, searchParams }: PageP
                   ) : null}
                 </>
               ) : (
-                <ParticipantBracketView
-                  slots={initialSlots}
-                  teams={teams}
-                  knockoutBracketPicksUnlocked={knockoutBracketPicksUnlocked}
-                  tournamentMatches={tournamentPayload?.matches ?? null}
-                  readOnly
-                  adminMode
-                  showIntro={false}
-                />
+                <WideSectionBreakout maxWidthClassName="max-w-[min(100%,1600px)]">
+                  <ParticipantBracketView
+                    slots={initialSlots}
+                    teams={teams}
+                    knockoutBracketPicksUnlocked={knockoutBracketPicksUnlocked}
+                    tournamentMatches={tournamentPayload?.matches ?? null}
+                    readOnly
+                    adminMode
+                    showIntro={false}
+                  />
+                </WideSectionBreakout>
               )}
             </>
           ) : null}

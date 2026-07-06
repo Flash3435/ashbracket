@@ -1,5 +1,10 @@
 import type { LiveBracketMatch, LiveBracketTrackerModel } from "../../../lib/bracket/liveBracketTracker";
 import type { Team } from "../../../src/types/domain";
+import {
+  ADMIN_BRACKET_CARD_WIDTH_PX,
+  ADMIN_BRACKET_CHAMPION_COLUMN_MIN_WIDTH_PX,
+  ADMIN_BRACKET_COLUMN_MIN_WIDTH_PX,
+} from "./adminBracketLayout";
 import { AdminBracketMatchCard } from "./AdminBracketMatchCard";
 import { AdminParticipantPicksSummary } from "./AdminParticipantPicksSummary";
 import { ChampionSummaryCard } from "./ChampionSummaryCard";
@@ -26,7 +31,10 @@ function AdminRoundColumn({
   wideGap?: boolean;
 }) {
   return (
-    <div className="flex min-w-[184px] shrink-0 flex-col">
+    <div
+      className="flex shrink-0 flex-col"
+      style={{ minWidth: ADMIN_BRACKET_COLUMN_MIN_WIDTH_PX }}
+    >
       <h3
         className="mb-2 shrink-0 text-center text-[10px] font-semibold uppercase tracking-wide text-ash-muted sm:text-xs"
         title={title}
@@ -34,7 +42,7 @@ function AdminRoundColumn({
         <span className="sm:hidden">{shortTitle}</span>
         <span className="hidden sm:inline">{title}</span>
       </h3>
-      <div className={`flex flex-col ${wideGap ? "gap-4" : "gap-2"}`}>
+      <div className={`flex flex-col ${wideGap ? "gap-5" : "gap-2.5"}`}>
         {matches.map((m) => (
           <AdminBracketMatchCard
             key={m.matchKey}
@@ -49,71 +57,100 @@ function AdminRoundColumn({
   );
 }
 
+function AdminChampionColumn({
+  champion,
+  teamById,
+  wideGap,
+}: {
+  champion: LiveBracketTrackerModel["champion"];
+  teamById: Map<string, Team>;
+  wideGap?: boolean;
+}) {
+  return (
+    <div
+      className="flex shrink-0 flex-col border-l border-ash-border/45 pl-5"
+      style={{ minWidth: ADMIN_BRACKET_CHAMPION_COLUMN_MIN_WIDTH_PX }}
+    >
+      <h3
+        className="mb-2 shrink-0 text-center text-[10px] font-semibold uppercase tracking-wide text-ash-muted sm:text-xs"
+        title="Champion"
+      >
+        Champion
+      </h3>
+      <div
+        className={`sticky top-20 ${wideGap ? "pt-6" : "pt-2"}`}
+        style={{ minWidth: ADMIN_BRACKET_CARD_WIDTH_PX }}
+      >
+        <ChampionSummaryCard champion={champion} teamById={teamById} />
+      </div>
+    </div>
+  );
+}
+
 export function AdminPosterBracketTracker({ tracker, teamById, matchEditHref }: Props) {
   return (
-    <div className="space-y-4">
+    <div className="w-full space-y-4">
       <AdminParticipantPicksSummary tracker={tracker} teamById={teamById} />
 
-      <div className="flex flex-col gap-4 xl:flex-row xl:items-start">
-        <div
-          className="min-w-0 flex-1 overflow-x-auto rounded-xl border border-ash-border bg-ash-body/20 p-3 sm:p-4"
-          role="region"
-          aria-label="Admin participant bracket"
-        >
-          <p className="mb-2 text-[10px] text-ash-muted xl:hidden">
-            Scroll horizontally to see all rounds →
-          </p>
-          <div className="flex w-max min-w-full flex-nowrap gap-4 pb-1">
-            <AdminRoundColumn
-              title="Round of 32"
-              shortTitle="R32"
-              matches={tracker.roundOf32}
+      <div
+        className="w-full overflow-x-auto rounded-xl border border-ash-border bg-ash-body/20 p-3 sm:p-5"
+        role="region"
+        aria-label="Admin participant bracket"
+      >
+        <p className="mb-3 text-[10px] text-ash-muted lg:hidden">
+          Scroll horizontally to see all rounds →
+        </p>
+        <div className="flex w-max min-w-full flex-nowrap items-start gap-5 pb-1 lg:gap-6">
+          <AdminRoundColumn
+            title="Round of 32"
+            shortTitle="R32"
+            matches={tracker.roundOf32}
+            teamById={teamById}
+            matchEditHref={matchEditHref}
+          />
+          <AdminRoundColumn
+            title="Round of 16"
+            shortTitle="R16"
+            matches={tracker.roundOf16}
+            teamById={teamById}
+            matchEditHref={matchEditHref}
+          />
+          <AdminRoundColumn
+            title="Quarter-finals"
+            shortTitle="QF"
+            matches={tracker.quarterfinals}
+            teamById={teamById}
+            matchEditHref={matchEditHref}
+            wideGap
+          />
+          <AdminRoundColumn
+            title="Semi-finals"
+            shortTitle="SF"
+            matches={tracker.semifinals}
+            teamById={teamById}
+            matchEditHref={matchEditHref}
+            wideGap
+          />
+          <AdminRoundColumn
+            title="Final"
+            shortTitle="F"
+            matches={tracker.final}
+            teamById={teamById}
+            matchEditHref={matchEditHref}
+            wideGap
+          />
+          {tracker.showChampionCard ? (
+            <AdminChampionColumn
+              champion={tracker.champion}
               teamById={teamById}
-              matchEditHref={matchEditHref}
-            />
-            <AdminRoundColumn
-              title="Round of 16"
-              shortTitle="R16"
-              matches={tracker.roundOf16}
-              teamById={teamById}
-              matchEditHref={matchEditHref}
-            />
-            <AdminRoundColumn
-              title="Quarter-finals"
-              shortTitle="QF"
-              matches={tracker.quarterfinals}
-              teamById={teamById}
-              matchEditHref={matchEditHref}
               wideGap
             />
-            <AdminRoundColumn
-              title="Semi-finals"
-              shortTitle="SF"
-              matches={tracker.semifinals}
-              teamById={teamById}
-              matchEditHref={matchEditHref}
-              wideGap
-            />
-            <AdminRoundColumn
-              title="Final"
-              shortTitle="F"
-              matches={tracker.final}
-              teamById={teamById}
-              matchEditHref={matchEditHref}
-              wideGap
-            />
-          </div>
-          {tracker.finalHelperCopy ? (
-            <p className="mt-3 text-center text-[10px] leading-snug text-ash-muted">
-              {tracker.finalHelperCopy}
-            </p>
           ) : null}
         </div>
-
-        {tracker.showChampionCard ? (
-          <aside className="w-full shrink-0 xl:sticky xl:top-4 xl:w-56">
-            <ChampionSummaryCard champion={tracker.champion} teamById={teamById} />
-          </aside>
+        {tracker.finalHelperCopy ? (
+          <p className="mt-4 text-center text-[10px] leading-snug text-ash-muted">
+            {tracker.finalHelperCopy}
+          </p>
         ) : null}
       </div>
     </div>

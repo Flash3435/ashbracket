@@ -43,7 +43,7 @@ export function ChampionSummaryCard({ champion, teamById }: Props) {
             className={muted ? "opacity-60 grayscale" : undefined}
           />
           <p
-            className={`min-w-0 truncate text-sm font-semibold ${
+            className={`min-w-0 text-sm font-semibold leading-snug ${
               muted ? "text-ash-muted" : "text-ash-text"
             }`}
             title={team!.name}

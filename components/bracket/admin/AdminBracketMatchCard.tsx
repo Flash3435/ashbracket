@@ -1,6 +1,7 @@
 import Link from "next/link";
 import type { LiveBracketMatch } from "../../../lib/bracket/liveBracketTracker";
 import type { Team } from "../../../src/types/domain";
+import { ADMIN_BRACKET_CARD_WIDTH_PX } from "./adminBracketLayout";
 import { AdminBracketTeamRow } from "./AdminBracketTeamRow";
 import { MatchOutcomeSummary } from "./MatchOutcomeSummary";
 
@@ -37,9 +38,10 @@ export function AdminBracketMatchCard({
 
   const inner = (
     <div
-      className={`flex w-[min(100%,192px)] min-w-[168px] shrink-0 flex-col overflow-hidden rounded-lg border border-ash-border/55 bg-ash-body/25 shadow-sm ${
+      className={`flex shrink-0 flex-col overflow-hidden rounded-lg border border-ash-border/55 bg-ash-body/25 shadow-sm ${
         compact ? "gap-0.5" : "gap-1"
       }`}
+      style={{ width: ADMIN_BRACKET_CARD_WIDTH_PX, minWidth: ADMIN_BRACKET_CARD_WIDTH_PX }}
     >
       <div
         className={`flex items-center justify-between gap-1 border-b border-ash-border/35 ${

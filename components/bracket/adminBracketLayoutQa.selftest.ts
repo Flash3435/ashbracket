@@ -12,6 +12,7 @@ import {
   resolveAdminTeamStatusBadge,
 } from "../../lib/bracket/adminBracketDisplay";
 import { buildLiveBracketTracker } from "../../lib/bracket/liveBracketTracker";
+import { ADMIN_BRACKET_CARD_WIDTH_PX } from "./admin/adminBracketLayout";
 import { AdminPosterBracketTracker } from "./admin/AdminPosterBracketTracker";
 import { ParticipantBracketView } from "./ParticipantBracketView";
 import { PosterBracketTracker } from "./PosterBracketTracker";
@@ -92,16 +93,19 @@ const LONG_NAME_TEAMS = [
   team("team-ger", "Germany", "GER"),
   team("team-esp", "Spain", "ESP"),
   team("team-eng", "England", "ENG"),
+  team("team-rsa", "South Africa", "RSA"),
+  team("team-can", "Canada", "CAN"),
+  team("team-mar", "Morocco", "MAR"),
 ];
 
 function assertOneBadgePerTeamRow(html: string): void {
   const cards = html.split("rounded-lg border border-ash-border/55").slice(1);
   for (const card of cards) {
-    if (!card.includes("min-h-[32px]")) continue;
+    if (!card.includes("min-h-[34px]") && !card.includes("min-h-[32px]")) continue;
     const badges = (
       card.match(/text-\[9px\] font-semibold uppercase tracking-wide ring-1/g) ?? []
     ).length;
-    const rows = (card.match(/min-h-\[32px\]/g) ?? []).length;
+    const rows = (card.match(/min-h-\[3[24]px\]/g) ?? []).length;
     assert(badges <= rows, `match card has at most one badge per team row (${badges} badges, ${rows} rows)`);
   }
 }
@@ -110,7 +114,9 @@ function assertAdminLayout(html: string): void {
   assert(html.includes("Participant pick summary"), "summary panel present");
   assert(html.includes('aria-label="Admin participant bracket"'), "admin bracket region");
   assert(html.includes("overflow-x-auto"), "horizontal scroll container");
-  assert(html.includes("<aside"), "champion aside present");
+  assert(html.includes("Champion"), "champion column present");
+  assert(html.includes("sticky top-20"), "champion sticky near final");
+  assert(html.includes("border-l border-ash-border/45"), "champion separated from final column");
   assert(!html.includes("BracketConnector"), "no connector tree");
   assert(!html.includes("grid-cols-[auto_280px_auto]"), "no poster center grid");
   assertOneBadgePerTeamRow(html);
@@ -156,7 +162,7 @@ void (async function main() {
 
   const completeSummary = buildAdminParticipantPicksSummary(completeTracker, teamById);
   assert(completeSummary.championPick === "United States", "summary champion for complete bracket");
-  assert(completeHtml.includes("Remaining live picks"), "live picks section");
+  assert(completeHtml.includes("Remaining live picks ("), "live picks count in heading");
 
   // 2. No champion pick
   const noChampSlots: KnockoutPickSlotDraft[] = [
@@ -303,7 +309,8 @@ void (async function main() {
   assert(completeHtml.includes("United States"), "long name United States in complete bracket");
   assert(longNameHtml.includes("Netherlands"), "long name Netherlands in upcoming match");
   assert(longNameHtml.includes("Argentina"), "long name Argentina in upcoming match");
-  assert(longNameHtml.includes("min-w-[168px]"), "card min-width for names");
+  assert(longNameHtml.includes(String(ADMIN_BRACKET_CARD_WIDTH_PX)), "readable card width constant");
+  assert(!longNameHtml.includes("South Af…"), "no aggressive truncation ellipsis in markup");
   assert(longNameHtml.includes("truncate"), "truncation class on long names");
 
   // Routing: participant pages use poster layout, admin uses admin layout

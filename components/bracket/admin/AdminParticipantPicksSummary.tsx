@@ -10,13 +10,19 @@ type Props = {
   teamById: Map<string, Team>;
 };
 
+function summaryHeading(label: string, count: number): string {
+  return `${label} (${count})`;
+}
+
 function SummaryList({
   label,
+  count,
   items,
   emptyText,
   tone = "default",
 }: {
   label: string;
+  count: number;
   items: string[];
   emptyText: string;
   tone?: "default" | "success" | "warning" | "error" | "muted";
@@ -34,11 +40,13 @@ function SummaryList({
 
   return (
     <div>
-      <p className="text-[10px] font-semibold uppercase tracking-wide text-ash-muted">{label}</p>
+      <p className="text-[10px] font-semibold uppercase tracking-wide text-ash-muted">
+        {summaryHeading(label, count)}
+      </p>
       {items.length > 0 ? (
         <ul className={`mt-1 space-y-0.5 text-xs ${toneClass}`}>
           {items.map((item) => (
-            <li key={item} className="truncate" title={item}>
+            <li key={item} title={item}>
               {item}
             </li>
           ))}
@@ -60,16 +68,18 @@ function buildChampionLabel(summary: AdminParticipantPicksSummary): string {
 
 export function AdminParticipantPicksSummary({ tracker, teamById }: Props) {
   const summary = buildAdminParticipantPicksSummary(tracker, teamById);
+  const championItems = summary.championPick ? [buildChampionLabel(summary)] : [];
 
   return (
-    <div className="rounded-xl border border-ash-border bg-ash-body/25 p-4">
+    <div className="rounded-xl border border-ash-border bg-ash-body/25 p-4 sm:p-5">
       <p className="text-xs font-semibold uppercase tracking-wide text-ash-muted">
         Participant pick summary
       </p>
-      <div className="mt-3 grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+      <div className="mt-3 grid gap-4 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-6">
         <SummaryList
           label="Champion pick"
-          items={summary.championPick ? [buildChampionLabel(summary)] : []}
+          count={championItems.length}
+          items={championItems}
           emptyText="No champion pick saved"
           tone={
             summary.championStatus === "unreachable"
@@ -81,29 +91,34 @@ export function AdminParticipantPicksSummary({ tracker, teamById }: Props) {
         />
         <SummaryList
           label="Final / finalist picks"
+          count={summary.finalPicks.length}
           items={summary.finalPicks}
           emptyText="No final picks saved"
         />
         <SummaryList
           label="Remaining live picks"
+          count={summary.livePicks.length}
           items={summary.livePicks}
           emptyText="None still alive"
           tone="success"
         />
         <SummaryList
           label="Eliminated picks"
+          count={summary.eliminatedPicks.length}
           items={summary.eliminatedPicks}
           emptyText="None eliminated yet"
           tone="error"
         />
         <SummaryList
           label="Missing picks"
+          count={summary.missingSlots.length}
           items={summary.missingSlots}
           emptyText="All slots filled"
           tone="muted"
         />
         <SummaryList
           label="Stale / path-invalid picks"
+          count={summary.stalePicks.length}
           items={summary.stalePicks}
           emptyText="None"
           tone="warning"

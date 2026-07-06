@@ -26,7 +26,7 @@ export function AdminBracketTeamRow({ side, teamById, score }: Props) {
 
   return (
     <div
-      className={`flex min-h-[32px] items-center gap-1.5 rounded px-1.5 py-1 ${liveSideRowClassName(side)}`}
+      className={`flex min-h-[34px] flex-wrap items-center gap-x-1.5 gap-y-1 rounded px-2 py-1 ${liveSideRowClassName(side)}`}
       title={side.helperTooltip ?? undefined}
     >
       {showFlag ? (
@@ -39,7 +39,7 @@ export function AdminBracketTeamRow({ side, teamById, score }: Props) {
         <CountryFlagPlaceholder size="sm" />
       )}
       <p
-        className={`min-w-0 flex-1 truncate text-[11px] leading-tight ${liveSideNameClassName(side)}`}
+        className={`min-w-0 flex-1 text-xs leading-snug ${liveSideNameClassName(side)}`}
         title={side.helperTooltip ?? side.displayName}
       >
         {side.displayName}
