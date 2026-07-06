@@ -33,4 +33,6 @@ export type PublicParticipantDetail = {
   rank: number;
   picks: PublicParticipantPick[];
   ledger: PublicParticipantLedgerRow[];
+  /** True when the eight official third-place advancers are known for scoring display. */
+  thirdPlaceQualifiersSettled?: boolean;
 };

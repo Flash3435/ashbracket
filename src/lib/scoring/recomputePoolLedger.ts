@@ -3,6 +3,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { revalidatePoolAdminPaths } from "@/lib/admin/revalidatePoolAdminPaths";
 import { createClient } from "@/lib/supabase/server";
 import { createServiceRoleClient } from "@/lib/supabase/service";
+import { ensureThirdPlaceQualifierResults } from "@/lib/scoring/ensureThirdPlaceQualifierResults";
 import { computePoolScores } from "./computePoolScores";
 import { fetchPoolPredictions } from "@/lib/predictions/fetchPoolPredictions";
 import { warnIfPoolPredictionsLookTruncated } from "@/lib/supabase/fetchAllRows";
@@ -124,6 +125,8 @@ export async function recomputePoolLedgerWithClient(
     .eq("pool_id", poolId);
 
   if (rulesErr) return { error: rulesErr.message };
+
+  await ensureThirdPlaceQualifierResults(supabase, editionId);
 
   const { data: resultsRaw, error: resErr } = await supabase
     .from("results")

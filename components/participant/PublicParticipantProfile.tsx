@@ -87,6 +87,16 @@ function pickStateBadge(pick: PublicParticipantDisplayPick) {
       </span>
     );
   }
+  if (status.state === "missed") {
+    return (
+      <span
+        className={`${base} border border-slate-500/35 bg-slate-900/50 text-slate-300`}
+        title={status.meaning}
+      >
+        {status.label}
+      </span>
+    );
+  }
   return (
     <span
       className={`${base} border border-slate-500/35 bg-slate-900/50 text-slate-400`}
@@ -134,9 +144,10 @@ function pickTeamRow(pick: PublicParticipantDisplayPick) {
 function sectionSummaryLine(section: PublicParticipantDisplaySection): string {
   const parts = [`${section.picks.length} picks`];
   if (section.scoredPicksCount > 0) {
-    parts.push(
-      `${section.scoredPicksCount} scored`,
-    );
+    parts.push(`${section.scoredPicksCount} scored`);
+  }
+  if (section.missedPicksCount > 0) {
+    parts.push(`${section.missedPicksCount} missed`);
   }
   if (section.awaitingScoreCount > 0) {
     parts.push(`${section.awaitingScoreCount} awaiting score`);
@@ -189,6 +200,11 @@ function StageSection({
                 {section.awaitingScoreCount} awaiting
               </span>
             ) : null}
+            {section.missedPicksCount > 0 ? (
+              <span className="rounded-full border border-slate-500/30 bg-slate-900/40 px-2.5 py-1 text-xs font-medium text-slate-300">
+                {section.missedPicksCount} missed
+              </span>
+            ) : null}
             <span
               className={`rounded-full border px-2.5 py-1 text-xs font-semibold tabular-nums ${
                 section.totalPoints > 0
@@ -228,6 +244,8 @@ function StageSection({
                   ? pick.ledgerCount === 1
                     ? "1 point award"
                     : `${pick.ledgerCount} point awards`
+                  : pick.state === "missed"
+                    ? "Did not score"
                   : pick.state === "awaiting"
                     ? "Not on the scoreboard yet"
                     : "—"}

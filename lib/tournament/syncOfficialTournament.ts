@@ -15,6 +15,7 @@ import {
   computeGroupStandings,
   type FinishedGroupMatch,
 } from "./groupStandings";
+import { ensureThirdPlaceQualifierResults } from "@/lib/scoring/ensureThirdPlaceQualifierResults";
 import { buildRoundOf32AdvancementResultInserts } from "./deriveRoundOf32AdvancementResults";
 import { winnerFromMatchScores } from "./matchOutcome";
 
@@ -532,8 +533,12 @@ export async function syncOfficialTournament(
     if (insErr) return { ok: false, error: insErr.message };
   }
 
+  const thirdPlaceEnsure = await ensureThirdPlaceQualifierResults(supabase, editionId);
+
   logger?.log("sync.derived_results_rebuild_end", {
     insertCount: inserts.length,
+    thirdPlaceQualifierUpserted: thirdPlaceEnsure.upsertedCount,
+    thirdPlaceQualifierSource: thirdPlaceEnsure.resolution.source,
     poolCount: poolIds.length,
     skipPoolRecalculation,
   });

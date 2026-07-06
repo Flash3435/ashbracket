@@ -19,6 +19,7 @@ function statusLabel(state: PickDisplayState): string {
 
 assert.equal(statusLabel("scored"), "Scored");
 assert.equal(statusLabel("awaiting"), "Awaiting score");
+assert.equal(statusLabel("missed"), "Missed");
 assert.equal(statusLabel("empty"), "No pick");
 
 const detail: PublicParticipantDetail = {
@@ -102,3 +103,57 @@ assertParticipantScoringTotalsConsistent({
 });
 
 console.log("publicParticipantPresentation selftest: ok");
+
+const settledThirdDetail: PublicParticipantDetail = {
+  ...detail,
+  thirdPlaceQualifiersSettled: true,
+  picks: [
+    ...detail.picks,
+    {
+      predictionId: "p-tpq-hit",
+      predictionKind: "third_place_qualifier",
+      groupCode: "A",
+      slotKey: null,
+      bonusKey: null,
+      stageCode: "round_of_32",
+      stageLabel: "Round of 32",
+      stageSortOrder: 20,
+      teamName: "Team TPQ Hit",
+      teamCountryCode: "USA",
+    },
+    {
+      predictionId: "p-tpq-miss",
+      predictionKind: "third_place_qualifier",
+      groupCode: "B",
+      slotKey: null,
+      bonusKey: null,
+      stageCode: "round_of_32",
+      stageLabel: "Round of 32",
+      stageSortOrder: 20,
+      teamName: "Team TPQ Miss",
+      teamCountryCode: "CAN",
+    },
+  ],
+  ledger: [
+    ...detail.ledger,
+    {
+      id: "l-tpq",
+      pointsDelta: 4,
+      predictionKind: "third_place_qualifier",
+      createdAt: "2026-06-30T12:00:00.000Z",
+      predictionId: "p-tpq-hit",
+      resultId: "r-tpq",
+    },
+  ],
+};
+
+const thirdPresentation = buildPublicParticipantPresentation(settledThirdDetail);
+const thirdSection = thirdPresentation.sections.find(
+  (s) => s.key === "third_place_advancers",
+);
+assert.ok(thirdSection);
+assert.equal(thirdSection!.scoredPicksCount, 1);
+assert.equal(thirdSection!.missedPicksCount, 1);
+assert.equal(thirdSection!.awaitingScoreCount, 0);
+
+console.log("publicParticipantPresentation third-place settled selftest: ok");

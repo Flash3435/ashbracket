@@ -7,13 +7,14 @@ import type {
 } from "../../types/publicParticipant";
 
 /**
- * What we can infer from public picks + ledger only (no per-slot result resolution):
+ * What we can infer from public picks + ledger (+ optional settlement context):
  * - empty: no team saved on the pick
  * - out: team saved but marked out (historical locked invalid pick)
  * - scored: at least one ledger line for this prediction (points awarded)
- * - awaiting: team saved but no ledger yet (may be pending results OR settled with 0 pts)
+ * - missed: team saved, qualifiers known, no points earned
+ * - awaiting: team saved but qualifiers not yet official (or other pending results)
  */
-export type PickDisplayState = "empty" | "out" | "scored" | "awaiting";
+export type PickDisplayState = "empty" | "out" | "scored" | "missed" | "awaiting";
 
 export type PickStatusPresentation = {
   state: PickDisplayState;
@@ -39,6 +40,7 @@ export type PublicParticipantDisplaySection = {
   sortOrder: number;
   picks: PublicParticipantDisplayPick[];
   scoredPicksCount: number;
+  missedPicksCount: number;
   awaitingScoreCount: number;
   emptyPicksCount: number;
   totalPoints: number;
@@ -168,10 +170,19 @@ function hasSavedTeam(pick: PublicParticipantPick): boolean {
 function resolvePickDisplayState(
   pick: PublicParticipantPick,
   pickLedger: PublicParticipantLedgerRow[],
+  context?: { thirdPlaceQualifiersSettled?: boolean },
 ): PickDisplayState {
   if (pick.pickIsOut && hasSavedTeam(pick)) return "out";
   if (pickLedger.length > 0) return "scored";
-  if (hasSavedTeam(pick)) return "awaiting";
+  if (hasSavedTeam(pick)) {
+    if (
+      pick.predictionKind === "third_place_qualifier" &&
+      context?.thirdPlaceQualifiersSettled
+    ) {
+      return "missed";
+    }
+    return "awaiting";
+  }
   return "empty";
 }
 
@@ -189,6 +200,13 @@ export function pickStatusPresentation(state: PickDisplayState): PickStatusPrese
         state,
         label: "Scored",
         meaning: "This pick earned points on the official results board.",
+      };
+    case "missed":
+      return {
+        state,
+        label: "Missed",
+        meaning:
+          "Official third-place advancers are known and this pick did not score.",
       };
     case "awaiting":
       return {
@@ -370,6 +388,10 @@ export function buildPublicParticipantPresentation(detail: PublicParticipantDeta
   sections: PublicParticipantDisplaySection[];
   ledgerItems: PublicParticipantDisplayLedgerItem[];
 } {
+  const presentationContext = {
+    thirdPlaceQualifiersSettled: detail.thirdPlaceQualifiersSettled === true,
+  };
+
   const ledgerByPredictionId = new Map<string, PublicParticipantLedgerRow[]>();
   for (const row of detail.ledger) {
     if (!row.predictionId) continue;
@@ -383,7 +405,7 @@ export function buildPublicParticipantPresentation(detail: PublicParticipantDeta
     const sectionMeta = SECTION_BY_KIND[pick.predictionKind] ?? fallbackSectionMeta(pick);
     const pickLedger = ledgerByPredictionId.get(pick.predictionId) ?? [];
     const described = describePick(pick);
-    const state = resolvePickDisplayState(pick, pickLedger);
+    const state = resolvePickDisplayState(pick, pickLedger, presentationContext);
     const displayPick: PublicParticipantDisplayPick = {
       ...pick,
       displayLabel: described.displayLabel,
@@ -399,6 +421,7 @@ export function buildPublicParticipantPresentation(detail: PublicParticipantDeta
       existing.picks.push(displayPick);
       existing.totalPoints += displayPick.pointsEarned;
       if (displayPick.state === "scored") existing.scoredPicksCount += 1;
+      else if (displayPick.state === "missed") existing.missedPicksCount += 1;
       else if (displayPick.state === "awaiting") existing.awaitingScoreCount += 1;
       else if (displayPick.state === "empty") existing.emptyPicksCount += 1;
     } else {
@@ -409,6 +432,7 @@ export function buildPublicParticipantPresentation(detail: PublicParticipantDeta
         sortOrder: sectionMeta.sortOrder,
         picks: [displayPick],
         scoredPicksCount: displayPick.state === "scored" ? 1 : 0,
+        missedPicksCount: displayPick.state === "missed" ? 1 : 0,
         awaitingScoreCount: displayPick.state === "awaiting" ? 1 : 0,
         emptyPicksCount: displayPick.state === "empty" ? 1 : 0,
         totalPoints: displayPick.pointsEarned,
@@ -459,6 +483,7 @@ export function buildPublicParticipantPresentation(detail: PublicParticipantDeta
     const state = resolvePickDisplayState(
       pick,
       ledgerByPredictionId.get(pick.predictionId) ?? [],
+      presentationContext,
     );
     if (state === "scored") scoredPicksCount += 1;
     else if (state === "awaiting") awaitingScoreCount += 1;

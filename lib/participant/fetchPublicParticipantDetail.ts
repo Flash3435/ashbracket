@@ -19,6 +19,8 @@ import {
   decodeKnockoutPickStatusMetadata,
 } from "../predictions/knockoutPickStatus";
 import { normalizeParticipantProfileRouteId } from "./participantProfileRouting";
+import { loadThirdPlaceQualifierSettlement } from "@/lib/scoring/ensureThirdPlaceQualifierResults";
+import { areThirdPlaceQualifiersSettled } from "@/lib/scoring/resolveOfficialThirdPlaceAdvancers";
 import { reconcileParticipantProfileTotals } from "./participantScoringConsistency";
 
 type ParticipantBracketHeaderRpcRow = {
@@ -182,8 +184,40 @@ async function loadPublicPoolParticipantDetail(
 
   return {
     ok: true,
-    data: detail,
+    data: await attachThirdPlaceSettlement(supabase, detail),
   };
+}
+
+async function loadPoolEditionId(
+  supabase: SupabaseClient,
+  poolId: string,
+): Promise<string | null> {
+  const { data, error } = await supabase
+    .from("pools")
+    .select("tournament_edition_id")
+    .eq("id", poolId)
+    .maybeSingle();
+  if (error || !data?.tournament_edition_id) return null;
+  return data.tournament_edition_id as string;
+}
+
+async function attachThirdPlaceSettlement(
+  _supabase: SupabaseClient,
+  detail: PublicParticipantDetail,
+): Promise<PublicParticipantDetail> {
+  const service = createServiceRoleClient();
+  const editionId = await loadPoolEditionId(service, detail.poolId);
+  if (!editionId) return detail;
+
+  try {
+    const resolution = await loadThirdPlaceQualifierSettlement(service, editionId);
+    return {
+      ...detail,
+      thirdPlaceQualifiersSettled: areThirdPlaceQualifiersSettled(resolution),
+    };
+  } catch {
+    return detail;
+  }
 }
 
 async function loadPeerPoolParticipantDetail(
@@ -261,7 +295,7 @@ async function loadPeerPoolParticipantDetail(
 
   return {
     ok: true,
-    data: detail,
+    data: await attachThirdPlaceSettlement(service, detail),
   };
 }
 
