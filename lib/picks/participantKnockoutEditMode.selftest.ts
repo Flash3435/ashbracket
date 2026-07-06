@@ -414,7 +414,7 @@ function validLaterRoundPickSlots(
   assert.equal(presentation.picksReadOnly, true);
 }
 
-// Saved R16 pick stays locked when feeder results are official
+// Saved R16 pick stays editable before kickoff when feeder results are official
 {
   const officialContext = {
     ...gradualConfirmedContext,
@@ -442,7 +442,7 @@ function validLaterRoundPickSlots(
     nowMs,
   });
   const savedM89 = rows.find((row) => row.fifaMatchNo === 89)!;
-  assert.equal(savedM89.lockReason, "frozen");
+  assert.equal(savedM89.lockReason, "pickable");
   assert.equal(validatedKnockoutMatchWinner(savedM89), "team-fra");
 
   const missingM90 = rows.find((row) => row.fifaMatchNo === 90)!;

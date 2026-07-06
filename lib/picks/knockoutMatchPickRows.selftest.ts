@@ -1891,10 +1891,7 @@ function r32Side(slotKey: string, teamId = ""): KnockoutPickSlotDraft {
   assert.strictEqual(validPick.savedPickStatus, "valid");
   assert.strictEqual(validPick.savedPickSummaryLine, "Saved pick: Sweden");
   assert.strictEqual(validPick.savedPickTeamId, "team-swe");
-  assert.strictEqual(
-    validPick.lockStatusLine,
-    "Locked — feeder results are official.",
-  );
+  assert.strictEqual(validPick.lockStatusLine, null);
   assert.strictEqual(validPick.savedPickWarning, null);
 
   const staleSlots = [
@@ -3065,6 +3062,282 @@ function r32Side(slotKey: string, teamId = ""): KnockoutPickSlotDraft {
     /no longer matches this matchup/i,
   );
   assert.strictEqual(validatedKnockoutMatchWinner(finishedLoserRow), null);
+}
+
+// Future official QF rows stay pickable until kickoff (M99 Norway vs England regression).
+{
+  const norEngTeams: Team[] = [
+    ...teams,
+    {
+      id: "team-nor",
+      name: "Norway",
+      countryCode: "NOR",
+      fifaCode: "NOR",
+      fifaRank: 45,
+      fifaRankAsOf: null,
+      createdAt: "",
+      updatedAt: "",
+    },
+    {
+      id: "team-eng",
+      name: "England",
+      countryCode: "ENG",
+      fifaCode: "ENG",
+      fifaRank: 4,
+      fifaRankAsOf: null,
+      createdAt: "",
+      updatedAt: "",
+    },
+    {
+      id: "team-jpn",
+      name: "Japan",
+      countryCode: "JPN",
+      fifaCode: "JPN",
+      fifaRank: 17,
+      fifaRankAsOf: null,
+      createdAt: "",
+      updatedAt: "",
+    },
+    {
+      id: "team-esp",
+      name: "Spain",
+      countryCode: "ESP",
+      fifaCode: "ESP",
+      fifaRank: 7,
+      fifaRankAsOf: null,
+      createdAt: "",
+      updatedAt: "",
+    },
+  ];
+  const qfNowMs = new Date("2026-07-06T12:00:00Z").getTime();
+  const tournamentMatches: TournamentMatchPublicRow[] = [
+    {
+      match_id: "m91",
+      edition_id: "ed",
+      edition_code: "2026",
+      match_code: "M91",
+      stage_code: "round_of_16",
+      stage_label: "Round of 16",
+      stage_sort_order: 3,
+      group_code: null,
+      round_index: 0,
+      kickoff_at: "2026-07-05T18:00:00Z",
+      status: "finished",
+      home_goals: 2,
+      away_goals: 1,
+      home_penalties: null,
+      away_penalties: null,
+      home_team_name: "Norway",
+      home_country_code: "NOR",
+      away_team_name: "Colombia",
+      away_country_code: "COL",
+      winner_team_name: "Norway",
+      winner_country_code: "NOR",
+    },
+    {
+      match_id: "m92",
+      edition_id: "ed",
+      edition_code: "2026",
+      match_code: "M92",
+      stage_code: "round_of_16",
+      stage_label: "Round of 16",
+      stage_sort_order: 3,
+      group_code: null,
+      round_index: 0,
+      kickoff_at: "2026-07-05T20:00:00Z",
+      status: "finished",
+      home_goals: 1,
+      away_goals: 0,
+      home_penalties: null,
+      away_penalties: null,
+      home_team_name: "Spain",
+      home_country_code: "ESP",
+      away_team_name: "England",
+      away_country_code: "ENG",
+      winner_team_name: "England",
+      winner_country_code: "ENG",
+    },
+    {
+      match_id: "m95",
+      edition_id: "ed",
+      edition_code: "2026",
+      match_code: "M95",
+      stage_code: "round_of_16",
+      stage_label: "Round of 16",
+      stage_sort_order: 3,
+      group_code: null,
+      round_index: 0,
+      kickoff_at: "2026-07-05T22:00:00Z",
+      status: "finished",
+      home_goals: 2,
+      away_goals: 1,
+      home_penalties: null,
+      away_penalties: null,
+      home_team_name: "Argentina",
+      home_country_code: "ARG",
+      away_team_name: "Brazil",
+      away_country_code: "BRA",
+      winner_team_name: "Argentina",
+      winner_country_code: "ARG",
+    },
+    {
+      match_id: "m96",
+      edition_id: "ed",
+      edition_code: "2026",
+      match_code: "M96",
+      stage_code: "round_of_16",
+      stage_label: "Round of 16",
+      stage_sort_order: 3,
+      group_code: null,
+      round_index: 0,
+      kickoff_at: "2026-07-05T23:00:00Z",
+      status: "finished",
+      home_goals: 1,
+      away_goals: 0,
+      home_penalties: null,
+      away_penalties: null,
+      home_team_name: "France",
+      home_country_code: "FRA",
+      away_team_name: "Morocco",
+      away_country_code: "MAR",
+      winner_team_name: "France",
+      winner_country_code: "FRA",
+    },
+    {
+      match_id: "m99",
+      edition_id: "ed",
+      edition_code: "2026",
+      match_code: "M99",
+      stage_code: "quarterfinal",
+      stage_label: "Quarter-finals",
+      stage_sort_order: 4,
+      group_code: null,
+      round_index: 0,
+      kickoff_at: "2026-07-11T18:00:00Z",
+      status: "scheduled",
+      home_goals: null,
+      away_goals: null,
+      home_penalties: null,
+      away_penalties: null,
+      home_team_name: "Norway",
+      home_country_code: "NOR",
+      away_team_name: "England",
+      away_country_code: "ENG",
+      winner_team_name: null,
+      winner_country_code: null,
+    },
+    {
+      match_id: "m100",
+      edition_id: "ed",
+      edition_code: "2026",
+      match_code: "M100",
+      stage_code: "quarterfinal",
+      stage_label: "Quarter-finals",
+      stage_sort_order: 4,
+      group_code: null,
+      round_index: 0,
+      kickoff_at: "2026-07-11T20:00:00Z",
+      status: "scheduled",
+      home_goals: null,
+      away_goals: null,
+      home_penalties: null,
+      away_penalties: null,
+      home_team_name: "Argentina",
+      home_country_code: "ARG",
+      away_team_name: "France",
+      away_country_code: "FRA",
+      winner_team_name: null,
+      winner_country_code: null,
+    },
+  ];
+  const allTeams = norEngTeams;
+  const baseR16 = Array.from({ length: 16 }, (_, i) =>
+    r16Slot(String(i + 1), ""),
+  );
+  const missingPickSlots: KnockoutPickSlotDraft[] = [
+    ...baseR16,
+    qfSlot("7", "team-arg"),
+    qfSlot("8", "team-fra"),
+    sfSlot("1", "team-ger"),
+    sfSlot("2", "team-fra"),
+    finSlot("1", "team-ger"),
+    champSlot("team-ger"),
+  ];
+  const qfInput = {
+    bracketKind: "quarterfinalist" as const,
+    slots: missingPickSlots,
+    teams: allTeams,
+    tournamentMatches,
+    knockoutBracketPicksUnlocked: true,
+    nowMs: qfNowMs,
+  };
+  const qfRows = buildKnockoutMatchPickRows(qfInput);
+  const m99 = qfRows.find((r) => r.fifaMatchNo === 99)!;
+  const m100 = qfRows.find((r) => r.fifaMatchNo === 100)!;
+  assert.strictEqual(m99.homeTeamId, "team-nor");
+  assert.strictEqual(m99.awayTeamId, "team-eng");
+  assert.strictEqual(m99.lockReason, "pickable");
+  assert.strictEqual(isKnockoutMatchDirectPickEligible(m99), true);
+  assert.strictEqual(validatedKnockoutMatchWinner(m99), null);
+  const m99Presentation = knockoutMatchSavedPickPresentation(m99, allTeams);
+  assert.strictEqual(m99Presentation.savedPickStatus, "missing");
+  assert.strictEqual(m99Presentation.lockStatusLine, null);
+  assert.ok(
+    !m99Presentation.savedPickWarning?.includes(
+      "already in progress after official feeder results",
+    ),
+  );
+  assert.strictEqual(m100.lockReason, "pickable");
+
+  const savedNorwaySlots = [
+    ...baseR16,
+    sfSlot("3", "team-nor"),
+    sfSlot("4", "team-eng"),
+    finSlot("2", "team-eng"),
+  ];
+  const savedRows = buildKnockoutMatchPickRows({
+    ...qfInput,
+    slots: savedNorwaySlots,
+  });
+  const savedM99 = savedRows.find((r) => r.fifaMatchNo === 99)!;
+  assert.strictEqual(savedM99.lockReason, "pickable");
+  assert.strictEqual(savedM99.winnerTeamId, "team-nor");
+  assert.strictEqual(validatedKnockoutMatchWinner(savedM99), "team-nor");
+
+  const staleJapanSlots = [
+    ...baseR16,
+    sfSlot("3", "team-jpn"),
+    sfSlot("4", "team-eng"),
+  ];
+  const staleRows = buildKnockoutMatchPickRows({
+    ...qfInput,
+    slots: staleJapanSlots,
+  });
+  const staleM99 = staleRows.find((r) => r.fifaMatchNo === 99)!;
+  assert.strictEqual(staleM99.lockReason, "pickable");
+  assert.strictEqual(savedPickIsStaleForKnockoutRow(staleM99), true);
+  assert.strictEqual(isKnockoutMatchDirectPickEligible(staleM99), true);
+
+  const kickedOffMatches = tournamentMatches.map((m) =>
+    m.match_code === "M99"
+      ? {
+          ...m,
+          kickoff_at: "2026-07-06T10:00:00Z",
+          status: "live" as const,
+        }
+      : m,
+  );
+  const startedRows = buildKnockoutMatchPickRows({
+    ...qfInput,
+    tournamentMatches: kickedOffMatches,
+    nowMs: new Date("2026-07-06T12:00:00Z").getTime(),
+  });
+  const startedM99 = startedRows.find((r) => r.fifaMatchNo === 99)!;
+  assert.strictEqual(startedM99.lockReason, "started");
+  assert.strictEqual(
+    startedM99.display.statusLine,
+    "Locked at kickoff",
+  );
 }
 
 console.log("knockoutMatchPickRows.selftest.ts: ok");

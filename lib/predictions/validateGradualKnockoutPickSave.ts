@@ -201,6 +201,7 @@ export function validateFrozenKnockoutSwapAttempts(input: {
       slotKey: slot.slotKey,
       tournamentMatches: input.matches,
       gradual: input.gradual,
+      nowMs: input.nowMs,
     });
   }
   return null;
@@ -299,6 +300,7 @@ export function validateKnockoutParticipantPickChanges(input: {
       slotKey: slot.slotKey,
       tournamentMatches: input.matches,
       gradual: input.gradual,
+      nowMs: input.nowMs,
     });
   }
   return null;

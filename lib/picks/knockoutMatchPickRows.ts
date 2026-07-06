@@ -1228,7 +1228,6 @@ export function buildKnockoutMatchPickRows(
 
     const r16OpenPickUntilKickoff =
       lockReason === "pickable" &&
-      def.wizardBracketKind === "round_of_16" &&
       !hasValidSavedPick &&
       isKnockoutSlotFrozenByOfficialFeeders({
         predictionKind: def.resultKind,

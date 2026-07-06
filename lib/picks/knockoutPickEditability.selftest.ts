@@ -526,7 +526,7 @@ const existing: Prediction[] = [
   );
 }
 
-// Canada R16 pick frozen after Morocco eliminates Netherlands in R32 feeders
+// Canada R16 pick stays editable before M90 kickoff when R32 feeders are official
 {
   const slots = [r16Slot("3", "team-ned"), qfSlot("2", "team-can")];
   const existingQf: Prediction[] = [
@@ -558,8 +558,8 @@ const existing: Prediction[] = [
   assert.strictEqual(m90.homeTeamId, "team-can");
   assert.strictEqual(m90.awayTeamId, "team-mar");
   assert.strictEqual(m90.winnerTeamId, "team-can");
-  assert.strictEqual(m90.lockReason, "frozen");
-  assert.strictEqual(isKnockoutMatchDirectPickEligible(m90), false);
+  assert.strictEqual(m90.lockReason, "pickable");
+  assert.strictEqual(isKnockoutMatchDirectPickEligible(m90), true);
   assert.strictEqual(
     isKnockoutPickEditableForParticipant({
       predictionKind: "quarterfinalist",
@@ -570,7 +570,7 @@ const existing: Prediction[] = [
       savedTeamId: "team-can",
       nowMs,
     }),
-    false,
+    true,
   );
   const swapErr = validateKnockoutParticipantPickChanges({
     incoming: [
@@ -589,10 +589,10 @@ const existing: Prediction[] = [
     fullRoundOf32Official: true,
     nowMs,
   });
-  assert.ok(swapErr, "cannot switch R16 winner from Canada to Morocco");
+  assert.strictEqual(swapErr, null, "can switch R16 winner before M90 kickoff");
 }
 
-// 2. Saved M90 Canada, feeders official, M90 not started → cannot switch or clear
+// 2. Saved M90 Canada, feeders official, M90 not started → can switch or clear
 {
   const clearErr = validateKnockoutParticipantPickChanges({
     incoming: [
@@ -626,7 +626,7 @@ const existing: Prediction[] = [
     fullRoundOf32Official: true,
     nowMs,
   });
-  assert.ok(clearErr, "clear blocked for saved M90 pick on feeder-official row");
+  assert.strictEqual(clearErr, null, "clear allowed before M90 kickoff");
 }
 
 // 3. Saved stale M90 Netherlands, feeders official → stale but editable before kickoff
@@ -901,7 +901,7 @@ const existing: Prediction[] = [
   assert.ok(repairErr, "cannot repair stale M90 pick after kickoff");
 }
 
-// Norway R16 pick frozen when Brazil appears from official feeder
+// Norway R16 pick stays editable before M91 kickoff when Brazil is official feeder
 {
   const m76 = match({
     match_code: "M76",
@@ -944,7 +944,7 @@ const existing: Prediction[] = [
   const m91 = rows.find((r) => r.fifaMatchNo === 91)!;
   assert.strictEqual(m91.homeTeamId, "team-bra");
   assert.strictEqual(m91.awayTeamId, "team-nor");
-  assert.strictEqual(m91.lockReason, "frozen");
+  assert.strictEqual(m91.lockReason, "pickable");
   assert.strictEqual(
     isKnockoutPickFrozenForParticipant({
       predictionKind: "quarterfinalist",
@@ -954,7 +954,7 @@ const existing: Prediction[] = [
       savedTeamId: "team-nor",
       nowMs,
     }),
-    true,
+    false,
   );
   const swapErr = validateKnockoutParticipantPickChanges({
     incoming: [
@@ -988,10 +988,14 @@ const existing: Prediction[] = [
     fullRoundOf32Official: true,
     nowMs,
   });
-  assert.ok(swapErr, "cannot switch Norway pick to Brazil after feeder is official");
+  assert.strictEqual(
+    swapErr,
+    null,
+    "can switch Norway pick to Brazil before M91 kickoff",
+  );
 }
 
-// 3. Clear is blocked for frozen later-round rows with saved picks
+// 3. Clear is allowed on later-round rows before kickoff
 {
   const clearErr = validateKnockoutParticipantPickChanges({
     incoming: [
@@ -1025,7 +1029,7 @@ const existing: Prediction[] = [
     fullRoundOf32Official: true,
     nowMs,
   });
-  assert.ok(clearErr, "clear blocked for frozen R16 match row");
+  assert.strictEqual(clearErr, null, "clear allowed before M90 kickoff");
   const guarded = applyGradualKnockoutPickSaveGuards({
     incoming: [
       {
@@ -1058,15 +1062,11 @@ const existing: Prediction[] = [
     fullRoundOf32Official: true,
     nowMs,
   });
-  assert.strictEqual(
-    guarded.error,
-    null,
-    "save guards restore frozen clear instead of failing whole payload",
-  );
+  assert.strictEqual(guarded.error, null, "clear save succeeds before kickoff");
   assert.strictEqual(
     guarded.slots.find((s) => s.predictionKind === "quarterfinalist" && s.slotKey === "2")
       ?.teamId,
-    "team-can",
+    "",
   );
 }
 
@@ -1120,7 +1120,11 @@ const existing: Prediction[] = [
   });
   const m89 = futureRows.find((r) => r.fifaMatchNo === 89)!;
   const m90 = futureRows.find((r) => r.fifaMatchNo === 90)!;
-  assert.strictEqual(m90.lockReason, "frozen", "M90 frozen when saved pick exists after official R32 feeders");
+  assert.strictEqual(
+    m90.lockReason,
+    "pickable",
+    "M90 stays editable when saved pick exists before kickoff",
+  );
   assert.strictEqual(m89.lockReason, "pickable", "M89 stays editable before feeder results");
   assert.strictEqual(m89.homeTeamId, "team-can");
   assert.strictEqual(m89.awayTeamId, "team-mar");
@@ -1137,10 +1141,10 @@ const existing: Prediction[] = [
   );
 }
 
-// 6. Admin correction still works on feeder-locked rows
+// 6. Pre-kickoff rows use normal editor; admin correction after kickoff
 {
   const slots = [r16Slot("3", "team-ned"), qfSlot("2", "team-can")];
-  const resolved = resolveKnockoutPickCorrectionMatch({
+  const preKickoff = resolveKnockoutPickCorrectionMatch({
     matchCode: "M90",
     slots,
     teams,
@@ -1149,24 +1153,43 @@ const existing: Prediction[] = [
     knockoutBracketPicksUnlocked: true,
     nowMs,
   });
-  assert.ok(!("error" in resolved), "admin can open correction on frozen R16 row");
+  assert.ok(
+    "error" in preKickoff,
+    "admin correction deferred to normal editor before kickoff",
+  );
+
+  const liveM90 = {
+    ...m90,
+    status: "live" as const,
+  };
+  const liveMatches = [m73, m75, liveM90];
+  const resolved = resolveKnockoutPickCorrectionMatch({
+    matchCode: "M90",
+    slots,
+    teams,
+    tournamentMatches: liveMatches,
+    fullRoundOf32Official: true,
+    knockoutBracketPicksUnlocked: true,
+    nowMs: new Date("2026-07-04T20:00:00Z").getTime(),
+  });
+  assert.ok(!("error" in resolved), "admin can open correction after kickoff");
   const applied = applyKnockoutPickCorrection({
     slots,
     match: resolved.match,
     newTeamId: "team-mar",
     teams,
-    tournamentMatches,
+    tournamentMatches: liveMatches,
     fullRoundOf32Official: true,
   });
   assert.strictEqual(
     applied.slots.find((s) => s.predictionKind === "quarterfinalist" && s.slotKey === "2")
       ?.teamId,
     "team-mar",
-    "admin can correct frozen R16 match winner",
+    "admin can correct started R16 match winner",
   );
 }
 
-// 7. Save unlocked R16 pick when frozen row was auto-cleared in client payload
+// 7. Save unlocked R16 pick alongside an intentional clear of another open row
 {
   const futureM74 = match({
     match_code: "M74",
@@ -1273,13 +1296,20 @@ const existing: Prediction[] = [
   assert.strictEqual(
     guarded.slots.find((s) => s.predictionKind === "quarterfinalist" && s.slotKey === "2")
       ?.teamId,
-    "team-can",
-    "frozen saved pick is preserved in payload",
+    "",
+    "cleared open M90 pick is accepted before kickoff",
   );
 }
 
-// 8. Frozen swap still rejected with row label in error
+// 8. Started-match swap still rejected with row label in error
 {
+  const liveMatches = [m73, m75, { ...m90, status: "live" as const }];
+  const liveGradual = getGradualKnockoutSelectionState({
+    matches: liveMatches,
+    teams,
+    nowMs: new Date("2026-07-04T20:00:00Z").getTime(),
+    fullRoundOf32Official: true,
+  });
   const swapErr = validateKnockoutParticipantPickChanges({
     incoming: [
       {
@@ -1307,15 +1337,15 @@ const existing: Prediction[] = [
         updatedAt: "",
       },
     ],
-    matches: tournamentMatches,
-    gradual,
+    matches: liveMatches,
+    gradual: liveGradual,
     fullRoundOf32Official: true,
-    nowMs,
+    nowMs: new Date("2026-07-04T20:00:00Z").getTime(),
   });
-  assert.ok(swapErr?.includes("M90"), swapErr ?? "expected M90 in frozen swap error");
+  assert.ok(swapErr?.includes("M90"), swapErr ?? "expected M90 in started swap error");
   assert.ok(
-    swapErr?.includes("feeder match results are official"),
-    swapErr ?? "expected feeder lock reason",
+    swapErr?.includes("kicked off"),
+    swapErr ?? "expected kickoff lock reason",
   );
 }
 
@@ -1891,10 +1921,10 @@ const existing: Prediction[] = [
   assert.strictEqual(afterScore.totalsByParticipantId[participantId] ?? 0, 4);
 }
 
-// 6. Later-round admin correction still works after R32 correction path
+// 6. Later-round admin correction works after kickoff, not before
 {
   const slots = [r16Slot("3", "team-ned"), qfSlot("2", "team-can")];
-  const resolved = resolveKnockoutPickCorrectionMatch({
+  const preKickoff = resolveKnockoutPickCorrectionMatch({
     matchCode: "M90",
     slots,
     teams,
@@ -1903,20 +1933,32 @@ const existing: Prediction[] = [
     knockoutBracketPicksUnlocked: true,
     nowMs,
   });
+  assert.ok("error" in preKickoff, "pre-kickoff M90 uses normal editor");
+
+  const liveMatches = [m73, m75, { ...m90, status: "live" as const }];
+  const resolved = resolveKnockoutPickCorrectionMatch({
+    matchCode: "M90",
+    slots,
+    teams,
+    tournamentMatches: liveMatches,
+    fullRoundOf32Official: true,
+    knockoutBracketPicksUnlocked: true,
+    nowMs: new Date("2026-07-04T20:00:00Z").getTime(),
+  });
   assert.ok(!("error" in resolved), "later-round admin correction still resolves");
   const applied = applyKnockoutPickCorrection({
     slots,
     match: resolved.match,
     newTeamId: "team-mar",
     teams,
-    tournamentMatches,
+    tournamentMatches: liveMatches,
     fullRoundOf32Official: true,
   });
   assert.strictEqual(
     applied.slots.find((s) => s.predictionKind === "quarterfinalist" && s.slotKey === "2")
       ?.teamId,
     "team-mar",
-    "later-round frozen row correction still applies",
+    "later-round started row correction still applies",
   );
 }
 
