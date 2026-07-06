@@ -161,6 +161,87 @@ export function lockedOutPickCardBody(
 /** @deprecated Use lockedOutPickCardBody */
 export const lockedClearedRepairCardBody = lockedOutPickCardBody;
 
+function participantTeamName(
+  teamId: string | null | undefined,
+  teams: ReadonlyArray<{ id: string; name: string }>,
+): string | null {
+  if (!teamId?.trim()) return null;
+  return teams.find((t) => t.id === teamId.trim())?.name?.trim() || null;
+}
+
+function downstreamPathStageLabel(
+  bracketKind: KnockoutWizardBracketKind,
+): string {
+  if (bracketKind === "semifinalist") return "semi-final";
+  if (bracketKind === "finalist") return "final";
+  return "path";
+}
+
+function eliminatedImmediateFeederCopy(
+  parentBracketKind: KnockoutWizardBracketKind,
+  pickTeamName: string | null,
+  roundLabel: string,
+): string {
+  const pathStage = downstreamPathStageLabel(parentBracketKind);
+  const pickLabel = pickTeamName ?? "your pick";
+  return `This ${pathStage} path is unavailable because your ${roundLabel} pick ${pickLabel} has been eliminated.`;
+}
+
+function otherFeederStillAliveCopy(
+  blockedRow: KnockoutMatchPickRow,
+  blockedFeeder: KnockoutMatchPickRow,
+  parentBracketKind: KnockoutWizardBracketKind,
+  upstreamRows: KnockoutMatchPickRow[],
+  upstreamInput: BuildKnockoutMatchPickRowsInput,
+): string | null {
+  const roundLabel = immediateUpstreamFeederRoundLabel(parentBracketKind);
+  for (const other of upstreamFeederRowsForMatch(
+    blockedRow,
+    parentBracketKind,
+    upstreamRows,
+  )) {
+    if (other.matchIndex === blockedFeeder.matchIndex) continue;
+    const otherSaved = readSavedUpstreamFeederPick(
+      parentBracketKind,
+      other.matchIndex,
+      upstreamInput.slots,
+    );
+    if (!otherSaved) continue;
+    if (isKnockoutPickLockedOut(otherSaved) || otherSaved.pickStatus === "out") {
+      continue;
+    }
+    const otherTeamName = participantTeamName(
+      otherSaved.teamId,
+      upstreamInput.teams,
+    );
+    if (otherTeamName) {
+      return `Your other ${roundLabel} pick ${otherTeamName} is still alive, but this matchup needs both feeder winners to be valid.`;
+    }
+  }
+  return null;
+}
+
+function immediateFeederBlockedUserCopy(
+  blockedRow: KnockoutMatchPickRow,
+  feeder: KnockoutMatchPickRow,
+  parentBracketKind: KnockoutWizardBracketKind,
+  upstreamRows: KnockoutMatchPickRow[],
+  upstreamInput: BuildKnockoutMatchPickRowsInput,
+  explanation: Omit<BlockedKnockoutMatchExplanation, "blockedRowMatchNo">,
+): string {
+  const secondary = otherFeederStillAliveCopy(
+    blockedRow,
+    feeder,
+    parentBracketKind,
+    upstreamRows,
+    upstreamInput,
+  );
+  if (secondary) {
+    return `${explanation.userFacingCopy} ${secondary}`;
+  }
+  return explanation.userFacingCopy;
+}
+
 function lockedOutDirectBlockedCopy(
   blockedRef: string,
   feederLabel: string | null,
@@ -245,12 +326,24 @@ function feederWasCleared(
 }
 
 /** Friendly matchup label for a feeder or blocked row. */
-export function feederMatchupLabel(row: KnockoutMatchPickRow): string | null {
+export function feederMatchupLabel(
+  row: KnockoutMatchPickRow,
+  teams?: ReadonlyArray<{ id: string; name: string }>,
+): string | null {
+  if (row.homeTeamId?.trim() && row.awayTeamId?.trim() && teams?.length) {
+    const home = teams.find((t) => t.id === row.homeTeamId)?.name?.trim();
+    const away = teams.find((t) => t.id === row.awayTeamId)?.name?.trim();
+    if (home && away) return `${home} vs ${away}`;
+  }
   const line = row.display.emptyPrimaryLine?.trim();
   if (
     line &&
     line.includes(" vs ") &&
     !line.startsWith("Complete ") &&
+    !line.startsWith("This ") &&
+    !line.startsWith("Waiting ") &&
+    !line.startsWith("Pick ") &&
+    !line.startsWith("No ") &&
     line !== "Locked" &&
     line !== "Locked at kickoff" &&
     line !== "Pick needed"
@@ -331,8 +424,7 @@ function classifyImmediateUpstreamFeeder(
     upstreamInput.slots,
   );
   const missingFeederMatchNo = feeder.fifaMatchNo > 0 ? feeder.fifaMatchNo : null;
-  const feederRef =
-    missingFeederMatchNo != null ? `M${missingFeederMatchNo}` : "This matchup";
+  const feederMatchup = feederMatchupLabel(feeder, upstreamInput.teams);
   const roundLabel = immediateUpstreamFeederRoundLabel(parentBracketKind);
   const saveRowKey = immediateFeederSaveRowKey(upstreamKind, feeder.matchIndex);
   const clearedSave =
@@ -340,31 +432,51 @@ function classifyImmediateUpstreamFeeder(
     feederWasCleared(feeder, options);
 
   if (saved) {
+    const pickTeamName = participantTeamName(saved.teamId, upstreamInput.teams);
     if (isKnockoutPickLockedOut(saved) || saved.pickStatus === "out") {
       return {
         missingFeederMatchNo,
-        missingFeederLabel: feederRef,
+        missingFeederLabel: pickTeamName ?? feederMatchup,
         feederState: "cleared_pick_locked",
         userAction: "locked_out",
-        userFacingCopy: `This path is out because your ${feederRef} ${roundLabel} pick was eliminated.`,
+        userFacingCopy: eliminatedImmediateFeederCopy(
+          parentBracketKind,
+          pickTeamName,
+          roundLabel,
+        ),
       };
     }
     return null;
   }
 
   if (clearedSave) {
+    const clearedTeamName = participantTeamName(
+      feeder.winnerTeamId,
+      upstreamInput.teams,
+    );
+    const pathStage = downstreamPathStageLabel(parentBracketKind);
+    const usableMatchup =
+      feederMatchup && !/^M\d+$/.test(feederMatchup) ? feederMatchup : null;
     return {
       missingFeederMatchNo,
-      missingFeederLabel: feederRef,
+      missingFeederLabel: clearedTeamName ?? usableMatchup,
       feederState: "cleared_pick_locked",
       userAction: "locked_out",
-      userFacingCopy: `This path is out because your ${feederRef} ${roundLabel} pick was eliminated.`,
+      userFacingCopy: clearedTeamName
+        ? eliminatedImmediateFeederCopy(
+            parentBracketKind,
+            clearedTeamName,
+            roundLabel,
+          )
+        : usableMatchup
+          ? `This ${pathStage} path is unavailable because your ${roundLabel} pick for ${usableMatchup} is no longer valid.`
+          : `No ${pathStage} pick can be saved for this matchup right now.`,
     };
   }
 
   if (feeder.lockReason === "frozen" || feeder.lockReason === "started") {
     const def = knockoutMatchStepDef(upstreamKind);
-    const feederLabel = feederMatchupLabel(feeder);
+    const feederLabel = feederMatchup;
     const official =
       def != null
         ? officialKnockoutMatchResultWinner(
@@ -384,32 +496,34 @@ function classifyImmediateUpstreamFeeder(
     ) {
       return {
         missingFeederMatchNo,
-        missingFeederLabel: feederLabel ?? feederRef,
+        missingFeederLabel: feederLabel,
         feederState: "stale_or_invalid_team",
         userAction: "wait_for_result",
         userFacingCopy: feederLabel
-          ? `${feederRef} is waiting for a valid official winner from ${feederLabel}.`
-          : `${feederRef} is waiting for a valid official winner.`,
+          ? `This matchup is waiting for a valid official winner from ${feederLabel}.`
+          : "This matchup is waiting for a valid official winner.",
       };
     }
 
     return {
       missingFeederMatchNo,
-      missingFeederLabel: feederLabel ?? feederRef,
+      missingFeederLabel: feederLabel,
       feederState: "official_result_missing",
       userAction: "wait_for_result",
       userFacingCopy: feederLabel
-        ? `${feederRef} is waiting for the official winner of ${feederLabel}.`
-        : `${feederRef} is waiting for an official result.`,
+        ? `This matchup is waiting for the official winner of ${feederLabel}.`
+        : "This matchup is waiting for an official result.",
     };
   }
 
   return {
     missingFeederMatchNo,
-    missingFeederLabel: feederRef,
+    missingFeederLabel: feederMatchup,
     feederState: "missing_pick_editable",
     userAction: "pick_upstream",
-    userFacingCopy: `Waiting for your ${feederRef} ${roundLabel} pick.`,
+    userFacingCopy: feederMatchup
+      ? `Waiting for your ${roundLabel} pick for ${feederMatchup}.`
+      : `Waiting for your ${roundLabel} pick.`,
   };
 }
 
@@ -435,7 +549,7 @@ function classifyUnresolvedFeeder(
   }
 
   const def = knockoutMatchStepDef(upstreamKind);
-  const feederLabel = feederMatchupLabel(feeder);
+  const feederLabel = feederMatchupLabel(feeder, upstreamInput.teams);
   const missingFeederMatchNo = feeder.fifaMatchNo > 0 ? feeder.fifaMatchNo : null;
 
   if (feeder.lockReason === "pickable") {
@@ -605,7 +719,14 @@ export function explainBlockedKnockoutMatchRow(
       blockedRowMatchNo,
       ...feederExplanation,
       userFacingCopy: useImmediateFeederCopy
-        ? feederExplanation.userFacingCopy
+        ? immediateFeederBlockedUserCopy(
+            row,
+            feeder,
+            bracketKind,
+            upstreamRows,
+            upstreamInput,
+            feederExplanation,
+          )
         : copyForBlockedDownstreamRow(
             row,
             feeder,

@@ -14,12 +14,14 @@ import {
   countKnockoutMatchupsFilled,
   countPickableKnockoutMissing,
   findDeepestBlockingKnockoutDependency,
+  usesImmediateUpstreamFeederSavedPick,
   usesKnockoutMatchPickRows,
   type KnockoutWizardBracketKind,
 } from "./knockoutMatchPickRows";
 import {
   firstBlockedRowExplanationForStep,
   stepLockedClearedPickIssue,
+  type BlockedKnockoutMatchExplanation,
 } from "./knockoutBlockedRowExplanation";
 
 export const KNOCKOUT_WIZARD_BRACKET_KINDS = [
@@ -298,6 +300,32 @@ function rowExplanationOptions(ctx: ResolvedKnockoutProgressContext) {
     : undefined;
 }
 
+function unavailableImmediateFeederStepStatus(
+  bracketKind: KnockoutWizardBracketKind,
+  rows: ReturnType<typeof buildKnockoutMatchPickRows>,
+  progress: KnockoutStepProgress,
+  gateMessage: string | null,
+  blockedExplanation: BlockedKnockoutMatchExplanation | null,
+): KnockoutWizardStepStatus | null {
+  const allRowsIncomplete =
+    rows.length > 0 && rows.every((r) => r.lockReason === "incomplete");
+  if (
+    !usesImmediateUpstreamFeederSavedPick(bracketKind) ||
+    progress.missing !== 0 ||
+    !allRowsIncomplete ||
+    blockedExplanation?.userAction !== "locked_out"
+  ) {
+    return null;
+  }
+  return {
+    kind: "locked",
+    complete: false,
+    missingPickable: 0,
+    totalPickable: 0,
+    gateMessage,
+  };
+}
+
 function matchPickStepStatus(
   bracketKind: KnockoutWizardBracketKind,
   ctx: ResolvedKnockoutProgressContext,
@@ -317,8 +345,21 @@ function matchPickStepStatus(
     lockedClearedIssue || !progress.complete
       ? findDeepestBlockingKnockoutDependency(input)
       : null;
+  const blockedExplanation = firstBlockedRowExplanationForStep(
+    bracketKind,
+    input,
+    explanationOptions,
+  );
 
   if (lockedClearedIssue) {
+    const unavailable = unavailableImmediateFeederStepStatus(
+      bracketKind,
+      rows,
+      progress,
+      gateMessage,
+      lockedClearedIssue,
+    );
+    if (unavailable) return unavailable;
     if (progress.missing === 0) {
       return {
         kind: "complete",
@@ -358,11 +399,14 @@ function matchPickStepStatus(
   }
 
   if (hasIncomplete) {
-    const blockedExplanation = firstBlockedRowExplanationForStep(
+    const unavailable = unavailableImmediateFeederStepStatus(
       bracketKind,
-      input,
-      explanationOptions,
+      rows,
+      progress,
+      gateMessage,
+      blockedExplanation,
     );
+    if (unavailable) return unavailable;
     if (
       progress.missing === 0 &&
       blockedExplanation?.userAction === "locked_out"

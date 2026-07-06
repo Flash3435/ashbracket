@@ -2411,11 +2411,11 @@ function r32Side(slotKey: string, teamId = ""): KnockoutPickSlotDraft {
   assert.strictEqual(m102.lockReason, "incomplete");
   assert.match(
     m101.display.emptyPrimaryLine!,
-    /Waiting for your M98 quarter-final pick/i,
+    /Waiting for your quarter-final pick/i,
   );
   assert.match(
     m102.display.emptyPrimaryLine!,
-    /Waiting for your M99 quarter-final pick/i,
+    /Waiting for your quarter-final pick/i,
   );
   assert.doesNotMatch(m101.display.emptyPrimaryLine!, /M91|M94/i);
   assert.doesNotMatch(m102.display.emptyPrimaryLine!, /M91|M94/i);
@@ -2443,9 +2443,116 @@ function r32Side(slotKey: string, teamId = ""): KnockoutPickSlotDraft {
   assert.strictEqual(m101.lockReason, "incomplete");
   assert.match(
     m101.display.emptyPrimaryLine!,
-    /This path is out because your M97 quarter-final pick was eliminated/i,
+    /This semi-final path is unavailable because your quarter-final pick France has been eliminated/i,
   );
   assert.doesNotMatch(m101.display.emptyPrimaryLine!, /M91|M89/i);
+  assert.doesNotMatch(m101.display.emptyPrimaryLine!, /\bM97\b/i);
+}
+
+// Mixed QF feeders: one eliminated, one still alive — SF blocked with team names
+{
+  const mixedTeams: Team[] = [
+    ...teams,
+    {
+      id: "team-eng",
+      name: "England",
+      countryCode: "ENG",
+      fifaCode: "ENG",
+      fifaRank: 4,
+      fifaRankAsOf: null,
+      createdAt: "",
+      updatedAt: "",
+    },
+    {
+      id: "team-esp",
+      name: "Spain",
+      countryCode: "ESP",
+      fifaCode: "ESP",
+      fifaRank: 7,
+      fifaRankAsOf: null,
+      createdAt: "",
+      updatedAt: "",
+    },
+    {
+      id: "team-nor",
+      name: "Norway",
+      countryCode: "NOR",
+      fifaCode: "NOR",
+      fifaRank: 45,
+      fifaRankAsOf: null,
+      createdAt: "",
+      updatedAt: "",
+    },
+    {
+      id: "team-sui",
+      name: "Switzerland",
+      countryCode: "SUI",
+      fifaCode: "SUI",
+      fifaRank: 18,
+      fifaRankAsOf: null,
+      createdAt: "",
+      updatedAt: "",
+    },
+    {
+      id: "team-bel",
+      name: "Belgium",
+      countryCode: "BEL",
+      fifaCode: "BEL",
+      fifaRank: 12,
+      fifaRankAsOf: null,
+      createdAt: "",
+      updatedAt: "",
+    },
+  ];
+  const slots: KnockoutPickSlotDraft[] = [
+    ...Array.from({ length: 16 }, (_, i) => r16Slot(String(i + 1), "team-ger")),
+    sfSlot("2", "team-esp"),
+    {
+      ...sfSlot("3", "team-eng"),
+      pickStatus: "out" as const,
+    },
+    sfSlot("4", "team-arg"),
+  ];
+  const sfInput = {
+    bracketKind: "semifinalist" as const,
+    slots,
+    teams: mixedTeams,
+    knockoutBracketPicksUnlocked: true,
+  };
+  const m102 = buildKnockoutMatchPickRows(sfInput).find((r) => r.fifaMatchNo === 102)!;
+  assert.strictEqual(m102.lockReason, "incomplete");
+  assert.match(
+    m102.display.emptyPrimaryLine!,
+    /This semi-final path is unavailable because your quarter-final pick England has been eliminated/i,
+  );
+  assert.match(
+    m102.display.emptyPrimaryLine!,
+    /Your other quarter-final pick Argentina is still alive/i,
+  );
+  assert.doesNotMatch(m102.display.emptyPrimaryLine!, /\bM99\b/i);
+  assert.doesNotMatch(m102.display.emptyPrimaryLine!, /Spain is still alive/i);
+
+  const m101 = buildKnockoutMatchPickRows(sfInput).find((r) => r.fifaMatchNo === 101)!;
+  assert.strictEqual(m101.lockReason, "incomplete");
+  assert.match(
+    m101.display.emptyPrimaryLine!,
+    /Waiting for your quarter-final pick/i,
+  );
+  assert.doesNotMatch(
+    m101.display.emptyPrimaryLine!,
+    /England has been eliminated/i,
+  );
+
+  const sfStatus = getKnockoutStepCompletionFromDraftState(
+    "semifinalist",
+    resolveKnockoutProgressContext({
+      slots,
+      teams: mixedTeams,
+      officialRoundOf32Complete: true,
+    }),
+  );
+  assert.strictEqual(sfStatus.complete, false);
+  assert.notStrictEqual(sfStatus.kind, "complete");
 }
 
 // SF step pill stays incomplete when rows are blocked upstream

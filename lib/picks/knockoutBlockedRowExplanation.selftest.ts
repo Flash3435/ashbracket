@@ -490,12 +490,26 @@ const r32OfficialResults: TournamentMatchPublicRow[] = [
   const m101 = buildKnockoutMatchPickRows(sfInput).find((r) => r.fifaMatchNo === 101)!;
   assert.match(
     m101.display.emptyPrimaryLine!,
-    /This path is out because your M97 quarter-final pick was eliminated/i,
+    /No semi-final pick can be saved for this matchup right now/i,
   );
   assert.strictEqual(m101.display.statusLine, null);
   assert.doesNotMatch(m101.display.emptyPrimaryLine!, /waiting for the winner/i);
   assert.doesNotMatch(m101.display.emptyPrimaryLine!, /Pick a winner for/i);
-  assert.doesNotMatch(m101.display.emptyPrimaryLine!, /Save/i);
+  assert.doesNotMatch(m101.display.emptyPrimaryLine!, /Save changes/i);
+  assert.doesNotMatch(m101.display.emptyPrimaryLine!, /\bM97\b/i);
+
+  const sfStatus = getKnockoutStepCompletionFromDraftState(
+    "semifinalist",
+    resolveKnockoutProgressContext({
+      slots: repaired,
+      teams,
+      tournamentMatches,
+      officialRoundOf32Complete: true,
+      clearedPickRowKeys: clearedKeys,
+    }),
+  );
+  assert.strictEqual(sfStatus.complete, false);
+  assert.strictEqual(sfStatus.kind, "locked");
 
   const r16Status = getKnockoutStepCompletionFromDraftState(
     "round_of_16",
