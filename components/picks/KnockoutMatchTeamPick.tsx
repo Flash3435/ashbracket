@@ -81,14 +81,35 @@ export function KnockoutMatchDirectTeamPick({
   pickKind = "winner",
   fifaMatchNo,
 }: {
-  teams: [Team, Team];
+  teams: readonly [Team, Team] | readonly [Team];
   selectedTeamId?: string;
   disabled: boolean;
   onPick: (teamId: string) => void;
   pickKind?: "winner" | "champion";
   fifaMatchNo: number;
 }) {
-  const [home, away] = teams;
+  if (teams.length === 1) {
+    const team = teams[0]!;
+    const groupLabel =
+      pickKind === "champion"
+        ? `Pick champion: ${team.name}`
+        : `Pick winner: ${team.name}`;
+    return (
+      <div className="mt-2" role="group" aria-label={groupLabel}>
+        <KnockoutMatchTeamPickButton
+          team={team}
+          opponent={team}
+          selected={selectedTeamId === team.id}
+          disabled={disabled}
+          pickKind={pickKind}
+          fifaMatchNo={fifaMatchNo}
+          onPick={() => onPick(team.id)}
+        />
+      </div>
+    );
+  }
+
+  const [home, away] = teams as [Team, Team];
   const groupLabel =
     pickKind === "champion"
       ? `Pick champion: ${home.name} vs ${away.name}`

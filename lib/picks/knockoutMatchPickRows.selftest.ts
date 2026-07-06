@@ -2029,9 +2029,11 @@ function r32Side(slotKey: string, teamId = ""): KnockoutPickSlotDraft {
       winner_country_code: null,
     },
   ];
+  const m94NowMs = Date.parse("2026-07-06T12:00:00Z");
   const m94Gradual = getGradualKnockoutSelectionState({
     matches: m94Matches,
     teams: m94Teams,
+    nowMs: m94NowMs,
     fullRoundOf32Official: true,
   });
   const m94Ctx = {
@@ -2039,6 +2041,7 @@ function r32Side(slotKey: string, teamId = ""): KnockoutPickSlotDraft {
     tournamentMatches: m94Matches,
     gradual: m94Gradual,
     knockoutBracketPicksUnlocked: true,
+    nowMs: m94NowMs,
   };
   const staleM94Slots: KnockoutPickSlotDraft[] = [
     r16Slot("9", "team-us"),
@@ -2059,6 +2062,7 @@ function r32Side(slotKey: string, teamId = ""): KnockoutPickSlotDraft {
     teams: m94Teams,
     tournamentMatches: m94Matches,
     knockoutBracketPicksUnlocked: true,
+    nowMs: m94NowMs,
   });
   const qf6After = afterInvalidation.find(
     (s) => s.predictionKind === "quarterfinalist" && s.slotKey === "6",
@@ -2076,6 +2080,7 @@ function r32Side(slotKey: string, teamId = ""): KnockoutPickSlotDraft {
     tournamentMatches: m94Matches,
     gradual: m94Gradual,
     knockoutBracketPicksUnlocked: true,
+    nowMs: m94NowMs,
   });
   const m94Row = m94Rows.find((r) => r.fifaMatchNo === 94)!;
   assert.strictEqual(m94Row.homeTeamId, "team-us");
@@ -2122,6 +2127,7 @@ function r32Side(slotKey: string, teamId = ""): KnockoutPickSlotDraft {
     gradual: m94Gradual,
     fullRoundOf32Official: true,
     teams: m94Teams,
+    nowMs: m94NowMs,
   });
   assert.strictEqual(
     swapOk,
@@ -2159,6 +2165,7 @@ function r32Side(slotKey: string, teamId = ""): KnockoutPickSlotDraft {
     teams: m94Teams,
     matches: m94Matches,
     fullRoundOf32Official: true,
+    nowMs: m94NowMs,
   });
   assert.strictEqual(
     backfillGuard.error,
@@ -2202,6 +2209,7 @@ function r32Side(slotKey: string, teamId = ""): KnockoutPickSlotDraft {
     gradual: m94Gradual,
     fullRoundOf32Official: true,
     teams: m94Teams,
+    nowMs: m94NowMs,
   });
   assert.ok(outSwapErr, "server rejects replacing out M94 pick with Belgium");
 }
@@ -2302,9 +2310,11 @@ function r32Side(slotKey: string, teamId = ""): KnockoutPickSlotDraft {
       winner_country_code: null,
     },
   ];
+  const seemaNowMs = Date.parse("2026-07-06T12:00:00Z");
   const seemaGradual = getGradualKnockoutSelectionState({
     matches: seemaMatches,
     teams: seemaTeams,
+    nowMs: seemaNowMs,
     fullRoundOf32Official: true,
   });
   const seemaSlots: KnockoutPickSlotDraft[] = [
@@ -2323,6 +2333,7 @@ function r32Side(slotKey: string, teamId = ""): KnockoutPickSlotDraft {
     tournamentMatches: seemaMatches,
     gradual: seemaGradual,
     knockoutBracketPicksUnlocked: true,
+    nowMs: seemaNowMs,
   });
   const seemaM94 = seemaRows.find((r) => r.fifaMatchNo === 94)!;
   assert.strictEqual(seemaM94.lockReason, "pickable");
@@ -2491,11 +2502,10 @@ function r32Side(slotKey: string, teamId = ""): KnockoutPickSlotDraft {
     knockoutBracketPicksUnlocked: true,
   };
   const m101 = buildKnockoutMatchPickRows(input).find((r) => r.fifaMatchNo === 101)!;
-  assert.strictEqual(m101.lockReason, "incomplete");
-  assert.match(
-    m101.display.emptyPrimaryLine!,
-    /Your quarter-final pick France is still alive, but it is no longer on the path to this semi-final/i,
-  );
+  assert.strictEqual(m101.lockReason, "pickable");
+  assert.strictEqual(m101.homeTeamId, null);
+  assert.strictEqual(m101.awayTeamId, "team-ger");
+  assert.strictEqual(m101.display.emptyPrimaryLine, "TBD vs Germany");
   assert.doesNotMatch(m101.display.emptyPrimaryLine!, /France has been eliminated/i);
   assert.doesNotMatch(m101.display.emptyPrimaryLine!, /M91|M89/i);
   assert.doesNotMatch(m101.display.emptyPrimaryLine!, /\bM97\b/i);
@@ -2547,11 +2557,10 @@ function r32Side(slotKey: string, teamId = ""): KnockoutPickSlotDraft {
     knockoutBracketPicksUnlocked: true,
   };
   const m101 = buildKnockoutMatchPickRows(input).find((r) => r.fifaMatchNo === 101)!;
-  assert.strictEqual(m101.lockReason, "incomplete");
-  assert.match(
-    m101.display.emptyPrimaryLine!,
-    /This semi-final path is unavailable because your quarter-final pick France has been eliminated/i,
-  );
+  assert.strictEqual(m101.lockReason, "pickable");
+  assert.strictEqual(m101.homeTeamId, null);
+  assert.strictEqual(m101.awayTeamId, "team-ger");
+  assert.strictEqual(m101.display.emptyPrimaryLine, "TBD vs Germany");
 }
 
 // Mixed QF feeders: one wrong-path pick, one still alive — SF blocked with team names
@@ -2631,27 +2640,16 @@ function r32Side(slotKey: string, teamId = ""): KnockoutPickSlotDraft {
     knockoutBracketPicksUnlocked: true,
   };
   const m101 = buildKnockoutMatchPickRows(sfInput).find((r) => r.fifaMatchNo === 101)!;
-  assert.strictEqual(m101.lockReason, "incomplete");
-  assert.match(
-    m101.display.emptyPrimaryLine!,
-    /Your quarter-final pick France is still alive, but it is no longer on the path to this semi-final/i,
-  );
-  assert.match(
-    m101.display.emptyPrimaryLine!,
-    /Your other quarter-final pick Spain is still in the tournament/i,
-  );
-  assert.doesNotMatch(m101.display.emptyPrimaryLine!, /France has been eliminated/i);
+  assert.strictEqual(m101.lockReason, "pickable");
+  assert.strictEqual(m101.homeTeamId, null);
+  assert.strictEqual(m101.awayTeamId, "team-esp");
+  assert.strictEqual(m101.display.emptyPrimaryLine, "TBD vs Spain");
 
   const m102 = buildKnockoutMatchPickRows(sfInput).find((r) => r.fifaMatchNo === 102)!;
-  assert.strictEqual(m102.lockReason, "incomplete");
-  assert.match(
-    m102.display.emptyPrimaryLine!,
-    /Your quarter-final pick England is still alive, but it is no longer on the path to this semi-final/i,
-  );
-  assert.match(
-    m102.display.emptyPrimaryLine!,
-    /Your other quarter-final pick Argentina is still in the tournament/i,
-  );
+  assert.strictEqual(m102.lockReason, "pickable");
+  assert.strictEqual(m102.homeTeamId, null);
+  assert.strictEqual(m102.awayTeamId, "team-arg");
+  assert.strictEqual(m102.display.emptyPrimaryLine, "TBD vs Argentina");
   assert.doesNotMatch(m102.display.emptyPrimaryLine!, /\bM99\b/i);
   assert.doesNotMatch(m102.display.emptyPrimaryLine!, /England has been eliminated/i);
   assert.doesNotMatch(m102.display.emptyPrimaryLine!, /Spain is still alive/i);
@@ -2665,11 +2663,12 @@ function r32Side(slotKey: string, teamId = ""): KnockoutPickSlotDraft {
     }),
   );
   assert.strictEqual(sfStatus.complete, false);
-  assert.notStrictEqual(sfStatus.kind, "complete");
+  assert.strictEqual(sfStatus.kind, "needs_pick");
+  assert.ok(sfStatus.missingPickable > 0);
 
   const sfGate = blockedKnockoutStepGateCopy("semifinalist", sfInput);
-  assert.match(sfGate!, /2 semi-final paths are blocked/i);
-  assert.doesNotMatch(sfGate!, /picks are out/i);
+  assert.match(sfGate!, /semi-finals picks remain|Complete M10/i);
+  assert.doesNotMatch(sfGate!, /paths are blocked/i);
 }
 
 // SF step pill stays incomplete when rows are blocked upstream

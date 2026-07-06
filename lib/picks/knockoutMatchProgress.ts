@@ -14,6 +14,7 @@ import {
   countKnockoutMatchupsFilled,
   countPickableKnockoutMissing,
   findDeepestBlockingKnockoutDependency,
+  knockoutMatchRowNeedsRepair,
   usesImmediateUpstreamFeederSavedPick,
   usesKnockoutMatchPickRows,
   type KnockoutWizardBracketKind,
@@ -407,25 +408,13 @@ function matchPickStepStatus(
       blockedExplanation,
     );
     if (unavailable) return unavailable;
-    if (
-      progress.missing === 0 &&
-      blockedExplanation?.userAction === "locked_out"
-    ) {
-      return {
-        kind: "complete",
-        complete: true,
-        missingPickable: 0,
-        totalPickable: pickable.length,
-        gateMessage: null,
-      };
-    }
     return {
       kind:
         blockedExplanation?.userAction === "locked_out"
           ? "locked_out"
           : "locked_upstream",
       complete: false,
-      missingPickable: 0,
+      missingPickable: progress.missing,
       totalPickable: pickable.length,
       gateMessage,
     };
@@ -525,7 +514,7 @@ function matchPickStepProgress(
   const pickable = rows.filter((r) => r.lockReason === "pickable");
   const filled = countKnockoutMatchupsFilled(rows, { onlyPickable: true });
   const missingPickable = countPickableKnockoutMissing(rows);
-  const hasBlockedUpstream = rows.some((r) => r.lockReason === "incomplete");
+  const hasUnresolvedRow = rows.some((r) => knockoutMatchRowNeedsRepair(r));
   const mappedKind: KnockoutWizardBracketKindId =
     bracketKind === "finalist" ? "champion" : bracketKind;
   return {
@@ -533,7 +522,7 @@ function matchPickStepProgress(
     filled,
     total: pickable.length,
     missing: missingPickable,
-    complete: hasBlockedUpstream ? false : missingPickable === 0,
+    complete: hasUnresolvedRow ? false : missingPickable === 0,
   };
 }
 

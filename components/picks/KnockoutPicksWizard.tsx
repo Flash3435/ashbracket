@@ -2477,10 +2477,10 @@ export function KnockoutPicksWizard({
                     matchRow,
                     teams,
                   );
-                  const matchupPair: [Team, Team] | null =
-                    allowedTeams.length === 2
-                      ? [allowedTeams[0]!, allowedTeams[1]!]
-                      : null;
+                  const pickableTeams = allowedTeams.filter(Boolean);
+                  const directPickEligible =
+                    isKnockoutMatchDirectPickEligible(matchRow) &&
+                    pickableTeams.length >= 1;
                   const selectedTeamId =
                     validatedKnockoutMatchWinner(matchRow) ?? "";
                   const team = selectedTeamId
@@ -2492,9 +2492,6 @@ export function KnockoutPicksWizard({
                   const isEmptyPick = !selectedTeamId;
                   const isChampionPickRow =
                     matchRow.savePredictionKind === "champion";
-                  const directPickEligible =
-                    isKnockoutMatchDirectPickEligible(matchRow) &&
-                    matchupPair != null;
                   const rowPickDisabled =
                     mutationDisabled ||
                     !fullBracketPicksUnlocked ||
@@ -2553,7 +2550,7 @@ export function KnockoutPicksWizard({
                             Tap a finalist to set your champion pick.
                           </p>
                         ) : null}
-                        {directPickEligible && matchupPair ? (
+                        {directPickEligible && pickableTeams.length >= 1 ? (
                           <>
                             {stalePickPresentation?.savedPickStatus === "stale" ? (
                               <div className="mt-1 space-y-1">
@@ -2579,7 +2576,11 @@ export function KnockoutPicksWizard({
                               </div>
                             ) : null}
                             <KnockoutMatchDirectTeamPick
-                              teams={matchupPair}
+                              teams={
+                                pickableTeams.length === 1
+                                  ? [pickableTeams[0]!]
+                                  : [pickableTeams[0]!, pickableTeams[1]!]
+                              }
                               selectedTeamId={selectedTeamId || undefined}
                               disabled={rowPickDisabled}
                               pickKind={isChampionPickRow ? "champion" : "winner"}

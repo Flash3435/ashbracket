@@ -533,11 +533,13 @@ export function savedPickMatchesRowMatchup(
     "winnerTeamId" | "homeTeamId" | "awayTeamId"
   >,
 ): boolean {
-  return isValidSavedPickForMatchup({
-    savedTeamId: row.winnerTeamId,
-    homeTeamId: row.homeTeamId,
-    awayTeamId: row.awayTeamId,
-  });
+  const saved = row.winnerTeamId.trim();
+  if (!saved) return false;
+  const home = row.homeTeamId?.trim() ?? "";
+  const away = row.awayTeamId?.trim() ?? "";
+  if (home && saved === home) return true;
+  if (away && saved === away) return true;
+  return false;
 }
 
 /** Row-level stale/out: not in the matchup, or eliminated by a finished official result. */
@@ -561,8 +563,9 @@ export function validatedKnockoutMatchWinner(
   if (!row) return null;
   if (savedPickIsStaleForKnockoutRow(row)) return null;
   const w = row.winnerTeamId.trim();
-  if (!w || !row.homeTeamId || !row.awayTeamId) return null;
-  if (w === row.homeTeamId || w === row.awayTeamId) return w;
+  if (!w) return null;
+  if (row.homeTeamId?.trim() === w) return w;
+  if (row.awayTeamId?.trim() === w) return w;
   return null;
 }
 
@@ -718,8 +721,7 @@ export function isKnockoutMatchDirectPickEligible(
 ): boolean {
   return (
     row.lockReason === "pickable" &&
-    Boolean(row.homeTeamId?.trim()) &&
-    Boolean(row.awayTeamId?.trim())
+    (Boolean(row.homeTeamId?.trim()) || Boolean(row.awayTeamId?.trim()))
   );
 }
 
@@ -858,6 +860,51 @@ function slotStageForWizardKind(
   if (wizardKind === "quarterfinalist") return "quarterfinal";
   if (wizardKind === "semifinalist") return "semifinal";
   if (wizardKind === "finalist") return "final";
+  return null;
+}
+
+/** Saved immediate-upstream feeder is stale/out — the missing side cannot be resolved. */
+function upstreamFeederSideBlockedOut(
+  wizardKind: KnockoutWizardBracketKind,
+  matchIndex: number,
+  side: "home" | "away",
+  slots: KnockoutPickSlotDraft[],
+  upstreamRows: (kind: KnockoutWizardBracketKind) => KnockoutMatchPickRow[],
+): boolean {
+  if (!usesImmediateUpstreamFeederSavedPick(wizardKind)) return false;
+  const slotStage = slotStageForWizardKind(wizardKind);
+  if (!slotStage) return false;
+  const pair = knockoutParticipantSlotPair(slotStage, matchIndex);
+  if (!pair) return false;
+  const slotKey = side === "home" ? pair[0]! : pair[1]!;
+  const feederMatchIndex = parseInt(slotKey, 10) - 1;
+  const saved = readSavedUpstreamFeederPick(
+    wizardKind,
+    feederMatchIndex,
+    slots,
+  );
+  if (!saved?.teamId) return false;
+  if (isKnockoutPickLockedOut(saved) || saved.pickStatus === "out") {
+    return true;
+  }
+  const upstreamKind = upstreamWizardKindForMatchSides(wizardKind);
+  if (!upstreamKind) return false;
+  const upstreamRow = upstreamRows(upstreamKind)[feederMatchIndex];
+  if (!upstreamRow) return false;
+  return !savedPickMatchesRowMatchup({
+    winnerTeamId: saved.teamId,
+    homeTeamId: upstreamRow.homeTeamId,
+    awayTeamId: upstreamRow.awayTeamId,
+  });
+}
+
+function partialMatchupLine(
+  homeName: string | null,
+  awayName: string | null,
+): string | null {
+  if (homeName && awayName) return `${homeName} vs ${awayName}`;
+  if (homeName) return `${homeName} vs TBD`;
+  if (awayName) return `TBD vs ${awayName}`;
   return null;
 }
 
@@ -1102,8 +1149,20 @@ export function buildKnockoutMatchPickRows(
       });
 
     let lockReason: KnockoutMatchLockReason = "pickable";
-    if (!homeTeamId || !awayTeamId) {
+    const hasHome = Boolean(homeTeamId?.trim());
+    const hasAway = Boolean(awayTeamId?.trim());
+    if (!hasHome && !hasAway) {
       lockReason = "incomplete";
+    } else if (!hasHome || !hasAway) {
+      const missingSide: "home" | "away" = hasHome ? "away" : "home";
+      const blockedOut = upstreamFeederSideBlockedOut(
+        def.wizardBracketKind,
+        matchIndex,
+        missingSide,
+        input.slots,
+        upstreamRows,
+      );
+      lockReason = blockedOut ? "pickable" : "incomplete";
     } else if (
       publicMatch &&
       isKnockoutMatchLockedForParticipant(publicMatch, nowMs)
@@ -1178,8 +1237,7 @@ export function buildKnockoutMatchPickRows(
         gradual,
       });
 
-    const matchupLineForRow =
-      homeName && awayName ? `${homeName} vs ${awayName}` : null;
+    const matchupLineForRow = partialMatchupLine(homeName, awayName);
     const outPickLabel = teamName(winnerTeamId, input.teams);
 
     const baseDisplay = pickOut
@@ -1219,6 +1277,11 @@ export function buildKnockoutMatchPickRows(
           kickoffIso,
         };
 
+    const displayWithPartialMatchup =
+      lockReason === "pickable" && matchupLineForRow
+        ? { ...baseDisplay, emptyPrimaryLine: matchupLineForRow }
+        : baseDisplay;
+
     return {
       matchIndex,
       fifaMatchNo,
@@ -1239,10 +1302,10 @@ export function buildKnockoutMatchPickRows(
       kickoffIso,
       display: r16OpenPickUntilKickoff
         ? {
-            ...baseDisplay,
+            ...displayWithPartialMatchup,
             statusLine: KNOCKOUT_R16_MISSING_PICK_OPEN_UNTIL_KICKOFF,
           }
-        : baseDisplay,
+        : displayWithPartialMatchup,
     };
   });
 }
@@ -1355,10 +1418,26 @@ export function knockoutMatchStepCaughtUp(
   return countPickableKnockoutMissing(rows) === 0;
 }
 
+/** Row still blocked upstream or awaiting a partial-side repair pick. */
+export function knockoutMatchRowNeedsRepair(
+  row: KnockoutMatchPickRow,
+): boolean {
+  if (row.lockReason === "incomplete") return true;
+  if (
+    row.lockReason === "pickable" &&
+    (!row.homeTeamId?.trim() || !row.awayTeamId?.trim()) &&
+    !validatedKnockoutMatchWinner(row)
+  ) {
+    return true;
+  }
+  return false;
+}
+
 export function knockoutMatchStepComplete(
   rows: KnockoutMatchPickRow[],
 ): boolean {
   if (rows.length === 0) return false;
+  if (rows.some((r) => knockoutMatchRowNeedsRepair(r))) return false;
   return rows.every((r) => Boolean(validatedKnockoutMatchWinner(r)));
 }
 
