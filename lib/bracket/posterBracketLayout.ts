@@ -95,6 +95,17 @@ export function connectorShouldHighlight(
   return pairHasAlivePick(matches, feederIndices);
 }
 
+/** SF connectors need every feeder QF pick alive on-path — not just one. */
+export function connectorAllFeedersHaveAlivePick(
+  matches: LiveBracketMatch[],
+  feederIndices: readonly number[],
+): boolean {
+  return (
+    feederIndices.length > 0 &&
+    feederIndices.every((i) => matchHasAliveParticipantPick(matches[i]!))
+  );
+}
+
 export function qfFeederR16Indices(qfIndex: number): readonly [number, number] {
   const pair = WC2026_QF_PARTICIPANT_SLOT_PAIRS[qfIndex];
   if (!pair) return [0, 1];

@@ -1,5 +1,6 @@
 import type { LiveBracketMatch, LiveBracketTrackerModel } from "../../lib/bracket/liveBracketTracker";
 import {
+  connectorAllFeedersHaveAlivePick,
   connectorShouldHighlight,
   POSTER_BRACKET_ROWS,
   POSTER_CENTER_MIN_WIDTH_PX,
@@ -90,7 +91,7 @@ function connectorHighlightsForSf(
   sfIndex: number,
 ): boolean[] {
   const [a, b] = sfFeederQfIndices(sfIndex);
-  return [connectorShouldHighlight(qfMatches, [a, b])];
+  return [connectorAllFeedersHaveAlivePick(qfMatches, [a, b])];
 }
 
 function PosterRoundColumn({

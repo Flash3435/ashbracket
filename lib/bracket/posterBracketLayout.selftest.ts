@@ -2,6 +2,7 @@
  * Self-test: `npx tsx lib/bracket/posterBracketLayout.selftest.ts`
  */
 import {
+  connectorAllFeedersHaveAlivePick,
   connectorShouldHighlight,
   matchHasAliveParticipantPick,
   POSTER_LEFT_HALF,
@@ -109,6 +110,39 @@ void (async function main() {
   );
   matches[0] = alive;
   assert(connectorShouldHighlight(matches, [0, 2]), "connector highlights alive feeder pair");
+
+  const wrongPath = mockMatch({
+    matchKey: "M98",
+    home: {
+      teamId: "x",
+      displayName: "X",
+      countryCode: "XXX",
+      tournamentOutcome: "pending",
+      participantPick: "your_pick_wrong_path",
+      eliminatedFromTournament: false,
+      fillState: "team",
+      helperTooltip: null,
+    },
+    away: {
+      teamId: "y",
+      displayName: "Y",
+      countryCode: "YYY",
+      tournamentOutcome: "pending",
+      participantPick: null,
+      eliminatedFromTournament: false,
+      fillState: "team",
+      helperTooltip: null,
+    },
+  });
+  const qfPair = [alive, wrongPath];
+  assert(
+    connectorShouldHighlight(qfPair, [0, 1]),
+    "OR-style connector highlights when any feeder is alive",
+  );
+  assert(
+    !connectorAllFeedersHaveAlivePick(qfPair, [0, 1]),
+    "SF connector needs every feeder alive on-path",
+  );
 
   console.log("posterBracketLayout.selftest.ts: ok");
 })();

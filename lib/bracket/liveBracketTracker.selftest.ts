@@ -12,6 +12,10 @@ import {
 } from "./knockoutBracketDisplayCopy";
 import { liveSideNeedsMutedFlag, liveSideRowClassName } from "./liveBracketSideStyles";
 import { shouldUseLiveBracketTracker } from "./resolveLiveBracketTrackerMode";
+import {
+  connectorAllFeedersHaveAlivePick,
+  connectorShouldHighlight,
+} from "./posterBracketLayout";
 
 function assert(cond: unknown, msg: string): void {
   if (!cond) throw new Error(msg);
@@ -392,6 +396,85 @@ void (async function main() {
     assert(
       liveSideRowClassName(m73.home).includes("ash-body"),
       "not your pick uses muted row styling not green highlight",
+    );
+  }
+
+  // Wrong-path QF picks: amber badge, not green alive path into SF
+  {
+    const extendedTeams = [
+      ...teams,
+      team("team-fra", "France", "FRA"),
+      team("team-esp", "Spain", "ESP"),
+      team("team-eng", "England", "ENG"),
+      team("team-arg", "Argentina", "ARG"),
+      team("team-ger", "Germany", "GER"),
+      team("team-ned", "Netherlands", "NED"),
+    ];
+    const slots: KnockoutPickSlotDraft[] = [
+      slot("r16|1", "round_of_16", "team-fra", "1"),
+      slot("r16|2", "round_of_16", "team-ger", "2"),
+      slot("r16|3", "round_of_16", "team-bra", "3"),
+      slot("r16|4", "round_of_16", "team-ned", "4"),
+      slot("r16|5", "round_of_16", "team-esp", "5"),
+      slot("r16|6", "round_of_16", "team-ger", "6"),
+      slot("r16|7", "round_of_16", "team-eng", "7"),
+      slot("r16|8", "round_of_16", "team-arg", "8"),
+      slot("qf|1", "quarterfinalist", "team-fra", "1"),
+      slot("qf|2", "quarterfinalist", "team-ger", "2"),
+      slot("qf|3", "quarterfinalist", "team-bra", "3"),
+      slot("qf|4", "quarterfinalist", "team-ned", "4"),
+      slot("qf|5", "quarterfinalist", "team-esp", "5"),
+      slot("qf|6", "quarterfinalist", "team-ger", "6"),
+      slot("qf|7", "quarterfinalist", "team-eng", "7"),
+      slot("qf|8", "quarterfinalist", "team-arg", "8"),
+      slot("sf|1", "semifinalist", "team-fra", "1"),
+      slot("sf|2", "semifinalist", "team-esp", "2"),
+      slot("sf|3", "semifinalist", "team-eng", "3"),
+      slot("sf|4", "semifinalist", "team-arg", "4"),
+    ];
+    const fraSlot = slots.find(
+      (s) => s.predictionKind === "semifinalist" && s.slotKey === "1",
+    )!;
+    fraSlot.pickStatus = "out";
+    fraSlot.invalidReason = "not_in_official_matchup";
+    const engSlot = slots.find(
+      (s) => s.predictionKind === "semifinalist" && s.slotKey === "3",
+    )!;
+    engSlot.pickStatus = "out";
+    engSlot.invalidReason = "not_in_official_matchup";
+
+    const tracker = buildLiveBracketTracker({
+      slots,
+      teams: extendedTeams,
+      knockoutBracketPicksUnlocked: true,
+      tournamentMatches: [],
+    });
+
+    const m97 = tracker.quarterfinals[0]!;
+    const fraSide = [m97.home, m97.away].find((s) => s.teamId === "team-fra");
+    assert(fraSide?.participantPick === "your_pick_wrong_path", "France shows wrong-path badge");
+    assert(
+      liveSideRowClassName(fraSide!).includes("amber"),
+      "wrong-path pick uses amber styling not green highlight",
+    );
+
+    const m98 = tracker.quarterfinals[1]!;
+    const espSide = [m98.home, m98.away].find((s) => s.teamId === "team-esp");
+    assert(espSide?.participantPick === "your_pick_alive", "Spain remains alive pick");
+
+    assert(
+      !connectorAllFeedersHaveAlivePick(tracker.quarterfinals, [0, 1]),
+      "SF connector does not highlight when one QF feeder is wrong-path",
+    );
+    assert(
+      connectorShouldHighlight(tracker.quarterfinals, [0, 1]),
+      "R16-style OR highlight still works for partial alive feeders",
+    );
+
+    const m101 = tracker.semifinals[0]!;
+    assert(
+      ![m101.home, m101.away].some((s) => s.participantPick === "your_pick_alive"),
+      "SF row does not show green alive feeder path when blocked",
     );
   }
 

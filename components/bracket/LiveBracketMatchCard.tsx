@@ -4,7 +4,7 @@ import {
   CountryFlagPlaceholder,
 } from "../tournament/Flag";
 import type { LiveBracketMatch, LiveBracketSide } from "../../lib/bracket/liveBracketTracker";
-import { NOT_YOUR_PICK_BADGE_LABEL } from "../../lib/bracket/knockoutBracketDisplayCopy";
+import { NOT_YOUR_PICK_BADGE_LABEL, WRONG_PATH_PICK_BADGE_LABEL } from "../../lib/bracket/knockoutBracketDisplayCopy";
 import {
   liveSideNameClassName,
   liveSideNeedsMutedFlag,
@@ -43,6 +43,13 @@ function ParticipantPickBadge({ pick }: { pick: LiveBracketSide["participantPick
     return (
       <span className="shrink-0 rounded bg-red-950/50 px-1 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-red-200 ring-1 ring-red-900/40">
         Pick out
+      </span>
+    );
+  }
+  if (pick === "your_pick_wrong_path") {
+    return (
+      <span className="shrink-0 rounded bg-amber-950/50 px-1 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-amber-200 ring-1 ring-amber-900/40">
+        {WRONG_PATH_PICK_BADGE_LABEL}
       </span>
     );
   }

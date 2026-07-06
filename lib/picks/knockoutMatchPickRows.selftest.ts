@@ -2390,6 +2390,48 @@ function r32Side(slotKey: string, teamId = ""): KnockoutPickSlotDraft {
   assert.strictEqual(sfStatus.kind, "needs_pick");
 }
 
+// Case 1: France + Spain are valid M101 feeders — pickable, no wrong-path copy
+{
+  const fraEspTeams: Team[] = [
+    ...teams,
+    {
+      id: "team-esp",
+      name: "Spain",
+      countryCode: "ESP",
+      fifaCode: "ESP",
+      fifaRank: 7,
+      fifaRankAsOf: null,
+      createdAt: "",
+      updatedAt: "",
+    },
+  ];
+  const slots: KnockoutPickSlotDraft[] = [
+    ...Array.from({ length: 16 }, (_, i) => r16Slot(String(i + 1), "team-rsa")),
+    sfSlot("1", "team-fra"),
+    sfSlot("2", "team-esp"),
+    sfSlot("3", "team-bra"),
+    sfSlot("4", "team-arg"),
+  ];
+  const input = {
+    bracketKind: "semifinalist" as const,
+    slots,
+    teams: fraEspTeams,
+    knockoutBracketPicksUnlocked: true,
+  };
+  const m101 = buildKnockoutMatchPickRows(input).find((r) => r.fifaMatchNo === 101)!;
+  assert.strictEqual(m101.lockReason, "pickable");
+  assert.strictEqual(m101.homeTeamId, "team-fra");
+  assert.strictEqual(m101.awayTeamId, "team-esp");
+  assert.doesNotMatch(
+    blockedKnockoutRowUserCopy(m101, "semifinalist", input),
+    /no longer on the path|no longer feeds this matchup/i,
+  );
+  assert.doesNotMatch(
+    blockedKnockoutStepGateCopy("semifinalist", input) ?? "",
+    /paths are blocked|picks are out/i,
+  );
+}
+
 // Missing QF winner blocks SF with immediate feeder copy, not stale R16 refs
 {
   const slots: KnockoutPickSlotDraft[] = [
@@ -2444,7 +2486,7 @@ function r32Side(slotKey: string, teamId = ""): KnockoutPickSlotDraft {
   assert.strictEqual(m101.lockReason, "incomplete");
   assert.match(
     m101.display.emptyPrimaryLine!,
-    /This semi-final path is unavailable because your quarter-final pick France no longer feeds this matchup/i,
+    /Your quarter-final pick France is still alive, but it is no longer on the path to this semi-final/i,
   );
   assert.doesNotMatch(m101.display.emptyPrimaryLine!, /France has been eliminated/i);
   assert.doesNotMatch(m101.display.emptyPrimaryLine!, /M91|M89/i);
@@ -2584,11 +2626,11 @@ function r32Side(slotKey: string, teamId = ""): KnockoutPickSlotDraft {
   assert.strictEqual(m101.lockReason, "incomplete");
   assert.match(
     m101.display.emptyPrimaryLine!,
-    /This semi-final path is unavailable because your quarter-final pick France no longer feeds this matchup/i,
+    /Your quarter-final pick France is still alive, but it is no longer on the path to this semi-final/i,
   );
   assert.match(
     m101.display.emptyPrimaryLine!,
-    /Your other quarter-final pick Spain is still alive, but this matchup needs both feeder winners to come from the correct bracket paths/i,
+    /Your other quarter-final pick Spain is still in the tournament/i,
   );
   assert.doesNotMatch(m101.display.emptyPrimaryLine!, /France has been eliminated/i);
 
@@ -2596,11 +2638,11 @@ function r32Side(slotKey: string, teamId = ""): KnockoutPickSlotDraft {
   assert.strictEqual(m102.lockReason, "incomplete");
   assert.match(
     m102.display.emptyPrimaryLine!,
-    /This semi-final path is unavailable because your quarter-final pick England no longer feeds this matchup/i,
+    /Your quarter-final pick England is still alive, but it is no longer on the path to this semi-final/i,
   );
   assert.match(
     m102.display.emptyPrimaryLine!,
-    /Your other quarter-final pick Argentina is still alive, but this matchup needs both feeder winners to come from the correct bracket paths/i,
+    /Your other quarter-final pick Argentina is still in the tournament/i,
   );
   assert.doesNotMatch(m102.display.emptyPrimaryLine!, /\bM99\b/i);
   assert.doesNotMatch(m102.display.emptyPrimaryLine!, /England has been eliminated/i);
@@ -2616,6 +2658,10 @@ function r32Side(slotKey: string, teamId = ""): KnockoutPickSlotDraft {
   );
   assert.strictEqual(sfStatus.complete, false);
   assert.notStrictEqual(sfStatus.kind, "complete");
+
+  const sfGate = blockedKnockoutStepGateCopy("semifinalist", sfInput);
+  assert.match(sfGate!, /2 semi-final paths are blocked/i);
+  assert.doesNotMatch(sfGate!, /picks are out/i);
 }
 
 // SF step pill stays incomplete when rows are blocked upstream

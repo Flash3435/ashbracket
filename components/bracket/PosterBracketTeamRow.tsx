@@ -5,6 +5,7 @@ import {
 import type { LiveBracketSide } from "../../lib/bracket/liveBracketTracker";
 import {
   NOT_YOUR_PICK_BADGE_LABEL,
+  WRONG_PATH_PICK_BADGE_LABEL,
 } from "../../lib/bracket/knockoutBracketDisplayCopy";
 import {
   liveSideNameClassName,
@@ -17,6 +18,7 @@ import type { Team } from "../../src/types/domain";
 function compactBadgeLabel(pick: LiveBracketSide["participantPick"]): string | null {
   if (pick === "your_pick" || pick === "your_pick_alive") return "Pick";
   if (pick === "your_pick_eliminated") return "Pick out";
+  if (pick === "your_pick_wrong_path") return WRONG_PATH_PICK_BADGE_LABEL;
   if (pick === "not_your_pick") return NOT_YOUR_PICK_BADGE_LABEL;
   return null;
 }
@@ -69,9 +71,11 @@ export function PosterBracketTeamRow({ side, teamById, score }: Props) {
           className={`shrink-0 rounded px-1 py-px text-[8px] font-semibold uppercase tracking-wide ring-1 ${
             side.participantPick === "your_pick_eliminated"
               ? "bg-red-950/50 text-red-200 ring-red-900/40"
-              : side.participantPick === "not_your_pick"
-                ? "bg-ash-body/70 text-ash-muted ring-ash-border/50"
-                : "bg-ash-accent/25 text-ash-accent ring-ash-accent/35"
+              : side.participantPick === "your_pick_wrong_path"
+                ? "bg-amber-950/50 text-amber-200 ring-amber-900/40"
+                : side.participantPick === "not_your_pick"
+                  ? "bg-ash-body/70 text-ash-muted ring-ash-border/50"
+                  : "bg-ash-accent/25 text-ash-accent ring-ash-accent/35"
           }`}
         >
           {pickLabel}

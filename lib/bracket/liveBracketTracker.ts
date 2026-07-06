@@ -30,6 +30,7 @@ import {
   type KnockoutWizardBracketKind,
 } from "../picks/knockoutMatchPickRows";
 import { isKnockoutProgressionKind } from "../predictions/knockoutProgressionKinds";
+import { isKnockoutPickLockedOut } from "../predictions/knockoutPickStatus";
 import {
   formatTournamentMatchScoreLine,
   isFinishedMatchWithScores,
@@ -43,6 +44,7 @@ export type ParticipantPickBadge =
   | "your_pick"
   | "your_pick_alive"
   | "your_pick_eliminated"
+  | "your_pick_wrong_path"
   | "not_your_pick"
   | null;
 
@@ -208,6 +210,7 @@ function participantPickBadge(args: {
   matchFinished: boolean;
   tournamentOutcome: TournamentSideOutcome | null;
   eliminatedFromTournament: boolean;
+  savedPickLockedOut: boolean;
 }): ParticipantPickBadge {
   const { teamId, participantPickedWinnerId } = args;
   if (!teamId) return null;
@@ -217,6 +220,11 @@ function participantPickBadge(args: {
       if (args.tournamentOutcome === "advanced") return "your_pick";
       if (args.tournamentOutcome === "eliminated") return "your_pick_eliminated";
       return "your_pick_eliminated";
+    }
+    if (args.savedPickLockedOut) {
+      return args.eliminatedFromTournament
+        ? "your_pick_eliminated"
+        : "your_pick_wrong_path";
     }
     if (args.eliminatedFromTournament) return "your_pick_eliminated";
     return "your_pick_alive";
@@ -254,12 +262,45 @@ function sideDisplayName(
   return "TBD";
 }
 
+function resolveParticipantPickDisplay(args: {
+  participantPickId: string | null;
+  pickLockedOut: boolean;
+  homeId: string | null;
+  awayId: string | null;
+}): { displayPickId: string | null; lockedOut: boolean } {
+  const participantPickId = args.participantPickId?.trim() || null;
+  if (!participantPickId) return { displayPickId: null, lockedOut: false };
+  const onSide =
+    participantPickId === args.homeId || participantPickId === args.awayId;
+  if (!onSide) return { displayPickId: null, lockedOut: false };
+  return {
+    displayPickId: participantPickId,
+    lockedOut: args.pickLockedOut,
+  };
+}
+
+function slotRowForLaterMatch(
+  bracketKind: KnockoutWizardBracketKind,
+  matchIndex: number,
+  slots: KnockoutPickSlotDraft[],
+): KnockoutPickSlotDraft | null {
+  const def = knockoutMatchStepDef(bracketKind);
+  if (!def || def.resultKind === "champion") return null;
+  const slotKey = String(matchIndex + 1);
+  return (
+    slots.find(
+      (s) => s.predictionKind === def.resultKind && s.slotKey === slotKey,
+    ) ?? null
+  );
+}
+
 function buildLiveSide(args: {
   teamId: string | null;
   teamById: Map<string, Team>;
   officialWinnerId: string | null;
   matchFinished: boolean;
   participantPickedWinnerId: string | null;
+  savedPickLockedOut: boolean;
   eliminatedTeamIds: Set<string>;
   usesOfficialFixture: boolean;
   siblingHasTeam: boolean;
@@ -288,6 +329,7 @@ function buildLiveSide(args: {
     matchFinished: args.matchFinished,
     tournamentOutcome,
     eliminatedFromTournament,
+    savedPickLockedOut: args.savedPickLockedOut,
   });
   const helperTooltip =
     participantPick === "not_your_pick"
@@ -345,6 +387,7 @@ function buildLiveMatchFromFixture(args: {
   participantHomeId: string | null;
   participantAwayId: string | null;
   participantPickedWinnerId: string | null;
+  participantSavedPickLockedOut?: boolean;
   teamById: Map<string, Team>;
   teamByCountry: Map<string, Team>;
   eliminatedTeamIds: Set<string>;
@@ -360,18 +403,19 @@ function buildLiveMatchFromFixture(args: {
     teamByCountry: args.teamByCountry,
   });
 
-  const participantPick =
-    args.participantPickedWinnerId?.trim() &&
-    (args.participantPickedWinnerId === homeId ||
-      args.participantPickedWinnerId === awayId)
-      ? args.participantPickedWinnerId
-      : null;
+  const { displayPickId, lockedOut } = resolveParticipantPickDisplay({
+    participantPickId: args.participantPickedWinnerId,
+    pickLockedOut: Boolean(args.participantSavedPickLockedOut),
+    homeId,
+    awayId,
+  });
 
   const sideArgs = {
     teamById: args.teamById,
     officialWinnerId,
     matchFinished,
-    participantPickedWinnerId: participantPick,
+    participantPickedWinnerId: displayPickId,
+    savedPickLockedOut: lockedOut,
     eliminatedTeamIds: args.eliminatedTeamIds,
     usesOfficialFixture,
   };
@@ -385,7 +429,7 @@ function buildLiveMatchFromFixture(args: {
     scoreLine: pub ? formatTournamentMatchScoreLine(pub) : null,
     statusLabel: statusLabelForMatch(status, pub),
     usesOfficialFixture,
-    participantPickedWinnerId: participantPick,
+    participantPickedWinnerId: displayPickId,
     home: buildLiveSide({
       teamId: homeId,
       siblingHasTeam: Boolean(awayId),
@@ -473,14 +517,16 @@ function buildLaterRoundMatches(
   return rows.map((row) => {
     const pub = publicMatchForFifaNo(stageMatches, def.stageCode, row.fifaMatchNo);
     const participantPick = row.winnerTeamId.trim() || null;
-    const pickValid =
-      row.pickStatus === "out" && participantPick
-        ? participantPick
-        : participantPick &&
-            (participantPick === row.homeTeamId ||
-              participantPick === row.awayTeamId)
-          ? participantPick
-          : null;
+    const pickLockedOut = isKnockoutPickLockedOut({
+      pickStatus: row.pickStatus,
+      teamId: row.winnerTeamId,
+    });
+    const { displayPickId, lockedOut } = resolveParticipantPickDisplay({
+      participantPickId: participantPick,
+      pickLockedOut,
+      homeId: row.homeTeamId,
+      awayId: row.awayTeamId,
+    });
 
     return buildLiveMatchFromFixture({
       matchKey: row.fifaMatchNo > 0 ? `M${row.fifaMatchNo}` : row.rowKey,
@@ -490,7 +536,8 @@ function buildLaterRoundMatches(
       officialMatch: pub,
       participantHomeId: row.homeTeamId,
       participantAwayId: row.awayTeamId,
-      participantPickedWinnerId: pickValid,
+      participantPickedWinnerId: displayPickId,
+      participantSavedPickLockedOut: lockedOut,
       teamById,
       teamByCountry,
       eliminatedTeamIds,
@@ -503,11 +550,11 @@ function pickTeamId(
   kind: KnockoutPickSlotDraft["predictionKind"],
   slotKey: string,
 ): string | null {
-  const id =
-    slots
-      .find((s) => s.predictionKind === kind && s.slotKey === slotKey)
-      ?.teamId.trim() ?? "";
-  return id || null;
+  const row =
+    slots.find((s) => s.predictionKind === kind && s.slotKey === slotKey) ??
+    null;
+  if (!row?.teamId.trim() || isKnockoutPickLockedOut(row)) return null;
+  return row.teamId.trim();
 }
 
 function participantPathForLaterMatch(
@@ -571,6 +618,13 @@ function officialFixtureTeamIds(
   return { homeId, awayId };
 }
 
+function livePickShowsWrongPath(live: LiveBracketMatch): boolean {
+  return (
+    live.home.participantPick === "your_pick_wrong_path" ||
+    live.away.participantPick === "your_pick_wrong_path"
+  );
+}
+
 function enrichR32Matches(
   liveMatches: LiveBracketMatch[],
   participantMatches: BracketMatchResolved[],
@@ -601,16 +655,20 @@ function enrichR32Matches(
       null;
     const participantPick =
       readParticipantR32MatchWinnerPick(index, slots, ctx) || null;
-    const pickValid =
-      participantPick &&
-      (participantPick === homeId || participantPick === awayId)
-        ? participantPick
-        : null;
+    const r32Slot = slots.find((s) => s.rowKey === `round_of_32|${index + 1}`);
+    const pickLockedOut = r32Slot ? isKnockoutPickLockedOut(r32Slot) : false;
+    const { displayPickId, lockedOut } = resolveParticipantPickDisplay({
+      participantPickId: participantPick,
+      pickLockedOut,
+      homeId,
+      awayId,
+    });
 
     if (
       homeId === live.home.teamId &&
       awayId === live.away.teamId &&
-      pickValid === live.participantPickedWinnerId
+      displayPickId === live.participantPickedWinnerId &&
+      lockedOut === livePickShowsWrongPath(live)
     ) {
       return live;
     }
@@ -623,7 +681,8 @@ function enrichR32Matches(
       officialMatch: pub,
       participantHomeId: homeId,
       participantAwayId: awayId,
-      participantPickedWinnerId: pickValid,
+      participantPickedWinnerId: displayPickId,
+      participantSavedPickLockedOut: lockedOut,
       teamById,
       teamByCountry,
       eliminatedTeamIds,
@@ -669,6 +728,10 @@ function enrichLiveRound(
       pathFallback.awayId ??
       participant?.away.teamId ??
       null;
+    const slotRow = slotRowForLaterMatch(bracketKind, index, slots);
+    const pickLockedOut = slotRow ? isKnockoutPickLockedOut(slotRow) : false;
+    const lockedOutSavedPickId =
+      pickLockedOut && slotRow?.teamId.trim() ? slotRow.teamId.trim() : null;
     const participantPick =
       live.participantPickedWinnerId ??
       (participant?.winnerTeamId &&
@@ -679,12 +742,23 @@ function enrichLiveRound(
       (pathFallback.pickId === homeId || pathFallback.pickId === awayId)
         ? pathFallback.pickId
         : null) ??
+      (lockedOutSavedPickId &&
+      (lockedOutSavedPickId === homeId || lockedOutSavedPickId === awayId)
+        ? lockedOutSavedPickId
+        : null) ??
       null;
+    const { displayPickId, lockedOut } = resolveParticipantPickDisplay({
+      participantPickId: participantPick,
+      pickLockedOut,
+      homeId,
+      awayId,
+    });
 
     if (
       homeId === live.home.teamId &&
       awayId === live.away.teamId &&
-      participantPick === live.participantPickedWinnerId
+      displayPickId === live.participantPickedWinnerId &&
+      lockedOut === livePickShowsWrongPath(live)
     ) {
       return live;
     }
@@ -697,7 +771,8 @@ function enrichLiveRound(
       officialMatch: pub,
       participantHomeId: homeId,
       participantAwayId: awayId,
-      participantPickedWinnerId: participantPick,
+      participantPickedWinnerId: displayPickId,
+      participantSavedPickLockedOut: lockedOut,
       teamById,
       teamByCountry,
       eliminatedTeamIds,
@@ -771,12 +846,14 @@ export function buildLiveBracketTracker(
   }
 
   const championEliminated = Boolean(champId && eliminatedTeamIds.has(champId));
+  const champSlotRow = input.slots.find((s) => s.predictionKind === "champion");
   const championPickBadge = participantPickBadge({
     teamId: champId,
     participantPickedWinnerId: champId,
     matchFinished: finalFinished,
     tournamentOutcome: championTournamentOutcome,
     eliminatedFromTournament: championEliminated,
+    savedPickLockedOut: champSlotRow ? isKnockoutPickLockedOut(champSlotRow) : false,
   });
 
   const hasSavedChampionPick = Boolean(champId);

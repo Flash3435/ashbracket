@@ -200,7 +200,7 @@ function blockedImmediateFeederCopy(
     return `This ${pathStage} path is unavailable because your ${roundLabel} pick ${pickLabel} has been eliminated.`;
   }
   if (pickTeamName || teamId) {
-    return `This ${pathStage} path is unavailable because your ${roundLabel} pick ${pickLabel} no longer feeds this matchup.`;
+    return `Your ${roundLabel} pick ${pickLabel} is still alive, but it is no longer on the path to this ${pathStage}.`;
   }
   return `No ${pathStage} pick can be saved for this matchup right now.`;
 }
@@ -233,7 +233,8 @@ function otherFeederStillAliveCopy(
       upstreamInput.teams,
     );
     if (otherTeamName) {
-      return `Your other ${roundLabel} pick ${otherTeamName} is still alive, but this matchup needs both feeder winners to come from the correct bracket paths.`;
+      const pathStage = downstreamPathStageLabel(parentBracketKind);
+      return `Your other ${roundLabel} pick ${otherTeamName} is still in the tournament. Review your ${roundLabel} picks before choosing this ${pathStage}.`;
     }
   }
   return null;
@@ -822,6 +823,21 @@ function stepGateSummaryFromExplanation(
     case "wait_for_result":
       return `${countLabel} ${blockedCount === 1 ? "is" : "are"} waiting on an earlier result.`;
     case "locked_out":
+      if (bracketKind === "semifinalist") {
+        return blockedCount === 1
+          ? "One semi-final path is blocked."
+          : `${blockedCount} semi-final paths are blocked.`;
+      }
+      if (bracketKind === "finalist") {
+        return blockedCount === 1
+          ? "One final path is blocked."
+          : `${blockedCount} final paths are blocked.`;
+      }
+      if (bracketKind === "quarterfinalist") {
+        return blockedCount === 1
+          ? "One quarter-final path is blocked."
+          : `${blockedCount} quarter-final paths are blocked.`;
+      }
       return `${countLabel} ${blockedCount === 1 ? "pick is" : "picks are"} out.`;
     case "pick_upstream":
       return `${countLabel} ${blockedCount === 1 ? "is" : "are"} blocked by an earlier round pick.`;
