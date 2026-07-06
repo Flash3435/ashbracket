@@ -1,7 +1,9 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import type { Result, Team } from "../../src/types/domain";
+import type { Result } from "../../src/types/domain";
 import { mapResultRow } from "../../src/lib/scoring/mapSupabaseRows";
+import { mapTeamRow } from "../results/mapRows";
 import { fetchGroupTeamCountryCodesForEdition } from "../tournament/fetchGroupTeamCountryCodesForEdition";
+import { TEAM_TABLE_SELECT } from "../teams/teamDbSelect";
 import {
   buildDerivedThirdPlaceQualifierResultRows,
   resolveOfficialThirdPlaceAdvancers,
@@ -53,7 +55,7 @@ export async function ensureThirdPlaceQualifierResults(
         .from("tournament_matches")
         .select("match_code, home_team_id, away_team_id, stage_code, group_code, home_goals, away_goals")
         .eq("edition_id", editionId),
-      supabase.from("teams").select("id, country_code, name"),
+      supabase.from("teams").select(TEAM_TABLE_SELECT),
       fetchGroupTeamCountryCodesForEdition(supabase, editionId),
     ]);
 
@@ -105,14 +107,7 @@ export async function ensureThirdPlaceQualifierResults(
     });
   }
 
-  const teams = (teamRes.data ?? []).map(
-    (t) =>
-      ({
-        id: t.id as string,
-        countryCode: t.country_code as string,
-        name: t.name as string,
-      }) satisfies Team,
-  );
+  const teams = (teamRes.data ?? []).map(mapTeamRow);
 
   const resolution = resolveOfficialThirdPlaceAdvancers({
     results,
@@ -162,7 +157,7 @@ export async function loadThirdPlaceQualifierSettlement(
         .from("tournament_matches")
         .select("match_code, home_team_id, away_team_id, stage_code, group_code, home_goals, away_goals")
         .eq("edition_id", editionId),
-      supabase.from("teams").select("id, country_code, name"),
+      supabase.from("teams").select(TEAM_TABLE_SELECT),
       fetchGroupTeamCountryCodesForEdition(supabase, editionId),
     ]);
 
@@ -198,14 +193,7 @@ export async function loadThirdPlaceQualifierSettlement(
     });
   }
 
-  const teams = (teamRes.data ?? []).map(
-    (t) =>
-      ({
-        id: t.id as string,
-        countryCode: t.country_code as string,
-        name: t.name as string,
-      }) satisfies Team,
-  );
+  const teams = (teamRes.data ?? []).map(mapTeamRow);
 
   return resolveOfficialThirdPlaceAdvancers({
     results,
