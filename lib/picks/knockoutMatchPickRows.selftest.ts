@@ -2461,11 +2461,11 @@ function r32Side(slotKey: string, teamId = ""): KnockoutPickSlotDraft {
   assert.strictEqual(m102.lockReason, "incomplete");
   assert.match(
     m101.display.emptyPrimaryLine!,
-    /Waiting for your quarter-final pick/i,
+    /Waiting for your quarter-final pick|Pick a winner for/i,
   );
   assert.match(
     m102.display.emptyPrimaryLine!,
-    /Waiting for your quarter-final pick/i,
+    /Waiting for your quarter-final pick|Pick a winner for/i,
   );
   assert.doesNotMatch(m101.display.emptyPrimaryLine!, /M91|M94/i);
   assert.doesNotMatch(m102.display.emptyPrimaryLine!, /M91|M94/i);

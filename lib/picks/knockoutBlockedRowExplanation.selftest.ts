@@ -4,6 +4,7 @@ import type { KnockoutPickSlotDraft } from "../../types/adminKnockoutPicks";
 import type { TournamentMatchPublicRow } from "../../types/tournamentPublic";
 import type { GradualKnockoutSelectionState } from "./gradualKnockoutUnlock";
 import {
+  blockedKnockoutRowUserCopy,
   blockedKnockoutStepGateCopy,
   clearedPickRowKeySet,
   LOCKED_KNOCKOUT_NO_ACTION_HEADLINE,
@@ -895,6 +896,160 @@ const r32OfficialResults: TournamentMatchPublicRow[] = [
     participantNonActionableLockedKnockoutRows(afterKickoffInput).some(
       (r) => r.fifaMatchNo === 94,
     ),
+  );
+}
+
+// Final waits on valid unpicked semi-finals — not "blocked by earlier round pick".
+{
+  const extendedTeams: Team[] = [
+    ...teams,
+    {
+      id: "team-fra",
+      name: "France",
+      countryCode: "FRA",
+      fifaCode: "FRA",
+      fifaRank: 2,
+      fifaRankAsOf: null,
+      createdAt: "",
+      updatedAt: "",
+    },
+    {
+      id: "team-esp",
+      name: "Spain",
+      countryCode: "ESP",
+      fifaCode: "ESP",
+      fifaRank: 7,
+      fifaRankAsOf: null,
+      createdAt: "",
+      updatedAt: "",
+    },
+    {
+      id: "team-arg",
+      name: "Argentina",
+      countryCode: "ARG",
+      fifaCode: "ARG",
+      fifaRank: 1,
+      fifaRankAsOf: null,
+      createdAt: "",
+      updatedAt: "",
+    },
+    {
+      id: "team-eng",
+      name: "England",
+      countryCode: "ENG",
+      fifaCode: "ENG",
+      fifaRank: 4,
+      fifaRankAsOf: null,
+      createdAt: "",
+      updatedAt: "",
+    },
+  ];
+  function r16All(slotKey: string): KnockoutPickSlotDraft {
+    return {
+      rowKey: `round_of_16|${slotKey}`,
+      sectionLabel: "Round of 16",
+      slotLabel: slotKey,
+      predictionKind: "round_of_16",
+      tournamentStageId: "r16",
+      slotKey,
+      groupCode: null,
+      bonusKey: null,
+      teamId: "team-ger",
+    };
+  }
+  function sfSlot(slotKey: string, teamId: string): KnockoutPickSlotDraft {
+    return {
+      rowKey: `semifinalist|${slotKey}`,
+      sectionLabel: "Semi-finals",
+      slotLabel: slotKey,
+      predictionKind: "semifinalist",
+      tournamentStageId: "sf",
+      slotKey,
+      groupCode: null,
+      bonusKey: null,
+      teamId,
+    };
+  }
+  function finSlot(slotKey: string, teamId = ""): KnockoutPickSlotDraft {
+    return {
+      rowKey: `finalist|${slotKey}`,
+      sectionLabel: "The final",
+      slotLabel: slotKey,
+      predictionKind: "finalist",
+      tournamentStageId: "fin",
+      slotKey,
+      groupCode: null,
+      bonusKey: null,
+      teamId,
+    };
+  }
+  const slots: KnockoutPickSlotDraft[] = [
+    ...Array.from({ length: 16 }, (_, i) => r16All(String(i + 1))),
+    sfSlot("1", "team-fra"),
+    sfSlot("2", "team-esp"),
+    sfSlot("3", "team-arg"),
+    sfSlot("4", "team-eng"),
+  ];
+  const sfInput = {
+    bracketKind: "semifinalist" as const,
+    slots,
+    teams: extendedTeams,
+    knockoutBracketPicksUnlocked: true,
+  };
+  const sfRows = buildKnockoutMatchPickRows(sfInput);
+  const m101 = sfRows.find((r) => r.fifaMatchNo === 101)!;
+  const m102 = sfRows.find((r) => r.fifaMatchNo === 102)!;
+  assert.strictEqual(m101.lockReason, "pickable");
+  assert.strictEqual(m101.homeTeamId, "team-fra");
+  assert.strictEqual(m101.awayTeamId, "team-esp");
+  assert.strictEqual(m102.lockReason, "pickable");
+  assert.strictEqual(m102.homeTeamId, "team-arg");
+  assert.strictEqual(m102.awayTeamId, "team-eng");
+
+  const finalInput = { ...sfInput, bracketKind: "finalist" as const };
+  const finalRow = buildKnockoutMatchPickRows(finalInput)[0]!;
+  assert.strictEqual(finalRow.lockReason, "incomplete");
+
+  const ctx = resolveKnockoutProgressContext({
+    slots,
+    teams: extendedTeams,
+    officialRoundOf32Complete: true,
+  });
+  const finalStatus = getKnockoutStepCompletionFromDraftState("finalist", ctx);
+  assert.strictEqual(finalStatus.complete, false);
+  assert.strictEqual(finalStatus.kind, "locked_upstream");
+
+  const gate = blockedKnockoutStepGateCopy("finalist", finalInput);
+  assert.match(
+    gate!,
+    /Pick both semi-final winners before choosing the final winner|waiting for your semi-final picks/i,
+  );
+  assert.doesNotMatch(gate!, /blocked by an earlier round pick/i);
+
+  const rowCopy = blockedKnockoutRowUserCopy(finalRow, "finalist", finalInput);
+  assert.match(
+    rowCopy,
+    /Waiting for your semi-final picks for France vs Spain and Argentina vs England/i,
+  );
+
+  const oneSfPickedSlots = [
+    ...slots,
+    finSlot("1", "team-fra"),
+  ];
+  const partialInput = { ...finalInput, slots: oneSfPickedSlots };
+  const partialGate = blockedKnockoutStepGateCopy("finalist", partialInput);
+  assert.match(partialGate!, /waiting for your semi-final picks/i);
+  assert.doesNotMatch(partialGate!, /blocked by an earlier round pick/i);
+
+  const partialRow = buildKnockoutMatchPickRows(partialInput)[0]!;
+  const partialCopy = blockedKnockoutRowUserCopy(
+    partialRow,
+    "finalist",
+    partialInput,
+  );
+  assert.match(
+    partialCopy,
+    /Waiting for your semi-final pick for Argentina vs England/i,
   );
 }
 

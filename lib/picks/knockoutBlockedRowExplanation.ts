@@ -32,6 +32,7 @@ export type KnockoutFeederBlockState =
 
 export type KnockoutBlockedUserAction =
   | "pick_upstream"
+  | "waiting_upstream"
   | "pick_this_row"
   | "wait_for_result"
   | "locked_out"
@@ -183,6 +184,87 @@ function downstreamPathStageLabel(
   if (bracketKind === "semifinalist") return "semi-final";
   if (bracketKind === "finalist") return "final";
   return "path";
+}
+
+function waitingUpstreamFeedersCopy(
+  parentBracketKind: KnockoutWizardBracketKind,
+  feeders: readonly KnockoutMatchPickRow[],
+  teams: ReadonlyArray<{ id: string; name: string }>,
+): string {
+  const roundLabel = immediateUpstreamFeederRoundLabel(parentBracketKind);
+  const matchupLabels = feeders
+    .map((feeder) => feederMatchupLabel(feeder, teams))
+    .filter(
+      (label): label is string =>
+        Boolean(
+          label?.includes(" vs ") &&
+            !label.startsWith("Complete ") &&
+            !label.startsWith("Pick "),
+        ),
+    );
+
+  if (matchupLabels.length === 0) {
+    return feeders.length === 1
+      ? `Waiting for your ${roundLabel} pick.`
+      : `Waiting for your ${roundLabel} picks.`;
+  }
+  if (matchupLabels.length === 1) {
+    return `Waiting for your ${roundLabel} pick for ${matchupLabels[0]}.`;
+  }
+  const last = matchupLabels[matchupLabels.length - 1]!;
+  const rest = matchupLabels.slice(0, -1);
+  return `Waiting for your ${roundLabel} picks for ${rest.join(", ")} and ${last}.`;
+}
+
+function waitingUpstreamStepGateCopy(
+  bracketKind: KnockoutWizardBracketKind,
+  missingFeederCount: number,
+): string {
+  if (bracketKind === "finalist") {
+    return missingFeederCount > 1
+      ? "Pick both semi-final winners before choosing the final winner."
+      : "The final is waiting for your semi-final picks.";
+  }
+  if (bracketKind === "semifinalist") {
+    return missingFeederCount > 1
+      ? "Pick your quarter-final winners before choosing semi-finals."
+      : "Semi-finals are waiting for your quarter-final picks.";
+  }
+  if (bracketKind === "quarterfinalist") {
+    return missingFeederCount > 1
+      ? "Pick your Round of 16 winners before choosing quarter-finals."
+      : "Quarter-finals are waiting for your Round of 16 picks.";
+  }
+  return "Complete earlier round picks first.";
+}
+
+function missingWaitingUpstreamFeederCount(
+  bracketKind: KnockoutWizardBracketKind,
+  input: BuildKnockoutMatchPickRowsInput,
+): number {
+  if (!usesImmediateUpstreamFeederSavedPick(bracketKind)) return 0;
+  const upstreamKind = upstreamWizardKindForMatchSides(bracketKind);
+  if (!upstreamKind) return 0;
+
+  const rows = buildKnockoutMatchPickRows(input);
+  const incompleteRow = rows.find((r) => r.lockReason === "incomplete");
+  if (!incompleteRow) return 0;
+
+  const upstreamInput = buildInputForBracketKind(input, upstreamKind);
+  const upstreamRows = buildKnockoutMatchPickRows(upstreamInput);
+
+  return upstreamFeederRowsForMatch(
+    incompleteRow,
+    bracketKind,
+    upstreamRows,
+  ).filter((feeder) => {
+    if (feeder.lockReason !== "pickable") return false;
+    return !readSavedUpstreamFeederPick(
+      bracketKind,
+      feeder.matchIndex,
+      input.slots,
+    );
+  }).length;
 }
 
 function isTeamEliminatedFromTournament(
@@ -555,11 +637,31 @@ function classifyImmediateUpstreamFeeder(
     };
   }
 
+  if (feeder.lockReason === "incomplete") {
+    const deeper = explainBlockedKnockoutMatchRow(
+      feeder,
+      upstreamKind,
+      upstreamInput,
+      options,
+    );
+    return {
+      missingFeederMatchNo: deeper.missingFeederMatchNo ?? missingFeederMatchNo,
+      missingFeederLabel: deeper.missingFeederLabel ?? feederMatchup,
+      feederState: deeper.feederState,
+      userAction: deeper.userAction,
+      userFacingCopy: deeper.userFacingCopy,
+    };
+  }
+
+  if (feeder.lockReason !== "pickable") {
+    return null;
+  }
+
   return {
     missingFeederMatchNo,
     missingFeederLabel: feederMatchup,
     feederState: "missing_pick_editable",
-    userAction: "pick_upstream",
+    userAction: "waiting_upstream",
     userFacingCopy: feederMatchup
       ? `Waiting for your ${roundLabel} pick for ${feederMatchup}.`
       : `Waiting for your ${roundLabel} pick.`,
@@ -741,6 +843,70 @@ export function explainBlockedKnockoutMatchRow(
   const upstreamInput = buildInputForBracketKind(input, upstreamKind);
   const upstreamRows = buildKnockoutMatchPickRows(upstreamInput);
 
+  if (usesImmediateUpstreamFeederSavedPick(bracketKind)) {
+    const feederRows = upstreamFeederRowsForMatch(row, bracketKind, upstreamRows);
+    const waitingFeeders: KnockoutMatchPickRow[] = [];
+
+    for (const feeder of feederRows) {
+      const feederExplanation = classifyUnresolvedFeeder(
+        feeder,
+        upstreamKind,
+        bracketKind,
+        upstreamInput,
+        options,
+      );
+      if (!feederExplanation) continue;
+
+      if (feederExplanation.userAction === "waiting_upstream") {
+        waitingFeeders.push(feeder);
+        continue;
+      }
+
+      return {
+        blockedRowMatchNo,
+        ...feederExplanation,
+        userFacingCopy: immediateFeederBlockedUserCopy(
+          row,
+          feeder,
+          bracketKind,
+          upstreamRows,
+          upstreamInput,
+          feederExplanation,
+        ),
+      };
+    }
+
+    if (waitingFeeders.length > 0) {
+      return {
+        blockedRowMatchNo,
+        missingFeederMatchNo:
+          waitingFeeders[0]!.fifaMatchNo > 0
+            ? waitingFeeders[0]!.fifaMatchNo
+            : null,
+        missingFeederLabel: feederMatchupLabel(waitingFeeders[0]!, input.teams),
+        feederState: "missing_pick_editable",
+        userAction: "waiting_upstream",
+        userFacingCopy: waitingUpstreamFeedersCopy(
+          bracketKind,
+          waitingFeeders,
+          input.teams,
+        ),
+      };
+    }
+
+    return {
+      blockedRowMatchNo,
+      missingFeederMatchNo: null,
+      missingFeederLabel: null,
+      feederState: "unknown",
+      userAction: "wait_for_result",
+      userFacingCopy:
+        blockedRowMatchNo > 0
+          ? `M${blockedRowMatchNo} is waiting for an official winner from a previous round.`
+          : "This matchup is waiting for an official winner from a previous round.",
+    };
+  }
+
   for (const feeder of upstreamFeederRowsForMatch(row, bracketKind, upstreamRows)) {
     const feederExplanation = classifyUnresolvedFeeder(
       feeder,
@@ -845,8 +1011,8 @@ function stepGateSummaryFromExplanation(
       }
       if (bracketKind === "finalist") {
         return blockedCount === 1
-          ? "One final path is blocked."
-          : `${blockedCount} final paths are blocked.`;
+          ? "The final is blocked by an earlier bracket-path issue."
+          : "The final is blocked by earlier bracket-path issues.";
       }
       if (bracketKind === "quarterfinalist") {
         return blockedCount === 1
@@ -890,6 +1056,12 @@ export function blockedKnockoutStepGateCopy(
     options,
   );
   if (!explanation) return null;
+  if (explanation.userAction === "waiting_upstream") {
+    return waitingUpstreamStepGateCopy(
+      bracketKind,
+      missingWaitingUpstreamFeederCount(bracketKind, input),
+    );
+  }
   if (incomplete.length === 0) return explanation.userFacingCopy;
   return stepGateSummaryFromExplanation(
     bracketKind,

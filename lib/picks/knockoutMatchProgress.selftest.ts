@@ -875,4 +875,73 @@ function assertStepComplete(
   );
 }
 
+// Final step is waiting (not blocked) when semi-finals are valid but unpicked.
+{
+  const extendedTeams: Team[] = [
+    ...teams,
+    {
+      id: "team-fra",
+      name: "France",
+      countryCode: "FRA",
+      fifaCode: "FRA",
+      fifaRank: 2,
+      fifaRankAsOf: null,
+      createdAt: "",
+      updatedAt: "",
+    },
+    {
+      id: "team-esp",
+      name: "Spain",
+      countryCode: "ESP",
+      fifaCode: "ESP",
+      fifaRank: 7,
+      fifaRankAsOf: null,
+      createdAt: "",
+      updatedAt: "",
+    },
+    {
+      id: "team-arg",
+      name: "Argentina",
+      countryCode: "ARG",
+      fifaCode: "ARG",
+      fifaRank: 1,
+      fifaRankAsOf: null,
+      createdAt: "",
+      updatedAt: "",
+    },
+    {
+      id: "team-eng",
+      name: "England",
+      countryCode: "ENG",
+      fifaCode: "ENG",
+      fifaRank: 4,
+      fifaRankAsOf: null,
+      createdAt: "",
+      updatedAt: "",
+    },
+  ];
+  const slots: KnockoutPickSlotDraft[] = [
+    ...Array.from({ length: 16 }, (_, i) => r16Slot(String(i + 1), "team-ger")),
+    sfSlot("1", "team-fra"),
+    sfSlot("2", "team-esp"),
+    sfSlot("3", "team-arg"),
+    sfSlot("4", "team-eng"),
+  ];
+  const ctx = resolveKnockoutProgressContext({
+    slots,
+    teams: extendedTeams,
+    officialRoundOf32Complete: true,
+  });
+  const finalStatus = getKnockoutStepCompletionFromDraftState("finalist", ctx);
+  assert.strictEqual(finalStatus.kind, "locked_upstream");
+  assert.strictEqual(finalStatus.complete, false);
+
+  const gate = getMissingFeederSummaryForStep("finalist", ctx);
+  assert.match(
+    gate!,
+    /Pick both semi-final winners before choosing the final winner|waiting for your semi-final picks/i,
+  );
+  assert.doesNotMatch(gate!, /blocked by an earlier round pick/i);
+}
+
 console.log("knockoutMatchProgress.selftest.ts: ok");
