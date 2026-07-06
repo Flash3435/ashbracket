@@ -401,6 +401,8 @@ export default async function AdminPoolPicksPage({ params, searchParams }: PageP
                   knockoutBracketPicksUnlocked={knockoutBracketPicksUnlocked}
                   tournamentMatches={tournamentPayload?.matches ?? null}
                   readOnly
+                  adminMode
+                  showIntro={false}
                 />
               )}
             </>

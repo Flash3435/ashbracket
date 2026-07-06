@@ -8,6 +8,7 @@ import type { Team } from "../../src/types/domain";
 import type { TournamentMatchPublicRow } from "../../types/tournamentPublic";
 import { BracketMatchCard } from "./BracketMatchCard";
 import { PosterBracketTracker } from "./PosterBracketTracker";
+import { AdminPosterBracketTracker } from "./admin/AdminPosterBracketTracker";
 import { LockedLaterRoundsPanel } from "./LockedLaterRoundsPanel";
 import { PreRoundOf32BracketBanner } from "../picks/PreRoundOf32BracketBanner";
 
@@ -25,6 +26,8 @@ type Props = {
   readOnly?: boolean;
   /** Hide the built-in section intro when a parent card already provides a heading. */
   showIntro?: boolean;
+  /** Admin participant-picks layout: summary panel, simplified badges, no connector tree. */
+  adminMode?: boolean;
 };
 
 function RoundColumn({
@@ -75,6 +78,7 @@ export function ParticipantBracketView({
   listViewHref = null,
   readOnly = false,
   showIntro = true,
+  adminMode = false,
 }: Props) {
   const bracket = deriveParticipantBracket({
     slots,
@@ -151,7 +155,7 @@ export function ParticipantBracketView({
 
   return (
     <div className="space-y-4">
-      {showIntro ? (
+      {showIntro && !adminMode ? (
         <div>
           <p className="text-xs font-semibold uppercase tracking-wide text-ash-muted">
             Knockout Bracket Tracker
@@ -162,11 +166,19 @@ export function ParticipantBracketView({
           </p>
         </div>
       ) : null}
-      <PosterBracketTracker
-        tracker={liveTracker!}
-        teamById={teamById}
-        matchEditHref={matchEditHref}
-      />
+      {adminMode ? (
+        <AdminPosterBracketTracker
+          tracker={liveTracker!}
+          teamById={teamById}
+          matchEditHref={matchEditHref}
+        />
+      ) : (
+        <PosterBracketTracker
+          tracker={liveTracker!}
+          teamById={teamById}
+          matchEditHref={matchEditHref}
+        />
+      )}
     </div>
   );
 }
