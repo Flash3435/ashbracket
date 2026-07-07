@@ -27,7 +27,23 @@ export const KNOCKOUT_PICK_LOCKED_FEEDER_RESULTS =
   "This pick is locked because feeder match results are official.";
 
 export const KNOCKOUT_MISSING_PICK_PROGRESS_LOCK_HELPER =
-  "This matchup is locked because this part of the bracket was already in progress after official feeder results.";
+  "This pick is locked because no original pick was saved.";
+
+/** Participant copy when a QF/SF/Final winner pick was never saved after feeders resolved. */
+export function knockoutMissingSavedPickBackfillBlockedCopy(
+  resultKind: LaterRoundKnockoutResultKind,
+): string {
+  switch (resultKind) {
+    case "semifinalist":
+      return "No quarter-final winner pick was saved before this matchup was set.";
+    case "finalist":
+      return "No semi-final winner pick was saved before this matchup was set.";
+    case "champion":
+      return "No final winner pick was saved before this matchup was set.";
+    case "quarterfinalist":
+      return "No Round of 16 winner pick was saved before this matchup was set.";
+  }
+}
 
 export const KNOCKOUT_R16_MISSING_PICK_OPEN_UNTIL_KICKOFF =
   "Pick still open until this match kicks off.";
@@ -239,23 +255,53 @@ export function participantHasKnockoutProgressPastStage(
 }
 
 /**
- * Missing later-round winner picks stay open until that match kicks off.
- * Official feeder results fix matchup composition only — they do not freeze
- * the winner pick for a future confirmed matchup.
+ * Missing QF/SF/Final winner picks cannot be backfilled once upstream feeders
+ * have kicked off or published a result. Round of 16 winner picks stay open
+ * until that match kicks off (see {@link KNOCKOUT_R16_MISSING_PICK_OPEN_UNTIL_KICKOFF}).
  */
-export function isLaterRoundKnockoutRowFrozenForMissingBackfill(_input: {
+export function isLaterRoundKnockoutRowFrozenForMissingBackfill(input: {
   resultKind: string;
   slotKey: string | null;
+  savedTeamId?: string | null;
   tournamentMatches?: TournamentMatchPublicRow[] | null;
   gradual: GradualKnockoutSelectionState;
   progressionRows: readonly KnockoutProgressionRowRef[];
+  teams?: Team[];
+  nowMs?: number;
 }): boolean {
-  return false;
+  if (input.resultKind === "quarterfinalist") return false;
+  if (!isLaterRoundKnockoutResultKind(input.resultKind)) return false;
+  if (input.savedTeamId?.trim()) return false;
+
+  const official = resolveOfficialKnockoutSlotMatchupTeamIds({
+    predictionKind: input.resultKind,
+    slotKey: input.slotKey,
+    tournamentMatches: input.tournamentMatches,
+    gradual: input.gradual,
+    teams: input.teams ?? [],
+  });
+  if (!official.homeTeamId?.trim() || !official.awayTeamId?.trim()) {
+    return false;
+  }
+
+  const feeders = resolveFeederMatchesForKnockoutSlot({
+    predictionKind: input.resultKind,
+    slotKey: input.slotKey,
+    tournamentMatches: input.tournamentMatches,
+    gradual: input.gradual,
+  });
+  if (feeders.length === 0) return false;
+
+  const nowMs = input.nowMs ?? Date.now();
+  return feeders.some(
+    (match) =>
+      hasOfficialKnockoutMatchResult(match) || isMatchStarted(match, nowMs),
+  );
 }
 
 /**
- * Freeze a later-round match row for participant UI when the pick is locked out.
- * Winner picks (missing, valid, stale, or path-repaired) stay pickable until kickoff.
+ * Freeze a later-round match row for participant UI when the saved pick is locked
+ * out, or when a missing QF/SF/Final winner pick can no longer be backfilled.
  */
 export function shouldFreezeLaterRoundKnockoutMatchRow(input: {
   resultKind: KnockoutProgressionPredictionKind;
@@ -268,10 +314,13 @@ export function shouldFreezeLaterRoundKnockoutMatchRow(input: {
   tournamentMatches?: TournamentMatchPublicRow[] | null;
   gradual: GradualKnockoutSelectionState;
   progressionRows: readonly KnockoutProgressionRowRef[];
+  teams?: Team[];
+  nowMs?: number;
 }): boolean {
   if (!isLaterRoundKnockoutResultKind(input.resultKind)) return false;
   if (input.pickStatus === "out" && input.savedTeamId?.trim()) return true;
-  return false;
+  if (input.savedTeamId?.trim()) return false;
+  return isLaterRoundKnockoutRowFrozenForMissingBackfill(input);
 }
 
 const LATER_KNOCKOUT_SLOT_STAGES: {
@@ -527,10 +576,28 @@ export function knockoutPickEditBlockedMessage(input: {
   teams?: Team[];
   slots?: readonly KnockoutPickSlotDraft[];
   knockoutBracketPicksUnlocked?: boolean;
+  savedTeamId?: string | null;
+  progressionRows?: readonly KnockoutProgressionRowRef[];
 }): string {
   const rowLabel = knockoutPickEditBlockedRowLabel(input);
   const match = resolveTournamentMatchForKnockoutSlot(input);
   const nowMs = input.nowMs ?? Date.now();
+  if (
+    !input.savedTeamId?.trim() &&
+    isLaterRoundKnockoutResultKind(input.predictionKind) &&
+    isLaterRoundKnockoutRowFrozenForMissingBackfill({
+      resultKind: input.predictionKind,
+      slotKey: input.slotKey,
+      savedTeamId: input.savedTeamId,
+      tournamentMatches: input.tournamentMatches,
+      gradual: input.gradual,
+      progressionRows: input.progressionRows ?? input.slots ?? [],
+      teams: input.teams,
+      nowMs,
+    })
+  ) {
+    return `${rowLabel}: ${knockoutMissingSavedPickBackfillBlockedCopy(input.predictionKind)}`;
+  }
   if (match && hasOfficialKnockoutMatchResult(match)) {
     return `${rowLabel}: ${KNOCKOUT_PICK_LOCKED_OFFICIAL_RESULT}`;
   }
@@ -604,6 +671,21 @@ export function isKnockoutPickEditableForParticipant(input: {
 
   if (input.savedTeamId?.trim()) return false;
 
+  if (
+    isLaterRoundKnockoutRowFrozenForMissingBackfill({
+      resultKind: input.predictionKind,
+      slotKey: input.slotKey,
+      savedTeamId: input.savedTeamId,
+      tournamentMatches: input.tournamentMatches,
+      gradual: input.gradual,
+      progressionRows: input.progressionRows ?? [],
+      teams: input.teams,
+      nowMs,
+    })
+  ) {
+    return false;
+  }
+
   return true;
 }
 
@@ -660,6 +742,21 @@ export function isKnockoutPickFrozenForParticipant(input: {
   if (input.pickStatus === "out" && input.savedTeamId?.trim()) return true;
 
   if (input.savedTeamId?.trim()) return true;
+
+  if (
+    isLaterRoundKnockoutRowFrozenForMissingBackfill({
+      resultKind: input.predictionKind,
+      slotKey: input.slotKey,
+      savedTeamId: input.savedTeamId,
+      tournamentMatches: input.tournamentMatches,
+      gradual: input.gradual,
+      progressionRows: input.progressionRows ?? [],
+      teams: input.teams,
+      nowMs,
+    })
+  ) {
+    return true;
+  }
 
   return false;
 }

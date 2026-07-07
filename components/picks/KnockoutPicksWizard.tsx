@@ -1420,6 +1420,8 @@ export function KnockoutPicksWizard({
         gradual: gradualKnockout,
         fullRoundOf32Official: knockoutBracketPicksUnlocked,
         savedTeamId: row.teamId,
+        pickStatus: row.pickStatus ?? null,
+        teams,
         progressionRows: slots,
       });
     }

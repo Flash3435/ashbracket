@@ -211,4 +211,18 @@ const gradual = {
   );
 }
 
+// M99: missing semifinalist pick — blocked once official matchup is set.
+{
+  const evaluation = evaluateMatchSlotSavedPick({
+    wizardKind: "quarterfinalist",
+    matchIndex: 2,
+    slots: [],
+    teams,
+    tournamentMatches,
+    gradual,
+    knockoutBracketPicksUnlocked: true,
+  });
+  assert.strictEqual(evaluation?.status, "missing");
+}
+
 console.log("knockoutStrictBracketPath.selftest.ts: ok");

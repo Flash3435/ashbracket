@@ -2342,7 +2342,7 @@ const existing: Prediction[] = [
     );
   }
 
-  // 2. Missing M99 pick — participant may still pick before kickoff when deadline allows.
+  // 2. Missing M99 pick — locked after feeders resolve; no backfill on official matchup.
   {
     const rows = buildKnockoutMatchPickRows({
       ...m99RowInput,
@@ -2350,11 +2350,11 @@ const existing: Prediction[] = [
     });
     const m99 = rows.find((r) => r.fifaMatchNo === 99)!;
     assert.strictEqual(m99.winnerTeamId, "");
-    assert.strictEqual(m99.lockReason, "pickable");
-    assert.strictEqual(isKnockoutMatchDirectPickEligible(m99), true);
-    assert.strictEqual(
-      m99.display.statusLine,
-      KNOCKOUT_R16_MISSING_PICK_OPEN_UNTIL_KICKOFF,
+    assert.strictEqual(m99.lockReason, "frozen");
+    assert.strictEqual(isKnockoutMatchDirectPickEligible(m99), false);
+    assert.match(
+      m99.display.statusLine!,
+      /No quarter-final winner pick was saved before this matchup was set/i,
     );
     assert.strictEqual(
       isKnockoutPickEditableForParticipant({
@@ -2364,11 +2364,12 @@ const existing: Prediction[] = [
         gradual: m99Gradual,
         fullRoundOf32Official: true,
         savedTeamId: "",
+        teams: m99Teams,
         progressionRows: missingM99Slots,
         nowMs: m99NowMs,
       }),
-      true,
-      "missing M99 pick stays editable before kickoff",
+      false,
+      "missing M99 pick is not editable after feeders resolve",
     );
     assert.strictEqual(
       isKnockoutPickFrozenForParticipant({
@@ -2377,12 +2378,13 @@ const existing: Prediction[] = [
         tournamentMatches: m99Matches,
         gradual: m99Gradual,
         savedTeamId: "",
+        teams: m99Teams,
         progressionRows: missingM99Slots,
         nowMs: m99NowMs,
       }),
-      false,
+      true,
     );
-    const firstPickOk = applyGradualKnockoutPickSaveGuards({
+    const firstPickBlocked = applyGradualKnockoutPickSaveGuards({
       incoming: [
         {
           predictionKind: "semifinalist",
@@ -2399,12 +2401,9 @@ const existing: Prediction[] = [
       fullRoundOf32Official: true,
       nowMs: m99NowMs,
     });
-    assert.strictEqual(firstPickOk.error, null, "server allows first M99 pick");
-    assert.strictEqual(
-      firstPickOk.slots.find(
-        (s) => s.predictionKind === "semifinalist" && s.slotKey === "3",
-      )?.teamId,
-      "team-nor",
+    assert.ok(
+      firstPickBlocked.error,
+      "server rejects first M99 pick after feeders resolve",
     );
     assert.strictEqual(
       validateKnockoutParticipantPickChanges({
@@ -2422,10 +2421,11 @@ const existing: Prediction[] = [
         matches: m99Matches,
         gradual: m99Gradual,
         fullRoundOf32Official: true,
+        teams: m99Teams,
         nowMs: m99NowMs,
       }),
-      null,
-      "server allows choosing either side on missing M99 pick",
+      firstPickBlocked.error,
+      "server rejects choosing either side on missing M99 pick after feeders resolve",
     );
   }
 

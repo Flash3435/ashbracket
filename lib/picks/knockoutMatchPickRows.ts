@@ -16,11 +16,14 @@ import {
 import {
   isKnockoutMatchLockedForParticipant,
   isKnockoutSlotFrozenByOfficialFeeders,
+  isLaterRoundKnockoutResultKind,
   isValidSavedPickForMatchup,
+  knockoutMissingSavedPickBackfillBlockedCopy,
   KNOCKOUT_MISSING_PICK_AFTER_KICKOFF,
   KNOCKOUT_MISSING_PICK_PROGRESS_LOCK_HELPER,
   KNOCKOUT_R16_MISSING_PICK_OPEN_UNTIL_KICKOFF,
   shouldFreezeLaterRoundKnockoutMatchRow,
+  type LaterRoundKnockoutResultKind,
 } from "./knockoutPickEditability";
 import { isMatchStarted } from "./knockoutSelectionWindow";
 import {
@@ -671,7 +674,13 @@ export function knockoutMatchSavedPickPresentation(
     row.lockReason === "frozen" &&
     !savedPickWarning
   ) {
-    savedPickWarning = KNOCKOUT_MISSING_PICK_PROGRESS_LOCK_HELPER;
+    savedPickWarning =
+      isLaterRoundKnockoutResultKind(row.savePredictionKind) &&
+      row.savePredictionKind !== "quarterfinalist"
+        ? knockoutMissingSavedPickBackfillBlockedCopy(
+            row.savePredictionKind as LaterRoundKnockoutResultKind,
+          )
+        : KNOCKOUT_MISSING_PICK_PROGRESS_LOCK_HELPER;
   }
 
   return {
@@ -1225,10 +1234,18 @@ export function buildKnockoutMatchPickRows(
         tournamentMatches: input.tournamentMatches,
         gradual,
         progressionRows: input.slots,
+        teams: input.teams,
+        nowMs,
       })
     ) {
       lockReason = "frozen";
     }
+
+    const missingBackfillBlocked =
+      lockReason === "frozen" &&
+      !winnerTeamId.trim() &&
+      isLaterRoundKnockoutResultKind(def.resultKind) &&
+      def.resultKind !== "quarterfinalist";
 
     const homeName = teamName(homeTeamId, input.teams);
     const awayName = teamName(awayTeamId, input.teams);
@@ -1332,7 +1349,14 @@ export function buildKnockoutMatchPickRows(
             statusLine: matchSlotStatusMessage,
             emptyPrimaryLine: matchupLineForRow ?? matchSlotStatusMessage,
           }
-        : displayWithPartialMatchup;
+        : missingBackfillBlocked
+          ? {
+              ...displayWithPartialMatchup,
+              statusLine: knockoutMissingSavedPickBackfillBlockedCopy(
+                def.resultKind as LaterRoundKnockoutResultKind,
+              ),
+            }
+          : displayWithPartialMatchup;
 
     return {
       matchIndex,
@@ -1508,6 +1532,15 @@ export function validateKnockoutLaterMatchPick(
     return "This match has already kicked off and can no longer be edited.";
   }
   if (row.lockReason === "frozen") {
+    if (
+      !row.winnerTeamId.trim() &&
+      isLaterRoundKnockoutResultKind(row.savePredictionKind) &&
+      row.savePredictionKind !== "quarterfinalist"
+    ) {
+      return knockoutMissingSavedPickBackfillBlockedCopy(
+        row.savePredictionKind as LaterRoundKnockoutResultKind,
+      );
+    }
     return "This pick is locked because feeder match results are official.";
   }
   if (teamId !== row.homeTeamId && teamId !== row.awayTeamId) {

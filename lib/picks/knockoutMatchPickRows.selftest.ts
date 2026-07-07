@@ -22,7 +22,10 @@ import {
   blockedKnockoutRowUserCopy,
   blockedKnockoutStepGateCopy,
 } from "./knockoutBlockedRowExplanation";
-import { KNOCKOUT_R16_MISSING_PICK_OPEN_UNTIL_KICKOFF } from "./knockoutPickEditability";
+import {
+  isKnockoutPickEditableForParticipant,
+  KNOCKOUT_R16_MISSING_PICK_OPEN_UNTIL_KICKOFF,
+} from "./knockoutPickEditability";
 import {
   getKnockoutStepCompletionFromDraftState,
   resolveKnockoutProgressContext,
@@ -3092,7 +3095,7 @@ function r32Side(slotKey: string, teamId = ""): KnockoutPickSlotDraft {
   assert.strictEqual(validatedKnockoutMatchWinner(finishedLoserRow), null);
 }
 
-// M99 match-slot saved pick: live Norway locks row; missing stays pickable; Mexico is out.
+// M99 match-slot saved pick: live Norway locks row; missing frozen after feeders; Mexico is out.
 {
   const norEngTeams: Team[] = [
     ...teams,
@@ -3112,6 +3115,16 @@ function r32Side(slotKey: string, teamId = ""): KnockoutPickSlotDraft {
       countryCode: "ENG",
       fifaCode: "ENG",
       fifaRank: 4,
+      fifaRankAsOf: null,
+      createdAt: "",
+      updatedAt: "",
+    },
+    {
+      id: "team-mex",
+      name: "Mexico",
+      countryCode: "MEX",
+      fifaCode: "MEX",
+      fifaRank: 14,
       fifaRankAsOf: null,
       createdAt: "",
       updatedAt: "",
@@ -3285,7 +3298,7 @@ function r32Side(slotKey: string, teamId = ""): KnockoutPickSlotDraft {
   const missingPickSlots: KnockoutPickSlotDraft[] = [
     ...baseR16,
     qfSlot("3", "team-nor"),
-    qfSlot("4", "team-eng"),
+    qfSlot("4", "team-mex"),
     qfSlot("7", "team-arg"),
     qfSlot("8", "team-fra"),
     sfSlot("1", "team-ger"),
@@ -3306,22 +3319,96 @@ function r32Side(slotKey: string, teamId = ""): KnockoutPickSlotDraft {
   const m100 = qfRows.find((r) => r.fifaMatchNo === 100)!;
   assert.strictEqual(m99.homeTeamId, "team-nor");
   assert.strictEqual(m99.awayTeamId, "team-eng");
-  assert.strictEqual(m99.lockReason, "pickable");
-  assert.strictEqual(isKnockoutMatchDirectPickEligible(m99), true);
+  assert.strictEqual(m99.lockReason, "frozen");
+  assert.strictEqual(isKnockoutMatchDirectPickEligible(m99), false);
   assert.strictEqual(validatedKnockoutMatchWinner(m99), null);
-  const m99Presentation = knockoutMatchSavedPickPresentation(m99, allTeams);
+  const m99Presentation = knockoutMatchSavedPickPresentation(m99, norEngTeams);
   assert.strictEqual(m99Presentation.savedPickStatus, "missing");
-  assert.strictEqual(m99Presentation.lockStatusLine, null);
+  assert.match(
+    m99Presentation.savedPickWarning!,
+    /No quarter-final winner pick was saved before this matchup was set/i,
+  );
+  assert.match(
+    m99.display.statusLine!,
+    /No quarter-final winner pick was saved before this matchup was set/i,
+  );
   assert.ok(
-    !m99Presentation.savedPickWarning?.includes(
-      "already in progress after official feeder results",
-    ),
+    !m99.display.statusLine?.includes(KNOCKOUT_R16_MISSING_PICK_OPEN_UNTIL_KICKOFF),
+  );
+  const m99Gate = blockedKnockoutStepGateCopy("quarterfinalist", qfInput);
+  assert.ok(
+    !m99Gate?.match(/Pick a winner for Norway vs England first/i),
+    m99Gate ?? "gate must not prompt for M99 first pick",
   );
   assert.strictEqual(
-    m99.display.statusLine,
-    KNOCKOUT_R16_MISSING_PICK_OPEN_UNTIL_KICKOFF,
+    isKnockoutPickEditableForParticipant({
+      predictionKind: "semifinalist",
+      slotKey: "3",
+      tournamentMatches,
+      gradual: getGradualKnockoutSelectionState({
+        matches: tournamentMatches,
+        teams: norEngTeams,
+        nowMs: qfNowMs,
+        fullRoundOf32Official: true,
+      }),
+      fullRoundOf32Official: true,
+      savedTeamId: "",
+      teams: norEngTeams,
+      progressionRows: missingPickSlots,
+      nowMs: qfNowMs,
+    }),
+    false,
   );
-  assert.strictEqual(m100.lockReason, "pickable");
+  const saveNorwayErr = validateKnockoutParticipantPickChanges({
+    incoming: [
+      {
+        predictionKind: "semifinalist",
+        tournamentStageId: "sf",
+        slotKey: "3",
+        groupCode: null,
+        bonusKey: null,
+        teamId: "team-nor",
+      },
+    ],
+    existing: [],
+    matches: tournamentMatches,
+    gradual: getGradualKnockoutSelectionState({
+      matches: tournamentMatches,
+      teams: norEngTeams,
+      nowMs: qfNowMs,
+      fullRoundOf32Official: true,
+    }),
+    fullRoundOf32Official: true,
+    teams: norEngTeams,
+    nowMs: qfNowMs,
+  });
+  assert.ok(saveNorwayErr, "server rejects backfill for missing M99 pick");
+  const saveEnglandErr = validateKnockoutParticipantPickChanges({
+    incoming: [
+      {
+        predictionKind: "semifinalist",
+        tournamentStageId: "sf",
+        slotKey: "3",
+        groupCode: null,
+        bonusKey: null,
+        teamId: "team-eng",
+      },
+    ],
+    existing: [],
+    matches: tournamentMatches,
+    gradual: getGradualKnockoutSelectionState({
+      matches: tournamentMatches,
+      teams: norEngTeams,
+      nowMs: qfNowMs,
+      fullRoundOf32Official: true,
+    }),
+    fullRoundOf32Official: true,
+    teams: norEngTeams,
+    nowMs: qfNowMs,
+  });
+  assert.ok(saveEnglandErr, "server rejects England backfill for missing M99");
+  assert.strictEqual(m100.winnerTeamId, "");
+  assert.strictEqual(m100.lockReason, "frozen");
 
   // Saved M99 winner (semifinalist slot 3) with wrong upstream QF feeder path (Mexico not England).
   const savedNorwayOverMexicoSlots = [
@@ -3333,19 +3420,7 @@ function r32Side(slotKey: string, teamId = ""): KnockoutPickSlotDraft {
   const savedNorwayInput = {
     ...qfInput,
     slots: savedNorwayOverMexicoSlots,
-    teams: [
-      ...allTeams,
-      {
-        id: "team-mex",
-        name: "Mexico",
-        countryCode: "MEX",
-        fifaCode: "MEX",
-        fifaRank: 14,
-        fifaRankAsOf: null,
-        createdAt: "",
-        updatedAt: "",
-      },
-    ],
+    teams: norEngTeams,
   };
   const savedNorwayRows = buildKnockoutMatchPickRows(savedNorwayInput);
   const savedNorwayM99 = savedNorwayRows.find((r) => r.fifaMatchNo === 99)!;
@@ -3423,19 +3498,7 @@ function r32Side(slotKey: string, teamId = ""): KnockoutPickSlotDraft {
   const staleMexicoRows = buildKnockoutMatchPickRows({
     ...qfInput,
     slots: staleMexicoSlots,
-    teams: [
-      ...allTeams,
-      {
-        id: "team-mex",
-        name: "Mexico",
-        countryCode: "MEX",
-        fifaCode: "MEX",
-        fifaRank: 14,
-        fifaRankAsOf: null,
-        createdAt: "",
-        updatedAt: "",
-      },
-    ],
+    teams: norEngTeams,
   });
   const staleMexicoM99 = staleMexicoRows.find((r) => r.fifaMatchNo === 99)!;
   assert.strictEqual(staleMexicoM99.lockReason, "frozen");
@@ -3463,6 +3526,134 @@ function r32Side(slotKey: string, teamId = ""): KnockoutPickSlotDraft {
   assert.strictEqual(
     startedM99.display.statusLine,
     "Locked at kickoff",
+  );
+
+  // D. Missing M99 before feeders resolve — still editable; save allowed.
+  const preFeederMatches: TournamentMatchPublicRow[] = [
+    {
+      match_id: "m91",
+      edition_id: "ed",
+      edition_code: "2026",
+      match_code: "M91",
+      stage_code: "round_of_16",
+      stage_label: "Round of 16",
+      stage_sort_order: 3,
+      group_code: null,
+      round_index: 0,
+      kickoff_at: "2026-07-10T18:00:00Z",
+      status: "scheduled",
+      home_goals: null,
+      away_goals: null,
+      home_penalties: null,
+      away_penalties: null,
+      home_team_name: "Norway",
+      home_country_code: "NOR",
+      away_team_name: "Colombia",
+      away_country_code: "COL",
+      winner_team_name: null,
+      winner_country_code: null,
+    },
+    {
+      match_id: "m92",
+      edition_id: "ed",
+      edition_code: "2026",
+      match_code: "M92",
+      stage_code: "round_of_16",
+      stage_label: "Round of 16",
+      stage_sort_order: 3,
+      group_code: null,
+      round_index: 0,
+      kickoff_at: "2026-07-10T20:00:00Z",
+      status: "scheduled",
+      home_goals: null,
+      away_goals: null,
+      home_penalties: null,
+      away_penalties: null,
+      home_team_name: "Spain",
+      home_country_code: "ESP",
+      away_team_name: "England",
+      away_country_code: "ENG",
+      winner_team_name: null,
+      winner_country_code: null,
+    },
+    {
+      match_id: "m99",
+      edition_id: "ed",
+      edition_code: "2026",
+      match_code: "M99",
+      stage_code: "quarterfinal",
+      stage_label: "Quarter-finals",
+      stage_sort_order: 4,
+      group_code: null,
+      round_index: 0,
+      kickoff_at: "2026-07-11T18:00:00Z",
+      status: "scheduled",
+      home_goals: null,
+      away_goals: null,
+      home_penalties: null,
+      away_penalties: null,
+      home_team_name: null,
+      home_country_code: null,
+      away_team_name: null,
+      away_country_code: null,
+      winner_team_name: null,
+      winner_country_code: null,
+    },
+  ];
+  const preFeederNowMs = new Date("2026-07-04T12:00:00Z").getTime();
+  const preFeederGradual = getGradualKnockoutSelectionState({
+    matches: preFeederMatches,
+    teams: norEngTeams,
+    nowMs: preFeederNowMs,
+    fullRoundOf32Official: true,
+  });
+  const preFeederSlots: KnockoutPickSlotDraft[] = [
+    ...baseR16,
+    qfSlot("3", "team-nor"),
+    qfSlot("4", "team-mex"),
+  ];
+  assert.strictEqual(
+    isKnockoutPickEditableForParticipant({
+      predictionKind: "semifinalist",
+      slotKey: "3",
+      tournamentMatches: preFeederMatches,
+      gradual: preFeederGradual,
+      fullRoundOf32Official: true,
+      savedTeamId: "",
+      teams: norEngTeams,
+      progressionRows: preFeederSlots,
+      nowMs: preFeederNowMs,
+    }),
+    true,
+    "missing M99 stays editable before feeders kick off",
+  );
+  const preFeederSave = applyGradualKnockoutPickSaveGuards({
+    incoming: [
+      {
+        predictionKind: "semifinalist",
+        tournamentStageId: "sf",
+        slotKey: "3",
+        groupCode: null,
+        bonusKey: null,
+        teamId: "team-nor",
+      },
+    ],
+    existing: [],
+    teams: norEngTeams,
+    matches: preFeederMatches,
+    fullRoundOf32Official: true,
+    nowMs: preFeederNowMs,
+  });
+  assert.strictEqual(
+    preFeederSave.error,
+    null,
+    "allows first M99 pick before feeders resolve",
+  );
+  assert.strictEqual(
+    preFeederSave.slots.find(
+      (s) => s.predictionKind === "semifinalist" && s.slotKey === "3",
+    )?.teamId,
+    "team-nor",
   );
 }
 

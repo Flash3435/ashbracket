@@ -13,6 +13,9 @@ import {
 import {
   hasOfficialKnockoutMatchResult,
   isKnockoutPickFrozenForParticipant,
+  isLaterRoundKnockoutResultKind,
+  isLaterRoundKnockoutRowFrozenForMissingBackfill,
+  knockoutMissingSavedPickBackfillBlockedCopy,
   knockoutPickEditBlockedMessage,
 } from "../picks/knockoutPickEditability";
 import { pickStatusFromPrediction } from "./knockoutPickStatus";
@@ -113,7 +116,7 @@ function mergedSlotsAsDrafts(
   }));
 }
 
-function validateStrictBracketKnockoutPickChanges(_input: {
+function validateStrictBracketKnockoutPickChanges(input: {
   incoming: ParticipantPickSlotPayload[];
   existing: Prediction[];
   matches: TournamentMatchPublicRow[];
@@ -121,6 +124,34 @@ function validateStrictBracketKnockoutPickChanges(_input: {
   teams?: Team[];
   nowMs?: number;
 }): string | null {
+  const priorByKey = existingTeamIdByKey(input.existing);
+  for (const slot of input.incoming) {
+    if (!isLaterRoundKnockoutResultKind(slot.predictionKind)) continue;
+    if (slot.predictionKind === "quarterfinalist") continue;
+    const incomingId = slot.teamId.trim();
+    if (!incomingId) continue;
+    const k = progressionKey({
+      predictionKind: slot.predictionKind,
+      tournamentStageId: slot.tournamentStageId,
+      slotKey: slot.slotKey,
+    });
+    const keep = priorByKey.get(k) ?? "";
+    if (keep) continue;
+    if (
+      isLaterRoundKnockoutRowFrozenForMissingBackfill({
+        resultKind: slot.predictionKind,
+        slotKey: slot.slotKey,
+        savedTeamId: keep,
+        tournamentMatches: input.matches,
+        gradual: input.gradual,
+        progressionRows: input.existing,
+        teams: input.teams,
+        nowMs: input.nowMs,
+      })
+    ) {
+      return knockoutMissingSavedPickBackfillBlockedCopy(slot.predictionKind);
+    }
+  }
   return null;
 }
 
@@ -232,6 +263,9 @@ export function validateFrozenKnockoutSwapAttempts(input: {
       tournamentMatches: input.matches,
       gradual: input.gradual,
       nowMs: input.nowMs,
+      savedTeamId: keep,
+      progressionRows: input.existing,
+      teams: input.teams,
     });
   }
   return null;
@@ -334,6 +368,8 @@ export function validateKnockoutParticipantPickChanges(input: {
       teams: input.teams,
       knockoutBracketPicksUnlocked: input.fullRoundOf32Official,
       nowMs: input.nowMs,
+      savedTeamId: keep,
+      progressionRows: input.existing,
     });
   }
   return null;
