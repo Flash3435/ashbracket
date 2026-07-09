@@ -3321,16 +3321,18 @@ function r32Side(slotKey: string, teamId = ""): KnockoutPickSlotDraft {
   assert.strictEqual(m99.awayTeamId, "team-eng");
   assert.strictEqual(m99.lockReason, "frozen");
   assert.strictEqual(isKnockoutMatchDirectPickEligible(m99), false);
-  assert.strictEqual(validatedKnockoutMatchWinner(m99), null);
+  assert.strictEqual(validatedKnockoutMatchWinner(m99), "team-nor");
+  assert.strictEqual(m99.autoCarriedPick?.status, "inferred_live");
   const m99Presentation = knockoutMatchSavedPickPresentation(m99, norEngTeams);
-  assert.strictEqual(m99Presentation.savedPickStatus, "missing");
+  assert.strictEqual(m99Presentation.savedPickStatus, "auto_carried");
+  assert.match(m99Presentation.savedPickSummaryLine, /Auto-carried pick: Norway/i);
   assert.match(
     m99Presentation.savedPickWarning!,
-    /No quarter-final winner pick was saved before this matchup was set/i,
+    /only surviving original pick in this match/i,
   );
   assert.match(
     m99.display.statusLine!,
-    /No quarter-final winner pick was saved before this matchup was set/i,
+    /only surviving original pick in this match/i,
   );
   assert.ok(
     !m99.display.statusLine?.includes(KNOCKOUT_R16_MISSING_PICK_OPEN_UNTIL_KICKOFF),
@@ -3523,9 +3525,10 @@ function r32Side(slotKey: string, teamId = ""): KnockoutPickSlotDraft {
   });
   const startedM99 = startedRows.find((r) => r.fifaMatchNo === 99)!;
   assert.strictEqual(startedM99.lockReason, "started");
-  assert.strictEqual(
-    startedM99.display.statusLine,
-    "Locked at kickoff",
+  assert.strictEqual(validatedKnockoutMatchWinner(startedM99), "team-nor");
+  assert.match(
+    startedM99.display.statusLine!,
+    /only surviving original pick in this match/i,
   );
 
   // D. Missing M99 before feeders resolve — still editable; save allowed.

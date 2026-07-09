@@ -14,6 +14,7 @@ export type AdminTeamStatusBadgeTone =
   | "picked"
   | "picked_advanced"
   | "picked_out"
+  | "auto_carried"
   | "advanced"
   | "eliminated"
   | "not_picked"
@@ -34,6 +35,7 @@ export type AdminParticipantPicksSummary = {
   championStatus: "saved" | "missing" | "unreachable";
   finalPicks: string[];
   livePicks: string[];
+  autoCarriedPicks: string[];
   eliminatedPicks: string[];
   missingSlots: string[];
   stalePicks: string[];
@@ -58,6 +60,7 @@ function sideIsParticipantPick(side: LiveBracketSide): boolean {
   return (
     side.participantPick === "your_pick" ||
     side.participantPick === "your_pick_alive" ||
+    side.participantPick === "your_pick_auto_carried" ||
     side.participantPick === "your_pick_eliminated" ||
     side.participantPick === "your_pick_wrong_path"
   );
@@ -75,10 +78,14 @@ export function resolveAdminTeamStatusBadge(side: LiveBracketSide): AdminTeamSta
   const picked =
     side.participantPick === "your_pick" ||
     side.participantPick === "your_pick_alive" ||
+    side.participantPick === "your_pick_auto_carried" ||
     side.participantPick === "your_pick_eliminated" ||
     side.participantPick === "your_pick_wrong_path";
 
   if (picked) {
+    if (side.participantPick === "your_pick_auto_carried") {
+      return { label: "Auto-carried", tone: "auto_carried" };
+    }
     if (
       side.participantPick === "your_pick_eliminated" ||
       side.participantPick === "your_pick_wrong_path"
@@ -124,6 +131,14 @@ export function resolveAdminMatchOutcomeSummary(
       return { text: `No pick saved · ${advancerName} advanced`, tone: "muted" };
     }
     return { text: "No pick saved", tone: "muted" };
+  }
+
+  if (match.isAutoCarriedPick) {
+    const pickName = teamName(pickId, teamById);
+    return {
+      text: pickName ? `Auto-carried pick: ${pickName}` : "Auto-carried pick",
+      tone: "neutral",
+    };
   }
 
   if (match.status !== "finished") {
@@ -189,6 +204,7 @@ export function buildAdminParticipantPicksSummary(
   ];
 
   const livePicks = new Set<string>();
+  const autoCarriedPicks = new Set<string>();
   const eliminatedPicks = new Set<string>();
   const stalePicks = new Set<string>();
   const missingSlots: string[] = [];
@@ -206,6 +222,10 @@ export function buildAdminParticipantPicksSummary(
     if (match.participantPickedWinnerId) {
       const pickName = teamName(match.participantPickedWinnerId, teamById);
       if (pickName) {
+        if (match.isAutoCarriedPick) {
+          autoCarriedPicks.add(pickName);
+          continue;
+        }
         const pickSide = [match.home, match.away].find((s) => sideIsParticipantPick(s));
         if (pickSide?.participantPick === "your_pick_wrong_path") {
           stalePicks.add(pickName);
@@ -258,6 +278,7 @@ export function buildAdminParticipantPicksSummary(
     championStatus,
     finalPicks,
     livePicks: [...livePicks].sort(),
+    autoCarriedPicks: [...autoCarriedPicks].sort(),
     eliminatedPicks: [...eliminatedPicks].sort(),
     missingSlots,
     stalePicks: [...stalePicks].sort(),
@@ -272,6 +293,8 @@ export function adminBadgeToneClassName(tone: AdminTeamStatusBadgeTone): string 
       return "bg-emerald-950/50 text-emerald-200 ring-emerald-800/50";
     case "picked_out":
       return "bg-red-950/50 text-red-200 ring-red-900/40";
+    case "auto_carried":
+      return "bg-sky-950/50 text-sky-200 ring-sky-900/40";
     case "advanced":
       return "bg-emerald-950/35 text-emerald-200/90 ring-emerald-800/40";
     case "eliminated":

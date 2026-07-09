@@ -35,6 +35,10 @@ import {
   evaluateMatchSlotSavedPick,
   matchSlotSavedPickStatusCopy,
 } from "./knockoutStrictBracketPath";
+import {
+  inferAutoCarriedMatchSlotPick,
+  type AutoCarriedMatchSlotPickResult,
+} from "./inferAutoCarriedMatchSlotPick";
 
 export type KnockoutWizardBracketKind =
   | "round_of_16"
@@ -61,6 +65,8 @@ export type KnockoutMatchPickRow = {
   lockReason: KnockoutMatchLockReason;
   /** Published fixture winner for this match, when known. */
   officialWinnerTeamId?: string | null;
+  /** Presentation/scoring-time inference when no winner was saved for this slot. */
+  autoCarriedPick?: AutoCarriedMatchSlotPickResult | null;
   display: R32SlotRowDisplay;
   kickoffIso: string | null;
 };
@@ -563,20 +569,51 @@ export function savedPickIsStaleForKnockoutRow(
   return Boolean(official && official !== saved);
 }
 
+function effectiveKnockoutMatchWinnerTeamId(
+  row: Pick<
+    KnockoutMatchPickRow,
+    | "winnerTeamId"
+    | "homeTeamId"
+    | "awayTeamId"
+    | "officialWinnerTeamId"
+    | "autoCarriedPick"
+  >,
+): string | null {
+  const saved = row.winnerTeamId.trim();
+  if (saved) return saved;
+  if (row.autoCarriedPick?.status === "inferred_live") {
+    return row.autoCarriedPick.inferredTeamId;
+  }
+  return null;
+}
+
 /** Winner pick counts only when it matches that row's official matchup. */
 export function validatedKnockoutMatchWinner(
   row: KnockoutMatchPickRow | undefined,
 ): string | null {
   if (!row) return null;
-  if (savedPickIsStaleForKnockoutRow(row)) return null;
-  const w = row.winnerTeamId.trim();
+  const w = effectiveKnockoutMatchWinnerTeamId(row);
   if (!w) return null;
+  if (
+    savedPickIsStaleForKnockoutRow({
+      winnerTeamId: w,
+      homeTeamId: row.homeTeamId,
+      awayTeamId: row.awayTeamId,
+      officialWinnerTeamId: row.officialWinnerTeamId,
+    })
+  ) {
+    return null;
+  }
   if (row.homeTeamId?.trim() === w) return w;
   if (row.awayTeamId?.trim() === w) return w;
   return null;
 }
 
-export type KnockoutMatchSavedPickStatus = "valid" | "missing" | "stale";
+export type KnockoutMatchSavedPickStatus =
+  | "valid"
+  | "missing"
+  | "stale"
+  | "auto_carried";
 
 export type KnockoutMatchSavedPickPresentation = {
   savedPickTeamId: string | null;
@@ -620,15 +657,29 @@ export function knockoutMatchSavedPickPresentation(
   row: KnockoutMatchPickRow,
   teams: Team[],
 ): KnockoutMatchSavedPickPresentation {
-  const savedPickTeamId = row.winnerTeamId.trim() || null;
+  const persistedPickTeamId = row.winnerTeamId.trim() || null;
+  const autoCarried =
+    !persistedPickTeamId && row.autoCarriedPick?.status === "inferred_live"
+      ? row.autoCarriedPick
+      : null;
+  const savedPickTeamId =
+    persistedPickTeamId ?? autoCarried?.inferredTeamId ?? null;
   const savedPickLabel = savedPickTeamId
     ? teamName(savedPickTeamId, teams)
     : null;
   const rowPickValid =
-    Boolean(savedPickTeamId) && !savedPickIsStaleForKnockoutRow(row);
+    Boolean(savedPickTeamId) &&
+    !savedPickIsStaleForKnockoutRow({
+      winnerTeamId: savedPickTeamId ?? "",
+      homeTeamId: row.homeTeamId,
+      awayTeamId: row.awayTeamId,
+      officialWinnerTeamId: row.officialWinnerTeamId,
+    });
 
   let savedPickStatus: KnockoutMatchSavedPickStatus;
-  if (!savedPickTeamId) {
+  if (autoCarried) {
+    savedPickStatus = rowPickValid ? "auto_carried" : "stale";
+  } else if (!savedPickTeamId) {
     savedPickStatus = "missing";
   } else if (rowPickValid) {
     savedPickStatus = "valid";
@@ -637,13 +688,15 @@ export function knockoutMatchSavedPickPresentation(
   }
 
   const savedPickSummaryLine =
-    savedPickStatus === "missing"
-      ? row.lockReason === "started"
-        ? KNOCKOUT_MISSING_PICK_AFTER_KICKOFF
-        : "No pick saved"
-      : savedPickStatus === "stale" && row.lockReason === "pickable"
-        ? `Previous saved pick: ${savedPickLabel ?? savedPickTeamId}`
-        : `Saved pick: ${savedPickLabel ?? savedPickTeamId}`;
+    savedPickStatus === "auto_carried"
+      ? autoCarried!.summaryCopy
+      : savedPickStatus === "missing"
+        ? row.lockReason === "started"
+          ? KNOCKOUT_MISSING_PICK_AFTER_KICKOFF
+          : "No pick saved"
+        : savedPickStatus === "stale" && row.lockReason === "pickable"
+          ? `Previous saved pick: ${savedPickLabel ?? savedPickTeamId}`
+          : `Saved pick: ${savedPickLabel ?? savedPickTeamId}`;
 
   let savedPickWarning: string | null = null;
   if (savedPickStatus === "stale") {
@@ -669,7 +722,10 @@ export function knockoutMatchSavedPickPresentation(
     lockStatusLine = `Pick still alive: ${savedPickLabel ?? savedPickTeamId}`;
   }
 
-  if (
+  if (savedPickStatus === "auto_carried") {
+    savedPickWarning = autoCarried!.detailCopy;
+    lockStatusLine = "This pick is locked.";
+  } else if (
     savedPickStatus === "missing" &&
     row.lockReason === "frozen" &&
     !savedPickWarning
@@ -1247,6 +1303,25 @@ export function buildKnockoutMatchPickRows(
       isLaterRoundKnockoutResultKind(def.resultKind) &&
       def.resultKind !== "quarterfinalist";
 
+    const autoCarriedPick =
+      !winnerTeamId.trim() && hasHome && hasAway
+        ? inferAutoCarriedMatchSlotPick({
+            resultKind: def.resultKind,
+            slotKey: saveSlotKey,
+            savedTeamId: winnerTeamId,
+            homeTeamId,
+            awayTeamId,
+            slots: input.slots,
+            teams: input.teams,
+            tournamentMatches: input.tournamentMatches,
+            gradual,
+            nowMs,
+          })
+        : null;
+
+    const autoCarriedLive =
+      autoCarriedPick?.status === "inferred_live" ? autoCarriedPick : null;
+
     const homeName = teamName(homeTeamId, input.teams);
     const awayName = teamName(awayTeamId, input.teams);
     const kickoffIso = publicMatch?.kickoff_at?.trim() || null;
@@ -1349,14 +1424,21 @@ export function buildKnockoutMatchPickRows(
             statusLine: matchSlotStatusMessage,
             emptyPrimaryLine: matchupLineForRow ?? matchSlotStatusMessage,
           }
-        : missingBackfillBlocked
+        : autoCarriedLive
           ? {
               ...displayWithPartialMatchup,
-              statusLine: knockoutMissingSavedPickBackfillBlockedCopy(
-                def.resultKind as LaterRoundKnockoutResultKind,
-              ),
+              statusLine: autoCarriedLive.detailCopy,
+              emptyPrimaryLine:
+                matchupLineForRow ?? autoCarriedLive.summaryCopy,
             }
-          : displayWithPartialMatchup;
+          : missingBackfillBlocked
+            ? {
+                ...displayWithPartialMatchup,
+                statusLine: knockoutMissingSavedPickBackfillBlockedCopy(
+                  def.resultKind as LaterRoundKnockoutResultKind,
+                ),
+              }
+            : displayWithPartialMatchup;
 
     return {
       matchIndex,
@@ -1374,6 +1456,7 @@ export function buildKnockoutMatchPickRows(
       winnerTeamId,
       pickStatus,
       officialWinnerTeamId,
+      autoCarriedPick,
       lockReason,
       kickoffIso,
       display: r16OpenPickUntilKickoff

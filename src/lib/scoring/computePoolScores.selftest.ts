@@ -405,10 +405,15 @@ const teamCan = "team-can-0001-0000-0000-000000000001";
 const teamCro = "team-cro-0001-0000-0000-000000000001";
 const teamEng = "team-eng-0001-0000-0000-000000000001";
 const teamSui = "team-sui-0001-0000-0000-000000000001";
+const teamNor = "team-nor-0001-0000-0000-000000000001";
+const teamMex = "team-mex-0001-0000-0000-000000000001";
 const dave = "part-dave-0001-0000-0000-000000000001";
+const arjie = "part-arjie-0001-0000-0000-000000000001";
 
 const stageR32Ko = "stage-r32-ko-0001-0000-000000000001";
 const stageR16Ko = "stage-r16-ko-0001-0000-000000000001";
+const stageQfKo = "stage-qf-ko-0001-0000-000000000001";
+const stageSfKo = "stage-sf-ko-0001-0000-000000000001";
 
 const koCarryRules: ScoringRule[] = [
   {
@@ -426,6 +431,15 @@ const koCarryRules: ScoringRule[] = [
     predictionKind: "quarterfinalist",
     bonusKey: null,
     points: 8,
+    createdAt: now,
+    updatedAt: now,
+  },
+  {
+    id: "rule-ko-sf",
+    poolId,
+    predictionKind: "semifinalist",
+    bonusKey: null,
+    points: 16,
     createdAt: now,
     updatedAt: now,
   },
@@ -620,6 +634,78 @@ function koResult(
   });
   assert.deepEqual(second, first);
   assert.equal(preds[0]?.teamId, teamCan, "predictions unchanged after scoring recompute");
+}
+
+// M99 auto-carried Norway (QF slots only, missing semifinalist|3): semifinalist points when Norway wins.
+{
+  const preds = [
+    koPred("pred-arjie-qf-nor", arjie, "quarterfinalist", teamNor, "3", stageR16Ko),
+    koPred("pred-arjie-qf-mex", arjie, "quarterfinalist", teamMex, "4", stageR16Ko),
+  ];
+  const norWinsM99 = [
+    koResult("res-nor-qf", "quarterfinalist", teamNor, "3", stageQfKo),
+    koResult("res-nor-sf", "semifinalist", teamNor, "3", stageSfKo),
+  ];
+  const outcome = computePoolScores({
+    poolId,
+    predictions: preds,
+    results: norWinsM99,
+    scoringRules: koCarryRules,
+  });
+  assert.equal(outcome.totalsByParticipantId[arjie], 16);
+  assert.equal(outcome.ledgerLines[0]?.predictionKind, "semifinalist");
+  assert.equal(outcome.ledgerLines[0]?.pointsDelta, 16);
+}
+
+// M99 auto-carried Norway: no semifinalist points when England wins (QF points only).
+{
+  const preds = [
+    koPred("pred-arjie-qf-nor", arjie, "quarterfinalist", teamNor, "3", stageR16Ko),
+    koPred("pred-arjie-qf-mex", arjie, "quarterfinalist", teamMex, "4", stageR16Ko),
+  ];
+  const engWinsM99 = [
+    koResult("res-nor-qf", "quarterfinalist", teamNor, "3", stageQfKo),
+    koResult("res-eng-sf", "semifinalist", teamEng, "3", stageSfKo),
+  ];
+  const outcome = computePoolScores({
+    poolId,
+    predictions: preds,
+    results: engWinsM99,
+    scoringRules: koCarryRules,
+  });
+  assert.equal(outcome.totalsByParticipantId[arjie], 8);
+  assert.ok(
+    outcome.ledgerLines.every((line) => line.predictionKind !== "semifinalist"),
+    "Norway earns no semifinalist points when England wins M99",
+  );
+}
+
+// Saved semifinalist pick overrides auto-carry for scoring (England saved, England wins).
+{
+  const preds = [
+    koPred("pred-arjie-qf-nor", arjie, "quarterfinalist", teamNor, "3", stageR16Ko),
+    koPred("pred-arjie-qf-mex", arjie, "quarterfinalist", teamMex, "4", stageR16Ko),
+    koPred("pred-arjie-sf-eng", arjie, "semifinalist", teamEng, "3", stageSfKo),
+  ];
+  const engWinsM99 = [
+    koResult("res-nor-qf", "quarterfinalist", teamNor, "3", stageQfKo),
+    koResult("res-eng-sf", "semifinalist", teamEng, "3", stageSfKo),
+  ];
+  const outcome = computePoolScores({
+    poolId,
+    predictions: preds,
+    results: engWinsM99,
+    scoringRules: koCarryRules,
+  });
+  assert.equal(outcome.totalsByParticipantId[arjie], 24);
+  assert.ok(
+    outcome.ledgerLines.some(
+      (line) =>
+        line.predictionKind === "semifinalist" &&
+        line.predictionId === "pred-arjie-sf-eng",
+    ),
+    "saved England semifinalist pick scores when England wins",
+  );
 }
 
 console.log("scoring selftest knockout carry-forward by team: ok");

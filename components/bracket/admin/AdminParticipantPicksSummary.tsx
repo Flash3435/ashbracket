@@ -103,6 +103,12 @@ export function AdminParticipantPicksSummary({ tracker, teamById }: Props) {
           tone="success"
         />
         <SummaryList
+          label="Auto-carried picks"
+          count={summary.autoCarriedPicks.length}
+          items={summary.autoCarriedPicks}
+          emptyText="None"
+        />
+        <SummaryList
           label="Eliminated picks"
           count={summary.eliminatedPicks.length}
           items={summary.eliminatedPicks}

@@ -26,6 +26,7 @@ import {
   readConfirmedR32MatchWinner,
   readParticipantR32MatchWinnerPick,
   storedFeederSideTeamIdsForMatch,
+  validatedKnockoutMatchWinner,
   type ConfirmedR32WinnerContext,
   type KnockoutWizardBracketKind,
 } from "../picks/knockoutMatchPickRows";
@@ -43,6 +44,7 @@ export type TournamentSideOutcome = "advanced" | "eliminated" | "pending";
 export type ParticipantPickBadge =
   | "your_pick"
   | "your_pick_alive"
+  | "your_pick_auto_carried"
   | "your_pick_eliminated"
   | "your_pick_wrong_path"
   | "not_your_pick"
@@ -72,6 +74,8 @@ export type LiveBracketMatch = {
   home: LiveBracketSide;
   away: LiveBracketSide;
   participantPickedWinnerId: string | null;
+  /** True when the displayed winner was inferred from upstream surviving picks. */
+  isAutoCarriedPick?: boolean;
   usesOfficialFixture: boolean;
 };
 
@@ -211,11 +215,15 @@ function participantPickBadge(args: {
   tournamentOutcome: TournamentSideOutcome | null;
   eliminatedFromTournament: boolean;
   savedPickLockedOut: boolean;
+  isAutoCarriedPick?: boolean;
 }): ParticipantPickBadge {
   const { teamId, participantPickedWinnerId } = args;
   if (!teamId) return null;
 
   if (participantPickedWinnerId && teamId === participantPickedWinnerId) {
+    if (args.isAutoCarriedPick) {
+      return "your_pick_auto_carried";
+    }
     if (args.matchFinished) {
       if (args.tournamentOutcome === "advanced") return "your_pick";
       if (args.tournamentOutcome === "eliminated") return "your_pick_eliminated";
@@ -303,6 +311,7 @@ function buildLiveSide(args: {
   matchFinished: boolean;
   participantPickedWinnerId: string | null;
   savedPickLockedOut: boolean;
+  isAutoCarriedPick?: boolean;
   eliminatedTeamIds: Set<string>;
   usesOfficialFixture: boolean;
   siblingHasTeam: boolean;
@@ -332,6 +341,7 @@ function buildLiveSide(args: {
     tournamentOutcome,
     eliminatedFromTournament,
     savedPickLockedOut: args.savedPickLockedOut,
+    isAutoCarriedPick: args.isAutoCarriedPick,
   });
   const helperTooltip =
     participantPick === "not_your_pick"
@@ -390,6 +400,7 @@ function buildLiveMatchFromFixture(args: {
   participantAwayId: string | null;
   participantPickedWinnerId: string | null;
   participantSavedPickLockedOut?: boolean;
+  isAutoCarriedPick?: boolean;
   teamById: Map<string, Team>;
   teamByCountry: Map<string, Team>;
   eliminatedTeamIds: Set<string>;
@@ -418,6 +429,7 @@ function buildLiveMatchFromFixture(args: {
     matchFinished,
     participantPickedWinnerId: displayPickId,
     savedPickLockedOut: lockedOut,
+    isAutoCarriedPick: args.isAutoCarriedPick,
     eliminatedTeamIds: args.eliminatedTeamIds,
     usesOfficialFixture,
   };
@@ -432,6 +444,7 @@ function buildLiveMatchFromFixture(args: {
     statusLabel: statusLabelForMatch(status, pub),
     usesOfficialFixture,
     participantPickedWinnerId: displayPickId,
+    isAutoCarriedPick: args.isAutoCarriedPick,
     home: buildLiveSide({
       teamId: homeId,
       siblingHasTeam: Boolean(awayId),
@@ -518,7 +531,7 @@ function buildLaterRoundMatches(
 
   return rows.map((row) => {
     const pub = publicMatchForFifaNo(stageMatches, def.stageCode, row.fifaMatchNo);
-    const participantPick = row.winnerTeamId.trim() || null;
+    const participantPick = validatedKnockoutMatchWinner(row);
     const pickLockedOut = isKnockoutPickLockedOut({
       pickStatus: row.pickStatus,
       teamId: row.winnerTeamId,
@@ -529,6 +542,10 @@ function buildLaterRoundMatches(
       homeId: row.homeTeamId,
       awayId: row.awayTeamId,
     });
+    const isAutoCarriedPick =
+      Boolean(displayPickId) &&
+      !row.winnerTeamId.trim() &&
+      row.autoCarriedPick?.status === "inferred_live";
 
     return buildLiveMatchFromFixture({
       matchKey: row.fifaMatchNo > 0 ? `M${row.fifaMatchNo}` : row.rowKey,
@@ -540,6 +557,7 @@ function buildLaterRoundMatches(
       participantAwayId: row.awayTeamId,
       participantPickedWinnerId: displayPickId,
       participantSavedPickLockedOut: lockedOut,
+      isAutoCarriedPick,
       teamById,
       teamByCountry,
       eliminatedTeamIds,
@@ -755,12 +773,17 @@ function enrichLiveRound(
       homeId,
       awayId,
     });
+    const isAutoCarriedPick =
+      Boolean(live.isAutoCarriedPick) &&
+      Boolean(displayPickId) &&
+      !(slotRow?.teamId.trim());
 
     if (
       homeId === live.home.teamId &&
       awayId === live.away.teamId &&
       displayPickId === live.participantPickedWinnerId &&
-      lockedOut === livePickShowsWrongPath(live)
+      lockedOut === livePickShowsWrongPath(live) &&
+      isAutoCarriedPick === Boolean(live.isAutoCarriedPick)
     ) {
       return live;
     }
@@ -775,6 +798,7 @@ function enrichLiveRound(
       participantAwayId: awayId,
       participantPickedWinnerId: displayPickId,
       participantSavedPickLockedOut: lockedOut,
+      isAutoCarriedPick,
       teamById,
       teamByCountry,
       eliminatedTeamIds,
