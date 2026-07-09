@@ -64,12 +64,7 @@ async function main() {
     ledgerLines: ledgerRes.ledgerLines,
   });
 
-  const currentRows = standings.map((row) => ({
-    participantId: row.participantId,
-    displayName: row.displayName,
-    totalPoints: row.totalPoints,
-    rank: row.rank,
-  }));
+  const currentRows = standings;
 
   const loaded = await fetchLeaderboardLatestScoreImpactForPool(
     supabase,
