@@ -12,6 +12,7 @@ import {
 } from "./buildSoftImpact";
 import { formatBracketImpactSummaryLines } from "@/lib/leaderboard/leaderboardBracketImpactDisplay";
 import { parseLatestScoreEventContext } from "@/lib/leaderboard/parseLatestScoreEventContext";
+import { THIRD_PLACE_SCORING_BACKFILL_NOTICE } from "@/lib/leaderboard/scoringCorrectionDisplay";
 
 export type ParsedScoreImpactMetadata = {
   matchLabel: string | null;
@@ -123,6 +124,27 @@ function readBracketImpactSummary(raw: unknown): {
     uniformPointsDelta,
     summary: row.summary ?? null,
   };
+}
+
+function readScoringCorrections(
+  raw: unknown,
+): Array<{ kind: "third_place_qualifier" }> {
+  if (!Array.isArray(raw)) return [];
+  const out: Array<{ kind: "third_place_qualifier" }> = [];
+  for (const row of raw) {
+    if (row == null || typeof row !== "object") continue;
+    const kind = (row as { kind?: unknown }).kind;
+    if (kind === "third_place_qualifier") {
+      out.push({ kind: "third_place_qualifier" });
+    }
+  }
+  return out;
+}
+
+function hasThirdPlaceScoringCorrection(metadata: Record<string, unknown>): boolean {
+  return readScoringCorrections(metadata.scoring_corrections).some(
+    (row) => row.kind === "third_place_qualifier",
+  );
 }
 
 function readLeaderboardMovement(
@@ -268,6 +290,11 @@ export function buildScoreImpactDisplayLines(
           : "Pool scores updated.";
 
     const detailLines: string[] = [];
+
+    if (hasThirdPlaceScoringCorrection(metadata)) {
+      detailLines.push(THIRD_PLACE_SCORING_BACKFILL_NOTICE);
+    }
+
     const bracketCount = parsed.affectedCount;
     const { uniformPointsDelta, summary } = readBracketImpactSummary(
       metadata.bracket_impact,

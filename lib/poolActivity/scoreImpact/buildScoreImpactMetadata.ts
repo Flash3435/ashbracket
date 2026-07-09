@@ -16,6 +16,7 @@ import type {
   ScoreImpactPointGainerMetadata,
   ScoreImpactSoftImpactMetadata,
   ScoreImpactTopGainerMetadata,
+  ScoreImpactScoringCorrectionMetadata,
 } from "./types";
 import type { BracketImpactResult } from "./buildBracketImpact";
 
@@ -63,6 +64,7 @@ export function buildScoreImpactMetadata(input: {
   scoreSignature: string;
   softImpact?: ScoreImpactSoftImpactMetadata | null;
   bracketImpact?: BracketImpactResult | null;
+  scoringCorrections?: ScoreImpactScoringCorrectionMetadata[];
 }): ScoreImpactActivityMetadata {
   const { analysis, matchResults } = input;
   const primaryMatch = matchResults[0] ?? null;
@@ -143,6 +145,10 @@ export function buildScoreImpactMetadata(input: {
 
   if (input.bracketImpact) {
     metadata.bracket_impact = bracketImpactToMetadata(input.bracketImpact);
+  }
+
+  if (input.scoringCorrections && input.scoringCorrections.length > 0) {
+    metadata.scoring_corrections = input.scoringCorrections;
   }
 
   return metadata;

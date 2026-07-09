@@ -219,6 +219,9 @@ export async function postScoreImpactActivityForPool(input: {
     scoreSignature,
     softImpact,
     bracketImpact,
+    scoringCorrections: input.runContext?.thirdPlaceQualifiersNewlyScored
+      ? [{ kind: "third_place_qualifier" }]
+      : undefined,
   });
 
   return upsertScoreImpactActivity({

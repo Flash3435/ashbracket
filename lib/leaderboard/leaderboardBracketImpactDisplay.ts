@@ -6,6 +6,7 @@ import type { LeaderboardLatestScoreEventContext } from "./parseLatestScoreEvent
 import type { LeaderboardMomentumRow } from "./buildLeaderboardMomentum";
 import type { LeaderboardLatestPointsBreakdown } from "./computeLatestMatchPointsBreakdown";
 import { formatPointsWithRecentDelta } from "./leaderboardMomentumDisplay";
+import { THIRD_PLACE_SCORING_CORRECTION_LABEL } from "./scoringCorrectionDisplay";
 
 const LATEST_POINTS_OPTIONS = { showZero: true, latestSuffix: true } as const;
 
@@ -70,14 +71,40 @@ function resolveMatchLinePoints(
   return momentum.recentPointsGained;
 }
 
-export function formatOtherScoringAdjustmentsLine(
+export function formatThirdPlaceScoringCorrectionLine(
   breakdown: LeaderboardLatestPointsBreakdown | null | undefined,
 ): string | null {
-  if (!breakdown?.isMixedUpdate || breakdown.otherScoringDelta == null) {
+  if (breakdown?.thirdPlaceQualifierDelta == null || breakdown.thirdPlaceQualifierDelta <= 0) {
+    return null;
+  }
+  const token = formatLatestPointsToken(breakdown.thirdPlaceQualifierDelta);
+  return token ? `${THIRD_PLACE_SCORING_CORRECTION_LABEL}: ${token}` : null;
+}
+
+export function formatOtherScoringAdjustmentsLine(
+  breakdown: LeaderboardLatestPointsBreakdown | null | undefined,
+  context?: {
+    participantId?: string;
+    displayName?: string | null;
+  },
+): string | null {
+  if (breakdown?.otherScoringDelta == null || breakdown.otherScoringDelta <= 0) {
     return null;
   }
   const token = formatLatestPointsToken(breakdown.otherScoringDelta);
-  return token ? `Other scoring adjustments: ${token}` : null;
+  if (!token) return null;
+
+  console.warn("[ashbracket:leaderboard-scoring] unknown scoring adjustment", {
+    participantId: context?.participantId ?? breakdown.participantId,
+    displayName: context?.displayName ?? null,
+    otherScoringDelta: breakdown.otherScoringDelta,
+    latestTotalDelta: breakdown.latestTotalDelta,
+    latestMatchPointsDelta: breakdown.latestMatchPointsDelta,
+    thirdPlaceQualifierDelta: breakdown.thirdPlaceQualifierDelta,
+    knownCorrectionKinds: breakdown.knownCorrectionKinds,
+  });
+
+  return `Other scoring adjustments: ${token}`;
 }
 
 export function formatLatestMatchScoringLine(
@@ -88,13 +115,25 @@ export function formatLatestMatchScoringLine(
 ): string | null {
   if (!momentum || !event?.hasValidSnapshot) return null;
 
+  const canAttributeMatch =
+    event.eventKind === "single_match" || event.eventKind === "multi_match";
+  const correctionOnly =
+    !canAttributeMatch &&
+    breakdown?.thirdPlaceQualifierDelta != null &&
+    breakdown.thirdPlaceQualifierDelta > 0 &&
+    breakdown.latestMatchPointsDelta == null;
+
+  if (correctionOnly) {
+    return formatThirdPlaceScoringCorrectionLine(breakdown);
+  }
+
   const matchPoints = resolveMatchLinePoints(momentum, breakdown, event);
   const pointsToken = formatLatestPointsToken(matchPoints);
   if (!pointsToken) return null;
 
   switch (event.eventKind) {
     case "multi_match":
-      return `Latest update: ${pointsToken} from ${event.matchCount} matches`;
+      return `Latest matches: ${pointsToken}`;
     case "scoring_refresh":
       return `Scoring refresh: ${formatLatestPointsToken(momentum.recentPointsGained)}`;
     case "generic_update":
@@ -204,14 +243,25 @@ export function formatLeaderboardLatestImpactSummary(input: {
   outlook?: ParticipantRaceOutlookRow | null;
   bracketImpact?: BracketImpactParticipantRow | null;
   pointsBreakdown?: LeaderboardLatestPointsBreakdown | null;
-}): { latestLine: string | null; impactLine: string | null; otherScoringLine: string | null } {
+  participantId?: string;
+  displayName?: string | null;
+}): {
+  latestLine: string | null;
+  impactLine: string | null;
+  correctionLine: string | null;
+  otherScoringLine: string | null;
+} {
   const latestLine = formatLatestMatchScoringLine(
     input.momentum,
     input.event,
     input.bracketImpact,
     input.pointsBreakdown,
   );
-  const otherScoringLine = formatOtherScoringAdjustmentsLine(input.pointsBreakdown);
+  const correctionLine = formatThirdPlaceScoringCorrectionLine(input.pointsBreakdown);
+  const otherScoringLine = formatOtherScoringAdjustmentsLine(input.pointsBreakdown, {
+    participantId: input.participantId ?? input.pointsBreakdown?.participantId,
+    displayName: input.displayName,
+  });
   const impactLine = formatLeaderboardBracketImpactLine({
     outlook: input.outlook,
     bracketImpact: input.bracketImpact,
@@ -219,7 +269,7 @@ export function formatLeaderboardLatestImpactSummary(input: {
       input.outlook?.pathValidLivePickCount ?? input.bracketImpact?.livePathsAfter,
   });
 
-  return { latestLine, impactLine, otherScoringLine };
+  return { latestLine, impactLine, correctionLine, otherScoringLine };
 }
 
 export function formatBiggestBracketImpactWinnerLine(input: {
@@ -343,8 +393,18 @@ export function formatExpandedBracketImpactContext(
   );
   if (latestLine) parts.push(latestLine);
 
-  const otherLine = formatOtherScoringAdjustmentsLine(pointsBreakdown);
+  const otherLine = formatOtherScoringAdjustmentsLine(pointsBreakdown, {
+    participantId: pointsBreakdown?.participantId,
+  });
   if (otherLine) parts.push(otherLine);
+
+  const correctionLine = formatThirdPlaceScoringCorrectionLine(pointsBreakdown);
+  if (
+    correctionLine &&
+    !parts.some((part) => part.includes(THIRD_PLACE_SCORING_CORRECTION_LABEL))
+  ) {
+    parts.push(correctionLine);
+  }
 
   if (!bracketImpact) {
     return parts.length > 0 ? parts.join(" ") : null;

@@ -140,6 +140,10 @@ export type BracketImpactActivityMetadata = {
   rows?: BracketImpactParticipantMetadata[];
 };
 
+export type ScoreImpactScoringCorrectionMetadata = {
+  kind: "third_place_qualifier";
+};
+
 export type ScoreImpactActivityMetadata = {
   source_key: string;
   score_impact_label: "SCORE IMPACT";
@@ -176,6 +180,8 @@ export type ScoreImpactActivityMetadata = {
   reason: ScoreImpactReason;
   soft_impact?: ScoreImpactSoftImpactMetadata;
   bracket_impact?: BracketImpactActivityMetadata;
+  /** Named one-time scoring corrections bundled into this update. */
+  scoring_corrections?: ScoreImpactScoringCorrectionMetadata[];
   /** >= 2 when before/after standings used paginated ledger capture. */
   standings_capture_version?: number;
 };
@@ -185,6 +191,8 @@ export type ScoreImpactRunContext = {
   matchResults?: ScoreImpactMatchResult[];
   /** Stable signature for the score/result inputs driving this recompute. */
   scoreSignature?: string;
+  /** When true, best-third advancer picks were newly written/scored this run. */
+  thirdPlaceQualifiersNewlyScored?: boolean;
 };
 
 export type ScoreImpactStandingsSnapshot = {

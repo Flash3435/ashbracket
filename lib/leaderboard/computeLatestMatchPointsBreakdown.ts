@@ -1,5 +1,6 @@
 import type { LeaderboardMomentumRow } from "./buildLeaderboardMomentum";
 import type { LeaderboardLatestScoreEventContext } from "./parseLatestScoreEventContext";
+import type { ScoringCorrectionKind } from "./scoringCorrectionDisplay";
 
 export type TournamentMatchForPointsAttribution = {
   matchCode: string;
@@ -24,8 +25,13 @@ export type LeaderboardLatestPointsBreakdown = {
   latestTotalDelta: number;
   /** Points from the displayed match(es) only; null when match attribution is unavailable. */
   latestMatchPointsDelta: number | null;
-  /** Non-match scoring movement when total differs from match-specific (e.g. backfill). */
+  /** Identified delayed third-place advancer scoring in this update. */
+  thirdPlaceQualifierDelta: number | null;
+  /** Residual non-match scoring when source is unknown. */
   otherScoringDelta: number | null;
+  /** Known correction kinds included in this breakdown (for diagnostics). */
+  knownCorrectionKinds: readonly ScoringCorrectionKind[];
+  /** Match points plus any named correction differ from the total standings delta. */
   isMixedUpdate: boolean;
 };
 
@@ -116,6 +122,80 @@ export function computeMatchPointsDeltaForParticipant(input: {
   return attributed ? total : null;
 }
 
+/** Total third-place advancer points from saved picks vs official advancers (not event delta). */
+export function computeThirdPlaceQualifierPointsFromPredictions(input: {
+  participantId: string;
+  predictions: readonly ParticipantPredictionForPointsAttribution[];
+  officialAdvancerTeamIds: ReadonlySet<string>;
+  pointsPerPick: number;
+}): number {
+  if (input.pointsPerPick <= 0 || input.officialAdvancerTeamIds.size === 0) return 0;
+
+  let total = 0;
+  for (const pred of predictionsForParticipant(
+    input.predictions,
+    input.participantId,
+  )) {
+    if (pred.predictionKind !== "third_place_qualifier" || !pred.teamId) continue;
+    if (input.officialAdvancerTeamIds.has(pred.teamId)) {
+      total += input.pointsPerPick;
+    }
+  }
+  return total;
+}
+
+function attributeScoringCorrections(input: {
+  unexplainedDelta: number;
+  thirdPlacePointsPerPick: number;
+  thirdPlaceSettled: boolean;
+  totalThirdPlacePointsFromPredictions: number;
+}): {
+  thirdPlaceQualifierDelta: number | null;
+  otherScoringDelta: number | null;
+  knownCorrectionKinds: ScoringCorrectionKind[];
+} {
+  if (input.unexplainedDelta <= 0) {
+    return {
+      thirdPlaceQualifierDelta: null,
+      otherScoringDelta: null,
+      knownCorrectionKinds: [],
+    };
+  }
+
+  const knownCorrectionKinds: ScoringCorrectionKind[] = [];
+  let thirdPlaceQualifierDelta: number | null = null;
+
+  if (
+    input.thirdPlaceSettled &&
+    input.thirdPlacePointsPerPick > 0 &&
+    input.totalThirdPlacePointsFromPredictions > 0
+  ) {
+    const perPick = input.thirdPlacePointsPerPick;
+    const candidate = input.totalThirdPlacePointsFromPredictions;
+    const unexplained = input.unexplainedDelta;
+
+    if (unexplained <= candidate && unexplained % perPick === 0) {
+      thirdPlaceQualifierDelta = unexplained;
+    } else if (candidate < unexplained && candidate % perPick === 0) {
+      thirdPlaceQualifierDelta = candidate;
+    }
+  }
+
+  if (thirdPlaceQualifierDelta != null && thirdPlaceQualifierDelta > 0) {
+    knownCorrectionKinds.push("third_place_qualifier");
+  }
+
+  const residual = input.unexplainedDelta - (thirdPlaceQualifierDelta ?? 0);
+  return {
+    thirdPlaceQualifierDelta:
+      thirdPlaceQualifierDelta != null && thirdPlaceQualifierDelta > 0
+        ? thirdPlaceQualifierDelta
+        : null,
+    otherScoringDelta: residual > 0 ? residual : null,
+    knownCorrectionKinds,
+  };
+}
+
 export function buildLatestPointsBreakdownForParticipant(input: {
   participantId: string;
   momentum: LeaderboardMomentumRow | null | undefined;
@@ -123,6 +203,8 @@ export function buildLatestPointsBreakdownForParticipant(input: {
   predictions: readonly ParticipantPredictionForPointsAttribution[];
   matches: readonly TournamentMatchForPointsAttribution[];
   rulesByKind: ReadonlyMap<string, number>;
+  officialThirdPlaceAdvancerTeamIds?: ReadonlySet<string>;
+  thirdPlaceQualifiersSettled?: boolean;
 }): LeaderboardLatestPointsBreakdown | null {
   if (!input.momentum || !input.event?.hasValidSnapshot) return null;
 
@@ -139,18 +221,41 @@ export function buildLatestPointsBreakdownForParticipant(input: {
       })
     : null;
 
-  const isMixedUpdate =
-    latestMatchPointsDelta != null && latestMatchPointsDelta !== latestTotalDelta;
+  const unexplainedDelta = Math.max(
+    0,
+    latestTotalDelta - (latestMatchPointsDelta ?? 0),
+  );
 
-  const otherScoringDelta = isMixedUpdate
-    ? Math.max(0, latestTotalDelta - latestMatchPointsDelta)
-    : null;
+  const thirdPlacePointsPerPick =
+    input.rulesByKind.get("third_place_qualifier") ?? 0;
+  const totalThirdPlacePointsFromPredictions =
+    computeThirdPlaceQualifierPointsFromPredictions({
+      participantId: input.participantId,
+      predictions: input.predictions,
+      officialAdvancerTeamIds: input.officialThirdPlaceAdvancerTeamIds ?? new Set(),
+      pointsPerPick: thirdPlacePointsPerPick,
+    });
+
+  const corrections = attributeScoringCorrections({
+    unexplainedDelta,
+    thirdPlacePointsPerPick,
+    thirdPlaceSettled: input.thirdPlaceQualifiersSettled === true,
+    totalThirdPlacePointsFromPredictions,
+  });
+
+  const isMixedUpdate =
+    (latestMatchPointsDelta != null &&
+      latestMatchPointsDelta !== latestTotalDelta) ||
+    corrections.thirdPlaceQualifierDelta != null ||
+    corrections.otherScoringDelta != null;
 
   return {
     participantId: input.participantId,
     latestTotalDelta,
     latestMatchPointsDelta,
-    otherScoringDelta: otherScoringDelta && otherScoringDelta > 0 ? otherScoringDelta : null,
+    thirdPlaceQualifierDelta: corrections.thirdPlaceQualifierDelta,
+    otherScoringDelta: corrections.otherScoringDelta,
+    knownCorrectionKinds: corrections.knownCorrectionKinds,
     isMixedUpdate,
   };
 }
@@ -162,6 +267,8 @@ export function buildLatestPointsBreakdownByParticipantId(input: {
   predictions: readonly ParticipantPredictionForPointsAttribution[];
   matches: readonly TournamentMatchForPointsAttribution[];
   rulesByKind: ReadonlyMap<string, number>;
+  officialThirdPlaceAdvancerTeamIds?: ReadonlySet<string>;
+  thirdPlaceQualifiersSettled?: boolean;
 }): Map<string, LeaderboardLatestPointsBreakdown> {
   const map = new Map<string, LeaderboardLatestPointsBreakdown>();
   if (!input.event?.hasValidSnapshot) return map;
@@ -174,6 +281,8 @@ export function buildLatestPointsBreakdownByParticipantId(input: {
       predictions: input.predictions,
       matches: input.matches,
       rulesByKind: input.rulesByKind,
+      officialThirdPlaceAdvancerTeamIds: input.officialThirdPlaceAdvancerTeamIds,
+      thirdPlaceQualifiersSettled: input.thirdPlaceQualifiersSettled,
     });
     if (breakdown) map.set(participantId, breakdown);
   }

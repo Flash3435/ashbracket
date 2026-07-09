@@ -73,6 +73,8 @@ function LatestImpactLines({
   latestScoreEvent = null,
   outlook = null,
   pointsBreakdown = null,
+  participantId,
+  displayName = null,
 }: {
   totalPoints: number;
   momentum?: LeaderboardMomentumRow | null;
@@ -80,16 +82,21 @@ function LatestImpactLines({
   latestScoreEvent?: LeaderboardLatestScoreEventContext | null;
   outlook?: ParticipantRaceOutlookRow | null;
   pointsBreakdown?: LeaderboardLatestPointsBreakdown | null;
+  participantId?: string;
+  displayName?: string | null;
 }) {
   const showLatest = momentum != null && latestScoreEvent?.hasValidSnapshot === true;
-  const { latestLine, impactLine, otherScoringLine } = formatLeaderboardLatestImpactSummary({
-    totalPoints,
-    momentum,
-    event: latestScoreEvent,
-    outlook,
-    bracketImpact,
-    pointsBreakdown,
-  });
+  const { latestLine, impactLine, correctionLine, otherScoringLine } =
+    formatLeaderboardLatestImpactSummary({
+      totalPoints,
+      momentum,
+      event: latestScoreEvent,
+      outlook,
+      bracketImpact,
+      pointsBreakdown,
+      participantId,
+      displayName,
+    });
 
   if (!showLatest && !impactLine) return null;
 
@@ -97,6 +104,9 @@ function LatestImpactLines({
     <div className="mt-1 space-y-0.5">
       {showLatest && latestLine ? (
         <p className="text-xs leading-relaxed text-ash-text/90">{latestLine}</p>
+      ) : null}
+      {showLatest && correctionLine && latestLine !== correctionLine ? (
+        <p className="text-xs leading-relaxed text-ash-muted">{correctionLine}</p>
       ) : null}
       {showLatest && otherScoringLine ? (
         <p className="text-xs leading-relaxed text-ash-muted">{otherScoringLine}</p>
@@ -230,6 +240,8 @@ export function LeaderboardParticipantCell({
         latestScoreEvent={latestScoreEvent}
         outlook={raceOutlook}
         pointsBreakdown={pointsBreakdown}
+        participantId={row.participantId}
+        displayName={row.displayName}
       />
       {raceOutlook ? (
         <RaceOutlookDetails

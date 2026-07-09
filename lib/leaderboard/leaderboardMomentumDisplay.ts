@@ -38,10 +38,26 @@ export function formatRecentPointsDelta(
   const isMatchAttributed =
     options?.event?.eventKind === "single_match" ||
     options?.event?.eventKind === "multi_match";
+  const matchDelta = options?.pointsBreakdown?.latestMatchPointsDelta;
+
+  if (isMatchAttributed && matchDelta != null) {
+    if (matchDelta <= 0) {
+      return options?.showZero ? "(+0)" : null;
+    }
+    const delta = formatPoolPoints(matchDelta);
+    return `(+${delta} latest)`;
+  }
+
+  if (
+    !isMatchAttributed &&
+    (options?.pointsBreakdown?.thirdPlaceQualifierDelta ?? 0) > 0
+  ) {
+    return null;
+  }
+
   const isMixed = options?.pointsBreakdown?.isMixedUpdate === true;
   const matchEqualsTotal =
-    options?.pointsBreakdown?.latestMatchPointsDelta != null &&
-    options.pointsBreakdown.latestMatchPointsDelta === momentum.recentPointsGained;
+    matchDelta != null && matchDelta === momentum.recentPointsGained;
 
   let suffix = "";
   if (options?.refreshSuffix || isMixed) {

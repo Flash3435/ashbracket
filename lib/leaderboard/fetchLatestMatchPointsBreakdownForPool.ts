@@ -7,6 +7,13 @@ import {
 } from "./computeLatestMatchPointsBreakdown";
 import type { LeaderboardMomentumRow } from "./buildLeaderboardMomentum";
 import type { LeaderboardLatestScoreEventContext } from "./parseLatestScoreEventContext";
+import { fetchPoolPredictions } from "@/lib/predictions/fetchPoolPredictions";
+import {
+  areThirdPlaceQualifiersSettled,
+  resolveOfficialThirdPlaceAdvancers,
+  r32FixturesFromTournamentMatches,
+} from "@/lib/scoring/resolveOfficialThirdPlaceAdvancers";
+import { mapResultRow } from "../../src/lib/scoring/mapSupabaseRows";
 
 async function loadMatchesForCodes(
   supabase: SupabaseClient,
@@ -50,18 +57,14 @@ async function loadPredictionsForPool(
   supabase: SupabaseClient,
   poolId: string,
 ): Promise<ParticipantPredictionForPointsAttribution[]> {
-  const { data, error } = await supabase
-    .from("predictions")
-    .select("participant_id, prediction_kind, team_id, slot_key")
-    .eq("pool_id", poolId);
+  const { predictions, error } = await fetchPoolPredictions(supabase, { poolId });
+  if (error) throw new Error(error);
 
-  if (error) throw new Error(error.message);
-
-  return (data ?? []).map((row) => ({
-    participantId: row.participant_id as string,
-    predictionKind: row.prediction_kind as string,
-    teamId: (row.team_id as string | null) ?? null,
-    slotKey: (row.slot_key as string | null) ?? null,
+  return predictions.map((pred) => ({
+    participantId: pred.participantId,
+    predictionKind: pred.predictionKind,
+    teamId: pred.teamId ?? null,
+    slotKey: pred.slotKey ?? null,
   }));
 }
 
@@ -83,6 +86,48 @@ async function loadScoringRulesByKind(
   return map;
 }
 
+async function loadThirdPlaceAdvancerTeamIds(
+  supabase: SupabaseClient,
+  editionId: string,
+): Promise<{ teamIds: Set<string>; settled: boolean }> {
+  const [{ data: stages }, { data: resultsRaw }, { data: r32Matches }] =
+    await Promise.all([
+      supabase.from("tournament_stages").select("id, code"),
+      supabase
+        .from("results")
+        .select(
+          "id, tournament_stage_id, kind, team_id, group_code, slot_key, value_text, resolved_at, created_at, edition_id",
+        )
+        .eq("edition_id", editionId),
+      supabase
+        .from("tournament_matches")
+        .select("match_code, home_team_id, away_team_id, stage_code")
+        .eq("edition_id", editionId)
+        .eq("stage_code", "round_of_32"),
+    ]);
+
+  const r32StageId = stages?.find((stage) => stage.code === "round_of_32")?.id as
+    | string
+    | undefined;
+  if (!r32StageId) {
+    return { teamIds: new Set(), settled: false };
+  }
+
+  const results = (resultsRaw ?? []).map(mapResultRow);
+  const resolution = resolveOfficialThirdPlaceAdvancers({
+    results,
+    roundOf32StageId: r32StageId,
+    r32Fixtures: r32FixturesFromTournamentMatches(r32Matches ?? []),
+  });
+
+  return {
+    teamIds: new Set(
+      resolution.advancers.map((advancer) => advancer.teamId).filter(Boolean),
+    ),
+    settled: areThirdPlaceQualifiersSettled(resolution),
+  };
+}
+
 /**
  * Per-participant latest match vs total scoring breakdown for leaderboard display.
  */
@@ -96,7 +141,6 @@ export async function fetchLatestMatchPointsBreakdownForPool(
   },
 ): Promise<Map<string, LeaderboardLatestPointsBreakdown>> {
   if (!input.event?.hasValidSnapshot) return new Map();
-  if (input.event.matchCodes.length === 0) return new Map();
 
   const { data: poolRow, error: poolErr } = await supabase
     .from("pools")
@@ -107,13 +151,17 @@ export async function fetchLatestMatchPointsBreakdownForPool(
   const editionId = poolRow?.tournament_edition_id as string | null | undefined;
   if (!editionId) return new Map();
 
-  const [matches, predictions, rulesByKind] = await Promise.all([
-    loadMatchesForCodes(supabase, editionId, input.event.matchCodes),
+  const matchCodes = input.event.matchCodes;
+  const [matches, predictions, rulesByKind, thirdPlaceContext] = await Promise.all([
+    matchCodes.length > 0
+      ? loadMatchesForCodes(supabase, editionId, matchCodes)
+      : Promise.resolve([]),
     loadPredictionsForPool(supabase, poolId),
     loadScoringRulesByKind(supabase, poolId),
+    loadThirdPlaceAdvancerTeamIds(supabase, editionId),
   ]);
 
-  if (matches.length === 0) return new Map();
+  if (matchCodes.length > 0 && matches.length === 0) return new Map();
 
   return buildLatestPointsBreakdownByParticipantId({
     participantIds: input.participantIds,
@@ -122,5 +170,7 @@ export async function fetchLatestMatchPointsBreakdownForPool(
     predictions,
     matches,
     rulesByKind,
+    officialThirdPlaceAdvancerTeamIds: thirdPlaceContext.teamIds,
+    thirdPlaceQualifiersSettled: thirdPlaceContext.settled,
   });
 }

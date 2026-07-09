@@ -87,7 +87,7 @@ const multiEvent = parseLatestScoreEventContext(
 assert.equal(multiEvent.eventKind, "multi_match");
 assert.equal(
   formatLatestMatchScoringLine(momentum(8), multiEvent),
-  "Latest update: +8 from 2 matches",
+  "Latest matches: +8",
   "multi-match update label",
 );
 
