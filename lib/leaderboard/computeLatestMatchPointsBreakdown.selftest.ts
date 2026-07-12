@@ -5,6 +5,7 @@ import assert from "node:assert/strict";
 import {
   buildLatestPointsBreakdownForParticipant,
   computeKnockoutMatchPickPointsDelta,
+  computeKnockoutOncePerTeamProgressionDelta,
 } from "./computeLatestMatchPointsBreakdown";
 import {
   formatLatestMatchScoringLine,
@@ -20,9 +21,12 @@ import { THIRD_PLACE_SCORING_CORRECTION_LABEL } from "./scoringCorrectionDisplay
 const spainId = "team-spain";
 const portugalId = "team-portugal";
 const swedenId = "team-sweden";
+const englandId = "team-england";
+const norwayId = "team-norway";
 const rules = new Map([
   ["round_of_16", 4],
   ["quarterfinalist", 8],
+  ["semifinalist", 16],
   ["third_place_qualifier", 4],
 ]);
 const officialThirdPlace = new Set([swedenId]);
@@ -36,6 +40,17 @@ const m93Match = {
   winnerTeamId: spainId,
   scoringResultKind: "quarterfinalist",
   scoringSlotKey: "5",
+};
+
+const m99Match = {
+  matchCode: "M99",
+  stageCode: "quarterfinal",
+  groupCode: null,
+  homeTeamId: norwayId,
+  awayTeamId: englandId,
+  winnerTeamId: englandId,
+  scoringResultKind: "semifinalist",
+  scoringSlotKey: "3",
 };
 
 function momentum(
@@ -76,15 +91,25 @@ const scoringRefreshEvent = parseLatestScoreEventContext(
   {
     match_codes: [],
     trigger: "admin_manual_recompute",
+    scoring_corrections: [{ kind: "third_place_qualifier" }],
   },
   { hasValidSnapshot: true },
 );
 
-// 1. Match update only
+const englandEvent = parseLatestScoreEventContext(
+  {
+    match_label: "Norway 1–2 England",
+    scoreline: "Norway 1–2 England",
+    match_codes: ["M99"],
+  },
+  { hasValidSnapshot: true },
+);
+
+// 1. Match update only (once-per-team progression: R16→QF = +4)
 {
   const breakdown = buildLatestPointsBreakdownForParticipant({
     participantId: "winner",
-    momentum: momentum("winner", 8),
+    momentum: momentum("winner", 4),
     event: multiMatchEvent,
     predictions: [
       {
@@ -99,21 +124,21 @@ const scoringRefreshEvent = parseLatestScoreEventContext(
     officialThirdPlaceAdvancerTeamIds: officialThirdPlace,
     thirdPlaceQualifiersSettled: true,
   });
-  assert.equal(breakdown?.latestMatchPointsDelta, 8);
+  assert.equal(breakdown?.latestMatchPointsDelta, 4);
   assert.equal(breakdown?.thirdPlaceQualifierDelta, null);
   assert.equal(breakdown?.otherScoringDelta, null);
   assert.equal(
-    formatRecentPointsDelta(momentum("winner", 8), {
+    formatRecentPointsDelta(momentum("winner", 4), {
       showZero: true,
       latestSuffix: true,
       pointsBreakdown: breakdown,
       event: multiMatchEvent,
     }),
-    "(+8 latest)",
+    "(+4 latest)",
   );
   assert.equal(
-    formatLatestMatchScoringLine(momentum("winner", 8), multiMatchEvent, null, breakdown),
-    "Latest matches: +8",
+    formatLatestMatchScoringLine(momentum("winner", 4), multiMatchEvent, null, breakdown),
+    "Latest matches: +4",
   );
   assert.equal(formatThirdPlaceScoringCorrectionLine(breakdown), null);
 }
@@ -148,7 +173,7 @@ const scoringRefreshEvent = parseLatestScoreEventContext(
   );
 }
 
-// 2. Third-place correction only
+// 2. Third-place correction only (explicit scoring_corrections on event)
 {
   const breakdown = buildLatestPointsBreakdownForParticipant({
     participantId: "a",
@@ -173,15 +198,6 @@ const scoringRefreshEvent = parseLatestScoreEventContext(
   assert.equal(
     formatLatestMatchScoringLine(momentum("a", 4), scoringRefreshEvent, null, breakdown),
     `${THIRD_PLACE_SCORING_CORRECTION_LABEL}: +4`,
-  );
-  assert.equal(
-    formatRecentPointsDelta(momentum("a", 4), {
-      showZero: true,
-      latestSuffix: true,
-      pointsBreakdown: breakdown,
-      event: scoringRefreshEvent,
-    }),
-    null,
   );
 }
 
@@ -226,22 +242,24 @@ const scoringRefreshEvent = parseLatestScoreEventContext(
   );
 }
 
-// 3. Mixed event: match points + correction points
+// 3. Mixed event: match points + explicit third-place correction
 {
+  const mixedEvent = parseLatestScoreEventContext(
+    {
+      match_codes: ["M96", "M97"],
+      match_label: "Knockout results",
+      scoring_corrections: [{ kind: "third_place_qualifier" }],
+    },
+    { hasValidSnapshot: true },
+  );
   const breakdown = buildLatestPointsBreakdownForParticipant({
     participantId: "adarsh",
-    momentum: momentum("adarsh", 12),
-    event: multiMatchEvent,
+    momentum: momentum("adarsh", 8),
+    event: mixedEvent,
     predictions: [
       {
         participantId: "adarsh",
-        predictionKind: "quarterfinalist",
-        teamId: spainId,
-        slotKey: "5",
-      },
-      {
-        participantId: "adarsh",
-        predictionKind: "quarterfinalist",
+        predictionKind: "round_of_16",
         teamId: spainId,
         slotKey: "5",
       },
@@ -252,37 +270,28 @@ const scoringRefreshEvent = parseLatestScoreEventContext(
         slotKey: "F",
       },
     ],
-    matches: [m93Match, m93Match],
+    matches: [m93Match],
     rulesByKind: rules,
     officialThirdPlaceAdvancerTeamIds: officialThirdPlace,
     thirdPlaceQualifiersSettled: true,
   });
-  assert.equal(breakdown?.latestMatchPointsDelta, 8);
+  assert.equal(breakdown?.latestMatchPointsDelta, 4);
   assert.equal(breakdown?.thirdPlaceQualifierDelta, 4);
   assert.equal(breakdown?.otherScoringDelta, null);
   const summary = formatLeaderboardLatestImpactSummary({
     totalPoints: 142,
-    momentum: momentum("adarsh", 12),
-    event: multiMatchEvent,
+    momentum: momentum("adarsh", 8),
+    event: mixedEvent,
     pointsBreakdown: breakdown,
   });
-  assert.equal(summary.latestLine, "Latest matches: +8");
+  assert.equal(summary.latestLine, "Latest matches: +4");
   assert.equal(
     summary.correctionLine,
     `${THIRD_PLACE_SCORING_CORRECTION_LABEL}: +4`,
   );
-  assert.equal(summary.otherScoringLine, null);
-  assert.equal(
-    formatRecentPointsDelta(momentum("adarsh", 12), {
-      showZero: true,
-      latestSuffix: true,
-      pointsBreakdown: breakdown,
-      event: multiMatchEvent,
-    }),
-    "(+8 latest)",
-  );
 }
 
+// 4. Later match must NOT relabel residual as third-place without scoring_corrections
 {
   const breakdown = buildLatestPointsBreakdownForParticipant({
     participantId: "missed",
@@ -314,7 +323,7 @@ const scoringRefreshEvent = parseLatestScoreEventContext(
         slotKey: "D",
       },
     ],
-    matches: [m93Match, m93Match],
+    matches: [m93Match],
     rulesByKind: rules,
     officialThirdPlaceAdvancerTeamIds: new Set([
       swedenId,
@@ -324,53 +333,161 @@ const scoringRefreshEvent = parseLatestScoreEventContext(
     thirdPlaceQualifiersSettled: true,
   });
   assert.equal(breakdown?.latestMatchPointsDelta, 0);
-  assert.equal(breakdown?.thirdPlaceQualifierDelta, 12);
-  assert.equal(
-    formatRecentPointsDelta(momentum("missed", 12), {
-      showZero: true,
-      latestSuffix: true,
-      pointsBreakdown: breakdown,
-      event: multiMatchEvent,
-    }),
-    "(+0)",
-  );
+  assert.equal(breakdown?.thirdPlaceQualifierDelta, null);
+  assert.equal(breakdown?.otherScoringDelta, 12);
+  assert.equal(formatThirdPlaceScoringCorrectionLine(breakdown), null);
 }
 
-// Legacy Spain/Portugal mixed backfill maps to third-place correction label
+// 5. Emil-style: England in bracket but not SF slot pick → once-per-team +8, not third-place
 {
   const breakdown = buildLatestPointsBreakdownForParticipant({
-    participantId: "loser",
-    momentum: momentum("loser", 4),
-    event: singleMatchEvent,
+    participantId: "emil",
+    momentum: momentum("emil", 8, 198),
+    event: englandEvent,
     predictions: [
       {
-        participantId: "loser",
+        participantId: "emil",
         predictionKind: "quarterfinalist",
-        teamId: portugalId,
-        slotKey: "5",
+        teamId: englandId,
+        slotKey: "4",
       },
       {
-        participantId: "loser",
+        participantId: "emil",
+        predictionKind: "third_place_qualifier",
+        teamId: swedenId,
+        slotKey: "F",
+      },
+      {
+        participantId: "emil",
+        predictionKind: "third_place_qualifier",
+        teamId: "team-par",
+        slotKey: "D",
+      },
+    ],
+    matches: [m99Match],
+    rulesByKind: rules,
+    officialThirdPlaceAdvancerTeamIds: new Set([swedenId, "team-par"]),
+    thirdPlaceQualifiersSettled: true,
+  });
+  assert.equal(breakdown?.latestMatchPointsDelta, 8);
+  assert.equal(breakdown?.thirdPlaceQualifierDelta, null);
+  assert.equal(breakdown?.otherScoringDelta, null);
+  const summary = formatLeaderboardLatestImpactSummary({
+    totalPoints: 206,
+    momentum: momentum("emil", 8, 198),
+    event: englandEvent,
+    pointsBreakdown: breakdown,
+    participantId: "emil",
+    displayName: "Emil",
+  });
+  assert.equal(summary.latestLine, "England def. Norway: +8");
+  assert.equal(summary.correctionLine, null);
+}
+
+// 6. Match winner SF slot picker: +8 progression (QF→SF), no third-place echo
+{
+  const breakdown = buildLatestPointsBreakdownForParticipant({
+    participantId: "wwcd",
+    momentum: momentum("wwcd", 8, 191),
+    event: englandEvent,
+    predictions: [
+      {
+        participantId: "wwcd",
+        predictionKind: "semifinalist",
+        teamId: englandId,
+        slotKey: "3",
+      },
+      {
+        participantId: "wwcd",
         predictionKind: "third_place_qualifier",
         teamId: swedenId,
         slotKey: "F",
       },
     ],
-    matches: [m93Match],
+    matches: [m99Match],
+    rulesByKind: rules,
+    officialThirdPlaceAdvancerTeamIds: officialThirdPlace,
+    thirdPlaceQualifiersSettled: true,
+  });
+  assert.equal(breakdown?.latestMatchPointsDelta, 8);
+  assert.equal(breakdown?.thirdPlaceQualifierDelta, null);
+  assert.equal(
+    formatThirdPlaceScoringCorrectionLine(breakdown),
+    null,
+  );
+}
+
+// 7. Match loser / no England knockout pick: +0, no third-place echo
+{
+  const breakdown = buildLatestPointsBreakdownForParticipant({
+    participantId: "arjie",
+    momentum: momentum("arjie", 0, 149),
+    event: englandEvent,
+    predictions: [
+      {
+        participantId: "arjie",
+        predictionKind: "group_winner",
+        teamId: englandId,
+        slotKey: null,
+      },
+      {
+        participantId: "arjie",
+        predictionKind: "third_place_qualifier",
+        teamId: swedenId,
+        slotKey: "F",
+      },
+    ],
+    matches: [m99Match],
     rulesByKind: rules,
     officialThirdPlaceAdvancerTeamIds: officialThirdPlace,
     thirdPlaceQualifiersSettled: true,
   });
   assert.equal(breakdown?.latestMatchPointsDelta, 0);
-  assert.equal(breakdown?.thirdPlaceQualifierDelta, 4);
+  assert.equal(breakdown?.thirdPlaceQualifierDelta, null);
+  assert.equal(breakdown?.otherScoringDelta, null);
   assert.equal(
-    formatThirdPlaceScoringCorrectionLine(breakdown),
-    `${THIRD_PLACE_SCORING_CORRECTION_LABEL}: +4`,
+    formatLatestMatchScoringLine(momentum("arjie", 0, 149), englandEvent, null, breakdown),
+    "England def. Norway: +0",
   );
-  assert.equal(formatOtherScoringAdjustmentsLine(breakdown), null);
 }
 
-// 4. Unknown adjustment fallback
+// 8. Stale baseline residual must not become third-place on match events
+{
+  const breakdown = buildLatestPointsBreakdownForParticipant({
+    participantId: "stale",
+    momentum: momentum("stale", 8, 190),
+    event: englandEvent,
+    predictions: [
+      {
+        participantId: "stale",
+        predictionKind: "semifinalist",
+        teamId: norwayId,
+        slotKey: "3",
+      },
+      {
+        participantId: "stale",
+        predictionKind: "third_place_qualifier",
+        teamId: swedenId,
+        slotKey: "F",
+      },
+      {
+        participantId: "stale",
+        predictionKind: "third_place_qualifier",
+        teamId: "team-par",
+        slotKey: "D",
+      },
+    ],
+    matches: [m99Match],
+    rulesByKind: rules,
+    officialThirdPlaceAdvancerTeamIds: new Set([swedenId, "team-par"]),
+    thirdPlaceQualifiersSettled: true,
+  });
+  assert.equal(breakdown?.latestMatchPointsDelta, 0);
+  assert.equal(breakdown?.thirdPlaceQualifierDelta, null);
+  assert.equal(breakdown?.otherScoringDelta, 8);
+}
+
+// 9. Unknown adjustment fallback
 {
   const breakdown = buildLatestPointsBreakdownForParticipant({
     participantId: "unknown",
@@ -401,7 +518,37 @@ const scoringRefreshEvent = parseLatestScoreEventContext(
   );
 }
 
-// Spain picker gets +4 match points
+// Progression helpers
+assert.equal(
+  computeKnockoutOncePerTeamProgressionDelta(
+    [
+      {
+        participantId: "winner",
+        predictionKind: "round_of_16",
+        teamId: spainId,
+        slotKey: "5",
+      },
+    ],
+    m93Match,
+    rules,
+  ),
+  4,
+);
+assert.equal(
+  computeKnockoutOncePerTeamProgressionDelta(
+    [
+      {
+        participantId: "emil",
+        predictionKind: "quarterfinalist",
+        teamId: englandId,
+        slotKey: "4",
+      },
+    ],
+    m99Match,
+    rules,
+  ),
+  8,
+);
 assert.equal(
   computeKnockoutMatchPickPointsDelta(
     [
@@ -415,7 +562,7 @@ assert.equal(
     m93Match,
     rules,
   ),
-  4,
+  8,
 );
 
 console.log("computeLatestMatchPointsBreakdown.selftest.ts: ok");

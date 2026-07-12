@@ -1,6 +1,10 @@
 import type { LeaderboardMomentumRow } from "./buildLeaderboardMomentum";
 import type { LeaderboardLatestScoreEventContext } from "./parseLatestScoreEventContext";
 import type { ScoringCorrectionKind } from "./scoringCorrectionDisplay";
+import {
+  KNOCKOUT_PROGRESSION_PREDICTION_KINDS,
+  isKnockoutProgressionKind,
+} from "@/lib/predictions/knockoutProgressionKinds";
 
 export type TournamentMatchForPointsAttribution = {
   matchCode: string;
@@ -35,21 +39,14 @@ export type LeaderboardLatestPointsBreakdown = {
   isMixedUpdate: boolean;
 };
 
-function stageToPickPointsKind(stageCode: string | null | undefined): string | null {
-  switch (stageCode) {
-    case "round_of_32":
-      return "round_of_32";
-    case "round_of_16":
-      return "round_of_16";
-    case "quarterfinal":
-      return "quarterfinalist";
-    case "semifinal":
-      return "semifinalist";
-    case "final":
-      return "finalist";
-    default:
-      return null;
-  }
+const KO_PROGRESSION_RANK = new Map(
+  KNOCKOUT_PROGRESSION_PREDICTION_KINDS.map((kind, index) => [kind, index]),
+);
+
+function knockoutProgressionPredecessor(kind: string): string | null {
+  const rank = KO_PROGRESSION_RANK.get(kind);
+  if (rank == null || rank <= 0) return null;
+  return KNOCKOUT_PROGRESSION_PREDICTION_KINDS[rank - 1] ?? null;
 }
 
 function predictionsForParticipant(
@@ -59,9 +56,22 @@ function predictionsForParticipant(
   return predictions.filter((p) => p.participantId === participantId);
 }
 
+function participantHasKnockoutTeam(
+  predictions: readonly ParticipantPredictionForPointsAttribution[],
+  teamId: string,
+): boolean {
+  return predictions.some(
+    (p) =>
+      isKnockoutProgressionKind(p.predictionKind) &&
+      p.teamId != null &&
+      p.teamId === teamId,
+  );
+}
+
 /**
- * Knockout fixture: participant's saved winner for this match slot (scoring_result_kind + slot).
- * Awards stage pick points when the saved winner matches the official winner.
+ * Slot-based knockout pick award (legacy helper for tests / diagnostics).
+ * Live scoring uses once-per-team progression; prefer
+ * {@link computeKnockoutOncePerTeamProgressionDelta} for leaderboard attribution.
  */
 export function computeKnockoutMatchPickPointsDelta(
   predictions: readonly ParticipantPredictionForPointsAttribution[],
@@ -81,10 +91,35 @@ export function computeKnockoutMatchPickPointsDelta(
     return 0;
   }
 
-  const pointsKind = stageToPickPointsKind(match.stageCode);
-  if (!pointsKind) return 0;
-  const points = rulesByKind.get(pointsKind);
+  const points = rulesByKind.get(match.scoringResultKind);
   return points != null && points > 0 ? points : 0;
+}
+
+/**
+ * Ledger knockout scoring is once-per-team at furthest official stage.
+ * When a match advances a team to `scoringResultKind`, participants who already
+ * had that team in any knockout pick gain (newPoints - previousStagePoints).
+ */
+export function computeKnockoutOncePerTeamProgressionDelta(
+  predictions: readonly ParticipantPredictionForPointsAttribution[],
+  match: TournamentMatchForPointsAttribution,
+  rulesByKind: ReadonlyMap<string, number>,
+): number {
+  const winnerId = match.winnerTeamId;
+  const newKind = match.scoringResultKind;
+  if (!winnerId || !newKind || !isKnockoutProgressionKind(newKind)) {
+    return 0;
+  }
+  if (!participantHasKnockoutTeam(predictions, winnerId)) {
+    return 0;
+  }
+
+  const newPoints = rulesByKind.get(newKind) ?? 0;
+  if (newPoints <= 0) return 0;
+
+  const prevKind = knockoutProgressionPredecessor(newKind);
+  const oldPoints = prevKind ? (rulesByKind.get(prevKind) ?? 0) : 0;
+  return Math.max(0, newPoints - oldPoints);
 }
 
 export function computeMatchPointsDeltaForParticipant(input: {
@@ -101,14 +136,21 @@ export function computeMatchPointsDeltaForParticipant(input: {
   );
   let total = 0;
   let attributed = false;
+  const awardedWinnerIds = new Set<string>();
 
   for (const match of input.matches) {
-    if (match.scoringResultKind && match.scoringSlotKey) {
-      total += computeKnockoutMatchPickPointsDelta(
+    if (match.scoringResultKind && match.winnerTeamId) {
+      if (awardedWinnerIds.has(match.winnerTeamId)) {
+        attributed = true;
+        continue;
+      }
+      const delta = computeKnockoutOncePerTeamProgressionDelta(
         participantPreds,
         match,
         input.rulesByKind,
       );
+      awardedWinnerIds.add(match.winnerTeamId);
+      total += delta;
       attributed = true;
       continue;
     }
@@ -144,11 +186,17 @@ export function computeThirdPlaceQualifierPointsFromPredictions(input: {
   return total;
 }
 
+/**
+ * Attribute third-place correction only when this score-impact event newly scored
+ * third-place qualifiers (`scoring_corrections` metadata). Never infer from residual
+ * alone on later match syncs — that mislabels once-per-team knockout upgrades.
+ */
 function attributeScoringCorrections(input: {
   unexplainedDelta: number;
   thirdPlacePointsPerPick: number;
   thirdPlaceSettled: boolean;
   totalThirdPlacePointsFromPredictions: number;
+  thirdPlaceCorrectionInEvent: boolean;
 }): {
   thirdPlaceQualifierDelta: number | null;
   otherScoringDelta: number | null;
@@ -166,6 +214,7 @@ function attributeScoringCorrections(input: {
   let thirdPlaceQualifierDelta: number | null = null;
 
   if (
+    input.thirdPlaceCorrectionInEvent &&
     input.thirdPlaceSettled &&
     input.thirdPlacePointsPerPick > 0 &&
     input.totalThirdPlacePointsFromPredictions > 0
@@ -205,6 +254,8 @@ export function buildLatestPointsBreakdownForParticipant(input: {
   rulesByKind: ReadonlyMap<string, number>;
   officialThirdPlaceAdvancerTeamIds?: ReadonlySet<string>;
   thirdPlaceQualifiersSettled?: boolean;
+  /** When true, this event newly applied third-place scoring (from score-impact metadata). */
+  thirdPlaceCorrectionInEvent?: boolean;
 }): LeaderboardLatestPointsBreakdown | null {
   if (!input.momentum || !input.event?.hasValidSnapshot) return null;
 
@@ -236,11 +287,17 @@ export function buildLatestPointsBreakdownForParticipant(input: {
       pointsPerPick: thirdPlacePointsPerPick,
     });
 
+  const thirdPlaceCorrectionInEvent =
+    input.thirdPlaceCorrectionInEvent === true ||
+    (input.event.scoringCorrectionKinds?.includes("third_place_qualifier") ??
+      false);
+
   const corrections = attributeScoringCorrections({
     unexplainedDelta,
     thirdPlacePointsPerPick,
     thirdPlaceSettled: input.thirdPlaceQualifiersSettled === true,
     totalThirdPlacePointsFromPredictions,
+    thirdPlaceCorrectionInEvent,
   });
 
   const isMixedUpdate =
@@ -269,6 +326,7 @@ export function buildLatestPointsBreakdownByParticipantId(input: {
   rulesByKind: ReadonlyMap<string, number>;
   officialThirdPlaceAdvancerTeamIds?: ReadonlySet<string>;
   thirdPlaceQualifiersSettled?: boolean;
+  thirdPlaceCorrectionInEvent?: boolean;
 }): Map<string, LeaderboardLatestPointsBreakdown> {
   const map = new Map<string, LeaderboardLatestPointsBreakdown>();
   if (!input.event?.hasValidSnapshot) return map;
@@ -283,6 +341,7 @@ export function buildLatestPointsBreakdownByParticipantId(input: {
       rulesByKind: input.rulesByKind,
       officialThirdPlaceAdvancerTeamIds: input.officialThirdPlaceAdvancerTeamIds,
       thirdPlaceQualifiersSettled: input.thirdPlaceQualifiersSettled,
+      thirdPlaceCorrectionInEvent: input.thirdPlaceCorrectionInEvent,
     });
     if (breakdown) map.set(participantId, breakdown);
   }

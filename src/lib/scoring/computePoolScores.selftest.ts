@@ -297,6 +297,16 @@ assert.equal(thirdOutcome.totalsByParticipantId[alice], 2);
 assert.equal(thirdOutcome.ledgerLines.length, 1);
 assert.equal(thirdOutcome.ledgerLines[0]?.resultId, "res-tpq-slot3");
 
+// Repeated recompute must not increase third-place totals (idempotent replace semantics).
+const thirdOutcomeAgain = computePoolScores({
+  poolId,
+  predictions: thirdPreds,
+  results: thirdResults,
+  scoringRules: thirdRules,
+});
+assert.deepEqual(thirdOutcomeAgain.ledgerLines, thirdOutcome.ledgerLines);
+assert.equal(thirdOutcomeAgain.totalsByParticipantId[alice], 2);
+
 console.log("scoring selftest third-place set match: ok");
 
 // Round of 32 pick scores when the team officially advances (via round_of_16 result from R32 win).

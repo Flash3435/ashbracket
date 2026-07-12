@@ -16,6 +16,12 @@ export type LeaderboardLatestScoreEventContext = {
   winnerTeamName: string | null;
   loserTeamName: string | null;
   matchupShortLabel: string | null;
+  /**
+   * Named scoring corrections recorded on this score-impact event.
+   * Third-place display attribution requires `third_place_qualifier` here —
+   * do not infer corrections from standings residuals alone.
+   */
+  scoringCorrectionKinds: Array<"third_place_qualifier">;
 };
 
 function readString(v: unknown): string | null {
@@ -182,6 +188,17 @@ export function parseLatestScoreEventContext(
     trigger,
   });
 
+  const scoringCorrectionKinds: Array<"third_place_qualifier"> = [];
+  if (Array.isArray(metadata.scoring_corrections)) {
+    for (const entry of metadata.scoring_corrections) {
+      if (entry == null || typeof entry !== "object") continue;
+      const kind = (entry as { kind?: unknown }).kind;
+      if (kind === "third_place_qualifier") {
+        scoringCorrectionKinds.push("third_place_qualifier");
+      }
+    }
+  }
+
   return {
     hasValidSnapshot: options?.hasValidSnapshot ?? false,
     eventKind,
@@ -193,5 +210,6 @@ export function parseLatestScoreEventContext(
     winnerTeamName,
     loserTeamName,
     matchupShortLabel,
+    scoringCorrectionKinds,
   };
 }
