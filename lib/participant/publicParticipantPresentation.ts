@@ -11,8 +11,8 @@ import type {
  * - empty: no team saved on the pick
  * - out: team saved but marked out (historical locked invalid pick)
  * - scored: at least one ledger line for this prediction (points awarded)
- * - missed: team saved, qualifiers known, no points earned
- * - awaiting: team saved but qualifiers not yet official (or other pending results)
+ * - missed: team saved, official outcome settled, no points earned
+ * - awaiting: team saved but official outcome not yet settled for this slot
  */
 export type PickDisplayState = "empty" | "out" | "scored" | "missed" | "awaiting";
 
@@ -23,6 +23,46 @@ export type PickStatusPresentation = {
   /** One-line explanation for tooltips / helper copy */
   meaning: string;
 };
+
+export type PickDisplaySettlementContext = {
+  /** Uppercase group codes with both official winner and runner-up results. */
+  settledGroupCodes?: ReadonlySet<string> | readonly string[];
+  thirdPlaceQualifiersSettled?: boolean;
+};
+
+/** Build sorted uppercase group codes that have both winner and runner-up results. */
+export function settledGroupCodesFromOfficialRows(
+  rows: ReadonlyArray<{ kind: string; group_code?: string | null; groupCode?: string | null }>,
+): string[] {
+  const winners = new Set<string>();
+  const runners = new Set<string>();
+  for (const row of rows) {
+    const raw = row.group_code ?? row.groupCode ?? "";
+    const group = String(raw).trim().toUpperCase();
+    if (!group) continue;
+    if (row.kind === "group_winner") winners.add(group);
+    else if (row.kind === "group_runner_up") runners.add(group);
+  }
+  return [...winners].filter((group) => runners.has(group)).sort();
+}
+
+function settledGroupCodeSet(
+  codes: PickDisplaySettlementContext["settledGroupCodes"],
+): ReadonlySet<string> {
+  if (!codes) return new Set();
+  if (codes instanceof Set) return codes;
+  return new Set(
+    [...codes].map((code) => String(code).trim().toUpperCase()).filter(Boolean),
+  );
+}
+
+function isGroupOutcomeSettled(
+  groupCode: string | null | undefined,
+  settledGroups: ReadonlySet<string>,
+): boolean {
+  const group = (groupCode ?? "").trim().toUpperCase();
+  return Boolean(group) && settledGroups.has(group);
+}
 
 export type PublicParticipantDisplayPick = PublicParticipantPick & {
   displayLabel: string;
@@ -57,7 +97,9 @@ export type PublicParticipantDisplayLedgerItem = PublicParticipantLedgerRow & {
 export type PublicParticipantDisplaySummary = {
   totalPicks: number;
   scoredPicksCount: number;
-  /** Saved picks (team chosen) with no ledger lines yet */
+  /** Saved picks whose official outcome is settled but ranking earned no points */
+  missedPicksCount: number;
+  /** Saved picks (team chosen) with no ledger lines and unsettled official outcome */
   awaitingScoreCount: number;
   emptyPicksCount: number;
   stagesWithPointsCount: number;
@@ -170,11 +212,18 @@ function hasSavedTeam(pick: PublicParticipantPick): boolean {
 function resolvePickDisplayState(
   pick: PublicParticipantPick,
   pickLedger: PublicParticipantLedgerRow[],
-  context?: { thirdPlaceQualifiersSettled?: boolean },
+  context?: PickDisplaySettlementContext,
 ): PickDisplayState {
   if (pick.pickIsOut && hasSavedTeam(pick)) return "out";
   if (pickLedger.length > 0) return "scored";
   if (hasSavedTeam(pick)) {
+    if (
+      (pick.predictionKind === "group_winner" ||
+        pick.predictionKind === "group_runner_up") &&
+      isGroupOutcomeSettled(pick.groupCode, settledGroupCodeSet(context?.settledGroupCodes))
+    ) {
+      return "missed";
+    }
     if (
       pick.predictionKind === "third_place_qualifier" &&
       context?.thirdPlaceQualifiersSettled
@@ -186,7 +235,23 @@ function resolvePickDisplayState(
   return "empty";
 }
 
-export function pickStatusPresentation(state: PickDisplayState): PickStatusPresentation {
+function missedStatusMeaning(predictionKind: string | undefined): string {
+  if (predictionKind === "third_place_qualifier") {
+    return "Official third-place advancers are known and this pick did not score.";
+  }
+  if (
+    predictionKind === "group_winner" ||
+    predictionKind === "group_runner_up"
+  ) {
+    return "Official group results are in and this pick did not score.";
+  }
+  return "Official results are in and this pick did not score.";
+}
+
+export function pickStatusPresentation(
+  state: PickDisplayState,
+  pick?: Pick<PublicParticipantPick, "predictionKind"> | null,
+): PickStatusPresentation {
   switch (state) {
     case "out":
       return {
@@ -205,15 +270,14 @@ export function pickStatusPresentation(state: PickDisplayState): PickStatusPrese
       return {
         state,
         label: "Missed",
-        meaning:
-          "Official third-place advancers are known and this pick did not score.",
+        meaning: missedStatusMeaning(pick?.predictionKind),
       };
     case "awaiting":
       return {
         state,
         label: "Awaiting score",
         meaning:
-          "You saved a team here, but no points are on the board yet. That can mean results are still pending, or this pick did not score once results were in.",
+          "You saved a team here, but the official result for this pick is not final yet.",
       };
     case "empty":
       return {
@@ -388,7 +452,8 @@ export function buildPublicParticipantPresentation(detail: PublicParticipantDeta
   sections: PublicParticipantDisplaySection[];
   ledgerItems: PublicParticipantDisplayLedgerItem[];
 } {
-  const presentationContext = {
+  const presentationContext: PickDisplaySettlementContext = {
+    settledGroupCodes: detail.settledGroupCodes,
     thirdPlaceQualifiersSettled: detail.thirdPlaceQualifiersSettled === true,
   };
 
@@ -411,7 +476,7 @@ export function buildPublicParticipantPresentation(detail: PublicParticipantDeta
       displayLabel: described.displayLabel,
       detailLabel: described.detailLabel,
       state,
-      status: pickStatusPresentation(state),
+      status: pickStatusPresentation(state, pick),
       pointsEarned: pickPoints(pickLedger),
       ledgerCount: pickLedger.length,
     };
@@ -477,6 +542,7 @@ export function buildPublicParticipantPresentation(detail: PublicParticipantDeta
     });
 
   let scoredPicksCount = 0;
+  let missedPicksCount = 0;
   let awaitingScoreCount = 0;
   let emptyPicksCount = 0;
   for (const pick of detail.picks) {
@@ -486,6 +552,7 @@ export function buildPublicParticipantPresentation(detail: PublicParticipantDeta
       presentationContext,
     );
     if (state === "scored") scoredPicksCount += 1;
+    else if (state === "missed") missedPicksCount += 1;
     else if (state === "awaiting") awaitingScoreCount += 1;
     else if (state === "empty") emptyPicksCount += 1;
   }
@@ -498,6 +565,7 @@ export function buildPublicParticipantPresentation(detail: PublicParticipantDeta
   const summary: PublicParticipantDisplaySummary = {
     totalPicks: detail.picks.length,
     scoredPicksCount,
+    missedPicksCount,
     awaitingScoreCount,
     emptyPicksCount,
     stagesWithPointsCount: sections.filter((section) => section.totalPoints > 0)

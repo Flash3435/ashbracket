@@ -245,7 +245,7 @@ function StageSection({
                     ? "1 point award"
                     : `${pick.ledgerCount} point awards`
                   : pick.state === "missed"
-                    ? "Did not score"
+                    ? "0 points"
                   : pick.state === "awaiting"
                     ? "Not on the scoreboard yet"
                     : "—"}
@@ -253,6 +253,10 @@ function StageSection({
               {pick.pointsEarned > 0 ? (
                 <span className="text-base font-bold tabular-nums text-emerald-200">
                   +{formatPoolPoints(pick.pointsEarned)}
+                </span>
+              ) : pick.state === "missed" ? (
+                <span className="text-base font-bold tabular-nums text-ash-muted">
+                  0
                 </span>
               ) : (
                 <span className="text-ash-border-hover">—</span>
@@ -351,16 +355,14 @@ export function PublicParticipantProfile({
           "Picks that have earned at least one point award on the board.",
         )}
         {summaryCard(
-          "Awaiting score",
-          String(summary.awaitingScoreCount),
-          "Saved picks with no points yet — results may still be pending, or the pick may not score.",
+          "Missed",
+          String(summary.missedPicksCount),
+          "Saved picks where the official outcome is known and no points were awarded.",
         )}
         {summaryCard(
-          "Stages with points",
-          summary.totalStagesCount > 0
-            ? `${summary.stagesWithPointsCount} of ${summary.totalStagesCount}`
-            : "—",
-          "How many pick stages (group, third-place, knockout, bonus) are already contributing points.",
+          "Awaiting score",
+          String(summary.awaitingScoreCount),
+          "Saved picks still waiting on an official result for that slot.",
         )}
         {summaryCard(
           "Point awards",
@@ -380,10 +382,9 @@ export function PublicParticipantProfile({
             {isViewer ? "Your picks by stage" : "Picks by stage"}
           </h2>
           <p className="max-w-3xl text-sm leading-relaxed text-ash-muted">
-            Expand a stage to review each slot. Status badges reflect what we can see
-            from {isViewer ? "your" : "these"} saved picks and awarded points — we
-            cannot show whether an unscored pick is still waiting on results or has
-            already missed.
+            Expand a stage to review each slot. Status badges use saved picks, awarded
+            points, and official settlement where we have a reliable result signal
+            (group stage and best third-place advancers today).
           </p>
         </div>
 
@@ -393,9 +394,13 @@ export function PublicParticipantProfile({
             the board for this pick.
           </p>
           <p className="mt-1.5">
+            <span className="font-medium text-slate-300">Missed</span> — official
+            outcome is known and this pick earned 0 points.
+          </p>
+          <p className="mt-1.5">
             <span className="font-medium text-amber-100">Awaiting score</span> —{" "}
-            {isViewer ? "you picked" : "they picked"} a team, but no points yet
-            (pending results or no points earned).
+            {isViewer ? "you picked" : "they picked"} a team, but the official result
+            for this slot is not final yet.
           </p>
           <p className="mt-1.5">
             <span className="font-medium text-slate-300">No pick</span> — empty slot.

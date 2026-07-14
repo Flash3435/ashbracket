@@ -22,6 +22,7 @@ import { normalizeParticipantProfileRouteId } from "./participantProfileRouting"
 import { loadThirdPlaceQualifierSettlement } from "@/lib/scoring/ensureThirdPlaceQualifierResults";
 import { areThirdPlaceQualifiersSettled } from "@/lib/scoring/resolveOfficialThirdPlaceAdvancers";
 import { reconcileParticipantProfileTotals } from "./participantScoringConsistency";
+import { settledGroupCodesFromOfficialRows } from "./publicParticipantPresentation";
 
 type ParticipantBracketHeaderRpcRow = {
   display_name: string;
@@ -184,7 +185,7 @@ async function loadPublicPoolParticipantDetail(
 
   return {
     ok: true,
-    data: await attachThirdPlaceSettlement(supabase, detail),
+    data: await attachProfileSettlementContext(detail),
   };
 }
 
@@ -201,23 +202,46 @@ async function loadPoolEditionId(
   return data.tournament_edition_id as string;
 }
 
-async function attachThirdPlaceSettlement(
-  _supabase: SupabaseClient,
+async function loadSettledGroupCodesForEdition(
+  supabase: SupabaseClient,
+  editionId: string,
+): Promise<string[]> {
+  const { data, error } = await supabase
+    .from("results")
+    .select("kind, group_code")
+    .eq("edition_id", editionId)
+    .in("kind", ["group_winner", "group_runner_up"]);
+  if (error) throw new Error(error.message);
+  return settledGroupCodesFromOfficialRows(data ?? []);
+}
+
+/** Attach per-group and third-place settlement flags used by profile pick status. */
+async function attachProfileSettlementContext(
   detail: PublicParticipantDetail,
 ): Promise<PublicParticipantDetail> {
   const service = createServiceRoleClient();
   const editionId = await loadPoolEditionId(service, detail.poolId);
   if (!editionId) return detail;
 
+  const next: PublicParticipantDetail = { ...detail };
+
+  try {
+    next.settledGroupCodes = await loadSettledGroupCodesForEdition(
+      service,
+      editionId,
+    );
+  } catch {
+    // Leave unset; group picks without context continue to show as awaiting.
+  }
+
   try {
     const resolution = await loadThirdPlaceQualifierSettlement(service, editionId);
-    return {
-      ...detail,
-      thirdPlaceQualifiersSettled: areThirdPlaceQualifiersSettled(resolution),
-    };
+    next.thirdPlaceQualifiersSettled = areThirdPlaceQualifiersSettled(resolution);
   } catch {
-    return detail;
+    // Leave unset; third-place picks without context continue to show as awaiting.
   }
+
+  return next;
 }
 
 async function loadPeerPoolParticipantDetail(
@@ -295,7 +319,7 @@ async function loadPeerPoolParticipantDetail(
 
   return {
     ok: true,
-    data: await attachThirdPlaceSettlement(service, detail),
+    data: await attachProfileSettlementContext(detail),
   };
 }
 

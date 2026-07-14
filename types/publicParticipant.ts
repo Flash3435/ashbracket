@@ -33,6 +33,11 @@ export type PublicParticipantDetail = {
   rank: number;
   picks: PublicParticipantPick[];
   ledger: PublicParticipantLedgerRow[];
+  /**
+   * Uppercase group letters whose official winner and runner-up results both exist.
+   * Used so settled incorrect group picks can display as missed (no ledger row).
+   */
+  settledGroupCodes?: readonly string[];
   /** True when the eight official third-place advancers are known for scoring display. */
   thirdPlaceQualifiersSettled?: boolean;
 };
