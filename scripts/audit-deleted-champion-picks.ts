@@ -505,7 +505,7 @@ async function main(): Promise<void> {
       );
       for (const hit of repairHits) {
         deletedChampionTeamId = deletedChampionTeamId ?? hit.teamId;
-        deletionTimestamp = deletionTimestamp ?? hit.timestamp;
+        deletionTimestamp = deletionTimestamp ?? hit.timestamp ?? null;
         levels.push("confirmed_repair_log");
         evidence.push(
           `Repair log/report (${hit.source}) cleared champion ${hit.teamId}${
