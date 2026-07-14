@@ -20,6 +20,10 @@ export type AutoCarriedMatchSlotPickResult =
   | {
       status: "inferred_live";
       inferredTeamId: string;
+      /** Auto-carry always comes from a raw persisted upstream feeder pick. */
+      source: "persisted_upstream_pick";
+      sourcePredictionKind: KnockoutProgressionPredictionKind;
+      sourceSlotKey: string;
       sourceSlots: AutoCarriedMatchSlotPickSourceSlot[];
       summaryCopy: string;
       detailCopy: string;
@@ -27,6 +31,9 @@ export type AutoCarriedMatchSlotPickResult =
   | {
       status: "not_inferable";
       inferredTeamId: null;
+      source: null;
+      sourcePredictionKind: null;
+      sourceSlotKey: null;
       sourceSlots: [];
       summaryCopy: null;
       detailCopy: null;
@@ -153,6 +160,9 @@ export function inferAutoCarriedMatchSlotPick(input: {
   const notInferable: AutoCarriedMatchSlotPickResult = {
     status: "not_inferable",
     inferredTeamId: null,
+    source: null,
+    sourcePredictionKind: null,
+    sourceSlotKey: null,
     sourceSlots: [],
     summaryCopy: null,
     detailCopy: null,
@@ -182,13 +192,17 @@ export function inferAutoCarriedMatchSlotPick(input: {
     slots: input.slots,
   });
 
-  if (teams.length !== 1) return notInferable;
+  if (teams.length !== 1 || sourceSlots.length === 0) return notInferable;
 
   const inferredTeamId = teams[0]!;
+  const primarySource = sourceSlots[0]!;
   const label = teamName(inferredTeamId, input.teams);
   return {
     status: "inferred_live",
     inferredTeamId,
+    source: "persisted_upstream_pick",
+    sourcePredictionKind: primarySource.predictionKind,
+    sourceSlotKey: primarySource.slotKey,
     sourceSlots,
     summaryCopy: autoCarriedPickSummaryCopy(label),
     detailCopy: autoCarriedPickDetailCopy(label),

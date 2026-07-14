@@ -1,7 +1,10 @@
 import type { Team } from "../../src/types/domain";
 import type { KnockoutPickSlotDraft } from "../../types/adminKnockoutPicks";
 import type { TournamentMatchPublicRow } from "../../types/tournamentPublic";
-import { buildEliminatedTeamIdSet } from "./bracketTeamDisplay";
+import {
+  buildEliminatedTeamIdSet,
+  findTeamKnockoutEliminationRoundLabel,
+} from "./bracketTeamDisplay";
 import { deriveParticipantBracket } from "./deriveParticipantBracket";
 import {
   FINAL_FEEDER_NO_CHAMPION_HELPER,
@@ -10,6 +13,8 @@ import {
   AWAITING_RESULT_BRACKET_LABEL,
   OFFICIAL_ADVANCED_NOT_YOUR_PICK_TOOLTIP,
   NO_SAVED_PICK_BRACKET_TOOLTIP,
+  championPickEliminatedRoundCopy,
+  CHAMPION_PICK_OUT_GENERIC_COPY,
 } from "./knockoutBracketDisplayCopy";
 import { resolveFullBracketUnlockedForTracker } from "./resolveLiveBracketTrackerMode";
 import type { BracketMatchResolved } from "./types";
@@ -93,6 +98,10 @@ export type LiveBracketTrackerModel = {
     emptyLabel: string;
     participantPick: boolean;
     eliminatedFromTournament: boolean;
+    /** Official knockout round where the champion pick was eliminated, when known. */
+    eliminationRoundLabel: string | null;
+    /** Detail under the champion name when the saved pick is out. */
+    outDetailCopy: string | null;
     participantPickBadge: ParticipantPickBadge;
     tournamentOutcome: TournamentSideOutcome | null;
   };
@@ -883,6 +892,24 @@ export function buildLiveBracketTracker(
   });
 
   const hasSavedChampionPick = Boolean(champId);
+  const eliminationRoundLabel =
+    hasSavedChampionPick && championEliminated
+      ? findTeamKnockoutEliminationRoundLabel(
+          champId,
+          input.tournamentMatches,
+          input.teams,
+        )
+      : null;
+  const championOut =
+    hasSavedChampionPick &&
+    (championEliminated ||
+      championPickBadge === "your_pick_eliminated" ||
+      championPickBadge === "your_pick_wrong_path");
+  const outDetailCopy = championOut
+    ? eliminationRoundLabel
+      ? championPickEliminatedRoundCopy(eliminationRoundLabel)
+      : CHAMPION_PICK_OUT_GENERIC_COPY
+    : null;
   const showChampionCard = hasAnyKnockoutProgressionPick(input.slots);
   const finalHasFeederTeams = Boolean(
     finalMatch &&
@@ -975,6 +1002,8 @@ export function buildLiveBracketTracker(
       emptyLabel: NO_CHAMPION_PICK_SAVED_LABEL,
       participantPick: Boolean(champId),
       eliminatedFromTournament: championEliminated,
+      eliminationRoundLabel,
+      outDetailCopy,
       participantPickBadge: championPickBadge,
       tournamentOutcome: championTournamentOutcome,
     },

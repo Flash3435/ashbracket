@@ -178,12 +178,15 @@ void (async function main() {
       emptyLabel: "No champion pick saved",
       participantPick: true,
       eliminatedFromTournament: false,
+      eliminationRoundLabel: null,
+      outDetailCopy: null,
       participantPickBadge: "your_pick_alive",
       tournamentOutcome: null,
     },
     teamById,
   );
   assert(champion.line === "Champion pick: France", "champion pick line");
+  assert(champion.detail === null, "alive champion has no out detail");
 
   const unreachable = resolveAdminChampionSummaryLine(
     {
@@ -194,14 +197,17 @@ void (async function main() {
       emptyLabel: "No champion pick saved",
       participantPick: true,
       eliminatedFromTournament: true,
+      eliminationRoundLabel: "Round of 32",
+      outDetailCopy: "Out — eliminated in the Round of 32.",
       participantPickBadge: "your_pick_eliminated",
       tournamentOutcome: "eliminated",
     },
     teamById,
   );
+  assert(unreachable.line === "Champion pick: Brazil", "unreachable champion name");
   assert(
-    unreachable.line === "Champion pick out — team not in the final",
-    "unreachable champion",
+    unreachable.detail === "Out — eliminated in the Round of 32.",
+    "unreachable champion round detail",
   );
 
   const tracker: LiveBracketTrackerModel = {
@@ -240,6 +246,8 @@ void (async function main() {
       emptyLabel: "No champion pick saved",
       participantPick: true,
       eliminatedFromTournament: false,
+      eliminationRoundLabel: null,
+      outDetailCopy: null,
       participantPickBadge: "your_pick_alive",
       tournamentOutcome: null,
     },

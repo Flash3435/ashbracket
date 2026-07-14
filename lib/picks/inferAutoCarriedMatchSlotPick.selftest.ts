@@ -313,6 +313,9 @@ function gradualFor(matches: TournamentMatchPublicRow[], nowMs: number) {
   assert.strictEqual(m97.winnerTeamId, "");
   assert.strictEqual(m97.autoCarriedPick?.status, "inferred_live");
   assert.strictEqual(m97.autoCarriedPick?.inferredTeamId, "team-fra");
+  assert.strictEqual(m97.autoCarriedPick?.source, "persisted_upstream_pick");
+  assert.strictEqual(m97.autoCarriedPick?.sourcePredictionKind, "quarterfinalist");
+  assert.strictEqual(m97.autoCarriedPick?.sourceSlotKey, "1");
   assert.strictEqual(validatedKnockoutMatchWinner(m97), "team-fra");
   assert.strictEqual(isKnockoutMatchDirectPickEligible(m97), false);
   const presentation = knockoutMatchSavedPickPresentation(m97, teams);

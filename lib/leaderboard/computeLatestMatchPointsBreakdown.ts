@@ -44,6 +44,7 @@ const KO_PROGRESSION_RANK = new Map(
 );
 
 function knockoutProgressionPredecessor(kind: string): string | null {
+  if (!isKnockoutProgressionKind(kind)) return null;
   const rank = KO_PROGRESSION_RANK.get(kind);
   if (rank == null || rank <= 0) return null;
   return KNOCKOUT_PROGRESSION_PREDICTION_KINDS[rank - 1] ?? null;

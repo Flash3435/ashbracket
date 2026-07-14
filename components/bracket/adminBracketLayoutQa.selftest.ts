@@ -263,7 +263,11 @@ void (async function main() {
   const staleHtml = renderToStaticMarkup(
     AdminPosterBracketTracker({ tracker: staleTracker, teamById, matchEditHref: null }),
   );
-  assert(staleHtml.includes("Champion pick no longer reachable"), "stale champion copy");
+  assert(
+    staleHtml.includes("Champion pick: France") &&
+      staleHtml.includes("Out — champion pick eliminated."),
+    "stale champion copy",
+  );
   const staleSummary = buildAdminParticipantPicksSummary(staleTracker, teamById);
   assert(
     staleSummary.stalePicks.includes("France") || staleSummary.championStatus === "unreachable",

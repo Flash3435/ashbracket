@@ -587,16 +587,13 @@ function effectiveKnockoutMatchWinnerTeamId(
   return null;
 }
 
-/** Winner pick counts only when it matches that row's official matchup. */
-export function validatedKnockoutMatchWinner(
-  row: KnockoutMatchPickRow | undefined,
+function knockoutWinnerMatchesCurrentSides(
+  row: Pick<KnockoutMatchPickRow, "homeTeamId" | "awayTeamId" | "officialWinnerTeamId">,
+  winnerTeamId: string,
 ): string | null {
-  if (!row) return null;
-  const w = effectiveKnockoutMatchWinnerTeamId(row);
-  if (!w) return null;
   if (
     savedPickIsStaleForKnockoutRow({
-      winnerTeamId: w,
+      winnerTeamId,
       homeTeamId: row.homeTeamId,
       awayTeamId: row.awayTeamId,
       officialWinnerTeamId: row.officialWinnerTeamId,
@@ -604,9 +601,67 @@ export function validatedKnockoutMatchWinner(
   ) {
     return null;
   }
-  if (row.homeTeamId?.trim() === w) return w;
-  if (row.awayTeamId?.trim() === w) return w;
+  if (row.homeTeamId?.trim() === winnerTeamId) return winnerTeamId;
+  if (row.awayTeamId?.trim() === winnerTeamId) return winnerTeamId;
   return null;
+}
+
+/**
+ * Persisted saved winner for this row only — never includes auto-carried picks.
+ * Use for downstream feeder/matchup construction.
+ */
+export function persistedKnockoutMatchWinner(
+  row: KnockoutMatchPickRow | undefined,
+): string | null {
+  if (!row) return null;
+  const saved = row.winnerTeamId.trim();
+  if (!saved) return null;
+  return knockoutWinnerMatchesCurrentSides(row, saved);
+}
+
+/**
+ * Winner allowed to feed later-round participant matchups:
+ * official completed-match result first, else persisted saved pick.
+ * Never returns an auto-carried inferred pick.
+ */
+export function persistedOrOfficialKnockoutMatchWinnerTeamId(
+  row: KnockoutMatchPickRow,
+  bracketKind: KnockoutWizardBracketKind,
+  input: BuildKnockoutMatchPickRowsInput,
+): string | null {
+  const def = knockoutMatchStepDef(bracketKind);
+  if (!def) return persistedKnockoutMatchWinner(row);
+
+  const official = officialKnockoutMatchResultWinner(
+    row.fifaMatchNo,
+    def.stageCode,
+    input.teams,
+    input.tournamentMatches,
+  );
+  if (official) {
+    if (row.homeTeamId?.trim() && row.awayTeamId?.trim()) {
+      if (official === row.homeTeamId || official === row.awayTeamId) {
+        return official;
+      }
+      return null;
+    }
+    return official;
+  }
+
+  return persistedKnockoutMatchWinner(row);
+}
+
+/**
+ * Display/scoring winner for this match row only: persisted pick, else auto-carried.
+ * Must not be used to populate downstream participant matchup sides.
+ */
+export function validatedKnockoutMatchWinner(
+  row: KnockoutMatchPickRow | undefined,
+): string | null {
+  if (!row) return null;
+  const w = effectiveKnockoutMatchWinnerTeamId(row);
+  if (!w) return null;
+  return knockoutWinnerMatchesCurrentSides(row, w);
 }
 
 export type KnockoutMatchSavedPickStatus =
@@ -751,34 +806,15 @@ export function knockoutMatchSavedPickPresentation(
 }
 
 /**
- * Bracket progression winner: valid participant pick, otherwise the published
- * fixture result when the row is locked by official feeders or kickoff.
+ * Winner that may resolve a feeder side for the next knockout round.
+ * Official completed-match result, else persisted saved pick — never auto-carried.
  */
 export function readConfirmedKnockoutMatchWinner(
   row: KnockoutMatchPickRow,
   bracketKind: KnockoutWizardBracketKind,
   input: BuildKnockoutMatchPickRowsInput,
 ): string | null {
-  const participant = validatedKnockoutMatchWinner(row);
-  if (participant) return participant;
-
-  const def = knockoutMatchStepDef(bracketKind);
-  if (!def) return null;
-
-  const official = officialKnockoutMatchResultWinner(
-    row.fifaMatchNo,
-    def.stageCode,
-    input.teams,
-    input.tournamentMatches,
-  );
-  if (!official) return null;
-  if (row.homeTeamId && row.awayTeamId) {
-    if (official === row.homeTeamId || official === row.awayTeamId) {
-      return official;
-    }
-    return null;
-  }
-  return official;
+  return persistedOrOfficialKnockoutMatchWinnerTeamId(row, bracketKind, input);
 }
 
 function buildInputForBracketKind(

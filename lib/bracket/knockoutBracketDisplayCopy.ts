@@ -1,6 +1,19 @@
 /** Shown on the champion card when knockout picks exist but no champion row is saved. */
 export const NO_CHAMPION_PICK_SAVED_LABEL = "No champion pick saved";
 
+/** Prefix for the saved champion team name on the champion card. */
+export function championPickSavedLabel(teamName: string): string {
+  return `Champion pick: ${teamName}`;
+}
+
+/** Eliminated champion detail when the knockout round is known. */
+export function championPickEliminatedRoundCopy(roundLabel: string): string {
+  return `Out — eliminated in the ${roundLabel}.`;
+}
+
+/** Fallback when the champion is out but the elimination round is unknown. */
+export const CHAMPION_PICK_OUT_GENERIC_COPY = "Out — champion pick eliminated.";
+
 /** Muted empty slot in live bracket tracker (no team known yet). */
 export const NO_SAVED_PICK_BRACKET_LABEL = "No saved pick";
 

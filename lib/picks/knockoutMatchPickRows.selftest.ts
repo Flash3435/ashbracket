@@ -2987,6 +2987,7 @@ function r32Side(slotKey: string, teamId = ""): KnockoutPickSlotDraft {
     teams,
     tournamentMatches,
     knockoutBracketPicksUnlocked: true,
+    nowMs: new Date("2026-07-10T12:00:00Z").getTime(),
   };
   const m97 = buildKnockoutMatchPickRows(qfInput).find((r) => r.fifaMatchNo === 97)!;
   assert.strictEqual(m97.homeTeamId, "team-ger");
@@ -3658,6 +3659,380 @@ function r32Side(slotKey: string, teamId = ""): KnockoutPickSlotDraft {
     )?.teamId,
     "team-nor",
   );
+}
+
+// --- Auto-carry is terminal: must not feed later-round participant matchups ---
+{
+  function autoCarryTeam(
+    id: string,
+    name: string,
+    code: string,
+  ): Team {
+    return {
+      id,
+      name,
+      countryCode: code,
+      fifaCode: code,
+      fifaRank: 1,
+      fifaRankAsOf: null,
+      createdAt: "",
+      updatedAt: "",
+    };
+  }
+  function autoCarryPub(
+    partial: Partial<TournamentMatchPublicRow> &
+      Pick<TournamentMatchPublicRow, "match_code" | "stage_code">,
+  ): TournamentMatchPublicRow {
+    return {
+      match_id: partial.match_code.toLowerCase(),
+      edition_id: "ed",
+      edition_code: "2026",
+      match_code: partial.match_code,
+      stage_code: partial.stage_code,
+      stage_label: partial.stage_code,
+      stage_sort_order: 1,
+      group_code: null,
+      round_index: 0,
+      kickoff_at: partial.kickoff_at ?? "2026-07-01T18:00:00Z",
+      status: partial.status ?? "finished",
+      home_goals: partial.home_goals ?? 1,
+      away_goals: partial.away_goals ?? 0,
+      home_penalties: null,
+      away_penalties: null,
+      home_team_name: partial.home_team_name ?? "Home",
+      home_country_code: partial.home_country_code ?? "HOM",
+      away_team_name: partial.away_team_name ?? "Away",
+      away_country_code: partial.away_country_code ?? "AWY",
+      winner_team_name: partial.winner_team_name ?? null,
+      winner_country_code: partial.winner_country_code ?? null,
+    };
+  }
+
+  const cascadeTeams: Team[] = [
+    autoCarryTeam("team-fra", "France", "FRA"),
+    autoCarryTeam("team-esp", "Spain", "ESP"),
+    autoCarryTeam("team-can", "Canada", "CAN"),
+    autoCarryTeam("team-mar", "Morocco", "MAR"),
+    autoCarryTeam("team-ger", "Germany", "GER"),
+    autoCarryTeam("team-eng", "England", "ENG"),
+    autoCarryTeam("team-bra", "Brazil", "BRA"),
+    autoCarryTeam("team-arg", "Argentina", "ARG"),
+  ];
+
+  // A. QF auto-carry must not feed SF participant sides
+  {
+    const nowMs = new Date("2026-07-02T12:00:00Z").getTime();
+    const tournamentMatches = [
+      autoCarryPub({
+        match_code: "M89",
+        stage_code: "round_of_16",
+        home_country_code: "FRA",
+        away_country_code: "CAN",
+        winner_country_code: "FRA",
+        winner_team_name: "France",
+        kickoff_at: "2026-07-01T18:00:00Z",
+      }),
+      autoCarryPub({
+        match_code: "M90",
+        stage_code: "round_of_16",
+        home_country_code: "MAR",
+        away_country_code: "BRA",
+        winner_country_code: "MAR",
+        winner_team_name: "Morocco",
+        kickoff_at: "2026-07-01T20:00:00Z",
+      }),
+      autoCarryPub({
+        match_code: "M97",
+        stage_code: "quarterfinal",
+        status: "scheduled",
+        home_goals: null,
+        away_goals: null,
+        home_country_code: "FRA",
+        away_country_code: "MAR",
+        winner_country_code: null,
+        kickoff_at: "2026-07-06T18:00:00Z",
+      }),
+    ];
+    const slots: KnockoutPickSlotDraft[] = [
+      ...Array.from({ length: 16 }, (_, i) => r16Slot(String(i + 1), "")),
+      qfSlot("1", "team-fra"),
+      qfSlot("2", "team-can"),
+    ];
+    const m97 = buildKnockoutMatchPickRows({
+      bracketKind: "quarterfinalist",
+      slots,
+      teams: cascadeTeams,
+      tournamentMatches,
+      knockoutBracketPicksUnlocked: true,
+      nowMs,
+    }).find((r) => r.fifaMatchNo === 97)!;
+    assert.strictEqual(m97.autoCarriedPick?.status, "inferred_live");
+    assert.strictEqual(m97.autoCarriedPick?.inferredTeamId, "team-fra");
+    assert.strictEqual(validatedKnockoutMatchWinner(m97), "team-fra");
+
+    const m101 = buildKnockoutMatchPickRows({
+      bracketKind: "semifinalist",
+      slots,
+      teams: cascadeTeams,
+      tournamentMatches,
+      knockoutBracketPicksUnlocked: true,
+      nowMs,
+    }).find((r) => r.fifaMatchNo === 101)!;
+    assert.notStrictEqual(
+      m101.homeTeamId,
+      "team-fra",
+      "A: M101 home must not come from M97 auto-carry",
+    );
+    assert.strictEqual(
+      validatedKnockoutMatchWinner(m101),
+      null,
+      "A: M101 has no saved/persisted winner",
+    );
+  }
+
+  // B. SF auto-carry must not feed Final participant sides
+  {
+    const nowMs = new Date("2026-07-06T12:00:00Z").getTime();
+    const tournamentMatches = [
+      autoCarryPub({
+        match_code: "M97",
+        stage_code: "quarterfinal",
+        home_country_code: "ESP",
+        away_country_code: "CAN",
+        winner_country_code: "ESP",
+        winner_team_name: "Spain",
+        kickoff_at: "2026-07-04T18:00:00Z",
+      }),
+      autoCarryPub({
+        match_code: "M98",
+        stage_code: "quarterfinal",
+        home_country_code: "FRA",
+        away_country_code: "BRA",
+        winner_country_code: "FRA",
+        winner_team_name: "France",
+        kickoff_at: "2026-07-04T20:00:00Z",
+      }),
+      autoCarryPub({
+        match_code: "M101",
+        stage_code: "semifinal",
+        status: "scheduled",
+        home_goals: null,
+        away_goals: null,
+        home_country_code: "ESP",
+        away_country_code: "FRA",
+        winner_country_code: null,
+        kickoff_at: "2026-07-10T18:00:00Z",
+      }),
+    ];
+    const slots: KnockoutPickSlotDraft[] = [
+      ...Array.from({ length: 16 }, (_, i) => r16Slot(String(i + 1), "")),
+      qfSlot("1", "team-esp"),
+      qfSlot("2", "team-bra"),
+    ];
+    // M101 feeders are semifinalist slots 1/2 from QF winners M97/M98
+    slots.push(sfSlot("1", "team-esp"), sfSlot("2", "team-bra"));
+    const m101 = buildKnockoutMatchPickRows({
+      bracketKind: "semifinalist",
+      slots,
+      teams: cascadeTeams,
+      tournamentMatches,
+      knockoutBracketPicksUnlocked: true,
+      nowMs,
+    }).find((r) => r.fifaMatchNo === 101)!;
+    assert.strictEqual(m101.autoCarriedPick?.status, "inferred_live");
+    assert.strictEqual(m101.autoCarriedPick?.inferredTeamId, "team-esp");
+    assert.strictEqual(validatedKnockoutMatchWinner(m101), "team-esp");
+
+    const m104 = buildKnockoutMatchPickRows({
+      bracketKind: "finalist",
+      slots,
+      teams: cascadeTeams,
+      tournamentMatches,
+      knockoutBracketPicksUnlocked: true,
+      nowMs,
+    })[0]!;
+    assert.notStrictEqual(
+      m104.homeTeamId,
+      "team-esp",
+      "B: M104 must not show Spain from M101 auto-carry",
+    );
+    assert.strictEqual(m104.autoCarriedPick?.status ?? "not_inferable", "not_inferable");
+    assert.strictEqual(validatedKnockoutMatchWinner(m104), null);
+  }
+
+  // C. Official SF result may still feed official Final matchup sides
+  {
+    const nowMs = new Date("2026-07-12T12:00:00Z").getTime();
+    const tournamentMatches = [
+      autoCarryPub({
+        match_code: "M97",
+        stage_code: "quarterfinal",
+        home_country_code: "ESP",
+        away_country_code: "CAN",
+        winner_country_code: "ESP",
+        winner_team_name: "Spain",
+        kickoff_at: "2026-07-04T18:00:00Z",
+      }),
+      autoCarryPub({
+        match_code: "M98",
+        stage_code: "quarterfinal",
+        home_country_code: "FRA",
+        away_country_code: "BRA",
+        winner_country_code: "FRA",
+        winner_team_name: "France",
+        kickoff_at: "2026-07-04T20:00:00Z",
+      }),
+      autoCarryPub({
+        match_code: "M99",
+        stage_code: "quarterfinal",
+        home_country_code: "GER",
+        away_country_code: "ARG",
+        winner_country_code: "GER",
+        winner_team_name: "Germany",
+        kickoff_at: "2026-07-05T18:00:00Z",
+      }),
+      autoCarryPub({
+        match_code: "M100",
+        stage_code: "quarterfinal",
+        home_country_code: "ENG",
+        away_country_code: "BRA",
+        winner_country_code: "ENG",
+        winner_team_name: "England",
+        kickoff_at: "2026-07-05T20:00:00Z",
+      }),
+      autoCarryPub({
+        match_code: "M101",
+        stage_code: "semifinal",
+        home_country_code: "ESP",
+        away_country_code: "FRA",
+        winner_country_code: "ESP",
+        winner_team_name: "Spain",
+        kickoff_at: "2026-07-10T18:00:00Z",
+      }),
+      autoCarryPub({
+        match_code: "M102",
+        stage_code: "semifinal",
+        home_country_code: "GER",
+        away_country_code: "ENG",
+        winner_country_code: "GER",
+        winner_team_name: "Germany",
+        kickoff_at: "2026-07-10T20:00:00Z",
+      }),
+      autoCarryPub({
+        match_code: "M104",
+        stage_code: "final",
+        status: "scheduled",
+        home_goals: null,
+        away_goals: null,
+        home_country_code: "ESP",
+        away_country_code: "GER",
+        winner_country_code: null,
+        kickoff_at: "2026-07-14T18:00:00Z",
+      }),
+    ];
+    const slots: KnockoutPickSlotDraft[] = [
+      ...Array.from({ length: 16 }, (_, i) => r16Slot(String(i + 1), "")),
+      sfSlot("1", "team-esp"),
+      sfSlot("2", "team-bra"),
+    ];
+    const m101 = buildKnockoutMatchPickRows({
+      bracketKind: "semifinalist",
+      slots,
+      teams: cascadeTeams,
+      tournamentMatches,
+      knockoutBracketPicksUnlocked: true,
+      nowMs,
+    }).find((r) => r.fifaMatchNo === 101)!;
+    assert.strictEqual(m101.winnerTeamId, "");
+    assert.strictEqual(m101.autoCarriedPick?.status, "inferred_live");
+
+    const m104 = buildKnockoutMatchPickRows({
+      bracketKind: "finalist",
+      slots,
+      teams: cascadeTeams,
+      tournamentMatches,
+      knockoutBracketPicksUnlocked: true,
+      nowMs,
+    })[0]!;
+    assert.strictEqual(
+      m104.homeTeamId,
+      "team-esp",
+      "C: Spain reaches Final via official M101 result",
+    );
+    assert.strictEqual(m104.awayTeamId, "team-ger");
+    assert.notStrictEqual(
+      m104.autoCarriedPick?.status,
+      "inferred_live",
+      "C: Final Spain side is official, not auto-carry pick cascade",
+    );
+  }
+
+  // D. Persisted SF winner still feeds Final participant path
+  {
+    const nowMs = new Date("2026-07-06T12:00:00Z").getTime();
+    const tournamentMatches = [
+      autoCarryPub({
+        match_code: "M97",
+        stage_code: "quarterfinal",
+        home_country_code: "ESP",
+        away_country_code: "CAN",
+        winner_country_code: "ESP",
+        winner_team_name: "Spain",
+        kickoff_at: "2026-07-04T18:00:00Z",
+      }),
+      autoCarryPub({
+        match_code: "M98",
+        stage_code: "quarterfinal",
+        home_country_code: "FRA",
+        away_country_code: "BRA",
+        winner_country_code: "FRA",
+        winner_team_name: "France",
+        kickoff_at: "2026-07-04T20:00:00Z",
+      }),
+      autoCarryPub({
+        match_code: "M101",
+        stage_code: "semifinal",
+        status: "scheduled",
+        home_goals: null,
+        away_goals: null,
+        home_country_code: "ESP",
+        away_country_code: "FRA",
+        winner_country_code: null,
+        kickoff_at: "2026-07-10T18:00:00Z",
+      }),
+    ];
+    const slots: KnockoutPickSlotDraft[] = [
+      ...Array.from({ length: 16 }, (_, i) => r16Slot(String(i + 1), "")),
+      sfSlot("1", "team-esp"),
+      sfSlot("2", "team-fra"),
+      finSlot("1", "team-esp"),
+    ];
+    const m101 = buildKnockoutMatchPickRows({
+      bracketKind: "semifinalist",
+      slots,
+      teams: cascadeTeams,
+      tournamentMatches,
+      knockoutBracketPicksUnlocked: true,
+      nowMs,
+    }).find((r) => r.fifaMatchNo === 101)!;
+    assert.strictEqual(m101.winnerTeamId, "team-esp");
+    assert.strictEqual(m101.autoCarriedPick ?? null, null);
+    assert.strictEqual(validatedKnockoutMatchWinner(m101), "team-esp");
+
+    const m104 = buildKnockoutMatchPickRows({
+      bracketKind: "finalist",
+      slots,
+      teams: cascadeTeams,
+      tournamentMatches,
+      knockoutBracketPicksUnlocked: true,
+      nowMs,
+    })[0]!;
+    assert.strictEqual(
+      m104.homeTeamId,
+      "team-esp",
+      "D: persisted M101 winner feeds Final participant side",
+    );
+  }
 }
 
 console.log("knockoutMatchPickRows.selftest.ts: ok");

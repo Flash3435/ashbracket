@@ -478,5 +478,76 @@ void (async function main() {
     );
   }
 
+  // E. Saved champion eliminated in R32 preserves name + round copy
+  {
+    const nedOut = knockoutMatch({
+      match_id: "m73",
+      match_code: "M73",
+      stage_code: "round_of_32",
+      stage_label: "Round of 32",
+      status: "finished",
+      home_country_code: "NED",
+      home_team_name: "Netherlands",
+      away_country_code: "USA",
+      away_team_name: "USA",
+      home_goals: 0,
+      away_goals: 1,
+      winner_country_code: "USA",
+      winner_team_name: "USA",
+    });
+    const slots: KnockoutPickSlotDraft[] = [
+      slot("champ", "champion", "team-ned"),
+      slot("sf|1", "semifinalist", "team-fra", "1"),
+    ];
+    const teamsWithNed = [
+      ...teams,
+      team("team-ned", "Netherlands", "NED"),
+      team("team-usa", "USA", "USA"),
+    ];
+
+    const tracker = buildLiveBracketTracker({
+      slots,
+      teams: teamsWithNed,
+      knockoutBracketPicksUnlocked: true,
+      tournamentMatches: [nedOut],
+    });
+
+    assert(tracker.champion.hasSavedPick, "E: has saved champion");
+    assert(tracker.champion.teamId === "team-ned", "E: Netherlands preserved");
+    assert(tracker.champion.displayName === "Netherlands", "E: display name");
+    assert(tracker.champion.eliminatedFromTournament, "E: marked eliminated");
+    assert(
+      tracker.champion.eliminationRoundLabel === "Round of 32",
+      "E: elimination round",
+    );
+    assert(
+      tracker.champion.outDetailCopy === "Out — eliminated in the Round of 32.",
+      "E: out detail copy",
+    );
+    assert(
+      tracker.champion.displayName !== NO_CHAMPION_PICK_SAVED_LABEL,
+      "E: never empty champion label",
+    );
+  }
+
+  // F. No champion row
+  {
+    const slots: KnockoutPickSlotDraft[] = [
+      slot("f|1", "finalist", "team-fra", "1"),
+    ];
+    const tracker = buildLiveBracketTracker({
+      slots,
+      teams,
+      knockoutBracketPicksUnlocked: true,
+      tournamentMatches: [],
+    });
+    assert(!tracker.champion.hasSavedPick, "F: no saved champion");
+    assert(
+      tracker.champion.displayName === NO_CHAMPION_PICK_SAVED_LABEL,
+      "F: empty champion label",
+    );
+    assert(tracker.champion.outDetailCopy == null, "F: no out detail");
+  }
+
   console.log("liveBracketTracker.selftest.ts: ok");
 })();

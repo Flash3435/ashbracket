@@ -61,6 +61,13 @@ export function ChampionSummaryCard({ champion, teamById }: Props) {
       >
         {summary.line}
       </p>
+      {summary.detail ? (
+        <p
+          className={`mt-1 text-[11px] leading-snug ${adminOutcomeToneClassName(summary.tone)}`}
+        >
+          {summary.detail}
+        </p>
+      ) : null}
     </div>
   );
 }

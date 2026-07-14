@@ -1,5 +1,6 @@
 import {
   AWAITING_RESULT_BRACKET_LABEL,
+  championPickSavedLabel,
   NO_CHAMPION_PICK_SAVED_LABEL,
   NO_SAVED_PICK_BRACKET_LABEL,
 } from "./knockoutBracketDisplayCopy";
@@ -167,22 +168,31 @@ export function resolveAdminMatchOutcomeSummary(
 export function resolveAdminChampionSummaryLine(
   champion: LiveBracketTrackerModel["champion"],
   teamById: Map<string, Team>,
-): { line: string; tone: AdminMatchOutcomeSummary["tone"] } {
+): {
+  line: string;
+  detail: string | null;
+  tone: AdminMatchOutcomeSummary["tone"];
+} {
   if (!champion.hasSavedPick || !champion.teamId) {
-    return { line: NO_CHAMPION_PICK_SAVED_LABEL, tone: "muted" };
+    return { line: NO_CHAMPION_PICK_SAVED_LABEL, detail: null, tone: "muted" };
   }
 
   const name = teamName(champion.teamId, teamById) ?? champion.displayName;
+  const line = championPickSavedLabel(name);
 
   if (
     champion.participantPickBadge === "your_pick_eliminated" ||
     champion.participantPickBadge === "your_pick_wrong_path" ||
     champion.eliminatedFromTournament
   ) {
-    return { line: "Champion pick out — team not in the final", tone: "warning" };
+    return {
+      line,
+      detail: champion.outDetailCopy,
+      tone: "warning",
+    };
   }
 
-  return { line: `Champion pick: ${name}`, tone: "success" };
+  return { line, detail: null, tone: "success" };
 }
 
 function matchSlotLabel(match: LiveBracketMatch): string {
