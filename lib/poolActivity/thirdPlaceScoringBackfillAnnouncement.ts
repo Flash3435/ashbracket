@@ -1,4 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { createServiceRoleClient } from "@/lib/supabase/service";
 import type { PoolActivityFeedRow } from "./poolActivityTypes";
 import { THIRD_PLACE_SCORING_BACKFILL_NOTICE } from "@/lib/leaderboard/scoringCorrectionDisplay";
 
@@ -21,13 +22,19 @@ export function thirdPlaceScoringBackfillActivityTypeLabel(
     : null;
 }
 
+/** Optional test hook — production callers must omit this. */
+export type ThirdPlaceBackfillNoticeClientFactory = () => SupabaseClient;
+
 /**
  * Idempotent pool activity note when best-third advancer picks are first scored.
+ * Uses the service role so SELECT/INSERT succeed despite SELECT-only authenticated RLS.
  */
 export async function postThirdPlaceScoringBackfillNoticeForPool(
-  supabase: SupabaseClient,
   poolId: string,
+  createClient: ThirdPlaceBackfillNoticeClientFactory = createServiceRoleClient,
 ): Promise<"inserted" | "skipped"> {
+  const supabase = createClient();
+
   const { data: existing, error: findErr } = await supabase
     .from("pool_activity")
     .select("id")
@@ -64,17 +71,40 @@ export async function postThirdPlaceScoringBackfillNoticeForPool(
 }
 
 export async function postThirdPlaceScoringBackfillNoticesForPools(
-  supabase: SupabaseClient,
   poolIds: readonly string[],
+  createClient: ThirdPlaceBackfillNoticeClientFactory = createServiceRoleClient,
 ): Promise<{ inserted: number; skipped: number }> {
   let inserted = 0;
   let skipped = 0;
 
   for (const poolId of poolIds) {
-    const result = await postThirdPlaceScoringBackfillNoticeForPool(supabase, poolId);
+    const result = await postThirdPlaceScoringBackfillNoticeForPool(
+      poolId,
+      createClient,
+    );
     if (result === "inserted") inserted += 1;
     else skipped += 1;
   }
 
   return { inserted, skipped };
+}
+
+/**
+ * Best-effort activity feed notice after a successful ledger recompute.
+ * Logs failures; never throws — standings success must not be reported as failure.
+ */
+export async function tryPostThirdPlaceScoringBackfillNoticesForPools(
+  poolIds: readonly string[],
+  createClient: ThirdPlaceBackfillNoticeClientFactory = createServiceRoleClient,
+): Promise<{ inserted: number; skipped: number; error?: string }> {
+  try {
+    return await postThirdPlaceScoringBackfillNoticesForPools(poolIds, createClient);
+  } catch (e) {
+    const message = e instanceof Error ? e.message : String(e);
+    console.error("[ashbracket:sync] third-place backfill notices failed", {
+      poolCount: poolIds.length,
+      error: message,
+    });
+    return { inserted: 0, skipped: 0, error: message };
+  }
 }

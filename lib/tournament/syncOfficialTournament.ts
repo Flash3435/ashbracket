@@ -16,7 +16,7 @@ import {
   type FinishedGroupMatch,
 } from "./groupStandings";
 import { ensureThirdPlaceQualifierResults } from "@/lib/scoring/ensureThirdPlaceQualifierResults";
-import { postThirdPlaceScoringBackfillNoticesForPools } from "@/lib/poolActivity/thirdPlaceScoringBackfillAnnouncement";
+import { tryPostThirdPlaceScoringBackfillNoticesForPools } from "@/lib/poolActivity/thirdPlaceScoringBackfillAnnouncement";
 import { buildRoundOf32AdvancementResultInserts } from "./deriveRoundOf32AdvancementResults";
 import { winnerFromMatchScores } from "./matchOutcome";
 
@@ -588,8 +588,27 @@ export async function syncOfficialTournament(
     poolsRecalculated = poolIds.length;
     logger?.log("sync.pool_recalc_complete", { poolCount: poolIds.length });
 
+    // Third-place rows are deleted+recreated each sync (source='sync'), so
+    // upsertedCount is often > 0 even when advancers are unchanged. Notice
+    // uniqueness relies on pool_activity source_key dedupe (select-existing +
+    // unique index), not on upsertedCount alone. Writer uses service role
+    // internally — never the authenticated sync client (SELECT-only RLS).
     if (thirdPlaceEnsure.upsertedCount > 0) {
-      await postThirdPlaceScoringBackfillNoticesForPools(supabase, poolIds);
+      const noticeOut = await tryPostThirdPlaceScoringBackfillNoticesForPools(
+        poolIds,
+      );
+      if (noticeOut.error) {
+        logger?.log("sync.third_place_backfill_notices_failed", {
+          error: noticeOut.error,
+          poolCount: poolIds.length,
+        });
+      } else {
+        logger?.log("sync.third_place_backfill_notices", {
+          inserted: noticeOut.inserted,
+          skipped: noticeOut.skipped,
+          poolCount: poolIds.length,
+        });
+      }
     }
   } else if (skipPoolRecalculation) {
     logger?.log("sync.pool_recalc_skipped", { poolCount: poolIds.length });
