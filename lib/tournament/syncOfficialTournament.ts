@@ -1,8 +1,13 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import {
   buildScoreImpactMatchResults,
+  buildScoreImpactMatchResultsFromMatchCodes,
   scoreImpactSignatureFromMatchResults,
 } from "@/lib/poolActivity/scoreImpact/buildScoreImpactMatchResults";
+import {
+  resolveScoreImpactRunAttribution,
+  type ResultAttributionSnapshot,
+} from "@/lib/poolActivity/scoreImpact/deriveScoreImpactAttribution";
 import { loadTeamNameMapForEdition } from "@/lib/poolActivity/scoreImpact/loadScoreImpactContext";
 import { recomputePoolLedgersWithScoreImpact } from "@/lib/poolActivity/scoreImpact/recomputeWithScoreImpact";
 import type { ApplyPhaseLogger } from "./liveScores/applyPhaseLogger";
@@ -374,6 +379,22 @@ export async function syncOfficialTournament(
     ),
   );
 
+  // Snapshot scoring results before delete+rebuild so score-impact attribution
+  // and third-place correction flags can detect real deltas (not upsert counts).
+  const { data: beforeResultRows, error: beforeResErr } = await supabase
+    .from("results")
+    .select("kind, team_id, slot_key, group_code")
+    .eq("edition_id", editionId);
+  if (beforeResErr) return { ok: false, error: beforeResErr.message };
+  const beforeResultSnapshots: ResultAttributionSnapshot[] = (
+    beforeResultRows ?? []
+  ).map((row) => ({
+    kind: row.kind as string,
+    teamId: (row.team_id as string | null) ?? null,
+    slotKey: (row.slot_key as string | null) ?? null,
+    groupCode: (row.group_code as string | null) ?? null,
+  }));
+
   const { error: delErr } = await supabase
     .from("results")
     .delete()
@@ -536,10 +557,47 @@ export async function syncOfficialTournament(
 
   const thirdPlaceEnsure = await ensureThirdPlaceQualifierResults(supabase, editionId);
 
+  const { data: afterResultRows, error: afterResErr } = await supabase
+    .from("results")
+    .select("kind, team_id, slot_key, group_code")
+    .eq("edition_id", editionId);
+  if (afterResErr) return { ok: false, error: afterResErr.message };
+  const afterResultSnapshots: ResultAttributionSnapshot[] = (
+    afterResultRows ?? []
+  ).map((row) => ({
+    kind: row.kind as string,
+    teamId: (row.team_id as string | null) ?? null,
+    slotKey: (row.slot_key as string | null) ?? null,
+    groupCode: (row.group_code as string | null) ?? null,
+  }));
+
+  const dirtyMatchCodes = matches
+    .filter((m) => dirtyMatchIds.has(m.id))
+    .map((m) => m.match_code);
+
+  const scoreImpactAttribution = resolveScoreImpactRunAttribution({
+    appliedPatchCodes: patchOutcome.applied,
+    beforeResults: beforeResultSnapshots,
+    afterResults: afterResultSnapshots,
+    matches: matches.map((m) => ({
+      matchCode: m.match_code,
+      stageCode: m.stage_code,
+      groupCode: m.group_code,
+      winnerTeamId: m.winner_team_id,
+      scoringResultKind: m.scoring_result_kind,
+      homeGoals: m.home_goals,
+      awayGoals: m.away_goals,
+    })),
+    dirtyMatchCodes,
+  });
+
   logger?.log("sync.derived_results_rebuild_end", {
     insertCount: inserts.length,
     thirdPlaceQualifierUpserted: thirdPlaceEnsure.upsertedCount,
     thirdPlaceQualifierSource: thirdPlaceEnsure.resolution.source,
+    thirdPlaceQualifiersNewlyScored:
+      scoreImpactAttribution.thirdPlaceQualifiersNewlyScored,
+    scoreImpactMatchCodes: scoreImpactAttribution.matchCodes,
     poolCount: poolIds.length,
     skipPoolRecalculation,
   });
@@ -547,11 +605,24 @@ export async function syncOfficialTournament(
   let poolsRecalculated = 0;
   if (!skipPoolRecalculation && poolIds.length > 0) {
     const teamNameById = await loadTeamNameMapForEdition(supabase, editionId);
-    const matchResults = buildScoreImpactMatchResults({
-      matches,
-      patches,
-      teamNameById,
-    });
+
+    // Prefer explicit patches when present (live-score / patch workflows).
+    // Otherwise attribute from grounded result deltas so patch-less
+    // "Recompute from stored scores" still gets match_codes.
+    const matchResults =
+      patchOutcome.applied.length > 0
+        ? buildScoreImpactMatchResults({
+            matches,
+            patches,
+            teamNameById,
+          })
+        : scoreImpactAttribution.matchCodes.length > 0
+          ? buildScoreImpactMatchResultsFromMatchCodes({
+              matches,
+              matchCodes: scoreImpactAttribution.matchCodes,
+              teamNameById,
+            })
+          : [];
     const scoreSignature = scoreImpactSignatureFromMatchResults(matchResults);
 
     const ledgerOut = await recomputePoolLedgersWithScoreImpact(
@@ -562,7 +633,8 @@ export async function syncOfficialTournament(
         editionId,
         matchResults,
         scoreSignature,
-        thirdPlaceQualifiersNewlyScored: thirdPlaceEnsure.upsertedCount > 0,
+        thirdPlaceQualifiersNewlyScored:
+          scoreImpactAttribution.thirdPlaceQualifiersNewlyScored,
       },
       {
         editionIsSimulation,
@@ -588,12 +660,12 @@ export async function syncOfficialTournament(
     poolsRecalculated = poolIds.length;
     logger?.log("sync.pool_recalc_complete", { poolCount: poolIds.length });
 
-    // Third-place rows are deleted+recreated each sync (source='sync'), so
-    // upsertedCount is often > 0 even when advancers are unchanged. Notice
-    // uniqueness relies on pool_activity source_key dedupe (select-existing +
-    // unique index), not on upsertedCount alone. Writer uses service role
-    // internally — never the authenticated sync client (SELECT-only RLS).
-    if (thirdPlaceEnsure.upsertedCount > 0) {
+    // One-time delayed third-place notice: only when advancers newly settle or
+    // change. Upsert counts are unreliable because sync deletes+recreates
+    // source='sync' rows. Notice uniqueness also relies on pool_activity
+    // source_key dedupe. Writer uses service role internally — never the
+    // authenticated sync client (SELECT-only RLS).
+    if (scoreImpactAttribution.thirdPlaceQualifiersNewlyScored) {
       const noticeOut = await tryPostThirdPlaceScoringBackfillNoticesForPools(
         poolIds,
       );

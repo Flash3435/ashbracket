@@ -191,7 +191,10 @@ export type ScoreImpactRunContext = {
   matchResults?: ScoreImpactMatchResult[];
   /** Stable signature for the score/result inputs driving this recompute. */
   scoreSignature?: string;
-  /** When true, best-third advancer picks were newly written/scored this run. */
+  /**
+   * When true, best-third advancer picks newly settled or the advancer set changed
+   * this run. Must not be inferred from delete/recreate upsert counts alone.
+   */
   thirdPlaceQualifiersNewlyScored?: boolean;
 };
 

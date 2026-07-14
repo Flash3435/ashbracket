@@ -293,6 +293,17 @@ async function main(): Promise<void> {
       syncSrc.includes("source_key dedupe"),
     "sync documents that notice uniqueness relies on pool_activity dedupe",
   );
+  t(
+    syncSrc.includes("scoreImpactAttribution.thirdPlaceQualifiersNewlyScored") ||
+      syncSrc.includes("thirdPlaceQualifiersNewlyScored"),
+    "sync gates third-place notices on newly-scored attribution, not upsert counts alone",
+  );
+  t(
+    !/thirdPlaceQualifiersNewlyScored:\s*thirdPlaceEnsure\.upsertedCount\s*>\s*0/.test(
+      syncSrc,
+    ),
+    "sync does not treat upsertedCount as newly-scored proof",
+  );
 
   if (failed) {
     process.exit(1);
