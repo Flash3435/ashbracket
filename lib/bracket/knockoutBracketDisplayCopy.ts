@@ -46,7 +46,7 @@ export const TOPOLOGY_STALE_PICKS_REVIEW_BODY =
 
 /** Admin panel intro — does not blame the participant. */
 export const TOPOLOGY_STALE_PICKS_ADMIN_INTRO =
-  "Some participants have saved semifinal-winner (finalist slot), final, or champion picks that cannot be valid under FIFA's corrected semi-final feeders (M101 = M97+M98, M102 = M99+M100). Missing-only picks are listed separately and are not cleared by the topology repair script.";
+  "Some participants have saved semifinal-winner (finalist slot), final, or champion picks that cannot be valid under FIFA's corrected semi-final feeders (M101 = M97+M98, M102 = M99+M100). Missing-only picks are listed separately. Stale finalist/semifinalist slots can be cleared by the topology repair script; persisted champion rows are never deleted by that repair (eliminated champions stay for display).";
 
 /** Admin note when M101/M102 matchup rows are fine but finalist slots were cleared. */
 export const TOPOLOGY_STALE_PICKS_ADMIN_M101_M102_NOTE =

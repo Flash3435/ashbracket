@@ -83,7 +83,7 @@ function planFor(slots: KnockoutPickSlotDraft[]) {
   });
 }
 
-// France + Spain finalists produce planned clears.
+// France + Spain finalists produce planned finalist clears; champion is never deleted.
 {
   const slots = [
     sfSlot("1", "team-fra"),
@@ -93,10 +93,42 @@ function planFor(slots: KnockoutPickSlotDraft[]) {
     champSlot("team-esp"),
   ];
   const actions = planFor(slots);
-  assert.ok(actions.length >= 3);
+  assert.ok(actions.length >= 2);
   assert.ok(actions.some((a) => a.predictionKind === "finalist" && a.slotKey === "2"));
-  assert.ok(actions.some((a) => a.predictionKind === "champion"));
+  assert.ok(
+    !actions.some((a) => a.predictionKind === "champion"),
+    "champion rows must not be planned for topology clear/delete",
+  );
+  assert.ok(
+    auditSlots(slots).stalePicks.some((s) => s.predictionKind === "champion"),
+    "stale champion still reported by audit",
+  );
   assert.strictEqual(assertRepairPlanCanApply(actions).ok, true);
+}
+
+// Eliminated / unmatched champion (NED) with unrelated finalists is never cleared.
+{
+  const slots = [
+    sfSlot("1", "team-fra"),
+    sfSlot("3", "team-bra"),
+    finSlot("1", "team-fra"),
+    finSlot("2", "team-bra"),
+    champSlot("team-esp"),
+  ];
+  const audit = auditSlots(slots);
+  assert.ok(
+    audit.stalePicks.some(
+      (s) =>
+        s.predictionKind === "champion" &&
+        s.topologyIssue === "champion_not_in_valid_final",
+    ),
+    "champion not among finalists is audit-stale",
+  );
+  assert.strictEqual(
+    planFor(slots).filter((a) => a.predictionKind === "champion").length,
+    0,
+    "champion_not_in_valid_final must not delete champion",
+  );
 }
 
 // France + Brazil finalists produce no planned clears.

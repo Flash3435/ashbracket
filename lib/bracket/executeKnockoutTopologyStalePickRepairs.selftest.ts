@@ -224,9 +224,15 @@ async function main(): Promise<void> {
       mock.rows.filter((row) => row.prediction_kind === "finalist").length,
       0,
     );
+    // Champion is never included in topology clears — historical pick retained.
+    assert.ok(
+      !actions.some((a) => a.predictionKind === "champion"),
+      "repair plan must not include champion clears",
+    );
     assert.strictEqual(
       mock.rows.filter((row) => row.prediction_kind === "champion").length,
-      0,
+      1,
+      "champion row must survive topology repair apply",
     );
   }
 

@@ -90,6 +90,11 @@ export function planClearsFromStaleFindings(input: {
   const actions: TopologyStalePickRepairAction[] = [];
 
   for (const finding of deduped) {
+    // Never delete persisted champion rows. An eliminated / path-invalid champion
+    // must remain for display ("Champion pick: X" + out status). Audit still
+    // reports stale champions separately; repair only clears SF+/finalist slots.
+    if (finding.predictionKind === "champion") continue;
+
     const row = slotRow(input.slots, finding.predictionKind, finding.slotKey);
     if (!row?.teamId.trim()) continue;
     if (row.teamId.trim() !== finding.savedTeamId) continue;
