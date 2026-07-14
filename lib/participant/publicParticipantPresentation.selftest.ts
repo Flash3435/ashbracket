@@ -297,3 +297,384 @@ assert.equal(outPresentation.summary.awaitingScoreCount, 0);
 assert.equal(outPresentation.summary.missedPicksCount, 0);
 
 console.log("publicParticipantPresentation pickIsOut selftest: ok");
+
+// --- Knockout once-per-team: awarded vs satisfied vs missed vs awaiting ---
+function koProgress(
+  teamId: string,
+  furthest: "round_of_32" | "round_of_16" | "quarterfinalist" | "semifinalist" | "finalist" | "champion" | null,
+  eliminated: boolean,
+  inRoundOf32Field = true,
+) {
+  return {
+    teamId,
+    furthestOfficialKind: furthest,
+    eliminated,
+    inRoundOf32Field,
+  };
+}
+
+const fra = "team-fra";
+const eng = "team-eng";
+const can = "team-can";
+const bra = "team-bra";
+const arg = "team-arg";
+const esp = "team-esp";
+
+const koDetail: PublicParticipantDetail = {
+  displayName: "KO",
+  poolName: "Pool",
+  poolId: "pool-ko",
+  participantId: "part-ko",
+  totalPoints: 36,
+  rank: 1,
+  knockoutRoundOf32FieldComplete: true,
+  knockoutKindsWithPositivePoints: [
+    "round_of_16",
+    "quarterfinalist",
+    "semifinalist",
+    "finalist",
+    "champion",
+  ],
+  knockoutOfficialResultCounts: {
+    round_of_32: 16,
+    round_of_16: 16,
+    quarterfinalist: 8,
+    semifinalist: 4,
+    finalist: 1,
+  },
+  knockoutProgressByTeamId: {
+    [fra]: koProgress(fra, "semifinalist", true),
+    [eng]: koProgress(eng, "semifinalist", false),
+    [can]: koProgress(can, "round_of_16", true),
+    [bra]: koProgress(bra, "round_of_16", true),
+    [arg]: koProgress(arg, "semifinalist", false),
+    [esp]: koProgress(esp, "finalist", false),
+  },
+  knockoutAwardByTeamId: {
+    [fra]: {
+      teamId: fra,
+      representativePredictionId: "ko-fra-r32",
+      points: 16,
+      resultKind: "semifinalist",
+    },
+    [can]: {
+      teamId: can,
+      representativePredictionId: "ko-can-r16",
+      points: 4,
+      resultKind: "round_of_16",
+    },
+    [eng]: {
+      teamId: eng,
+      representativePredictionId: "ko-eng-qf",
+      points: 16,
+      resultKind: "semifinalist",
+    },
+    [esp]: {
+      teamId: esp,
+      representativePredictionId: "ko-esp-qf",
+      points: 24,
+      resultKind: "finalist",
+    },
+    [arg]: {
+      teamId: arg,
+      representativePredictionId: "ko-arg-sf",
+      points: 16,
+      resultKind: "semifinalist",
+    },
+  },
+  picks: [
+    pick({
+      predictionId: "ko-fra-r32",
+      predictionKind: "round_of_32",
+      slotKey: "9",
+      stageCode: "round_of_32",
+      stageLabel: "Round of 32",
+      stageSortOrder: 30,
+      teamName: "France",
+      teamCountryCode: "FRA",
+      teamId: fra,
+    }),
+    pick({
+      predictionId: "ko-fra-r16",
+      predictionKind: "round_of_16",
+      slotKey: "5",
+      stageCode: "round_of_16",
+      stageLabel: "Round of 16",
+      stageSortOrder: 40,
+      teamName: "France",
+      teamCountryCode: "FRA",
+      teamId: fra,
+    }),
+    pick({
+      predictionId: "ko-fra-sf",
+      predictionKind: "semifinalist",
+      slotKey: "1",
+      stageCode: "semifinal",
+      stageLabel: "Semi-finals",
+      stageSortOrder: 60,
+      teamName: "France",
+      teamCountryCode: "FRA",
+      teamId: fra,
+    }),
+    pick({
+      predictionId: "ko-fra-final",
+      predictionKind: "finalist",
+      slotKey: "1",
+      stageCode: "final",
+      stageLabel: "Final",
+      stageSortOrder: 70,
+      teamName: "France",
+      teamCountryCode: "FRA",
+      teamId: fra,
+    }),
+    pick({
+      predictionId: "ko-fra-champ",
+      predictionKind: "champion",
+      stageCode: "final",
+      stageLabel: "Final",
+      stageSortOrder: 80,
+      teamName: "France",
+      teamCountryCode: "FRA",
+      teamId: fra,
+    }),
+    pick({
+      predictionId: "ko-can-r16",
+      predictionKind: "round_of_16",
+      slotKey: "1",
+      stageCode: "round_of_16",
+      stageLabel: "Round of 16",
+      stageSortOrder: 40,
+      teamName: "Canada",
+      teamCountryCode: "CAN",
+      teamId: can,
+    }),
+    pick({
+      predictionId: "ko-eng-qf",
+      predictionKind: "quarterfinalist",
+      slotKey: "4",
+      stageCode: "quarterfinal",
+      stageLabel: "Quarter-finals",
+      stageSortOrder: 50,
+      teamName: "England",
+      teamCountryCode: "ENG",
+      teamId: eng,
+    }),
+    pick({
+      predictionId: "ko-eng-r16",
+      predictionKind: "round_of_16",
+      slotKey: "8",
+      stageCode: "round_of_16",
+      stageLabel: "Round of 16",
+      stageSortOrder: 40,
+      teamName: "England",
+      teamCountryCode: "ENG",
+      teamId: eng,
+    }),
+    pick({
+      predictionId: "ko-bra-qf",
+      predictionKind: "quarterfinalist",
+      slotKey: "3",
+      stageCode: "quarterfinal",
+      stageLabel: "Quarter-finals",
+      stageSortOrder: 50,
+      teamName: "Brazil",
+      teamCountryCode: "BRA",
+      teamId: bra,
+    }),
+    pick({
+      predictionId: "ko-arg-sf",
+      predictionKind: "semifinalist",
+      slotKey: "4",
+      stageCode: "semifinal",
+      stageLabel: "Semi-finals",
+      stageSortOrder: 60,
+      teamName: "Argentina",
+      teamCountryCode: "ARG",
+      teamId: arg,
+    }),
+    pick({
+      predictionId: "ko-arg-final",
+      predictionKind: "finalist",
+      slotKey: "2",
+      stageCode: "final",
+      stageLabel: "Final",
+      stageSortOrder: 70,
+      teamName: "Argentina",
+      teamCountryCode: "ARG",
+      teamId: arg,
+    }),
+    pick({
+      predictionId: "ko-esp-qf",
+      predictionKind: "quarterfinalist",
+      slotKey: "5",
+      stageCode: "quarterfinal",
+      stageLabel: "Quarter-finals",
+      stageSortOrder: 50,
+      teamName: "Spain",
+      teamCountryCode: "ESP",
+      teamId: esp,
+    }),
+    pick({
+      predictionId: "ko-esp-sf",
+      predictionKind: "semifinalist",
+      slotKey: "2",
+      stageCode: "semifinal",
+      stageLabel: "Semi-finals",
+      stageSortOrder: 60,
+      teamName: "Spain",
+      teamCountryCode: "ESP",
+      teamId: esp,
+    }),
+    pick({
+      predictionId: "ko-out",
+      predictionKind: "round_of_16",
+      slotKey: "2",
+      stageCode: "round_of_16",
+      stageLabel: "Round of 16",
+      stageSortOrder: 40,
+      teamName: "Germany",
+      teamCountryCode: "GER",
+      teamId: "team-ger",
+      pickIsOut: true,
+    }),
+  ],
+  ledger: [
+    {
+      id: "l-fra",
+      pointsDelta: 16,
+      predictionKind: "semifinalist",
+      createdAt: "2026-07-14T12:00:00.000Z",
+      predictionId: "ko-fra-r32",
+      resultId: "r-fra",
+    },
+    {
+      id: "l-can",
+      pointsDelta: 4,
+      predictionKind: "round_of_16",
+      createdAt: "2026-07-01T12:00:00.000Z",
+      predictionId: "ko-can-r16",
+      resultId: "r-can",
+    },
+    {
+      id: "l-eng",
+      pointsDelta: 16,
+      predictionKind: "semifinalist",
+      createdAt: "2026-07-14T12:00:00.000Z",
+      predictionId: "ko-eng-qf",
+      resultId: "r-eng",
+    },
+    {
+      id: "l-esp",
+      pointsDelta: 24,
+      predictionKind: "finalist",
+      createdAt: "2026-07-14T12:00:00.000Z",
+      predictionId: "ko-esp-qf",
+      resultId: "r-esp",
+    },
+    {
+      id: "l-arg",
+      pointsDelta: 16,
+      predictionKind: "semifinalist",
+      createdAt: "2026-07-14T12:00:00.000Z",
+      predictionId: "ko-arg-sf",
+      resultId: "r-arg",
+    },
+  ],
+};
+
+const koPresentation = buildPublicParticipantPresentation(koDetail);
+const koById = new Map(
+  koPresentation.sections.flatMap((s) => s.picks).map((p) => [p.predictionId, p]),
+);
+
+// 1. Ledger on this prediction → awarded + points
+assert.equal(koById.get("ko-fra-r32")!.state, "awarded");
+assert.equal(koById.get("ko-fra-r32")!.pointsEarned, 16);
+assert.equal(koById.get("ko-fra-r32")!.status.label, "Awarded");
+assert.equal(koById.get("ko-can-r16")!.state, "awarded");
+assert.equal(koById.get("ko-can-r16")!.pointsEarned, 4);
+
+// 2–3. Same team, deeper progress → earlier cards satisfied, no duplicate points
+assert.equal(koById.get("ko-fra-r16")!.state, "satisfied");
+assert.equal(koById.get("ko-fra-r16")!.pointsEarned, 0);
+assert.equal(koById.get("ko-fra-r16")!.footerLabel, "Already counted");
+assert.equal(koById.get("ko-fra-sf")!.state, "satisfied");
+assert.equal(koById.get("ko-eng-r16")!.state, "satisfied");
+assert.equal(koById.get("ko-eng-qf")!.state, "awarded");
+
+// 4. Eliminated before depth → missed
+assert.equal(koById.get("ko-bra-qf")!.state, "missed");
+assert.equal(koById.get("ko-bra-qf")!.pointsEarned, 0);
+assert.match(koById.get("ko-bra-qf")!.status.meaning, /eliminated/i);
+
+// 5–7. Alive below depth → awaiting; lost SF → missed finalist/champion
+assert.equal(koById.get("ko-arg-final")!.state, "awaiting");
+assert.equal(koById.get("ko-fra-final")!.state, "missed");
+assert.equal(koById.get("ko-fra-champ")!.state, "missed");
+
+// 8–9 covered above. 10. pickIsOut precedence
+assert.equal(koById.get("ko-out")!.state, "out");
+
+// Spain SF satisfied (award on QF card)
+assert.equal(koById.get("ko-esp-qf")!.state, "awarded");
+assert.equal(koById.get("ko-esp-sf")!.state, "satisfied");
+assert.equal(koById.get("ko-arg-sf")!.state, "awarded");
+
+// 12. Section summary + points from ledger only
+const r16Section = koPresentation.sections.find((s) => s.key === "round_of_16")!;
+assert.ok(r16Section.awardedPicksCount >= 1);
+assert.ok(r16Section.satisfiedPicksCount >= 1);
+assert.equal(
+  koPresentation.sections.reduce((sum, s) => sum + s.totalPoints, 0),
+  16 + 4 + 16 + 24 + 16,
+);
+assert.equal(koById.get("ko-fra-r16")!.pointsEarned, 0);
+
+assert.equal(koPresentation.summary.awardedPicksCount, 5);
+assert.equal(koPresentation.summary.satisfiedPicksCount, 4);
+assert.equal(koPresentation.summary.missedPicksCount, 3);
+assert.equal(koPresentation.summary.awaitingScoreCount, 1);
+assert.equal(koPresentation.summary.outPicksCount, 1);
+assert.equal(koPresentation.diagnostics.consistencyErrors.length, 0);
+
+console.log("publicParticipantPresentation knockout awarded/satisfied selftest: ok");
+
+// 13. Consistency guard: satisfied depth but missing team award
+const consistencyDetail: PublicParticipantDetail = {
+  displayName: "Broken",
+  poolName: "Pool",
+  poolId: "pool-x",
+  participantId: "part-x",
+  totalPoints: 0,
+  rank: 1,
+  knockoutRoundOf32FieldComplete: true,
+  knockoutKindsWithPositivePoints: ["round_of_16"],
+  knockoutOfficialResultCounts: { round_of_16: 16 },
+  knockoutProgressByTeamId: {
+    [eng]: koProgress(eng, "round_of_16", true),
+  },
+  knockoutAwardByTeamId: {},
+  picks: [
+    pick({
+      predictionId: "broken-eng",
+      predictionKind: "round_of_16",
+      slotKey: "8",
+      stageCode: "round_of_16",
+      stageLabel: "Round of 16",
+      stageSortOrder: 40,
+      teamName: "England",
+      teamCountryCode: "ENG",
+      teamId: eng,
+    }),
+  ],
+  ledger: [],
+};
+const consistencyPresentation = buildPublicParticipantPresentation(consistencyDetail);
+assert.ok(consistencyPresentation.diagnostics.consistencyErrors.length > 0);
+assert.equal(
+  consistencyPresentation.sections.flatMap((s) => s.picks)[0]!.state,
+  "awaiting",
+  "must not claim Satisfied without a team award",
+);
+
+console.log("publicParticipantPresentation knockout consistency selftest: ok");

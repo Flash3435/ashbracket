@@ -1,4 +1,9 @@
-/** Mapped pick from `predictions_public`. */
+import type {
+  KnockoutTeamAward,
+  KnockoutTeamProgress,
+} from "../lib/participant/knockoutProfileSettlement";
+
+/** Mapped pick from `predictions_public` / private predictions. */
 export type PublicParticipantPick = {
   predictionId: string;
   predictionKind: string;
@@ -10,6 +15,8 @@ export type PublicParticipantPick = {
   stageSortOrder: number;
   teamName: string | null;
   teamCountryCode: string | null;
+  /** Present when loaded with service enrichment or from predictions table. */
+  teamId?: string | null;
   /** True when value_text marks a locked historical knockout pick as out. */
   pickIsOut?: boolean;
 };
@@ -40,4 +47,16 @@ export type PublicParticipantDetail = {
   settledGroupCodes?: readonly string[];
   /** True when the eight official third-place advancers are known for scoring display. */
   thirdPlaceQualifiersSettled?: boolean;
+  /** Official furthest kind + elimination by team id. */
+  knockoutProgressByTeamId?: Readonly<
+    Record<string, KnockoutTeamProgress>
+  >;
+  /** Once-per-team knockout awards derived from this participant's ledger. */
+  knockoutAwardByTeamId?: Readonly<Record<string, KnockoutTeamAward>>;
+  /** Prediction kinds with positive scoring-rule points in this pool. */
+  knockoutKindsWithPositivePoints?: readonly string[];
+  /** True when all 16 Round of 32 fixtures are finished. */
+  knockoutRoundOf32FieldComplete?: boolean;
+  /** Official result counts by knockout kind (for stage-completion checks). */
+  knockoutOfficialResultCounts?: Readonly<Record<string, number>>;
 };

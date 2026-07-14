@@ -67,10 +67,20 @@ function pickStateBadge(pick: PublicParticipantDisplayPick) {
       </span>
     );
   }
-  if (status.state === "scored") {
+  if (status.state === "scored" || status.state === "awarded") {
     return (
       <span
         className={`${base} border border-emerald-500/40 bg-emerald-950/40 text-emerald-100`}
+        title={status.meaning}
+      >
+        {status.label}
+      </span>
+    );
+  }
+  if (status.state === "satisfied") {
+    return (
+      <span
+        className={`${base} border border-sky-500/35 bg-sky-950/35 text-sky-100`}
         title={status.meaning}
       >
         {status.label}
@@ -143,6 +153,12 @@ function pickTeamRow(pick: PublicParticipantDisplayPick) {
 
 function sectionSummaryLine(section: PublicParticipantDisplaySection): string {
   const parts = [`${section.picks.length} picks`];
+  if (section.awardedPicksCount > 0) {
+    parts.push(`${section.awardedPicksCount} awarded`);
+  }
+  if (section.satisfiedPicksCount > 0) {
+    parts.push(`${section.satisfiedPicksCount} satisfied`);
+  }
   if (section.scoredPicksCount > 0) {
     parts.push(`${section.scoredPicksCount} scored`);
   }
@@ -150,12 +166,30 @@ function sectionSummaryLine(section: PublicParticipantDisplaySection): string {
     parts.push(`${section.missedPicksCount} missed`);
   }
   if (section.awaitingScoreCount > 0) {
-    parts.push(`${section.awaitingScoreCount} awaiting score`);
+    parts.push(`${section.awaitingScoreCount} awaiting`);
+  }
+  if (section.outPicksCount > 0) {
+    parts.push(`${section.outPicksCount} pick out`);
   }
   if (section.emptyPicksCount > 0) {
     parts.push(`${section.emptyPicksCount} empty`);
   }
   return parts.join(" · ");
+}
+
+function isKnockoutSection(section: PublicParticipantDisplaySection): boolean {
+  return (
+    section.awardedPicksCount > 0 ||
+    section.satisfiedPicksCount > 0 ||
+    [
+      "round_of_32",
+      "round_of_16",
+      "quarterfinalists",
+      "semifinalists",
+      "finalists",
+      "champion",
+    ].includes(section.key)
+  );
 }
 
 function StageSection({
@@ -190,19 +224,32 @@ function StageSection({
             </p>
           </div>
           <div className="flex shrink-0 flex-wrap items-center gap-2 pl-5 lg:pl-0">
-            {section.scoredPicksCount > 0 ? (
+            {isKnockoutSection(section) ? (
+              <>
+                {section.awardedPicksCount > 0 ? (
+                  <span className="rounded-full border border-emerald-500/30 bg-emerald-950/20 px-2.5 py-1 text-xs font-medium text-emerald-100">
+                    {section.awardedPicksCount} awarded
+                  </span>
+                ) : null}
+                {section.satisfiedPicksCount > 0 ? (
+                  <span className="rounded-full border border-sky-500/30 bg-sky-950/25 px-2.5 py-1 text-xs font-medium text-sky-100">
+                    {section.satisfiedPicksCount} satisfied
+                  </span>
+                ) : null}
+              </>
+            ) : section.scoredPicksCount > 0 ? (
               <span className="rounded-full border border-emerald-500/30 bg-emerald-950/20 px-2.5 py-1 text-xs font-medium text-emerald-100">
                 {section.scoredPicksCount} scored
-              </span>
-            ) : null}
-            {section.awaitingScoreCount > 0 ? (
-              <span className="rounded-full border border-amber-600/30 bg-amber-950/25 px-2.5 py-1 text-xs font-medium text-amber-100">
-                {section.awaitingScoreCount} awaiting
               </span>
             ) : null}
             {section.missedPicksCount > 0 ? (
               <span className="rounded-full border border-slate-500/30 bg-slate-900/40 px-2.5 py-1 text-xs font-medium text-slate-300">
                 {section.missedPicksCount} missed
+              </span>
+            ) : null}
+            {section.awaitingScoreCount > 0 ? (
+              <span className="rounded-full border border-amber-600/30 bg-amber-950/25 px-2.5 py-1 text-xs font-medium text-amber-100">
+                {section.awaitingScoreCount} awaiting
               </span>
             ) : null}
             <span
@@ -239,18 +286,11 @@ function StageSection({
             {pickTeamRow(pick)}
 
             <div className="mt-4 flex items-center justify-between gap-3 border-t border-ash-border/50 pt-3 text-xs">
-              <span className="text-ash-muted">
-                {pick.state === "scored"
-                  ? pick.ledgerCount === 1
-                    ? "1 point award"
-                    : `${pick.ledgerCount} point awards`
-                  : pick.state === "missed"
-                    ? "0 points"
-                  : pick.state === "awaiting"
-                    ? "Not on the scoreboard yet"
-                    : "—"}
+              <span className="text-ash-muted" title={pick.status.meaning}>
+                {pick.footerLabel}
               </span>
-              {pick.pointsEarned > 0 ? (
+              {pick.pointsEarned > 0 &&
+              (pick.state === "awarded" || pick.state === "scored") ? (
                 <span className="text-base font-bold tabular-nums text-emerald-200">
                   +{formatPoolPoints(pick.pointsEarned)}
                 </span>
@@ -258,6 +298,8 @@ function StageSection({
                 <span className="text-base font-bold tabular-nums text-ash-muted">
                   0
                 </span>
+              ) : pick.state === "satisfied" ? (
+                <span className="text-xs font-medium text-sky-200/90">Counted</span>
               ) : (
                 <span className="text-ash-border-hover">—</span>
               )}
@@ -284,11 +326,17 @@ export function PublicParticipantProfile({
 }: Props) {
   const { summary, sections, ledgerItems } = buildPublicParticipantPresentation(detail);
 
+  const settledCompleteCount =
+    summary.scoredPicksCount +
+    summary.awardedPicksCount +
+    summary.satisfiedPicksCount +
+    summary.missedPicksCount +
+    summary.outPicksCount;
   const unresolvedHint =
     summary.awaitingScoreCount > 0
-      ? `${summary.awaitingScoreCount} saved ${summary.awaitingScoreCount === 1 ? "pick is" : "picks are"} still waiting to appear on the scoreboard.`
-      : summary.scoredPicksCount === summary.totalPicks && summary.totalPicks > 0
-        ? "Every saved pick slot has scored so far."
+      ? `${summary.awaitingScoreCount} saved ${summary.awaitingScoreCount === 1 ? "pick is" : "picks are"} still waiting on an unresolved knockout or group result.`
+      : settledCompleteCount === summary.totalPicks && summary.totalPicks > 0
+        ? "Every saved pick slot has a settled status."
         : null;
 
   return (
@@ -350,19 +398,19 @@ export function PublicParticipantProfile({
 
       <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         {summaryCard(
-          "Picks scored",
-          `${summary.scoredPicksCount} of ${summary.totalPicks}`,
-          "Picks that have earned at least one point award on the board.",
+          "Ownership awards",
+          `${summary.scoredPicksCount + summary.awardedPicksCount} of ${summary.totalPicks}`,
+          "Cards that hold a ledger award (group/bonus scored, or knockout once-per-team awarded).",
         )}
         {summaryCard(
-          "Missed",
-          String(summary.missedPicksCount),
-          "Saved picks where the official outcome is known and no points were awarded.",
+          "Satisfied",
+          String(summary.satisfiedPicksCount),
+          "Correct knockout picks already counted via another card for the same team.",
         )}
         {summaryCard(
-          "Awaiting score",
-          String(summary.awaitingScoreCount),
-          "Saved picks still waiting on an official result for that slot.",
+          "Missed / awaiting",
+          `${summary.missedPicksCount} / ${summary.awaitingScoreCount}`,
+          "Missed when the outcome is known at 0 points; awaiting only when the team can still get there.",
         )}
         {summaryCard(
           "Point awards",
@@ -382,25 +430,36 @@ export function PublicParticipantProfile({
             {isViewer ? "Your picks by stage" : "Picks by stage"}
           </h2>
           <p className="max-w-3xl text-sm leading-relaxed text-ash-muted">
-            Expand a stage to review each slot. Status badges use saved picks, awarded
-            points, and official settlement where we have a reliable result signal
-            (group stage and best third-place advancers today).
+            Expand a stage to review each slot. Knockout points count once per team at
+            the furthest stage reached — Awarded holds that award; Satisfied means the
+            pick was right but points live on another card for the same team.
           </p>
         </div>
 
         <div className="rounded-xl border border-ash-border/60 bg-ash-body/20 px-4 py-3 text-sm leading-relaxed text-ash-muted">
           <p>
-            <span className="font-medium text-ash-text">Scored</span> — points are on
-            the board for this pick.
+            <span className="font-medium text-emerald-100">Awarded</span> — this card
+            holds the team’s highest once-per-team knockout award.
           </p>
           <p className="mt-1.5">
-            <span className="font-medium text-slate-300">Missed</span> — official
-            outcome is known and this pick earned 0 points.
+            <span className="font-medium text-sky-100">Satisfied</span> — this
+            prediction was correct; knockout points were counted on another card.
           </p>
           <p className="mt-1.5">
-            <span className="font-medium text-amber-100">Awaiting score</span> —{" "}
-            {isViewer ? "you picked" : "they picked"} a team, but the official result
-            for this slot is not final yet.
+            <span className="font-medium text-ash-text">Scored</span> — group, third-place,
+            or bonus points are on the board for this pick.
+          </p>
+          <p className="mt-1.5">
+            <span className="font-medium text-slate-300">Missed</span> — the team was
+            eliminated before reaching this stage (0 points).
+          </p>
+          <p className="mt-1.5">
+            <span className="font-medium text-amber-100">Awaiting</span> — the team can
+            still reach this stage.
+          </p>
+          <p className="mt-1.5">
+            <span className="font-medium text-red-200">Pick out</span> — locked knockout
+            pick that no longer fits the official bracket path.
           </p>
           <p className="mt-1.5">
             <span className="font-medium text-slate-300">No pick</span> — empty slot.

@@ -23,6 +23,13 @@ import { loadThirdPlaceQualifierSettlement } from "@/lib/scoring/ensureThirdPlac
 import { areThirdPlaceQualifiersSettled } from "@/lib/scoring/resolveOfficialThirdPlaceAdvancers";
 import { reconcileParticipantProfileTotals } from "./participantScoringConsistency";
 import { settledGroupCodesFromOfficialRows } from "./publicParticipantPresentation";
+import {
+  buildKnockoutProfileSettlementContext,
+  buildKnockoutResultCounts,
+} from "./knockoutProfileSettlement";
+import {
+  KNOCKOUT_PROGRESSION_PREDICTION_KINDS,
+} from "../predictions/knockoutProgressionKinds";
 
 type ParticipantBracketHeaderRpcRow = {
   display_name: string;
@@ -215,7 +222,7 @@ async function loadSettledGroupCodesForEdition(
   return settledGroupCodesFromOfficialRows(data ?? []);
 }
 
-/** Attach per-group and third-place settlement flags used by profile pick status. */
+/** Attach group, third-place, and knockout settlement used by profile pick status. */
 async function attachProfileSettlementContext(
   detail: PublicParticipantDetail,
 ): Promise<PublicParticipantDetail> {
@@ -241,7 +248,114 @@ async function attachProfileSettlementContext(
     // Leave unset; third-place picks without context continue to show as awaiting.
   }
 
+  try {
+    await attachKnockoutSettlementContext(service, next, editionId);
+  } catch (e) {
+    console.warn("[ashbracket:knockout-profile] settlement attach failed", {
+      participantId: detail.participantId,
+      poolId: detail.poolId,
+      message: e instanceof Error ? e.message : String(e),
+    });
+  }
+
   return next;
+}
+
+async function attachKnockoutSettlementContext(
+  service: SupabaseClient,
+  detail: PublicParticipantDetail,
+  editionId: string,
+): Promise<void> {
+  const predictionIds = detail.picks.map((p) => p.predictionId);
+  const needsTeamIds = detail.picks.some(
+    (p) =>
+      KNOCKOUT_PROGRESSION_PREDICTION_KINDS.includes(
+        p.predictionKind as (typeof KNOCKOUT_PROGRESSION_PREDICTION_KINDS)[number],
+      ) && !p.teamId,
+  );
+
+  const [resultsRes, matchesRes, rulesRes, teamIdRes] = await Promise.all([
+    service
+      .from("results")
+      .select("kind, team_id")
+      .eq("edition_id", editionId)
+      .in("kind", [...KNOCKOUT_PROGRESSION_PREDICTION_KINDS]),
+    service
+      .from("tournament_matches")
+      .select(
+        "stage_code, home_team_id, away_team_id, winner_team_id, status",
+      )
+      .eq("edition_id", editionId)
+      .in("stage_code", [
+        "round_of_32",
+        "round_of_16",
+        "quarterfinal",
+        "semifinal",
+        "final",
+        "third_place",
+      ]),
+    service
+      .from("scoring_rules")
+      .select("prediction_kind, points")
+      .eq("pool_id", detail.poolId)
+      .in("prediction_kind", [...KNOCKOUT_PROGRESSION_PREDICTION_KINDS]),
+    needsTeamIds && predictionIds.length > 0
+      ? service
+          .from("predictions")
+          .select("id, team_id")
+          .eq("participant_id", detail.participantId)
+          .eq("pool_id", detail.poolId)
+          .in("id", predictionIds)
+      : Promise.resolve({ data: [] as { id: string; team_id: string | null }[], error: null }),
+  ]);
+
+  if (resultsRes.error) throw new Error(resultsRes.error.message);
+  if (matchesRes.error) throw new Error(matchesRes.error.message);
+  if (rulesRes.error) throw new Error(rulesRes.error.message);
+  if (teamIdRes.error) throw new Error(teamIdRes.error.message);
+
+  if (needsTeamIds && teamIdRes.data) {
+    const teamByPredictionId = new Map(
+      (teamIdRes.data as { id: string; team_id: string | null }[]).map((row) => [
+        row.id,
+        row.team_id,
+      ]),
+    );
+    detail.picks = detail.picks.map((pick) => ({
+      ...pick,
+      teamId: pick.teamId ?? teamByPredictionId.get(pick.predictionId) ?? null,
+    }));
+  }
+
+  const kindsWithPositivePoints = (rulesRes.data ?? [])
+    .filter((row) => Number(row.points) > 0)
+    .map((row) => String(row.prediction_kind));
+
+  const settlement = buildKnockoutProfileSettlementContext({
+    results: resultsRes.data ?? [],
+    matches: matchesRes.data ?? [],
+    picks: detail.picks.map((p) => ({
+      predictionId: p.predictionId,
+      predictionKind: p.predictionKind,
+      teamId: p.teamId ?? null,
+    })),
+    ledger: detail.ledger.map((l) => ({
+      predictionId: l.predictionId,
+      pointsDelta: l.pointsDelta,
+      predictionKind: l.predictionKind,
+    })),
+    kindsWithPositivePoints,
+  });
+
+  detail.knockoutProgressByTeamId = Object.fromEntries(
+    settlement.progressByTeamId,
+  );
+  detail.knockoutAwardByTeamId = Object.fromEntries(settlement.awardByTeamId);
+  detail.knockoutKindsWithPositivePoints = kindsWithPositivePoints;
+  detail.knockoutRoundOf32FieldComplete = settlement.roundOf32FieldComplete;
+  detail.knockoutOfficialResultCounts = Object.fromEntries(
+    buildKnockoutResultCounts(resultsRes.data ?? []),
+  );
 }
 
 async function loadPeerPoolParticipantDetail(
@@ -403,6 +517,7 @@ async function loadPicksFromPredictionsTable(
       stageSortOrder: Number(stage?.sort_order ?? 10_000),
       teamName: (team?.name as string | undefined) ?? null,
       teamCountryCode: (team?.country_code as string | undefined) ?? null,
+      teamId: row.team_id,
       pickIsOut:
         Boolean(row.team_id) &&
         decodeKnockoutPickStatusMetadata(row.value_text)?.status === "out",
