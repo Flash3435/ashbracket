@@ -67,13 +67,20 @@ async function fetchAll(
   filters: { column: string; value: string }[],
 ): Promise<Record<string, unknown>[]> {
   const out: Record<string, unknown>[] = [];
+  const seen = new Set<string>();
   const page = 1000;
   for (let from = 0; ; from += page) {
-    let q = sb.from(table).select(select).range(from, from + page - 1);
+    // Stable order is required — unordered range pagination can overlap pages.
+    let q = sb.from(table).select(select).order("id").range(from, from + page - 1);
     for (const f of filters) q = q.eq(f.column, f.value);
     const { data, error } = await q;
     if (error) throw new Error(`${table}: ${error.message}`);
-    out.push(...((data ?? []) as unknown as Record<string, unknown>[]));
+    for (const row of (data ?? []) as unknown as Record<string, unknown>[]) {
+      const id = String(row.id ?? "");
+      if (id && seen.has(id)) continue;
+      if (id) seen.add(id);
+      out.push(row);
+    }
     if (!data || data.length < page) break;
   }
   return out;
@@ -541,7 +548,7 @@ async function main() {
         return [id, { rows: post.rows, summaryHash: post.summaryHash }] as const;
       }),
     );
-    await postScoreImpactForPools({
+    const posted = await postScoreImpactForPools({
       poolIds,
       trigger: "admin_manual_recompute",
       beforeByPool,
@@ -553,6 +560,20 @@ async function main() {
       },
       editionIsSimulation: false,
     });
+    const changedPoolCount = poolIds.filter((id) => {
+      const before = beforeByPool.get(id);
+      const after = afterByPool.get(id);
+      return before && after && before.summaryHash !== after.summaryHash;
+    }).length;
+    console.log(
+      `  score-impact for edition ${editionId}: inserted=${posted.inserted} updated=${posted.updated} skipped=${posted.skipped} (changedPools=${changedPoolCount})`,
+    );
+    if (changedPoolCount > 0 && posted.inserted + posted.updated === 0) {
+      console.error(
+        "  FAIL: expected m101_knockout_depth_transition score-impact activity for changed pools",
+      );
+      process.exit(1);
+    }
   }
 
   writeFileSync(

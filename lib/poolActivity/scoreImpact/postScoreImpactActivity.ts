@@ -155,7 +155,20 @@ export async function postScoreImpactActivityForPool(input: {
     teamNameById,
   });
 
-  if (!scoreImpactHasMeaningfulChange(analysis)) return "none";
+  const scoringCorrections =
+    input.runContext?.scoringCorrections ??
+    (input.runContext?.thirdPlaceQualifiersNewlyScored
+      ? [{ kind: "third_place_qualifier" as const }]
+      : undefined);
+  const standingsMoved = input.before.summaryHash !== input.after.summaryHash;
+  const correctionForced =
+    Boolean(scoringCorrections && scoringCorrections.length > 0) && standingsMoved;
+
+  // Pure point-loss corrections (e.g. M101 −8) have no "gainers", so the default
+  // gain-based meaningful-change gate would skip the activity entirely.
+  if (!scoreImpactHasMeaningfulChange(analysis) && !correctionForced) {
+    return "none";
+  }
 
   let softImpact = null;
   let bracketImpact = null;
@@ -189,12 +202,19 @@ export async function postScoreImpactActivityForPool(input: {
     }
   }
 
-  const bodyText = buildScoreImpactCommentary(
+  let bodyText = buildScoreImpactCommentary(
     analysis,
     softImpact,
     bracketImpact?.summary ?? null,
     bracketImpact?.uniformPointsDelta ?? null,
   );
+  if (!bodyText && correctionForced) {
+    const mover = analysis.movers[0];
+    const moverBit = mover
+      ? ` Leaderboard shakeup: ${mover.displayName} ${mover.previousRank}→${mover.newRank}.`
+      : "";
+    bodyText = `Scoring correction applied.${moverBit}`.trim();
+  }
   if (!bodyText) return "none";
 
   const scoreSignature =
@@ -219,11 +239,7 @@ export async function postScoreImpactActivityForPool(input: {
     scoreSignature,
     softImpact,
     bracketImpact,
-    scoringCorrections:
-      input.runContext?.scoringCorrections ??
-      (input.runContext?.thirdPlaceQualifiersNewlyScored
-        ? [{ kind: "third_place_qualifier" as const }]
-        : undefined),
+    scoringCorrections,
   });
 
   return upsertScoreImpactActivity({

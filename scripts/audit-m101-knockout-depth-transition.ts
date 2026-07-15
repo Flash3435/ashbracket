@@ -62,13 +62,20 @@ async function fetchAll(
   filters: { column: string; value: string }[],
 ): Promise<Record<string, unknown>[]> {
   const out: Record<string, unknown>[] = [];
+  const seen = new Set<string>();
   const page = 1000;
   for (let from = 0; ; from += page) {
-    let q = sb.from(table).select(select).range(from, from + page - 1);
+    // Stable order is required — unordered range pagination can overlap pages.
+    let q = sb.from(table).select(select).order("id").range(from, from + page - 1);
     for (const f of filters) q = q.eq(f.column, f.value);
     const { data, error } = await q;
     if (error) throw new Error(`${table}: ${error.message}`);
-    out.push(...((data ?? []) as unknown as Record<string, unknown>[]));
+    for (const row of (data ?? []) as unknown as Record<string, unknown>[]) {
+      const id = String(row.id ?? "");
+      if (id && seen.has(id)) continue;
+      if (id) seen.add(id);
+      out.push(row);
+    }
     if (!data || data.length < page) break;
   }
   return out;
