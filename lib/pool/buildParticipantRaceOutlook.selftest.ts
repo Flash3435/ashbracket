@@ -9,6 +9,7 @@ import {
   countLiveKnockoutPicksRemaining,
   resolveChampionPickForParticipant,
   resolveRaceOutlookStatus,
+  resolveRemainingTournamentPicks,
   RACE_OUTLOOK_TOP_N,
 } from "./buildParticipantRaceOutlook";
 
@@ -97,6 +98,82 @@ const baseOutlookInput = {
   assert(row);
   assert.strictEqual(row.hasChampionPick, true);
   assert.strictEqual(row.championTeamName, "France");
+  assert.strictEqual(row.remainingTournamentPicks[0]?.teamName, "France");
+  assert.strictEqual(row.remainingTournamentPicks[1]?.teamName, null);
+}
+
+// Remaining tournament picks include bonus teams from slots
+{
+  const resolved = resolveRemainingTournamentPicks({
+    champion: {
+      teamId: "team-fra",
+      teamName: "France",
+      teamCode: "FRA",
+      hasChampionPick: true,
+    },
+    bracketSlots: [
+      slot({ predictionKind: "champion", teamId: "team-fra" }),
+      slot({
+        predictionKind: "bonus_pick",
+        teamId: "team-bra",
+        bonusKey: "most_goals",
+        rowKey: "bonus:most_goals",
+      }),
+      slot({
+        predictionKind: "bonus_pick",
+        teamId: "team-dead",
+        bonusKey: "most_yellow_cards",
+        rowKey: "bonus:most_yellow_cards",
+      }),
+    ],
+    teams,
+  });
+  assert.deepStrictEqual(
+    resolved.map((pick) => [pick.key, pick.teamName]),
+    [
+      ["champion", "France"],
+      ["most_goals", "Brazil"],
+      ["most_yellow_cards", "Netherlands"],
+      ["most_red_cards", null],
+    ],
+  );
+
+  const outlook = buildParticipantRaceOutlook({
+    ...baseOutlookInput,
+    leaderboardRows: [leaderboardRow("p1", "Emil", 1, 62)],
+    participantBrackets: [
+      {
+        participantId: "p1",
+        slots: [
+          slot({ predictionKind: "champion", teamId: "team-fra" }),
+          slot({
+            predictionKind: "bonus_pick",
+            teamId: "team-bra",
+            bonusKey: "most_goals",
+            rowKey: "bonus:most_goals",
+          }),
+          slot({
+            predictionKind: "bonus_pick",
+            teamId: "team-dead",
+            bonusKey: "most_yellow_cards",
+            rowKey: "bonus:most_yellow_cards",
+          }),
+          slot({
+            predictionKind: "bonus_pick",
+            teamId: "team-fra",
+            bonusKey: "most_red_cards",
+            rowKey: "bonus:most_red_cards",
+          }),
+        ],
+      },
+    ],
+  });
+  const row = outlook.rows[0];
+  assert(row);
+  assert.deepStrictEqual(
+    row.remainingTournamentPicks.map((pick) => pick.teamName),
+    ["France", "Brazil", "Netherlands", "France"],
+  );
 }
 
 // Live champion marked alive

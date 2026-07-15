@@ -121,6 +121,12 @@ import {
             hasChampionPick: true,
             pathValidLivePickCount: 9,
             topRemainingPicks: [],
+            remainingTournamentPicks: [
+              { key: "champion", teamId: "t1", teamName: "France" },
+              { key: "most_goals", teamId: null, teamName: null },
+              { key: "most_yellow_cards", teamId: null, teamName: null },
+              { key: "most_red_cards", teamId: null, teamName: null },
+            ],
             statusLabel: "Leading",
             leaderDisplayName: "Emil",
             leaderLivePathCount: 9,

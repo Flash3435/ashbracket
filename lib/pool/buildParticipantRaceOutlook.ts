@@ -17,6 +17,23 @@ export type RaceOutlookStatus =
   | "Long shot"
   | "Champion dead";
 
+/** Headline tournament picks shown in leaderboard Details (presentation only). */
+export const REMAINING_TOURNAMENT_PICK_KEYS = [
+  "champion",
+  "most_goals",
+  "most_yellow_cards",
+  "most_red_cards",
+] as const;
+
+export type RemainingTournamentPickKey =
+  (typeof REMAINING_TOURNAMENT_PICK_KEYS)[number];
+
+export type RemainingTournamentPick = {
+  key: RemainingTournamentPickKey;
+  teamId: string | null;
+  teamName: string | null;
+};
+
 export type ParticipantRaceOutlookRow = {
   participantId: string;
   displayName: string;
@@ -28,6 +45,8 @@ export type ParticipantRaceOutlookRow = {
   hasChampionPick: boolean;
   pathValidLivePickCount: number;
   topRemainingPicks: PathValidRemainingPick[];
+  /** Champion + bonus picks for compact Details (from already-loaded slots). */
+  remainingTournamentPicks: RemainingTournamentPick[];
   statusLabel: RaceOutlookStatus;
   leaderDisplayName: string;
   leaderLivePathCount: number | null;
@@ -66,6 +85,45 @@ export function countLiveKnockoutPicksRemaining(
     count += 1;
   }
   return count;
+}
+
+/**
+ * Resolve champion + default bonus picks from already-loaded bracket slots.
+ * No settlement/status — presentation names only.
+ */
+export function resolveRemainingTournamentPicks(input: {
+  champion: ResolvedChampionPick;
+  bracketSlots: KnockoutPickSlotDraft[];
+  teams: Team[];
+}): RemainingTournamentPick[] {
+  const teamNameById = new Map(
+    input.teams.map((t) => [t.id, t.name?.trim() || "Unknown team"] as const),
+  );
+
+  function bonusTeam(bonusKey: RemainingTournamentPickKey): RemainingTournamentPick {
+    const slot = input.bracketSlots.find(
+      (s) =>
+        s.predictionKind === "bonus_pick" &&
+        (s.bonusKey ?? "").trim() === bonusKey,
+    );
+    const teamId = slot?.teamId.trim() || null;
+    return {
+      key: bonusKey,
+      teamId,
+      teamName: teamId ? teamNameById.get(teamId) ?? "Unknown team" : null,
+    };
+  }
+
+  return [
+    {
+      key: "champion",
+      teamId: input.champion.hasChampionPick ? input.champion.teamId : null,
+      teamName: input.champion.hasChampionPick ? input.champion.teamName : null,
+    },
+    bonusTeam("most_goals"),
+    bonusTeam("most_yellow_cards"),
+    bonusTeam("most_red_cards"),
+  ];
 }
 
 export function resolveChampionPickForParticipant(input: {
@@ -263,6 +321,11 @@ export function buildParticipantRaceOutlook(input: {
       hasChampionPick,
       pathValidLivePickCount: pathOutlook.pathValidLivePickCount,
       topRemainingPicks: pathOutlook.topRemainingPicks,
+      remainingTournamentPicks: resolveRemainingTournamentPicks({
+        champion,
+        bracketSlots: bracket.slots,
+        teams: input.teams,
+      }),
       leaderDisplayName,
       leaderLivePathCount,
       pointsBehindLeader,

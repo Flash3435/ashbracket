@@ -6,21 +6,11 @@ import type { BracketImpactParticipantRow } from "@/lib/poolActivity/scoreImpact
 import type { LeaderboardLatestScoreEventContext } from "@/lib/leaderboard/parseLatestScoreEventContext";
 import type { LeaderboardLatestPointsBreakdown } from "@/lib/leaderboard/computeLatestMatchPointsBreakdown";
 import {
-  expandedTopRemainingPicks,
-  formatExpandedRemainingPicksMoreLine,
-  formatRaceOutlookLeaderComparison,
-  formatTopRemainingPickLine,
-  raceOutlookExpandedFallbackCopy,
+  formatRemainingTournamentPicksDisplay,
   raceStatusBadgeClass,
 } from "@/lib/leaderboard/leaderboardRaceRowContext";
-import {
-  formatExpandedMomentumContext,
-  formatPointsWithRecentDelta,
-} from "@/lib/leaderboard/leaderboardMomentumDisplay";
-import {
-  formatExpandedBracketImpactContext,
-  formatLeaderboardLatestImpactSummary,
-} from "@/lib/leaderboard/leaderboardBracketImpactDisplay";
+import { formatPointsWithRecentDelta } from "@/lib/leaderboard/leaderboardMomentumDisplay";
+import { formatLeaderboardLatestImpactSummary } from "@/lib/leaderboard/leaderboardBracketImpactDisplay";
 import type { ParticipantRaceOutlookRow } from "@/lib/pool/buildParticipantRaceOutlook";
 import { participantPublicProfileHref } from "@/lib/participant/participantProfileRouting";
 import { ViewerYouChip } from "../ui/ViewerYouChip";
@@ -118,28 +108,9 @@ function LatestImpactLines({
   );
 }
 
-function RaceOutlookDetails({
-  outlook,
-  momentum = null,
-  bracketImpact = null,
-  latestScoreEvent = null,
-  pointsBreakdown = null,
-}: {
-  outlook: ParticipantRaceOutlookRow;
-  momentum?: LeaderboardMomentumRow | null;
-  bracketImpact?: BracketImpactParticipantRow | null;
-  latestScoreEvent?: LeaderboardLatestScoreEventContext | null;
-  pointsBreakdown?: LeaderboardLatestPointsBreakdown | null;
-}) {
-  const topPicks = expandedTopRemainingPicks(outlook);
-  const moreLine = formatExpandedRemainingPicksMoreLine(outlook);
-  const leaderComparison = formatRaceOutlookLeaderComparison(outlook);
-  const momentumLine = formatExpandedMomentumContext(momentum);
-  const bracketImpactLine = formatExpandedBracketImpactContext(
-    bracketImpact,
-    latestScoreEvent,
-    momentum,
-    pointsBreakdown,
+function RaceOutlookDetails({ outlook }: { outlook: ParticipantRaceOutlookRow }) {
+  const remainingPicks = formatRemainingTournamentPicksDisplay(
+    outlook.remainingTournamentPicks,
   );
 
   return (
@@ -147,25 +118,21 @@ function RaceOutlookDetails({
       <summary className="cursor-pointer text-xs font-medium text-ash-accent hover:underline">
         Details
       </summary>
-      <div className="mt-2 space-y-1.5 text-xs leading-relaxed text-ash-muted">
-        {topPicks.length > 0 ? (
-          <div>
-            <p className="font-medium text-ash-text">Most important remaining</p>
-            <ul className="mt-1 list-inside list-disc space-y-0.5">
-              {topPicks.map((pick) => (
-                <li key={`${pick.predictionKind}-${pick.teamId}`}>
-                  {formatTopRemainingPickLine(pick)}
-                </li>
-              ))}
-            </ul>
-            {moreLine ? <p className="mt-1">{moreLine}</p> : null}
-          </div>
-        ) : (
-          <p>{raceOutlookExpandedFallbackCopy(outlook)}</p>
-        )}
-        {momentumLine ? <p>{momentumLine}</p> : null}
-        {bracketImpactLine ? <p>{bracketImpactLine}</p> : null}
-        <p>{leaderComparison}</p>
+      <div className="mt-2 text-xs leading-snug text-ash-muted">
+        <p className="font-medium text-ash-text">Remaining Picks</p>
+        <ul className="mt-2 space-y-2">
+          {remainingPicks.map((pick) => (
+            <li key={pick.key}>
+              <p className="text-ash-muted">
+                <span className="mr-1" aria-hidden>
+                  {pick.icon}
+                </span>
+                {pick.label}
+              </p>
+              <p className="font-medium text-ash-text">{pick.teamName}</p>
+            </li>
+          ))}
+        </ul>
       </div>
     </details>
   );
@@ -243,24 +210,10 @@ export function LeaderboardParticipantCell({
         participantId={row.participantId}
         displayName={row.displayName}
       />
-      {raceOutlook ? (
-        <RaceOutlookDetails
-          outlook={raceOutlook}
-          momentum={momentum}
-          bracketImpact={bracketImpact}
-          latestScoreEvent={latestScoreEvent}
-          pointsBreakdown={pointsBreakdown}
-        />
-      ) : null}
+      {raceOutlook ? <RaceOutlookDetails outlook={raceOutlook} /> : null}
     </>
   ) : raceOutlook ? (
-    <RaceOutlookDetails
-      outlook={raceOutlook}
-      momentum={momentum}
-      bracketImpact={bracketImpact}
-      latestScoreEvent={latestScoreEvent}
-      pointsBreakdown={pointsBreakdown}
-    />
+    <RaceOutlookDetails outlook={raceOutlook} />
   ) : null;
 
   if (layout === "mobile") {

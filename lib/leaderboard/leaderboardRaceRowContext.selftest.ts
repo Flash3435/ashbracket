@@ -5,6 +5,7 @@ import {
   formatExpandedRemainingPicksMoreLine,
   formatLeaderboardRaceSummary,
   formatRaceOutlookLeaderComparison,
+  formatRemainingTournamentPicksDisplay,
   formatTopRemainingPickLine,
   mapRaceOutlookByParticipantId,
   raceOutlookDetailExplanation,
@@ -38,6 +39,12 @@ function outlookRow(
         teamName: "England",
         shortLabel: "finalist",
       },
+    ],
+    remainingTournamentPicks: [
+      { key: "champion", teamId: "team-fra", teamName: "France" },
+      { key: "most_goals", teamId: "team-fra", teamName: "France" },
+      { key: "most_yellow_cards", teamId: "team-arg", teamName: "Argentina" },
+      { key: "most_red_cards", teamId: "team-mex", teamName: "Mexico" },
     ],
     statusLabel: "Leading",
     leaderDisplayName: "Emil",
@@ -276,6 +283,33 @@ const baseOutlook = outlookRow();
       outlookRow({ statusLabel: "Close behind" }),
     ),
     /few points/i,
+  );
+}
+
+// Remaining tournament picks display (Details section)
+{
+  const display = formatRemainingTournamentPicksDisplay(
+    baseOutlook.remainingTournamentPicks,
+  );
+  assert.equal(display.length, 4);
+  assert.deepEqual(
+    display.map((row) => [row.key, row.icon, row.label, row.teamName]),
+    [
+      ["champion", "🏆", "Champion", "France"],
+      ["most_goals", "⚽", "Most Goals", "France"],
+      ["most_yellow_cards", "🟨", "Most Yellow Cards", "Argentina"],
+      ["most_red_cards", "🟥", "Most Red Cards", "Mexico"],
+    ],
+  );
+  assert.deepEqual(
+    formatRemainingTournamentPicksDisplay(undefined).map((row) => row.teamName),
+    ["—", "—", "—", "—"],
+  );
+  assert.deepEqual(
+    formatRemainingTournamentPicksDisplay([
+      { key: "champion", teamId: null, teamName: null },
+    ]).map((row) => row.teamName),
+    ["—", "—", "—", "—"],
   );
 }
 

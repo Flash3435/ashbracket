@@ -2,12 +2,51 @@ import type {
   ParticipantRaceOutlook,
   ParticipantRaceOutlookRow,
   RaceOutlookStatus,
+  RemainingTournamentPick,
+  RemainingTournamentPickKey,
 } from "@/lib/pool/buildParticipantRaceOutlook";
 import type { BracketImpactParticipantRow } from "@/lib/poolActivity/scoreImpact/buildBracketImpact";
 import type { LeaderboardMomentumRow } from "./buildLeaderboardMomentum";
 import { formatLeaderboardRaceSummaryWithImpact } from "./leaderboardBracketImpactDisplay";
 
 export const EXPANDED_TOP_REMAINING_PICKS_LIMIT = 3;
+
+export type RemainingTournamentPickDisplay = {
+  key: RemainingTournamentPickKey;
+  icon: string;
+  label: string;
+  teamName: string;
+};
+
+const REMAINING_TOURNAMENT_PICK_DISPLAY: Record<
+  RemainingTournamentPickKey,
+  { icon: string; label: string }
+> = {
+  champion: { icon: "🏆", label: "Champion" },
+  most_goals: { icon: "⚽", label: "Most Goals" },
+  most_yellow_cards: { icon: "🟨", label: "Most Yellow Cards" },
+  most_red_cards: { icon: "🟥", label: "Most Red Cards" },
+};
+
+/** Compact Details rows: Champion + three bonus picks, in fixed order. */
+export function formatRemainingTournamentPicksDisplay(
+  picks: RemainingTournamentPick[] | null | undefined,
+): RemainingTournamentPickDisplay[] {
+  const byKey = new Map((picks ?? []).map((pick) => [pick.key, pick]));
+  return (
+    Object.keys(REMAINING_TOURNAMENT_PICK_DISPLAY) as RemainingTournamentPickKey[]
+  ).map((key) => {
+    const meta = REMAINING_TOURNAMENT_PICK_DISPLAY[key];
+    const pick = byKey.get(key);
+    const teamName = pick?.teamName?.trim() || "—";
+    return {
+      key,
+      icon: meta.icon,
+      label: meta.label,
+      teamName,
+    };
+  });
+}
 
 export function mapRaceOutlookByParticipantId(
   outlook: ParticipantRaceOutlook | null | undefined,
