@@ -1,4 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { refuseIfLiveScoreSyncFrozen } from "@/lib/admin/liveScoreSyncFreeze";
 import type { OfficialMatchScorePatch } from "../syncOfficialTournament";
 import {
   syncOfficialTournament,
@@ -141,6 +142,13 @@ export async function applyLiveScoresAndSync(
   },
 ): Promise<ApplyLiveScoresResult> {
   const warnings: string[] = [];
+  // Production path (default syncFn) respects the ops freeze. Unit tests inject syncFn.
+  if (!options.syncFn) {
+    const frozen = refuseIfLiveScoreSyncFrozen();
+    if (!frozen.ok) {
+      return { ok: false, error: frozen.error, warnings };
+    }
+  }
   const syncFn = options.syncFn ?? syncOfficialTournament;
   const cardPatches = options.cardPatches ?? [];
   const logger = options.logger ?? new ApplyPhaseLogger("liveScoresApply");

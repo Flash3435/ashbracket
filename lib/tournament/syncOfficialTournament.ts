@@ -24,6 +24,10 @@ import { ensureThirdPlaceQualifierResults } from "@/lib/scoring/ensureThirdPlace
 import { tryPostThirdPlaceScoringBackfillNoticesForPools } from "@/lib/poolActivity/thirdPlaceScoringBackfillAnnouncement";
 import { buildRoundOf32AdvancementResultInserts } from "./deriveRoundOf32AdvancementResults";
 import { winnerFromMatchScores } from "./matchOutcome";
+import {
+  planSyncResultReconcile,
+  type SyncResultRow,
+} from "./reconcileSyncResults";
 
 export type SyncOfficialTournamentSummary = {
   /** All matches loaded for the edition. */
@@ -217,7 +221,8 @@ async function loadStageIdsByCode(
  * 1) Optional score patches (skipped when `sync_locked`).
  * 2) Recompute winners + bracket propagation via `*_advance_from_match_id`.
  * 3) Persist match rows.
- * 4) Replace `results` rows with `source = 'sync'`, then insert derived group + KO slots (skips locked manual keys).
+ * 4) Reconcile `results` rows with `source = 'sync'` in place (stable UUIDs by
+ *    stage/kind/group/slot); insert new slots; delete obsolete unlocked sync rows.
  * 5) Recompute pool ledger for each pool in `poolIds`.
  */
 export async function syncOfficialTournament(
@@ -379,8 +384,8 @@ export async function syncOfficialTournament(
     ),
   );
 
-  // Snapshot scoring results before delete+rebuild so score-impact attribution
-  // and third-place correction flags can detect real deltas (not upsert counts).
+  // Snapshot scoring results before reconcile so score-impact attribution
+  // and third-place correction flags can detect real deltas.
   const { data: beforeResultRows, error: beforeResErr } = await supabase
     .from("results")
     .select("kind, team_id, slot_key, group_code")
@@ -395,15 +400,18 @@ export async function syncOfficialTournament(
     groupCode: (row.group_code as string | null) ?? null,
   }));
 
-  const { error: delErr } = await supabase
+  const { data: existingSyncRows, error: existingSyncErr } = await supabase
     .from("results")
-    .delete()
+    .select(
+      "id, tournament_stage_id, kind, team_id, group_code, slot_key, resolved_at, locked",
+    )
     .eq("edition_id", editionId)
-    .eq("source", "sync");
-  if (delErr) return { ok: false, error: delErr.message };
+    .eq("source", "sync")
+    .eq("locked", false);
+  if (existingSyncErr) return { ok: false, error: existingSyncErr.message };
 
   const resolvedAt = new Date().toISOString();
-  const insertByKey = new Map<string, Record<string, unknown>>();
+  const insertByKey = new Map<string, SyncResultRow>();
 
   const groupStageId = stageMap.get("group");
   if (!groupStageId) {
@@ -524,13 +532,27 @@ export async function syncOfficialTournament(
         row.slot_key,
       );
       if (lockedKeys.has(k)) continue;
-      insertByKey.set(k, row);
+      insertByKey.set(k, row as SyncResultRow);
     }
   }
 
-  const inserts = [...insertByKey.values()];
+  const reconcile = planSyncResultReconcile({
+    existingSyncUnlocked: (existingSyncRows ?? []).map((r) => ({
+      id: r.id as string,
+      tournament_stage_id: r.tournament_stage_id as string,
+      kind: r.kind as string,
+      team_id: (r.team_id as string | null) ?? null,
+      group_code: (r.group_code as string | null) ?? null,
+      slot_key: (r.slot_key as string | null) ?? null,
+      resolved_at: (r.resolved_at as string | null) ?? null,
+    })),
+    desiredByKey: insertByKey,
+    lockedKeys,
+  });
 
-  logger?.log("sync.derived_results_rebuild_start", {
+  const inserts = reconcile.toInsert;
+
+  logger?.log("sync.derived_results_reconcile_start", {
     knockoutResultCandidates: matches.filter(
       (m) => m.scoring_result_kind && m.scoring_stage_code,
     ).length,
@@ -544,11 +566,33 @@ export async function syncOfficialTournament(
         m.status === "finished" &&
         m.winner_team_id,
     ).length,
-    roundOf32AdvancementRows: inserts.filter((r) => r.kind === "round_of_32").length,
-    roundOf16FromR32AdvancementRows: inserts.filter(
+    roundOf32AdvancementRows: [...insertByKey.values()].filter(
+      (r) => r.kind === "round_of_32",
+    ).length,
+    roundOf16FromR32AdvancementRows: [...insertByKey.values()].filter(
       (r) => r.kind === "round_of_16" && r.source === "sync",
     ).length,
+    insertCount: reconcile.toInsert.length,
+    updateCount: reconcile.toUpdate.length,
+    deleteCount: reconcile.toDeleteIds.length,
+    reusedIdCount: reconcile.reusedIds.length,
   });
+
+  if (reconcile.toDeleteIds.length > 0) {
+    const { error: delErr } = await supabase
+      .from("results")
+      .delete()
+      .in("id", reconcile.toDeleteIds);
+    if (delErr) return { ok: false, error: delErr.message };
+  }
+
+  for (const upd of reconcile.toUpdate) {
+    const { error: updErr } = await supabase
+      .from("results")
+      .update(upd.patch)
+      .eq("id", upd.id);
+    if (updErr) return { ok: false, error: updErr.message };
+  }
 
   if (inserts.length > 0) {
     const { error: insErr } = await supabase.from("results").insert(inserts);
@@ -661,8 +705,8 @@ export async function syncOfficialTournament(
     logger?.log("sync.pool_recalc_complete", { poolCount: poolIds.length });
 
     // One-time delayed third-place notice: only when advancers newly settle or
-    // change. Upsert counts are unreliable because sync deletes+recreates
-    // source='sync' rows. Notice uniqueness also relies on pool_activity
+    // change. Upsert counts are unreliable because sync may update existing
+    // source='sync' rows in place. Notice uniqueness also relies on pool_activity
     // source_key dedupe. Writer uses service role internally — never the
     // authenticated sync client (SELECT-only RLS).
     if (scoreImpactAttribution.thirdPlaceQualifiersNewlyScored) {
@@ -726,7 +770,8 @@ export async function syncOfficialTournament(
       matchCount: matches.length,
       matchesWithScoresCount,
       finishedMatchCount,
-      derivedResultsInserted: inserts.length,
+      derivedResultsInserted:
+        reconcile.toInsert.length + reconcile.toUpdate.length,
       poolsRecalculated,
       syncLockedMatchCount,
       patchesApplied: patchOutcome.applied.length,

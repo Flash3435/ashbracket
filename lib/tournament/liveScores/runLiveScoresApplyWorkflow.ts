@@ -11,6 +11,7 @@ import {
 import { inferRecentAppliedMatchCodes } from "@/lib/poolActivity/scoreImpact/inferRecentAppliedMatchCodes";
 import { loadTeamNameMapForEdition } from "@/lib/poolActivity/scoreImpact/loadScoreImpactContext";
 import { recomputePoolLedgersWithScoreImpact } from "@/lib/poolActivity/scoreImpact/recomputeWithScoreImpact";
+import { refuseIfLiveScoreSyncFrozen } from "@/lib/admin/liveScoreSyncFreeze";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import {
   fetchOfficialLiveEdition,
@@ -205,6 +206,16 @@ export async function runLiveScoresApplyScoresOnly(
   try {
     const gate = await requireLiveScoresAdmin(supabase, input.productionAcknowledged, logger);
     if (!gate.ok) return gate.result as LiveScoresApplyScoresResult;
+
+    const frozen = refuseIfLiveScoreSyncFrozen();
+    if (!frozen.ok) {
+      return {
+        ok: false,
+        build: LIVE_SCORES_APPLY_BUILD,
+        error: frozen.error,
+        technicalDetails: logger.snapshot(),
+      };
+    }
 
     const { user, liveEdition } = gate;
 
@@ -446,6 +457,19 @@ export async function runLiveScoresRecalculateOnePool(
         poolId: input.poolId,
         poolIndex: input.poolIndex,
         poolTotal: input.poolTotal,
+      };
+    }
+
+    const frozen = refuseIfLiveScoreSyncFrozen();
+    if (!frozen.ok) {
+      return {
+        ok: false,
+        build: LIVE_SCORES_APPLY_BUILD,
+        poolId: input.poolId,
+        poolIndex: input.poolIndex,
+        poolTotal: input.poolTotal,
+        error: frozen.error,
+        technicalDetails: logger.snapshot(),
       };
     }
 

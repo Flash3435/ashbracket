@@ -3,17 +3,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { revalidatePoolAdminPaths } from "@/lib/admin/revalidatePoolAdminPaths";
 import { createClient } from "@/lib/supabase/server";
 import { createServiceRoleClient } from "@/lib/supabase/service";
-import { ensureThirdPlaceQualifierResults } from "@/lib/scoring/ensureThirdPlaceQualifierResults";
-import { computePoolScores } from "./computePoolScores";
-import { fetchPoolPredictions } from "@/lib/predictions/fetchPoolPredictions";
-import { warnIfPoolPredictionsLookTruncated } from "@/lib/supabase/fetchAllRows";
-import { mapResultRow, mapScoringRuleRow } from "./mapSupabaseRows";
-import {
-  knockoutScoringConfigFromTransition,
-  mergePreservedPreCutoffKnockoutLedger,
-  postCutoffTeamIdsFromResults,
-  resolveKnockoutScoringTransition,
-} from "./knockoutScoringTransition";
+import { buildPoolLedgerPayloadWithClient } from "./buildPoolLedgerPayload";
 
 type RecomputeResult = { error?: string };
 
@@ -66,161 +56,28 @@ export async function recomputePoolLedgerWithClient(
   poolId: string,
   options?: RecomputePoolLedgerOptions,
 ): Promise<RecomputeResult> {
-  const poolPredictions = await fetchPoolPredictions(supabase, { poolId });
-  if (poolPredictions.error) return { error: poolPredictions.error };
+  const built = await buildPoolLedgerPayloadWithClient(supabase, poolId);
+  if (!built.ok) return { error: built.error };
 
-  const { data: participantRows, error: participantErr } = await supabase
-    .from("participants")
-    .select("id")
-    .eq("pool_id", poolId);
-  if (participantErr) return { error: participantErr.message };
-
-  const participantCount = (participantRows ?? []).length;
-  warnIfPoolPredictionsLookTruncated({
-    participantCount,
-    predictionRowCount: poolPredictions.predictions.length,
-    paginationPageCount: poolPredictions.pageCount,
-    context: "recomputePoolLedgerWithClient",
-    poolId,
-  });
-
-  const { data: poolRow, error: poolErr } = await supabase
-    .from("pools")
-    .select(
-      "id, group_advance_exact_points, group_advance_wrong_slot_points, tournament_edition_id",
-    )
-    .eq("id", poolId)
-    .maybeSingle();
-
-  if (poolErr) return { error: poolErr.message };
-  if (!poolRow?.tournament_edition_id) {
-    return { error: "Pool has no tournament edition assigned." };
+  if (built.excludedOrphans.length > 0) {
+    console.warn("[ashbracket:ledger-merge] excluded knockout orphans", {
+      poolId,
+      count: built.excludedOrphans.length,
+      sample: built.excludedOrphans.slice(0, 5),
+    });
   }
 
-  const editionId = poolRow.tournament_edition_id as string;
-
-  const { data: editionRow, error: editionErr } = await supabase
-    .from("tournament_editions")
-    .select("code, is_simulation")
-    .eq("id", editionId)
-    .maybeSingle();
-  if (editionErr) return { error: editionErr.message };
-
-  const knockoutScoring = knockoutScoringConfigFromTransition(
-    resolveKnockoutScoringTransition({
-      editionCode: editionRow?.code ?? null,
-      isSimulation: Boolean(editionRow?.is_simulation),
-    }),
-  );
-
-  const { data: groupStageRow } = await supabase
-    .from("tournament_stages")
-    .select("id")
-    .eq("code", "group")
-    .maybeSingle();
-
-  let groupStageScoring: {
-    groupStageId: string;
-    exactPoints: number;
-    wrongSlotPoints: number;
-  } | null = null;
-  if (
-    poolRow &&
-    poolRow.group_advance_exact_points != null &&
-    poolRow.group_advance_wrong_slot_points != null &&
-    groupStageRow?.id
-  ) {
-    groupStageScoring = {
-      groupStageId: groupStageRow.id,
-      exactPoints: Number(poolRow.group_advance_exact_points),
-      wrongSlotPoints: Number(poolRow.group_advance_wrong_slot_points),
-    };
-  }
-
-  const { data: rulesRaw, error: rulesErr } = await supabase
-    .from("scoring_rules")
-    .select(
-      "id, pool_id, prediction_kind, bonus_key, points, created_at, updated_at",
-    )
-    .eq("pool_id", poolId);
-
-  if (rulesErr) return { error: rulesErr.message };
-
-  await ensureThirdPlaceQualifierResults(supabase, editionId);
-
-  const { data: resultsRaw, error: resErr } = await supabase
-    .from("results")
-    .select(
-      "id, tournament_stage_id, kind, team_id, group_code, slot_key, value_text, resolved_at, created_at, edition_id",
-    )
-    .eq("edition_id", editionId);
-
-  if (resErr) return { error: resErr.message };
-
-  const predictions = poolPredictions.predictions;
-  const scoringRules = (rulesRaw ?? []).map(mapScoringRuleRow);
-  const results = (resultsRaw ?? []).map(mapResultRow);
-
-  const outcome = computePoolScores({
-    poolId,
-    predictions,
-    results,
-    scoringRules,
-    groupStageScoring,
-    knockoutScoring,
-  });
-
-  const computedRows = outcome.ledgerLines.map((l) => ({
-    participant_id: l.participantId,
-    points_delta: l.pointsDelta,
-    prediction_kind: l.predictionKind,
-    prediction_id: l.predictionId,
-    result_id: l.resultId,
-    note: l.note,
-  }));
-
-  let payload = computedRows;
-
-  // Grandfathered transition: preserve pre-cutoff KO ledger rows (incl. orphans)
-  // while replacing post-cutoff team awards from the transitional scorer.
-  if (knockoutScoring.mode === "grandfathered_cutoff_then_capped_increment") {
-    const { data: liveLedgerRaw, error: liveErr } = await supabase
-      .from("points_ledger")
-      .select(
-        "participant_id, points_delta, prediction_kind, prediction_id, result_id, note",
-      )
-      .eq("pool_id", poolId);
-    if (liveErr) return { error: liveErr.message };
-
-    const resultTeamIdById = new Map(
-      results.map((r) => [r.id, r.teamId] as const),
-    );
-    const postCutoffTeamIds = postCutoffTeamIdsFromResults(
-      results,
-      knockoutScoring.cutoffMaxOfficialKind,
-    );
-    payload = mergePreservedPreCutoffKnockoutLedger({
-      computedRows,
-      liveRows: (liveLedgerRaw ?? []).map((r) => ({
-        participant_id: r.participant_id as string,
-        points_delta: Number(r.points_delta),
-        prediction_kind: r.prediction_kind as string,
-        prediction_id: r.prediction_id as string,
-        result_id: r.result_id as string,
-        note: (r.note as string | null) ?? null,
-      })),
-      resultTeamIdById,
-      postCutoffTeamIds,
-    }).map((r) => ({
-      ...r,
-      prediction_kind: r.prediction_kind as (typeof computedRows)[number]["prediction_kind"],
-      note: r.note ?? "",
-    }));
+  if (!built.validation.ok) {
+    console.error("[ashbracket:ledger-validate] blocked replace", {
+      poolId,
+      ...built.validation,
+    });
+    return { error: built.validation.error ?? "Invalid knockout ledger payload" };
   }
 
   const { error: rpcErr } = await supabase.rpc("replace_points_ledger_for_pool", {
     p_pool_id: poolId,
-    p_rows: payload,
+    p_rows: built.payload,
   });
 
   if (rpcErr) return { error: rpcErr.message };

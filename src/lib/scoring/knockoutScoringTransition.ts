@@ -262,55 +262,196 @@ export type LedgerRowLike = {
   note: string | null;
 };
 
+export type ExcludedKnockoutOrphan = {
+  participant_id: string;
+  prediction_id: string;
+  prediction_kind: string;
+  points_delta: number;
+  reason: string;
+};
+
+export type MergePreservedPreCutoffKnockoutLedgerResult = {
+  rows: LedgerRowLike[];
+  excludedOrphans: ExcludedKnockoutOrphan[];
+};
+
+/**
+ * Resolve the team that owns a knockout ledger row.
+ * Prefer a live, resolvable `result_id`; fall back to the prediction's team.
+ */
+export function resolveKnockoutLedgerTeamId(
+  row: Pick<LedgerRowLike, "result_id" | "prediction_id">,
+  resultTeamIdById: ReadonlyMap<string, string | null>,
+  predictionTeamIdByPredictionId?: ReadonlyMap<string, string | null>,
+): string | null {
+  const rid = row.result_id?.trim() ? row.result_id : "";
+  if (rid) {
+    const fromResult = resultTeamIdById.get(rid) ?? null;
+    if (fromResult) return fromResult;
+  }
+  if (predictionTeamIdByPredictionId) {
+    return predictionTeamIdByPredictionId.get(row.prediction_id) ?? null;
+  }
+  return null;
+}
+
+function ownershipKey(participantId: string, teamId: string): string {
+  return `${participantId}::${teamId}`;
+}
+
 /**
  * For grandfathered editions: keep live KO rows for teams that have not progressed
  * past the cutoff (preserves historical / orphan awards). Replace KO rows for teams
  * that progressed past the cutoff with transitional computed awards. Keep all non-KO.
+ *
+ * Invariant: at most one knockout progression award per (participant_id, team_id).
+ *
+ * Rows with null/unresolvable result_id are not blindly preserved. Team ownership is
+ * resolved via `prediction_id` when possible. Unresolvable rows are excluded and reported.
+ * When a live row only resolves via prediction (nulled FK) and computed already covers
+ * the same (participant, team), the computed row wins so result linkage stays fresh.
  */
 export function mergePreservedPreCutoffKnockoutLedger(input: {
   computedRows: LedgerRowLike[];
   liveRows: LedgerRowLike[];
   resultTeamIdById: ReadonlyMap<string, string | null>;
   postCutoffTeamIds: ReadonlySet<string>;
-}): LedgerRowLike[] {
+  /** prediction_id → team_id; used when result_id was nulled by sync delete. */
+  predictionTeamIdByPredictionId?: ReadonlyMap<string, string | null>;
+}): MergePreservedPreCutoffKnockoutLedgerResult {
+  const predTeam = input.predictionTeamIdByPredictionId;
+  const excludedOrphans: ExcludedKnockoutOrphan[] = [];
+
+  const computedKoByKey = new Map<string, LedgerRowLike>();
+  for (const row of input.computedRows) {
+    if (!isKnockoutProgressionKind(row.prediction_kind)) continue;
+    const teamId = resolveKnockoutLedgerTeamId(
+      row,
+      input.resultTeamIdById,
+      predTeam,
+    );
+    if (!teamId) continue;
+    computedKoByKey.set(ownershipKey(row.participant_id, teamId), row);
+  }
+
   const preservedPreCutoffKo: LedgerRowLike[] = [];
+  const preservedKeys = new Set<string>();
 
   for (const row of input.liveRows) {
-    const teamId = input.resultTeamIdById.get(row.result_id) ?? null;
-    const isKo = isKnockoutProgressionKind(row.prediction_kind);
-    if (!isKo) continue;
-    if (teamId && input.postCutoffTeamIds.has(teamId)) continue;
+    if (!isKnockoutProgressionKind(row.prediction_kind)) continue;
+
+    const teamId = resolveKnockoutLedgerTeamId(
+      row,
+      input.resultTeamIdById,
+      predTeam,
+    );
+    if (!teamId) {
+      excludedOrphans.push({
+        participant_id: row.participant_id,
+        prediction_id: row.prediction_id,
+        prediction_kind: row.prediction_kind,
+        points_delta: row.points_delta,
+        reason: "unresolvable_team",
+      });
+      continue;
+    }
+
+    const key = ownershipKey(row.participant_id, teamId);
+    if (input.postCutoffTeamIds.has(teamId)) {
+      // Post-cutoff: always take transitional computed (do not preserve live).
+      continue;
+    }
+
+    const resultResolvable = Boolean(
+      row.result_id?.trim() && input.resultTeamIdById.get(row.result_id),
+    );
+
+    // Nulled/stale result_id with a computed replacement for the same team:
+    // drop the live orphan so we do not double-award.
+    if (!resultResolvable && computedKoByKey.has(key)) {
+      excludedOrphans.push({
+        participant_id: row.participant_id,
+        prediction_id: row.prediction_id,
+        prediction_kind: row.prediction_kind,
+        points_delta: row.points_delta,
+        reason: "nulled_result_superseded_by_computed",
+      });
+      continue;
+    }
+
+    if (preservedKeys.has(key)) {
+      excludedOrphans.push({
+        participant_id: row.participant_id,
+        prediction_id: row.prediction_id,
+        prediction_kind: row.prediction_kind,
+        points_delta: row.points_delta,
+        reason: "duplicate_live_ownership",
+      });
+      continue;
+    }
+
+    preservedKeys.add(key);
     preservedPreCutoffKo.push(row);
   }
 
   const computedPostCutoffKo: LedgerRowLike[] = [];
   const computedNewPreCutoffKo: LedgerRowLike[] = [];
+  const emittedComputedKeys = new Set<string>();
 
   for (const row of input.computedRows) {
     if (!isKnockoutProgressionKind(row.prediction_kind)) continue;
-    const teamId = input.resultTeamIdById.get(row.result_id) ?? null;
-    if (teamId && input.postCutoffTeamIds.has(teamId)) {
+    const teamId = resolveKnockoutLedgerTeamId(
+      row,
+      input.resultTeamIdById,
+      predTeam,
+    );
+    if (!teamId) {
+      excludedOrphans.push({
+        participant_id: row.participant_id,
+        prediction_id: row.prediction_id,
+        prediction_kind: row.prediction_kind,
+        points_delta: row.points_delta,
+        reason: "computed_unresolvable_team",
+      });
+      continue;
+    }
+    const key = ownershipKey(row.participant_id, teamId);
+    if (emittedComputedKeys.has(key)) {
+      excludedOrphans.push({
+        participant_id: row.participant_id,
+        prediction_id: row.prediction_id,
+        prediction_kind: row.prediction_kind,
+        points_delta: row.points_delta,
+        reason: "duplicate_computed_ownership",
+      });
+      continue;
+    }
+    if (input.postCutoffTeamIds.has(teamId)) {
+      emittedComputedKeys.add(key);
       computedPostCutoffKo.push(row);
       continue;
     }
-    const alreadyPreserved = preservedPreCutoffKo.some(
-      (r) =>
-        r.participant_id === row.participant_id &&
-        (input.resultTeamIdById.get(r.result_id) ?? null) === teamId,
-    );
-    if (!alreadyPreserved) computedNewPreCutoffKo.push(row);
+    if (preservedKeys.has(key)) {
+      // Live grandfathered row already owns this (participant, team).
+      continue;
+    }
+    emittedComputedKeys.add(key);
+    computedNewPreCutoffKo.push(row);
   }
 
   const nonKoComputed = input.computedRows.filter(
     (r) => !isKnockoutProgressionKind(r.prediction_kind),
   );
 
-  return [
-    ...nonKoComputed,
-    ...preservedPreCutoffKo,
-    ...computedNewPreCutoffKo,
-    ...computedPostCutoffKo,
-  ];
+  return {
+    rows: [
+      ...nonKoComputed,
+      ...preservedPreCutoffKo,
+      ...computedNewPreCutoffKo,
+      ...computedPostCutoffKo,
+    ],
+    excludedOrphans,
+  };
 }
 
 export function postCutoffTeamIdsFromResults(

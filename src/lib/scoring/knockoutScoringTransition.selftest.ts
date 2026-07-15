@@ -606,24 +606,285 @@ const rulesMap = new Map(rules.map((r) => [r.predictionKind, r.points]));
     ["esp-sf", teamEsp],
     ["gw-a", teamEng],
   ]);
+  const predTeam = new Map<string, string | null>([
+    ["pred-bel", teamBel],
+    ["pred-esp", teamEsp],
+  ]);
   const merged = mergePreservedPreCutoffKnockoutLedger({
     computedRows,
     liveRows,
     resultTeamIdById,
+    predictionTeamIdByPredictionId: predTeam,
     postCutoffTeamIds: postCutoff,
   });
-  const bel = merged.find((r) => r.result_id === "bel-qf");
-  const esp = merged.find((r) => r.participant_id === pSfOnly && r.prediction_kind === "semifinalist");
-  const espFinalist = merged.find((r) => r.result_id === "esp-finalist");
+  const bel = merged.rows.find((r) => r.result_id === "bel-qf");
+  const esp = merged.rows.find((r) => r.participant_id === pSfOnly && r.prediction_kind === "semifinalist");
+  const espFinalist = merged.rows.find((r) => r.result_id === "esp-finalist");
   assert.ok(bel, "pre-cutoff live KO preserved");
   assert.equal(bel?.points_delta, 8);
   assert.ok(esp, "post-cutoff Spain replaced with transitional");
   assert.equal(esp?.points_delta, 16);
   assert.equal(espFinalist, undefined, "no duplicate Spain finalist row");
   assert.equal(
-    merged.filter((r) => r.prediction_kind === "group_winner").length,
+    merged.rows.filter((r) => r.prediction_kind === "group_winner").length,
     1,
   );
+}
+
+// Sync nulls result_id: merge must not duplicate when prediction resolves team.
+{
+  const postCutoff = postCutoffTeamIdsFromResults(
+    [
+      ...spainThroughFinal.map((r) => ({ kind: r.kind, teamId: r.teamId })),
+      { kind: "semifinalist", teamId: "team-arg" },
+      { kind: "finalist", teamId: "team-arg" },
+    ],
+    "semifinalist",
+  );
+  assert.ok(postCutoff.has("team-arg"));
+
+  const liveOrphans = [
+    {
+      participant_id: pFinalist,
+      points_delta: 16,
+      prediction_kind: "semifinalist",
+      prediction_id: "pred-arg-fin",
+      result_id: "",
+      note: "nulled after sync delete",
+    },
+    {
+      participant_id: pFinalist,
+      points_delta: 8,
+      prediction_kind: "quarterfinalist",
+      prediction_id: "pred-bel-2",
+      result_id: "",
+      note: "nulled bel",
+    },
+  ];
+  const computed = [
+    {
+      participant_id: pFinalist,
+      points_delta: 24,
+      prediction_kind: "finalist",
+      prediction_id: "pred-arg-fin",
+      result_id: "arg-fin",
+      note: "computed argentina",
+    },
+    {
+      participant_id: pFinalist,
+      points_delta: 8,
+      prediction_kind: "quarterfinalist",
+      prediction_id: "pred-bel-2",
+      result_id: "bel-qf-new",
+      note: "computed bel",
+    },
+  ];
+  const resultMap = new Map<string, string | null>([
+    ["arg-fin", "team-arg"],
+    ["bel-qf-new", teamBel],
+  ]);
+  const predMap = new Map<string, string | null>([
+    ["pred-arg-fin", "team-arg"],
+    ["pred-bel-2", teamBel],
+  ]);
+  const merged = mergePreservedPreCutoffKnockoutLedger({
+    computedRows: computed,
+    liveRows: liveOrphans,
+    resultTeamIdById: resultMap,
+    predictionTeamIdByPredictionId: predMap,
+    postCutoffTeamIds: postCutoff,
+  });
+  const ko = merged.rows.filter((r) =>
+    ["semifinalist", "finalist", "quarterfinalist"].includes(r.prediction_kind),
+  );
+  assert.equal(ko.length, 2, "exactly one award per team, not doubled");
+  assert.equal(
+    ko.filter((r) => r.prediction_id === "pred-arg-fin").length,
+    1,
+  );
+  assert.equal(
+    ko.find((r) => r.prediction_id === "pred-arg-fin")?.points_delta,
+    24,
+  );
+  assert.equal(
+    ko.find((r) => r.prediction_id === "pred-bel-2")?.result_id,
+    "bel-qf-new",
+  );
+  assert.ok(
+    merged.excludedOrphans.some((o) => o.reason === "nulled_result_superseded_by_computed"),
+  );
+}
+
+// Unresolvable orphan excluded, not preserved.
+{
+  const merged = mergePreservedPreCutoffKnockoutLedger({
+    computedRows: [],
+    liveRows: [
+      {
+        participant_id: pSfOnly,
+        points_delta: 4,
+        prediction_kind: "round_of_16",
+        prediction_id: "missing-pred",
+        result_id: "",
+        note: "ghost",
+      },
+    ],
+    resultTeamIdById: new Map(),
+    predictionTeamIdByPredictionId: new Map(),
+    postCutoffTeamIds: new Set(),
+  });
+  assert.equal(merged.rows.length, 0);
+  assert.equal(merged.excludedOrphans.length, 1);
+  assert.equal(merged.excludedOrphans[0]?.reason, "unresolvable_team");
+}
+
+// Preserved historical + computed same team → one award.
+{
+  const liveRows = [
+    {
+      participant_id: pSfOnly,
+      points_delta: 8,
+      prediction_kind: "quarterfinalist",
+      prediction_id: "pred-bel",
+      result_id: "bel-qf",
+      note: "live",
+    },
+  ];
+  const computedRows = [
+    {
+      participant_id: pSfOnly,
+      points_delta: 8,
+      prediction_kind: "quarterfinalist",
+      prediction_id: "pred-bel",
+      result_id: "bel-qf-2",
+      note: "computed",
+    },
+  ];
+  const merged = mergePreservedPreCutoffKnockoutLedger({
+    computedRows,
+    liveRows,
+    resultTeamIdById: new Map([
+      ["bel-qf", teamBel],
+      ["bel-qf-2", teamBel],
+    ]),
+    predictionTeamIdByPredictionId: new Map([["pred-bel", teamBel]]),
+    postCutoffTeamIds: new Set(),
+  });
+  const ko = merged.rows.filter((r) => r.prediction_kind === "quarterfinalist");
+  assert.equal(ko.length, 1);
+  assert.equal(ko[0]?.result_id, "bel-qf", "prefer resolvable live grandfather");
+}
+
+// 16 KO teams → 16 awards after merge even when live orphans double them.
+{
+  const teams = Array.from({ length: 16 }, (_, i) => `team-${i}`);
+  const liveRows = teams.flatMap((t, i) => [
+    {
+      participant_id: pSfOnly,
+      points_delta: 4,
+      prediction_kind: "round_of_16",
+      prediction_id: `pred-${i}`,
+      result_id: "",
+      note: "orphan",
+    },
+    {
+      participant_id: pSfOnly,
+      points_delta: 4,
+      prediction_kind: "round_of_16",
+      prediction_id: `pred-${i}`,
+      result_id: `res-${i}`,
+      note: "resolved",
+    },
+  ]);
+  const computedRows = teams.map((t, i) => ({
+    participant_id: pSfOnly,
+    points_delta: 4,
+    prediction_kind: "round_of_16",
+    prediction_id: `pred-${i}`,
+    result_id: `res-new-${i}`,
+    note: "computed",
+  }));
+  const resultTeamIdById = new Map<string, string | null>();
+  const predTeam = new Map<string, string | null>();
+  for (let i = 0; i < 16; i++) {
+    resultTeamIdById.set(`res-${i}`, teams[i]!);
+    resultTeamIdById.set(`res-new-${i}`, teams[i]!);
+    predTeam.set(`pred-${i}`, teams[i]!);
+  }
+  const merged = mergePreservedPreCutoffKnockoutLedger({
+    computedRows,
+    liveRows,
+    resultTeamIdById,
+    predictionTeamIdByPredictionId: predTeam,
+    postCutoffTeamIds: new Set(),
+  });
+  const ko = merged.rows.filter((r) => r.prediction_kind === "round_of_16");
+  assert.equal(ko.length, 16, "exactly 16 logical KO awards, not 32");
+}
+
+// M102: Argentina finalist picker +8; SF-only +0 incremental beyond grandfather.
+{
+  const teamArg = "team-arg";
+  const resultsArgFinal: Result[] = [
+    {
+      id: "arg-r16",
+      tournamentStageId: stageKo,
+      kind: "round_of_16",
+      teamId: teamArg,
+      groupCode: null,
+      slotKey: null,
+      valueText: null,
+      resolvedAt: now,
+      createdAt: now,
+    },
+    {
+      id: "arg-qf",
+      tournamentStageId: stageKo,
+      kind: "quarterfinalist",
+      teamId: teamArg,
+      groupCode: null,
+      slotKey: null,
+      valueText: null,
+      resolvedAt: now,
+      createdAt: now,
+    },
+    {
+      id: "arg-sf",
+      tournamentStageId: stageKo,
+      kind: "semifinalist",
+      teamId: teamArg,
+      groupCode: null,
+      slotKey: null,
+      valueText: null,
+      resolvedAt: now,
+      createdAt: now,
+    },
+    {
+      id: "arg-fin",
+      tournamentStageId: stageKo,
+      kind: "finalist",
+      teamId: teamArg,
+      groupCode: null,
+      slotKey: null,
+      valueText: null,
+      resolvedAt: now,
+      createdAt: now,
+    },
+  ];
+  const pArgSf = "part-arg-sf";
+  const pArgFin = "part-arg-fin";
+  const out = computePoolScores({
+    poolId,
+    predictions: [
+      pred("a-sf", pArgSf, "semifinalist", teamArg, "1"),
+      pred("a-fin", pArgFin, "finalist", teamArg, "1"),
+    ],
+    results: resultsArgFinal,
+    scoringRules: rules,
+    knockoutScoring: transitional,
+  });
+  assert.equal(out.totalsByParticipantId[pArgSf], 16, "SF-only: grandfather only");
+  assert.equal(out.totalsByParticipantId[pArgFin], 24, "finalist: +8 increment");
 }
 
 // Second transitional compute is idempotent (same inputs → same KO awards).

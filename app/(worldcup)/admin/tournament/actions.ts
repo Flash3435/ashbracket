@@ -2,6 +2,7 @@
 
 import { logAdminRiskAction } from "@/lib/admin/adminRiskAuditLog";
 import { checkProductionAdminAck } from "@/lib/admin/requireProductionAdminAck";
+import { refuseIfLiveScoreSyncFrozen } from "@/lib/admin/liveScoreSyncFreeze";
 import { createClient } from "@/lib/supabase/server";
 import { isGlobalAdmin } from "../../../../lib/auth/permissions";
 import { OFFICIAL_EDITION_CODE } from "../../../../lib/config/officialTournament";
@@ -47,6 +48,9 @@ export async function runLiveDailyUpdateAction(input: {
   try {
     const ack = checkProductionAdminAck(input.productionAcknowledged);
     if (!ack.ok) return ack;
+
+    const frozen = refuseIfLiveScoreSyncFrozen();
+    if (!frozen.ok) return frozen;
 
     const supabase = await createClient();
     const {

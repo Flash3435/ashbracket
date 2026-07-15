@@ -14,6 +14,7 @@ import { logAdminRiskAction } from "@/lib/admin/adminRiskAuditLog";
 import { logPilotVerificationEvent } from "@/lib/admin/pilotVerificationLog";
 import { fetchEditionImpactSummary, fetchPoolImpactSummary } from "@/lib/admin/fetchAdminImpactSummary";
 import { checkProductionAdminAck } from "@/lib/admin/requireProductionAdminAck";
+import { refuseIfLiveScoreSyncFrozen } from "@/lib/admin/liveScoreSyncFreeze";
 import { createClient } from "@/lib/supabase/server";
 import { isGlobalAdmin } from "../../../../lib/auth/permissions";
 import { mapResultRow, mapTeamRow } from "@/lib/results/mapRows";
@@ -128,6 +129,9 @@ export async function recomputeStandingsForPoolAction(input: {
     const ack = checkProductionAdminAck(input.productionAcknowledged);
     if (!ack.ok) return ack;
 
+    const frozen = refuseIfLiveScoreSyncFrozen();
+    if (!frozen.ok) return frozen;
+
     const supabase = await createClient();
     const poolId = input.poolId.trim();
     const gate = await assertCanManagePool(supabase, poolId);
@@ -184,6 +188,9 @@ export async function recomputeAllPoolsLedgerAction(input?: {
   try {
     const ack = checkProductionAdminAck(input?.productionAcknowledged);
     if (!ack.ok) return ack;
+
+    const frozen = refuseIfLiveScoreSyncFrozen();
+    if (!frozen.ok) return frozen;
 
     const supabase = await createClient();
     const {
@@ -242,6 +249,11 @@ export async function recomputeEditionPoolsLedgerAction(input: {
     const supabase = await createClient();
     const gate = await requireGlobalAdminEdition(supabase, input.editionId.trim());
     if (!gate.ok) return gate;
+
+    if (!gate.edition.isSimulation) {
+      const frozen = refuseIfLiveScoreSyncFrozen();
+      if (!frozen.ok) return frozen;
+    }
 
     const {
       data: { user },
@@ -316,6 +328,11 @@ export async function setKnockoutResultAction(input: {
     const supabase = await createClient();
     const gate = await requireGlobalAdminEdition(supabase, input.editionId.trim());
     if (!gate.ok) return gate;
+
+    if (!gate.edition.isSimulation) {
+      const frozen = refuseIfLiveScoreSyncFrozen();
+      if (!frozen.ok) return frozen;
+    }
 
     const editionId = gate.edition.id;
     const gc =
