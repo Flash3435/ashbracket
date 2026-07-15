@@ -50,8 +50,8 @@ assert.equal(
 
 assert.equal(
   formatLatestMatchScoringLine(momentum(0), event),
-  "Morocco def. Canada: +0",
-  "zero points still shows latest match",
+  null,
+  "zero points: no +0 match line (path/rank only)",
 );
 
 const upsetBackerImpact: BracketImpactParticipantRow = {
@@ -261,7 +261,8 @@ assert.equal(
 );
 assert.equal(
   formatLatestMatchScoringLine(momentum(0), norwayEvent),
-  "Norway def. Brazil: +0",
+  null,
+  "zero points: no +0 match line",
 );
 
 // Generic recompute without match metadata

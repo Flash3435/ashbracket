@@ -12,7 +12,8 @@ import {
   THIRD_PLACE_SCORING_CORRECTION_LABEL,
 } from "./scoringCorrectionDisplay";
 
-const LATEST_POINTS_OPTIONS = { showZero: true, latestSuffix: true } as const;
+/** Hide (+0) / (+0 refresh) — zero-delta participants show path/rank only. */
+const LATEST_POINTS_OPTIONS = { showZero: false, latestSuffix: true } as const;
 
 export function formatLivePathsDelta(delta: number): string | null {
   if (delta === 0) return null;
@@ -216,6 +217,10 @@ export function formatLatestMatchScoringLine(
   }
 
   const matchPoints = resolveMatchLinePoints(momentum, breakdown, event);
+  // Clean M101 / match UX: no personal points line when the participant scored 0.
+  // Rank movement and live-path changes still render via impact lines.
+  if (matchPoints === 0) return null;
+
   const pointsToken = formatLatestPointsToken(matchPoints);
   if (!pointsToken) return null;
 

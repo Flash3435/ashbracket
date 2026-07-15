@@ -469,7 +469,8 @@ const englandEvent = parseLatestScoreEventContext(
   assert.equal(breakdown?.otherScoringDelta, null);
   assert.equal(
     formatLatestMatchScoringLine(momentum("arjie", 0, 149), englandEvent, null, breakdown),
-    "England def. Norway: +0",
+    null,
+    "zero match points: no England def. Norway: +0 line",
   );
 }
 
