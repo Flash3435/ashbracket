@@ -157,13 +157,13 @@ import {
   assert.equal(formatRankMovementIndicator(newbie), "NEW");
 }
 
-// do not show negative points gained
+// signed point losses are preserved for correction attribution; gain badge stays hidden
 {
   const momentum = buildLeaderboardMomentum({
     currentRows: [{ participantId: "emil", totalPoints: 70, rank: 2 }],
     previousRows: [{ participantId: "emil", totalPoints: 72 }],
   });
-  assert.equal(momentum.rows[0]?.recentPointsGained, 0);
+  assert.equal(momentum.rows[0]?.recentPointsGained, -2);
   assert.equal(formatRecentPointsDelta(momentum.rows[0]), null);
 }
 
@@ -239,6 +239,24 @@ import {
   assert.equal(a?.rankChange, 1);
   assert.equal(b?.rankChange, -1);
   assert.equal(c?.rankChange, 0);
+}
+
+// signed deltas for scoring corrections (e.g. M101 −8)
+{
+  const momentum = buildLeaderboardMomentum({
+    currentRows: [
+      { participantId: "sf-only", totalPoints: 207, rank: 3 },
+      { participantId: "keeper", totalPoints: 210, rank: 1 },
+    ],
+    previousRows: [
+      { participantId: "sf-only", totalPoints: 215 },
+      { participantId: "keeper", totalPoints: 210 },
+    ],
+  });
+  const sf = momentum.rows.find((row) => row.participantId === "sf-only");
+  const keeper = momentum.rows.find((row) => row.participantId === "keeper");
+  assert.equal(sf?.recentPointsGained, -8);
+  assert.equal(keeper?.recentPointsGained, 0);
 }
 
 // expanded movement copy

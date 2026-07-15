@@ -8,6 +8,10 @@ export type LeaderboardMomentumRow = {
   rankChange: number;
   previousPoints: number | null;
   currentPoints: number;
+  /**
+   * Signed points delta since the previous snapshot (can be negative for
+   * scoring corrections such as the M101 depth transition).
+   */
   recentPointsGained: number;
   isNewEntry: boolean;
 };
@@ -83,7 +87,7 @@ export function buildLeaderboardMomentum(input: {
     }
 
     const previousRank = previousRanks.get(current.participantId) ?? currentRank;
-    const pointsGained = Math.max(0, current.totalPoints - previousPoints);
+    const pointsGained = current.totalPoints - previousPoints;
 
     return {
       participantId: current.participantId,
