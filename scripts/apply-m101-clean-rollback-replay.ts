@@ -41,7 +41,6 @@ import { mapPredictionRow } from "../src/lib/scoring/mapSupabaseRows";
 loadEnvLocal();
 
 const SPAIN_TEAM_ID = "153d854f-aa4e-4d42-83a9-ddbf2244b436";
-const SUPERSEDED_TYPE = "ash_score_impact_superseded";
 const CLEAN_SCORE_SIGNATURE = "m101_clean_replay:france_0_2_spain";
 
 const M101_MATCH: ScoreImpactMatchResult = {
@@ -193,11 +192,11 @@ async function main() {
       .from("pool_activity")
       .select("id, created_at, type, metadata_json, body_text")
       .eq("pool_id", poolId)
-      .in("type", ["ash_score_impact", SUPERSEDED_TYPE])
+      .eq("type", "ash_score_impact")
       .order("created_at", { ascending: false })
       .limit(80);
 
-    const liveActs = (acts ?? []).filter((a) => a.type === "ash_score_impact");
+    const liveActs = acts ?? [];
     const correctionActs = liveActs.filter((a) =>
       isCorrectionActivity(a.metadata_json),
     );
@@ -433,33 +432,33 @@ async function main() {
 
     console.log(`\nApplying activity cleanup: ${pool.poolName}`);
 
-    // 1) Supersede correction rows (hide from ash_score_impact latest queries).
+    // 1) Soft-delete correction overlays (archive to report, then delete).
+    // pool_activity_type_check does not allow a superseded type variant.
+    const archivedCorrections: unknown[] = [];
     for (const id of pool.correctionIds) {
       const { data: row, error: loadErr } = await sb
         .from("pool_activity")
-        .select("id, body_text, metadata_json")
+        .select("id, pool_id, created_at, type, body_text, metadata_json")
         .eq("id", id)
         .maybeSingle();
       if (loadErr) throw new Error(loadErr.message);
       if (!row) continue;
-      const md = {
-        ...((row.metadata_json as Record<string, unknown>) ?? {}),
-        superseded_at: new Date().toISOString(),
-        superseded_reason: "m101_clean_activity_replay",
-        original_type: "ash_score_impact",
-      };
-      const { error: updErr } = await sb
+      archivedCorrections.push({
+        ...row,
+        archived_at: new Date().toISOString(),
+        archive_reason: "m101_clean_activity_replay",
+      });
+      const { error: delErr } = await sb
         .from("pool_activity")
-        .update({
-          type: SUPERSEDED_TYPE,
-          body_text: `[superseded] ${row.body_text ?? ""}`.slice(0, 2000),
-          metadata_json: md,
-          updated_at: new Date().toISOString(),
-        })
+        .delete()
         .eq("id", id);
-      if (updErr) throw new Error(updErr.message);
-      console.log(`  superseded correction ${id}`);
+      if (delErr) throw new Error(delErr.message);
+      console.log(`  deleted correction overlay ${id}`);
     }
+    writeFileSync(
+      join(reportDir, `archived-corrections-${pool.poolId}.json`),
+      JSON.stringify(archivedCorrections, null, 2),
+    );
 
     // 2) Upsert clean M101 score-impact from pre-M101 → live (totals unchanged).
     const beforeByPool = new Map([
