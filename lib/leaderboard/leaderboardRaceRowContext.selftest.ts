@@ -301,6 +301,10 @@ const baseOutlook = outlookRow();
       ["most_red_cards", "🟥", "Most Red Cards", "Mexico"],
     ],
   );
+  // Display labels stay short for compact two-column mobile layout
+  assert.ok(
+    display.every((row) => row.label.length <= "Most Yellow Cards".length),
+  );
   assert.deepEqual(
     formatRemainingTournamentPicksDisplay(undefined).map((row) => row.teamName),
     ["—", "—", "—", "—"],

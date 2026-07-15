@@ -7,14 +7,18 @@ import {
 type Props = {
   momentum?: LeaderboardMomentumRow | null;
   className?: string;
+  /** Hide the neutral → marker (useful on tight mobile rows). */
+  hideNeutral?: boolean;
 };
 
 export function LeaderboardRankMovementIndicator({
   momentum = null,
   className = "",
+  hideNeutral = false,
 }: Props) {
   const label = formatRankMovementIndicator(momentum);
   if (!label) return null;
+  if (hideNeutral && label === "→") return null;
 
   return (
     <span

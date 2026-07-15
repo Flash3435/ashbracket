@@ -58,6 +58,7 @@ function summaryCard(label: string, value: string, hint: string) {
 function rankCell(
   row: PublicPoolLeaderboardRowDisplay,
   momentum: LeaderboardMomentumRow | null = null,
+  options: { hideNeutralMovement?: boolean } = {},
 ) {
   const base =
     "inline-flex min-w-[2.25rem] items-center justify-center rounded-full px-2 py-0.5 text-sm font-bold tabular-nums";
@@ -92,7 +93,10 @@ function rankCell(
   return (
     <span className="inline-flex items-center gap-1.5">
       {badge}
-      <LeaderboardRankMovementIndicator momentum={momentum} />
+      <LeaderboardRankMovementIndicator
+        momentum={momentum}
+        hideNeutral={options.hideNeutralMovement === true}
+      />
     </span>
   );
 }
@@ -445,7 +449,7 @@ export function PublicPoolLeaderboardView({
                 aria-current={isViewerRow ? "true" : undefined}
               >
                 <div
-                  className={`rounded-xl border border-ash-border/70 px-4 py-4 ${rowSurfaceClass(row, isViewerRow)}`}
+                  className={`rounded-xl border border-ash-border/70 px-3 py-3.5 sm:px-4 sm:py-4 ${rowSurfaceClass(row, isViewerRow)}`}
                 >
                   <LeaderboardParticipantCell
                     row={row}
@@ -456,7 +460,9 @@ export function PublicPoolLeaderboardView({
                     latestScoreEvent={latestScoreEvent}
                     pointsBreakdown={pointsBreakdown}
                     layout="mobile"
-                    rankCell={rankCell(row, momentum)}
+                    rankCell={rankCell(row, momentum, {
+                      hideNeutralMovement: true,
+                    })}
                   />
                 </div>
               </li>

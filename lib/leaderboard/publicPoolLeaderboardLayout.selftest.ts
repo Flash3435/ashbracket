@@ -34,6 +34,17 @@ const cellSrc = readFileSync(cellPath, "utf8");
 {
   assert.ok(cellSrc.includes("<details"));
   assert.ok(cellSrc.includes("Details"));
+  assert.ok(cellSrc.includes("Tournament Picks"));
+  assert.ok(cellSrc.includes("grid-cols-[auto_minmax(0,1fr)_auto]"));
+  assert.ok(cellSrc.includes("layout === \"mobile\""));
+  assert.ok(cellSrc.includes("compact"));
+}
+
+// Mobile cards hide neutral rank arrows; desktop table does not
+{
+  assert.ok(viewSrc.includes("hideNeutralMovement: true"));
+  assert.ok(viewSrc.includes('layout="table"'));
+  assert.ok(viewSrc.includes('layout="mobile"'));
 }
 
 // Champion exposure is collapsible below leaderboard
