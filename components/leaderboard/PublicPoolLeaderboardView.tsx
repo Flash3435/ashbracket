@@ -406,7 +406,7 @@ export function PublicPoolLeaderboardView({
                           row.totalPoints,
                           latestScoreEvent?.hasValidSnapshot ? momentum : null,
                           {
-                            showZero: true,
+                            showZero: false,
                             latestSuffix: isMatchAttributed,
                             pointsBreakdown,
                             event: latestScoreEvent ?? undefined,

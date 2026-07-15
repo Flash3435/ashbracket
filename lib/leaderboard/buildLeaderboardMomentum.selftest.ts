@@ -106,6 +106,12 @@ import {
   assert.equal(emil?.recentPointsGained, 0);
   assert.equal(formatRankMovementIndicator(emil), "→");
   assert.equal(formatRecentPointsDelta(emil, { showZero: true }), "(+0)");
+  assert.equal(formatRecentPointsDelta(emil), null, "hide (+0) by default");
+  assert.equal(
+    formatPointsWithRecentDelta(207, emil),
+    "207 pts",
+    "zero-delta participants show points only",
+  );
 }
 
 // tied rank movement
@@ -157,14 +163,18 @@ import {
   assert.equal(formatRankMovementIndicator(newbie), "NEW");
 }
 
-// signed point losses are preserved for correction attribution; gain badge stays hidden
+// signed point losses are preserved and shown when non-zero; zero stays hidden
 {
   const momentum = buildLeaderboardMomentum({
     currentRows: [{ participantId: "emil", totalPoints: 70, rank: 2 }],
     previousRows: [{ participantId: "emil", totalPoints: 72 }],
   });
   assert.equal(momentum.rows[0]?.recentPointsGained, -2);
-  assert.equal(formatRecentPointsDelta(momentum.rows[0]), null);
+  assert.equal(formatRecentPointsDelta(momentum.rows[0]), "(−2)");
+  assert.equal(
+    formatRecentPointsDelta(momentum.rows[0], { latestSuffix: true }),
+    "(−2 latest)",
+  );
 }
 
 // biggest movers card picks largest absolute movement
@@ -257,6 +267,21 @@ import {
   const keeper = momentum.rows.find((row) => row.participantId === "keeper");
   assert.equal(sf?.recentPointsGained, -8);
   assert.equal(keeper?.recentPointsGained, 0);
+  assert.equal(
+    formatRecentPointsDelta(sf, { latestSuffix: true }),
+    "(−8 latest)",
+  );
+  assert.equal(formatRecentPointsDelta(keeper, { latestSuffix: true }), null);
+  assert.equal(formatPointsWithRecentDelta(222, {
+    participantId: "emil",
+    previousRank: 1,
+    currentRank: 1,
+    rankChange: 0,
+    previousPoints: 214,
+    currentPoints: 222,
+    recentPointsGained: 8,
+    isNewEntry: false,
+  }, { latestSuffix: true }), "222 pts (+8 latest)");
 }
 
 // expanded movement copy

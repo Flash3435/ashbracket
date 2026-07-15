@@ -3,6 +3,12 @@ import type { LeaderboardMomentumRow } from "./buildLeaderboardMomentum";
 import type { LeaderboardLatestPointsBreakdown } from "./computeLatestMatchPointsBreakdown";
 import type { LeaderboardLatestScoreEventContext } from "./parseLatestScoreEventContext";
 
+function formatSignedDeltaBadge(points: number, suffix: string): string {
+  const abs = formatPoolPoints(Math.abs(points));
+  if (points > 0) return `(+${abs}${suffix})`;
+  return `(−${abs}${suffix})`;
+}
+
 export function formatRankMovementIndicator(
   momentum: LeaderboardMomentumRow | null | undefined,
 ): string | null {
@@ -41,11 +47,10 @@ export function formatRecentPointsDelta(
   const matchDelta = options?.pointsBreakdown?.latestMatchPointsDelta;
 
   if (isMatchAttributed && matchDelta != null) {
-    if (matchDelta <= 0) {
+    if (matchDelta === 0) {
       return options?.showZero ? "(+0)" : null;
     }
-    const delta = formatPoolPoints(matchDelta);
-    return `(+${delta} latest)`;
+    return formatSignedDeltaBadge(matchDelta, " latest");
   }
 
   if (
@@ -66,13 +71,15 @@ export function formatRecentPointsDelta(
     suffix = " latest";
   } else if (options?.latestSuffix && !isMatchAttributed) {
     suffix = " latest";
+  } else if (options?.latestSuffix && isMatchAttributed) {
+    // Match event without a separate match attribution — still a "latest" delta.
+    suffix = " latest";
   }
 
-  if (momentum.recentPointsGained <= 0) {
+  if (momentum.recentPointsGained === 0) {
     return options?.showZero ? `(+0${suffix})` : null;
   }
-  const delta = formatPoolPoints(momentum.recentPointsGained);
-  return `(+${delta}${suffix})`;
+  return formatSignedDeltaBadge(momentum.recentPointsGained, suffix);
 }
 
 export function formatPointsWithRecentDelta(

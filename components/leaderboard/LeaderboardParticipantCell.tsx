@@ -37,7 +37,7 @@ function latestPointsOptions(
   const isMatchAttributed =
     event?.eventKind === "single_match" || event?.eventKind === "multi_match";
   return {
-    showZero: true,
+    showZero: false,
     latestSuffix: isMatchAttributed,
     pointsBreakdown,
     event: event ?? undefined,
