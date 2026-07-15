@@ -47,6 +47,15 @@ const cellSrc = readFileSync(cellPath, "utf8");
   assert.ok(viewSrc.includes('layout="mobile"'));
 }
 
+// Tournament bonus standings are passed once from the page into every row
+{
+  assert.ok(viewSrc.includes("tournamentBonusStandings"));
+  assert.ok(cellSrc.includes("tournamentBonusStandings"));
+  assert.ok(cellSrc.includes("buildTournamentPickStandingLines"));
+  assert.ok(!cellSrc.includes("loadTournamentTeamStatLeaders"));
+  assert.ok(!cellSrc.includes("from(\"tournament_match_team_stats\")"));
+}
+
 // Champion exposure is collapsible below leaderboard
 {
   assert.ok(viewSrc.includes("collapsible"));

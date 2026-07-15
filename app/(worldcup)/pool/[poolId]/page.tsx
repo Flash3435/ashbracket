@@ -154,6 +154,7 @@ export default async function PublicPoolLeaderboardPage({ params }: PageProps) {
         picksLocked={picksLocked}
         revealHref={revealHref}
         bonusWatchView={bonusWatchRes?.ok ? bonusWatchRes.view : null}
+        tournamentBonusStandings={bonusWatchRes?.ok ? bonusWatchRes.standings : null}
         bracketOutlookSummary={bracketOutlookSummary}
         showBracketOutlook={showBracketOutlook}
         decisiveResultCount={decisiveResultCount}

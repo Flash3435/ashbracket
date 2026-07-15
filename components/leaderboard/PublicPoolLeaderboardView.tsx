@@ -34,6 +34,7 @@ import { BracketOutlookView } from "./BracketOutlookView";
 import type { BracketOutlookSummary } from "@/lib/leaderboard/bracketOutlookSeparation";
 import { TournamentStatLeadersPanel } from "@/components/tournament/TournamentStatLeadersPanel";
 import type { TournamentStatLeadersView } from "@/lib/tournament/matchTeamStats/buildTournamentStatLeadersView";
+import type { TournamentBonusStandings } from "@/lib/tournament/matchTeamStats/buildTournamentBonusStandings";
 import { ChampionPickExposureCard } from "@/components/pool/ChampionPickExposureCard";
 import type { ChampionPickExposure } from "@/lib/pool/buildChampionPickExposure";
 import type { ParticipantRaceOutlook } from "@/lib/pool/buildParticipantRaceOutlook";
@@ -148,6 +149,8 @@ type Props = {
   revealHref?: string | null;
   audience?: "public" | "member";
   bonusWatchView?: TournamentStatLeadersView | null;
+  /** Page-level bonus standings (loaded once) for Tournament Picks comparisons. */
+  tournamentBonusStandings?: TournamentBonusStandings | null;
   bracketOutlookSummary?: BracketOutlookSummary | null;
   showBracketOutlook?: boolean;
   decisiveResultCount?: number;
@@ -172,6 +175,7 @@ export function PublicPoolLeaderboardView({
   revealHref = null,
   audience = "public",
   bonusWatchView = null,
+  tournamentBonusStandings = null,
   bracketOutlookSummary = null,
   showBracketOutlook = false,
   decisiveResultCount = 0,
@@ -401,6 +405,7 @@ export function PublicPoolLeaderboardView({
                         bracketImpact={bracketImpact}
                         latestScoreEvent={latestScoreEvent}
                         pointsBreakdown={pointsBreakdown}
+                        tournamentBonusStandings={tournamentBonusStandings}
                         layout="table"
                       />
                     </td>
@@ -459,6 +464,7 @@ export function PublicPoolLeaderboardView({
                     bracketImpact={bracketImpact}
                     latestScoreEvent={latestScoreEvent}
                     pointsBreakdown={pointsBreakdown}
+                    tournamentBonusStandings={tournamentBonusStandings}
                     layout="mobile"
                     rankCell={rankCell(row, momentum, {
                       hideNeutralMovement: true,

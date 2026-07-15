@@ -2,6 +2,10 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { OFFICIAL_EDITION_CODE } from "@/lib/config/officialTournament";
 import { fetchEditionByCode } from "@/lib/tournament/editionScope";
 import {
+  buildTournamentBonusStandings,
+  type TournamentBonusStandings,
+} from "./buildTournamentBonusStandings";
+import {
   buildTournamentStatLeadersView,
   type TeamDisplayInfo,
   type TournamentStatCategoryKey,
@@ -13,7 +17,12 @@ import {
 } from "./loadMatchTeamStatsAdminData";
 
 export type LoadTournamentTeamStatLeadersResult =
-  | { ok: true; view: TournamentStatLeadersView }
+  | {
+      ok: true;
+      view: TournamentStatLeadersView;
+      /** Same deriveTeamStatTotals source as Bonus Watch — load once, reuse everywhere. */
+      standings: TournamentBonusStandings;
+    }
   | { ok: false; error: string };
 
 async function loadTeamDisplayInfo(
@@ -157,6 +166,11 @@ export async function loadTournamentTeamStatLeaders(
     teamStats: statRes.teamStats,
     teamInfoById: teamInfoRes,
   });
+  const standings = buildTournamentBonusStandings({
+    matches: matchRes.matches,
+    teamStats: statRes.teamStats,
+    teamInfoById: teamInfoRes,
+  });
 
   const poolId = options?.poolId?.trim();
   if (poolId) {
@@ -173,5 +187,5 @@ export async function loadTournamentTeamStatLeaders(
     }
   }
 
-  return { ok: true, view };
+  return { ok: true, view, standings };
 }

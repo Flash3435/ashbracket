@@ -16,6 +16,7 @@ import {
   leaderboardHasAwardedPoints,
   resolveLeaderboardPageCopy,
 } from "@/lib/leaderboard/resolveLeaderboardPageCopy";
+import { loadTournamentTeamStatLeaders } from "@/lib/tournament/matchTeamStats/loadTournamentTeamStatLeaders";
 import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
 
@@ -164,6 +165,12 @@ export default async function AccountLeaderboardPage({ searchParams }: PageProps
   const pointsBreakdownByParticipantId =
     latestScoreImpact?.pointsBreakdownByParticipantId ?? new Map();
 
+  const bonusWatchRes = await loadTournamentTeamStatLeaders(supabase, {
+    poolId: selectedPoolId,
+  }).catch(() => null);
+  const tournamentBonusStandings =
+    bonusWatchRes?.ok === true ? bonusWatchRes.standings : null;
+
   const revealHref = `/account/reveal?participant=${ctx.selectedId}`;
   const activityHref = `/account/activity?participant=${ctx.selectedId}`;
   const dashboardHref = `/account?participant=${ctx.selectedId}`;
@@ -236,6 +243,7 @@ export default async function AccountLeaderboardPage({ searchParams }: PageProps
           leaderboardBracketImpact={leaderboardBracketImpact}
           latestScoreEvent={latestScoreEvent}
           pointsBreakdownByParticipantId={pointsBreakdownByParticipantId}
+          tournamentBonusStandings={tournamentBonusStandings}
         />
       )}
     </PageContainer>

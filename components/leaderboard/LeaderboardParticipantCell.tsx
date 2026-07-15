@@ -9,10 +9,12 @@ import {
   formatRemainingTournamentPicksDisplay,
   raceStatusBadgeClass,
 } from "@/lib/leaderboard/leaderboardRaceRowContext";
+import { buildTournamentPickStandingLines } from "@/lib/leaderboard/formatBonusPickStandingStatus";
 import { formatRecentPointsDelta } from "@/lib/leaderboard/leaderboardMomentumDisplay";
 import { formatPoolPoints } from "@/lib/format/poolPoints";
 import { formatLeaderboardLatestImpactSummary } from "@/lib/leaderboard/leaderboardBracketImpactDisplay";
 import type { ParticipantRaceOutlookRow } from "@/lib/pool/buildParticipantRaceOutlook";
+import type { TournamentBonusStandings } from "@/lib/tournament/matchTeamStats/buildTournamentBonusStandings";
 import { participantPublicProfileHref } from "@/lib/participant/participantProfileRouting";
 import { ViewerYouChip } from "../ui/ViewerYouChip";
 
@@ -45,6 +47,8 @@ type Props = {
   pointsBreakdown?: LeaderboardLatestPointsBreakdown | null;
   layout: "table" | "mobile";
   rankCell?: ReactNode;
+  /** Shared page-level standings — never fetched per row. */
+  tournamentBonusStandings?: TournamentBonusStandings | null;
 };
 
 function RaceStatusBadge({ outlook }: { outlook: ParticipantRaceOutlookRow }) {
@@ -116,12 +120,20 @@ function LatestImpactLines({
 function RaceOutlookDetails({
   outlook,
   compact = false,
+  tournamentBonusStandings = null,
 }: {
   outlook: ParticipantRaceOutlookRow;
   compact?: boolean;
+  tournamentBonusStandings?: TournamentBonusStandings | null;
 }) {
   const remainingPicks = formatRemainingTournamentPicksDisplay(
     outlook.remainingTournamentPicks,
+  );
+  const standingByPickKey = new Map(
+    buildTournamentPickStandingLines({
+      picks: outlook.remainingTournamentPicks,
+      standings: tournamentBonusStandings,
+    }).map((line) => [line.pickKey, line.statusLine]),
   );
 
   return (
@@ -138,34 +150,52 @@ function RaceOutlookDetails({
       <div className="mt-1.5 text-xs leading-snug text-ash-muted">
         <p className="font-medium text-ash-text">Tournament Picks</p>
         {compact ? (
-          <div className="mt-2 grid grid-cols-[auto_minmax(0,1fr)] gap-x-3 gap-y-2.5 sm:gap-x-4">
-            {remainingPicks.map((pick) => (
-              <div key={pick.key} className="contents">
-                <span className="whitespace-nowrap text-ash-muted">
-                  <span className="mr-1" aria-hidden>
-                    {pick.icon}
-                  </span>
-                  {pick.label}
-                </span>
-                <span className="min-w-0 break-words text-right font-medium text-ash-text">
-                  {pick.teamName}
-                </span>
-              </div>
-            ))}
-          </div>
+          <ul className="mt-2 space-y-2.5">
+            {remainingPicks.map((pick) => {
+              const statusLine = standingByPickKey.get(pick.key) ?? null;
+              return (
+                <li key={pick.key}>
+                  <div className="grid grid-cols-[auto_minmax(0,1fr)] items-baseline gap-x-3 sm:gap-x-4">
+                    <span className="whitespace-nowrap text-ash-muted">
+                      <span className="mr-1" aria-hidden>
+                        {pick.icon}
+                      </span>
+                      {pick.label}
+                    </span>
+                    <span className="min-w-0 break-words text-right font-medium text-ash-text">
+                      {pick.teamName}
+                    </span>
+                  </div>
+                  {statusLine ? (
+                    <p className="mt-0.5 text-[11px] leading-snug text-ash-muted/90">
+                      {statusLine}
+                    </p>
+                  ) : null}
+                </li>
+              );
+            })}
+          </ul>
         ) : (
           <ul className="mt-2 space-y-2">
-            {remainingPicks.map((pick) => (
-              <li key={pick.key}>
-                <p className="text-ash-muted">
-                  <span className="mr-1" aria-hidden>
-                    {pick.icon}
-                  </span>
-                  {pick.label}
-                </p>
-                <p className="font-medium text-ash-text">{pick.teamName}</p>
-              </li>
-            ))}
+            {remainingPicks.map((pick) => {
+              const statusLine = standingByPickKey.get(pick.key) ?? null;
+              return (
+                <li key={pick.key}>
+                  <p className="text-ash-muted">
+                    <span className="mr-1" aria-hidden>
+                      {pick.icon}
+                    </span>
+                    {pick.label}
+                  </p>
+                  <p className="font-medium text-ash-text">{pick.teamName}</p>
+                  {statusLine ? (
+                    <p className="mt-0.5 text-[11px] leading-snug text-ash-muted/90">
+                      {statusLine}
+                    </p>
+                  ) : null}
+                </li>
+              );
+            })}
           </ul>
         )}
       </div>
@@ -270,6 +300,7 @@ export function LeaderboardParticipantCell({
   bracketImpact = null,
   latestScoreEvent = null,
   pointsBreakdown = null,
+  tournamentBonusStandings = null,
   layout,
   rankCell = null,
 }: Props) {
@@ -319,7 +350,13 @@ export function LeaderboardParticipantCell({
           />
         </div>
         {mobileImpact}
-        {raceOutlook ? <RaceOutlookDetails outlook={raceOutlook} compact /> : null}
+        {raceOutlook ? (
+          <RaceOutlookDetails
+            outlook={raceOutlook}
+            compact
+            tournamentBonusStandings={tournamentBonusStandings}
+          />
+        ) : null}
       </div>
     );
   }
@@ -336,10 +373,18 @@ export function LeaderboardParticipantCell({
         participantId={row.participantId}
         displayName={row.displayName}
       />
-      {raceOutlook ? <RaceOutlookDetails outlook={raceOutlook} /> : null}
+      {raceOutlook ? (
+        <RaceOutlookDetails
+          outlook={raceOutlook}
+          tournamentBonusStandings={tournamentBonusStandings}
+        />
+      ) : null}
     </>
   ) : raceOutlook ? (
-    <RaceOutlookDetails outlook={raceOutlook} />
+    <RaceOutlookDetails
+      outlook={raceOutlook}
+      tournamentBonusStandings={tournamentBonusStandings}
+    />
   ) : null;
 
   return (
