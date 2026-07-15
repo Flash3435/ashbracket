@@ -99,7 +99,10 @@ export const PUBLIC_RULES_PAGE_COPY = {
   lockingP2:
     "Stage 3 stays closed until organizers enter every official Round of 32 slot. After that, you can complete the knockout path while those picks still follow the published FIFA bracket.",
   knockoutScoringNote:
-    "Knockout point values are listed for this pool in the table below. They are awarded once per team at min(official furthest round, deepest round you predicted for that team) — not once per round pick, and not an automatic unlock beyond your bracket path for that team.",
+    "Each team you pick earns knockout points only once. As that team advances, its total value increases to the amount for how far it actually got — and never deeper than the furthest stage you predicted for it. Numbers in parentheses are that team’s total value at that stage: reaching the Final does not award another 24 points; winning the tournament raises a finalist from 24 total to 32 total (+8).",
+  knockoutScoringExample:
+    "Example: If you predicted Spain to reach the Final, Spain is worth 16 points after reaching the semi-finals, 24 total after reaching the Final, and 32 total if Spain wins the tournament.",
+  knockoutTablePointsHeading: "Additional points earned",
   entryPerPersonNote:
     "One entry per person unless the organizer says otherwise.",
   entryUnknownFee:

@@ -16,13 +16,17 @@ import {
   DEFAULT_WORLD_CUP_SCORING_RULE_ROWS,
 } from "../scoring/worldcupPoolDefaults";
 import { bonusRulesTableRowsFromPublicRules } from "./bonusRulesTableRows";
-import { knockoutRulesTableRowsFromPublicRules } from "./knockoutRulesTableRows";
+import {
+  formatKnockoutRulesProgressionDisplay,
+  knockoutRulesTableRowsFromPublicRules,
+} from "./knockoutRulesTableRows";
 import { labelPublicScoringRule } from "./scoringRulePublicLabels";
 import { partitionPublicRulesForDisplay } from "./partitionPublicRulesForDisplay";
 import {
   resolvePoolScoringConfig,
   resolveStage2PointsForRulesPage,
 } from "../scoring/poolScoringConfig";
+import { PUBLIC_RULES_PAGE_COPY } from "./publicRulesDisplayDefaults";
 
 assert.equal(DEFAULT_PUBLIC_RULES_STAGE2_CORRECT, 4);
 assert.equal(DEFAULT_PUBLIC_RULES_GROUP_ADVANCE.exactPoints, 3);
@@ -119,6 +123,29 @@ assert.deepEqual(
   [4, 8, 16, 24, 32],
 );
 assert.notDeepEqual(knockoutTable.map((row) => row.points), [10, 20, 50, 100]);
+
+const knockoutProgression = formatKnockoutRulesProgressionDisplay(knockoutTable);
+assert.deepEqual(
+  knockoutProgression.map((row) => row.pointsDisplay),
+  [
+    "+4",
+    "+4 (8 total)",
+    "+8 (16 total)",
+    "+8 (24 total)",
+    "+8 (32 total)",
+  ],
+);
+assert.match(PUBLIC_RULES_PAGE_COPY.knockoutScoringNote, /only once/i);
+assert.match(PUBLIC_RULES_PAGE_COPY.knockoutScoringNote, /does not award another 24/i);
+assert.match(PUBLIC_RULES_PAGE_COPY.knockoutScoringNote, /24 total to 32 total/i);
+assert.match(PUBLIC_RULES_PAGE_COPY.knockoutScoringExample, /Spain/i);
+assert.equal(
+  PUBLIC_RULES_PAGE_COPY.knockoutTablePointsHeading,
+  "Additional points earned",
+);
+assert.ok(!/cumulative/i.test(PUBLIC_RULES_PAGE_COPY.knockoutScoringNote));
+assert.ok(!/cumulative/i.test(PUBLIC_RULES_PAGE_COPY.knockoutScoringExample));
+assert.ok(!/cumulative/i.test(PUBLIC_RULES_PAGE_COPY.knockoutTablePointsHeading));
 
 const stage2Points =
   resolvePoolScoringConfig({

@@ -6,7 +6,7 @@ import { PageContainer } from "@/components/ui/PageContainer";
 import { PageTitle } from "@/components/ui/PageTitle";
 import { bonusRulesTableRowsFromPublicRules } from "../../../lib/rules/bonusRulesTableRows";
 import { fetchSamplePoolScoringRules } from "../../../lib/rules/fetchSamplePoolScoringRules";
-import { knockoutRulesTableRowsFromPublicRules } from "../../../lib/rules/knockoutRulesTableRows";
+import { knockoutRulesTableRowsFromPublicRules, formatKnockoutRulesProgressionDisplay } from "../../../lib/rules/knockoutRulesTableRows";
 import { partitionPublicRulesForDisplay } from "../../../lib/rules/partitionPublicRulesForDisplay";
 import {
   PUBLIC_RULES_DEFAULT_TIE_BREAK,
@@ -62,9 +62,16 @@ function RulesPointsTable({ rows }: { rows: PublicScoringRuleRow[] }) {
 function PointsLabelTable({
   rows,
   leftHeading,
+  rightHeading = "Points",
 }: {
-  rows: { key: string; label: string; points: number }[];
+  rows: {
+    key: string;
+    label: string;
+    points: number;
+    pointsDisplay?: string;
+  }[];
   leftHeading: string;
+  rightHeading?: string;
 }) {
   if (rows.length === 0) return null;
   return (
@@ -73,7 +80,7 @@ function PointsLabelTable({
         <thead className="border-b border-ash-border bg-ash-body/50 text-xs font-medium uppercase tracking-wide text-ash-muted">
           <tr>
             <th className="px-4 py-3">{leftHeading}</th>
-            <th className="px-4 py-3 text-right">Points</th>
+            <th className="px-4 py-3 text-right">{rightHeading}</th>
           </tr>
         </thead>
         <tbody className="divide-y divide-ash-border">
@@ -81,7 +88,7 @@ function PointsLabelTable({
             <tr key={row.key}>
               <td className="px-4 py-3 text-ash-text">{row.label}</td>
               <td className="px-4 py-3 text-right font-medium tabular-nums text-ash-text">
-                {formatPoolPoints(row.points)}
+                {row.pointsDisplay ?? formatPoolPoints(row.points)}
               </td>
             </tr>
           ))}
@@ -153,8 +160,9 @@ export default async function RulesPage() {
     partitionPublicRulesForDisplay(data.rules);
   const tieCopy = data.tieBreakNote?.trim() || PUBLIC_RULES_DEFAULT_TIE_BREAK;
 
-  const knockoutTableRows =
-    knockoutRulesTableRowsFromPublicRules(knockoutRules);
+  const knockoutTableRows = formatKnockoutRulesProgressionDisplay(
+    knockoutRulesTableRowsFromPublicRules(knockoutRules),
+  );
   const bonusTableRows = bonusRulesTableRowsFromPublicRules(bonusRules);
 
   const stage2PointsPerCorrect =
@@ -368,10 +376,16 @@ export default async function RulesPage() {
           <h2 className="text-sm font-semibold uppercase tracking-wide text-ash-muted">
             Stage 3 — Knockout bracket
           </h2>
-          <p className="mt-2 text-sm text-ash-muted">{c.knockoutScoringNote}</p>
+          <p className="mt-2 text-sm leading-relaxed text-ash-muted">
+            {c.knockoutScoringNote}
+          </p>
+          <p className="mt-2 text-sm leading-relaxed text-ash-muted">
+            {c.knockoutScoringExample}
+          </p>
           <PointsLabelTable
             rows={knockoutTableRows}
             leftHeading="Furthest round reached"
+            rightHeading={c.knockoutTablePointsHeading}
           />
         </section>
 
