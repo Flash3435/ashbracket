@@ -302,7 +302,7 @@ function participantWizardSteps(
         ? "This step only appears after organizers publish the official Round of 32 (all 32 teams in their real FIFA slots). Pick the nation in each slot using the real pairings — your Stage 2 list only predicted which third-place teams qualify, not where FIFA placed them."
         : "Confirmed Round of 32 matchups can be picked as they become official. Unconfirmed slots stay locked until the bracket is published.",
       hint: knockoutBracketPicksUnlocked
-        ? "Eligible teams usually match your group top-two and third-place advancers; we highlight that pool when earlier steps are filled. Knockout points count once per team by furthest round reached (see pool rules)."
+        ? "Eligible teams usually match your group top-two and third-place advancers; we highlight that pool when earlier steps are filled. Knockout points count once per team up to the furthest round you predicted for that team (see pool rules)."
         : "Pick only from the two teams in each confirmed matchup. Each match locks at kickoff. Later rounds unlock once the full Round of 32 is official.",
     },
     {

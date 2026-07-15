@@ -88,7 +88,7 @@ export const PUBLIC_RULES_PAGE_COPY = {
     "After the group stage, FIFA assigns those sides to real knockout slots. Each Stage 2 choice must come from that row’s group, and a group top-two pick cannot also be one of your eight third-place advancers.",
   stage3Title: "Stage 3 — Knockout bracket",
   stage3Body:
-    "After the group stage, organizers publish the official Round of 32 bracket with real FIFA matchups. Once that bracket is live in the app, you fill Round of 32 through champion using those slots. Knockout scoring counts once per team you picked, based on how far that team actually goes in the tournament.",
+    "After the group stage, organizers publish the official Round of 32 bracket with real FIFA matchups. Once that bracket is live in the app, you fill Round of 32 through champion using those slots. Knockout scoring counts once per team you picked: you earn the points for how far that team actually goes, but never deeper than the furthest stage you predicted for them.",
   howYouScoreP1:
     "You earn points when your picks line up with real results. Group finishes, third-place advancers, knockout depth, and bonus categories all add into the same total.",
   howYouScoreP2:
@@ -99,7 +99,7 @@ export const PUBLIC_RULES_PAGE_COPY = {
   lockingP2:
     "Stage 3 stays closed until organizers enter every official Round of 32 slot. After that, you can complete the knockout path while those picks still follow the published FIFA bracket.",
   knockoutScoringNote:
-    "Knockout point values are listed for this pool in the table below. They are awarded once per team, using the furthest round that team reaches — not once per round pick.",
+    "Knockout point values are listed for this pool in the table below. They are awarded once per team at min(official furthest round, deepest round you predicted for that team) — not once per round pick, and not an automatic unlock beyond your bracket path for that team.",
   entryPerPersonNote:
     "One entry per person unless the organizer says otherwise.",
   entryUnknownFee:

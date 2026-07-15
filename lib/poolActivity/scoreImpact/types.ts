@@ -141,7 +141,10 @@ export type BracketImpactActivityMetadata = {
 };
 
 export type ScoreImpactScoringCorrectionMetadata = {
-  kind: "third_place_qualifier";
+  kind:
+    | "third_place_qualifier"
+    | "knockout_prediction_depth_cap"
+    | "m101_knockout_depth_transition";
 };
 
 export type ScoreImpactActivityMetadata = {
@@ -196,6 +199,12 @@ export type ScoreImpactRunContext = {
    * this run. Must not be inferred from delete/recreate upsert counts alone.
    */
   thirdPlaceQualifiersNewlyScored?: boolean;
+  /**
+   * Explicit named correction kinds for score-impact metadata (e.g. knockout
+   * prediction-depth cap). When set, takes precedence over deriving corrections
+   * from {@link thirdPlaceQualifiersNewlyScored} alone.
+   */
+  scoringCorrections?: ScoreImpactScoringCorrectionMetadata[];
 };
 
 export type ScoreImpactStandingsSnapshot = {

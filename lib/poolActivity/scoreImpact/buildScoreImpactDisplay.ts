@@ -12,7 +12,12 @@ import {
 } from "./buildSoftImpact";
 import { formatBracketImpactSummaryLines } from "@/lib/leaderboard/leaderboardBracketImpactDisplay";
 import { parseLatestScoreEventContext } from "@/lib/leaderboard/parseLatestScoreEventContext";
-import { THIRD_PLACE_SCORING_BACKFILL_NOTICE } from "@/lib/leaderboard/scoringCorrectionDisplay";
+import {
+  KNOCKOUT_DEPTH_CAP_SCORING_CORRECTION_NOTICE,
+  M101_KNOCKOUT_DEPTH_TRANSITION_NOTICE,
+  THIRD_PLACE_SCORING_BACKFILL_NOTICE,
+} from "@/lib/leaderboard/scoringCorrectionDisplay";
+import type { ScoringCorrectionKind } from "@/lib/leaderboard/scoringCorrectionDisplay";
 
 export type ParsedScoreImpactMetadata = {
   matchLabel: string | null;
@@ -128,14 +133,18 @@ function readBracketImpactSummary(raw: unknown): {
 
 function readScoringCorrections(
   raw: unknown,
-): Array<{ kind: "third_place_qualifier" }> {
+): Array<{ kind: ScoringCorrectionKind }> {
   if (!Array.isArray(raw)) return [];
-  const out: Array<{ kind: "third_place_qualifier" }> = [];
+  const out: Array<{ kind: ScoringCorrectionKind }> = [];
   for (const row of raw) {
     if (row == null || typeof row !== "object") continue;
     const kind = (row as { kind?: unknown }).kind;
-    if (kind === "third_place_qualifier") {
-      out.push({ kind: "third_place_qualifier" });
+    if (
+      kind === "third_place_qualifier" ||
+      kind === "knockout_prediction_depth_cap" ||
+      kind === "m101_knockout_depth_transition"
+    ) {
+      out.push({ kind });
     }
   }
   return out;
@@ -144,6 +153,22 @@ function readScoringCorrections(
 function hasThirdPlaceScoringCorrection(metadata: Record<string, unknown>): boolean {
   return readScoringCorrections(metadata.scoring_corrections).some(
     (row) => row.kind === "third_place_qualifier",
+  );
+}
+
+function hasKnockoutDepthCapScoringCorrection(
+  metadata: Record<string, unknown>,
+): boolean {
+  return readScoringCorrections(metadata.scoring_corrections).some(
+    (row) => row.kind === "knockout_prediction_depth_cap",
+  );
+}
+
+function hasM101KnockoutDepthTransitionCorrection(
+  metadata: Record<string, unknown>,
+): boolean {
+  return readScoringCorrections(metadata.scoring_corrections).some(
+    (row) => row.kind === "m101_knockout_depth_transition",
   );
 }
 
@@ -291,7 +316,11 @@ export function buildScoreImpactDisplayLines(
 
     const detailLines: string[] = [];
 
-    if (hasThirdPlaceScoringCorrection(metadata)) {
+    if (hasM101KnockoutDepthTransitionCorrection(metadata)) {
+      detailLines.push(M101_KNOCKOUT_DEPTH_TRANSITION_NOTICE);
+    } else if (hasKnockoutDepthCapScoringCorrection(metadata)) {
+      detailLines.push(KNOCKOUT_DEPTH_CAP_SCORING_CORRECTION_NOTICE);
+    } else if (hasThirdPlaceScoringCorrection(metadata)) {
       detailLines.push(THIRD_PLACE_SCORING_BACKFILL_NOTICE);
     }
 
@@ -300,7 +329,11 @@ export function buildScoreImpactDisplayLines(
       metadata.bracket_impact,
     );
 
-    if (uniformPointsDelta == null) {
+    if (
+      !hasKnockoutDepthCapScoringCorrection(metadata) &&
+      !hasM101KnockoutDepthTransitionCorrection(metadata) &&
+      uniformPointsDelta == null
+    ) {
       const bracketLabel =
         bracketCount === 1
           ? "1 bracket gained points."

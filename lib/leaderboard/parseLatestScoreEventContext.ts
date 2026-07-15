@@ -1,3 +1,5 @@
+import type { ScoringCorrectionKind } from "./scoringCorrectionDisplay";
+
 export type LatestScoreEventKind =
   | "single_match"
   | "multi_match"
@@ -18,10 +20,10 @@ export type LeaderboardLatestScoreEventContext = {
   matchupShortLabel: string | null;
   /**
    * Named scoring corrections recorded on this score-impact event.
-   * Third-place display attribution requires `third_place_qualifier` here —
-   * do not infer corrections from standings residuals alone.
+   * Display attribution requires an explicit kind here — do not infer corrections
+   * from standings residuals alone.
    */
-  scoringCorrectionKinds: Array<"third_place_qualifier">;
+  scoringCorrectionKinds: ScoringCorrectionKind[];
 };
 
 function readString(v: unknown): string | null {
@@ -188,13 +190,17 @@ export function parseLatestScoreEventContext(
     trigger,
   });
 
-  const scoringCorrectionKinds: Array<"third_place_qualifier"> = [];
+  const scoringCorrectionKinds: ScoringCorrectionKind[] = [];
   if (Array.isArray(metadata.scoring_corrections)) {
     for (const entry of metadata.scoring_corrections) {
       if (entry == null || typeof entry !== "object") continue;
       const kind = (entry as { kind?: unknown }).kind;
-      if (kind === "third_place_qualifier") {
-        scoringCorrectionKinds.push("third_place_qualifier");
+      if (
+        kind === "third_place_qualifier" ||
+        kind === "knockout_prediction_depth_cap" ||
+        kind === "m101_knockout_depth_transition"
+      ) {
+        scoringCorrectionKinds.push(kind);
       }
     }
   }

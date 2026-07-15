@@ -6,7 +6,11 @@ import type { LeaderboardLatestScoreEventContext } from "./parseLatestScoreEvent
 import type { LeaderboardMomentumRow } from "./buildLeaderboardMomentum";
 import type { LeaderboardLatestPointsBreakdown } from "./computeLatestMatchPointsBreakdown";
 import { formatPointsWithRecentDelta } from "./leaderboardMomentumDisplay";
-import { THIRD_PLACE_SCORING_CORRECTION_LABEL } from "./scoringCorrectionDisplay";
+import {
+  KNOCKOUT_DEPTH_CAP_SCORING_CORRECTION_LABEL,
+  M101_KNOCKOUT_DEPTH_TRANSITION_LABEL,
+  THIRD_PLACE_SCORING_CORRECTION_LABEL,
+} from "./scoringCorrectionDisplay";
 
 const LATEST_POINTS_OPTIONS = { showZero: true, latestSuffix: true } as const;
 
@@ -50,11 +54,12 @@ export function formatChampionStatusAfterImpact(
   return "Champion alive";
 }
 
-function formatLatestPointsToken(
-  points: number,
-): string | null {
-  const pts = formatPoolPoints(points);
-  return points > 0 ? `+${pts}` : "+0";
+/** Signed points token for latest / correction lines (+4, −24, +0). */
+export function formatLatestPointsToken(points: number): string | null {
+  const pts = formatPoolPoints(Math.abs(points));
+  if (points > 0) return `+${pts}`;
+  if (points < 0) return `−${pts}`;
+  return "+0";
 }
 
 function resolveMatchLinePoints(
@@ -81,6 +86,63 @@ export function formatThirdPlaceScoringCorrectionLine(
   return token ? `${THIRD_PLACE_SCORING_CORRECTION_LABEL}: ${token}` : null;
 }
 
+/**
+ * Participant-facing knockout prediction-depth cap correction line.
+ * Supports negative deltas (points removed).
+ */
+export function formatKnockoutDepthCapScoringCorrectionLine(
+  breakdown: LeaderboardLatestPointsBreakdown | null | undefined,
+): string | null {
+  if (
+    breakdown?.knockoutPredictionDepthCapDelta == null ||
+    breakdown.knockoutPredictionDepthCapDelta === 0
+  ) {
+    return null;
+  }
+  if (
+    !breakdown.knownCorrectionKinds.includes("knockout_prediction_depth_cap")
+  ) {
+    return null;
+  }
+  const token = formatLatestPointsToken(breakdown.knockoutPredictionDepthCapDelta);
+  return token
+    ? `${KNOCKOUT_DEPTH_CAP_SCORING_CORRECTION_LABEL}: ${token}`
+    : null;
+}
+
+/**
+ * Participant-facing M101 cutover adjustment line (narrower than full-history).
+ * Supports negative deltas (incorrect finalist increments removed).
+ */
+export function formatM101KnockoutDepthTransitionLine(
+  breakdown: LeaderboardLatestPointsBreakdown | null | undefined,
+): string | null {
+  if (
+    breakdown?.m101KnockoutDepthTransitionDelta == null ||
+    breakdown.m101KnockoutDepthTransitionDelta === 0
+  ) {
+    return null;
+  }
+  if (
+    !breakdown.knownCorrectionKinds.includes("m101_knockout_depth_transition")
+  ) {
+    return null;
+  }
+  const token = formatLatestPointsToken(breakdown.m101KnockoutDepthTransitionDelta);
+  return token ? `${M101_KNOCKOUT_DEPTH_TRANSITION_LABEL}: ${token}` : null;
+}
+
+/** Prefer M101 cutover, else full-history depth-cap, else third-place. */
+export function formatNamedScoringCorrectionLine(
+  breakdown: LeaderboardLatestPointsBreakdown | null | undefined,
+): string | null {
+  return (
+    formatM101KnockoutDepthTransitionLine(breakdown) ??
+    formatKnockoutDepthCapScoringCorrectionLine(breakdown) ??
+    formatThirdPlaceScoringCorrectionLine(breakdown)
+  );
+}
+
 export function formatOtherScoringAdjustmentsLine(
   breakdown: LeaderboardLatestPointsBreakdown | null | undefined,
   context?: {
@@ -88,6 +150,12 @@ export function formatOtherScoringAdjustmentsLine(
     displayName?: string | null;
   },
 ): string | null {
+  if (
+    breakdown?.knownCorrectionKinds.includes("knockout_prediction_depth_cap") ||
+    breakdown?.knownCorrectionKinds.includes("m101_knockout_depth_transition")
+  ) {
+    return null;
+  }
   if (breakdown?.otherScoringDelta == null || breakdown.otherScoringDelta <= 0) {
     return null;
   }
@@ -101,6 +169,8 @@ export function formatOtherScoringAdjustmentsLine(
     latestTotalDelta: breakdown.latestTotalDelta,
     latestMatchPointsDelta: breakdown.latestMatchPointsDelta,
     thirdPlaceQualifierDelta: breakdown.thirdPlaceQualifierDelta,
+    knockoutPredictionDepthCapDelta: breakdown.knockoutPredictionDepthCapDelta,
+    m101KnockoutDepthTransitionDelta: breakdown.m101KnockoutDepthTransitionDelta,
     knownCorrectionKinds: breakdown.knownCorrectionKinds,
   });
 
@@ -117,6 +187,24 @@ export function formatLatestMatchScoringLine(
 
   const canAttributeMatch =
     event.eventKind === "single_match" || event.eventKind === "multi_match";
+  const m101TransitionOnly =
+    !canAttributeMatch &&
+    breakdown?.m101KnockoutDepthTransitionDelta != null &&
+    breakdown.m101KnockoutDepthTransitionDelta !== 0 &&
+    breakdown.knownCorrectionKinds.includes("m101_knockout_depth_transition");
+  if (m101TransitionOnly) {
+    return formatM101KnockoutDepthTransitionLine(breakdown);
+  }
+
+  const depthCapOnly =
+    !canAttributeMatch &&
+    breakdown?.knockoutPredictionDepthCapDelta != null &&
+    breakdown.knockoutPredictionDepthCapDelta !== 0 &&
+    breakdown.knownCorrectionKinds.includes("knockout_prediction_depth_cap");
+  if (depthCapOnly) {
+    return formatKnockoutDepthCapScoringCorrectionLine(breakdown);
+  }
+
   const correctionOnly =
     !canAttributeMatch &&
     breakdown?.thirdPlaceQualifierDelta != null &&
@@ -257,7 +345,7 @@ export function formatLeaderboardLatestImpactSummary(input: {
     input.bracketImpact,
     input.pointsBreakdown,
   );
-  const correctionLine = formatThirdPlaceScoringCorrectionLine(input.pointsBreakdown);
+  const correctionLine = formatNamedScoringCorrectionLine(input.pointsBreakdown);
   const otherScoringLine = formatOtherScoringAdjustmentsLine(input.pointsBreakdown, {
     participantId: input.participantId ?? input.pointsBreakdown?.participantId,
     displayName: input.displayName,
@@ -398,10 +486,14 @@ export function formatExpandedBracketImpactContext(
   });
   if (otherLine) parts.push(otherLine);
 
-  const correctionLine = formatThirdPlaceScoringCorrectionLine(pointsBreakdown);
+  const correctionLine = formatNamedScoringCorrectionLine(pointsBreakdown);
   if (
     correctionLine &&
-    !parts.some((part) => part.includes(THIRD_PLACE_SCORING_CORRECTION_LABEL))
+    !parts.some(
+      (part) =>
+        part.includes(THIRD_PLACE_SCORING_CORRECTION_LABEL) ||
+        part.includes(KNOCKOUT_DEPTH_CAP_SCORING_CORRECTION_LABEL),
+    )
   ) {
     parts.push(correctionLine);
   }

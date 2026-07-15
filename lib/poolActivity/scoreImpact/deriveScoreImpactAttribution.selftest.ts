@@ -241,7 +241,7 @@ const m99: MatchAttributionLike = {
     scoringResultKind: "finalist",
     scoringSlotKey: "1",
   };
-  const spainDelta = computeKnockoutOncePerTeamProgressionDelta(
+  const spainDeltaCapped = computeKnockoutOncePerTeamProgressionDelta(
     [
       {
         participantId: "p1",
@@ -249,11 +249,31 @@ const m99: MatchAttributionLike = {
         teamId: SPAIN,
         slotKey: "12",
       },
+      {
+        participantId: "p1",
+        predictionKind: "semifinalist",
+        teamId: SPAIN,
+        slotKey: "2",
+      },
     ],
     m101Attr,
     rules,
   );
-  t(spainDelta === 8, "Spain progression delta is +8");
+  t(spainDeltaCapped === 0, "Spain SF-predicted progression delta is +0 after M101");
+
+  const spainDeltaFinalistPred = computeKnockoutOncePerTeamProgressionDelta(
+    [
+      {
+        participantId: "p1",
+        predictionKind: "finalist",
+        teamId: SPAIN,
+        slotKey: "1",
+      },
+    ],
+    m101Attr,
+    rules,
+  );
+  t(spainDeltaFinalistPred === 8, "Spain finalist-predicted progression delta is +8");
 
   function momentum(participantId: string, gained: number): LeaderboardMomentumRow {
     return {
@@ -277,9 +297,9 @@ const m99: MatchAttributionLike = {
       predictions: [
         {
           participantId: "p-tp",
-          predictionKind: "round_of_16",
+          predictionKind: "finalist",
           teamId: SPAIN,
-          slotKey: "12",
+          slotKey: "1",
         },
         {
           participantId: "p-tp",
@@ -329,9 +349,9 @@ const m99: MatchAttributionLike = {
       predictions: [
         {
           participantId: "p-no-tp",
-          predictionKind: "round_of_16",
+          predictionKind: "finalist",
           teamId: SPAIN,
-          slotKey: "12",
+          slotKey: "1",
         },
       ],
       matches: [m101Attr],

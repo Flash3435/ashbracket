@@ -431,8 +431,9 @@ export function PublicParticipantProfile({
           </h2>
           <p className="max-w-3xl text-sm leading-relaxed text-ash-muted">
             Expand a stage to review each slot. Knockout points count once per team at
-            the furthest stage reached — Awarded holds that award; Satisfied means the
-            pick was right but points live on another card for the same team.
+            min(official furthest stage, deepest stage you predicted for that team) —
+            Awarded holds that award; Satisfied means the pick was right but points live
+            on another card for the same team.
           </p>
         </div>
 

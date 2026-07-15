@@ -94,7 +94,11 @@ export function clearedOutPickRowKeys(
   return keys;
 }
 
-/** Knockout progression picks score by saved teamId vs official results (pickStatus out is display-only). */
+/**
+ * Knockout progression picks score by saved teamId vs official results.
+ * `pickStatus: out` is display-only: the original teamId still counts toward
+ * once-per-team eligibility and maximum predicted depth (locked original-pick policy).
+ */
 export function isKnockoutPredictionScoringEligible(pred: Prediction): boolean {
   return Boolean(pred.teamId?.trim());
 }

@@ -1,33 +1,22 @@
 import type { Prediction, PredictionKind, Result } from "../../types/domain";
-import {
-  KNOCKOUT_PROGRESSION_PREDICTION_KINDS,
-  isKnockoutProgressionKind,
-} from "../../../lib/predictions/knockoutProgressionKinds";
+import { isKnockoutProgressionKind } from "../../../lib/predictions/knockoutProgressionKinds";
 import { isKnockoutPredictionScoringEligible } from "../../../lib/predictions/knockoutPickStatus";
+import {
+  betterKnockoutKind,
+  knockoutProgressionRank,
+  participantMaximumPredictedDepthForTeam,
+} from "./knockoutOncePerTeamDepth";
+import {
+  buildCutoffOfficialTeamFurthestKnockoutKind,
+  computeKnockoutTeamAward,
+  type KnockoutScoringConfig,
+} from "./knockoutScoringTransition";
 import type {
   ComputedLedgerLine,
   GroupStageScoringConfig,
   PoolScoringInput,
   ScoringOutcome,
 } from "./types";
-
-const KO_PROGRESSION_RANK: Map<string, number> = new Map(
-  KNOCKOUT_PROGRESSION_PREDICTION_KINDS.map((k, i) => [k, i]),
-);
-
-function knockoutProgressionRank(kind: string): number {
-  return KO_PROGRESSION_RANK.get(kind) ?? -1;
-}
-
-function betterKnockoutKind(
-  current: string | null,
-  candidate: string,
-): string {
-  if (current == null) return candidate;
-  return knockoutProgressionRank(candidate) >= knockoutProgressionRank(current)
-    ? candidate
-    : current;
-}
 
 /** Furthest knockout stage each team reached in official results (one row per team at max depth). */
 function buildOfficialTeamFurthestKnockoutKind(
@@ -43,6 +32,10 @@ function buildOfficialTeamFurthestKnockoutKind(
   return m;
 }
 
+/**
+ * Deterministic once-per-team ledger owner (lowest prediction id).
+ * Ownership does not determine maximum eligible scoring depth.
+ */
 function pickRepresentativeKnockoutPrediction(
   preds: Prediction[],
 ): Map<string, Prediction> {
@@ -68,18 +61,33 @@ function firstOfficialResultForTeamKind(
   return matches[0] ?? null;
 }
 
+/**
+ * One knockout ledger line per (participant, team).
+ *
+ * Default mode awards min(official furthest, max predicted depth).
+ * Live WC 2026 transition grandfathers uncapped awards through the cutoff
+ * stage, then adds only prediction-depth-capped increments afterward.
+ */
 function appendKnockoutOncePerTeamScores(
   input: {
     poolId: string;
     poolPreds: Prediction[];
     results: Result[];
     rulesMap: Map<string, number>;
+    knockoutScoring: KnockoutScoringConfig;
   },
   ledgerLines: ComputedLedgerLine[],
   totals: Record<string, number>,
 ): void {
-  const { poolId, poolPreds, results, rulesMap } = input;
+  const { poolId, poolPreds, results, rulesMap, knockoutScoring } = input;
   const officialFurthest = buildOfficialTeamFurthestKnockoutKind(results);
+  const cutoffOfficialFurthest =
+    knockoutScoring.mode === "grandfathered_cutoff_then_capped_increment"
+      ? buildCutoffOfficialTeamFurthestKnockoutKind(
+          results,
+          knockoutScoring.cutoffMaxOfficialKind,
+        )
+      : new Map<string, string>();
 
   const knockoutPreds = poolPreds.filter(
     (p) =>
@@ -98,23 +106,37 @@ function appendKnockoutOncePerTeamScores(
   for (const [participantId, preds] of byParticipant) {
     const repByTeam = pickRepresentativeKnockoutPrediction(preds);
     for (const [teamId, repPred] of repByTeam) {
-      const furthest = officialFurthest.get(teamId);
-      if (!furthest) continue;
-      const points = rulesMap.get(furthest);
-      if (points === undefined || points <= 0) continue;
-      const res = firstOfficialResultForTeamKind(results, teamId, furthest);
+      const currentOfficial = officialFurthest.get(teamId) ?? null;
+      const cutoffOfficial =
+        knockoutScoring.mode === "grandfathered_cutoff_then_capped_increment"
+          ? (cutoffOfficialFurthest.get(teamId) ?? null)
+          : null;
+      const maxPredicted = participantMaximumPredictedDepthForTeam(preds, teamId);
+      const award = computeKnockoutTeamAward({
+        currentOfficialKind: currentOfficial,
+        cutoffOfficialKind: cutoffOfficial,
+        maxPredictedKind: maxPredicted,
+        rulesMap,
+        config: knockoutScoring,
+      });
+      if (!award.ledgerKind || award.points <= 0) continue;
+      const res = firstOfficialResultForTeamKind(
+        results,
+        teamId,
+        award.ledgerKind,
+      );
       if (!res) continue;
 
       ledgerLines.push({
         poolId,
         participantId,
-        pointsDelta: points,
-        predictionKind: furthest as PredictionKind,
+        pointsDelta: award.points,
+        predictionKind: award.ledgerKind as PredictionKind,
         predictionId: repPred.id,
         resultId: res.id,
-        note: `Knockout: ${furthest} once per team (${points} pts)`,
+        note: award.note,
       });
-      totals[participantId] = (totals[participantId] ?? 0) + points;
+      totals[participantId] = (totals[participantId] ?? 0) + award.points;
     }
   }
 }
@@ -344,7 +366,16 @@ function scoreGroupAdvancePick(
  * Safe to rerun from scratch — callers replace ledger from this output when syncing DB.
  */
 export function computePoolScores(input: PoolScoringInput): ScoringOutcome {
-  const { poolId, predictions, results, scoringRules, groupStageScoring } = input;
+  const {
+    poolId,
+    predictions,
+    results,
+    scoringRules,
+    groupStageScoring,
+    knockoutScoring = { mode: "prediction_depth_capped" },
+  } = input;
+  const knockoutConfig: KnockoutScoringConfig =
+    knockoutScoring ?? { mode: "prediction_depth_capped" };
 
   const useGroupAdvance =
     groupStageScoring != null &&
@@ -434,7 +465,7 @@ export function computePoolScores(input: PoolScoringInput): ScoringOutcome {
   }
 
   appendKnockoutOncePerTeamScores(
-    { poolId, poolPreds, results, rulesMap },
+    { poolId, poolPreds, results, rulesMap, knockoutScoring: knockoutConfig },
     ledgerLines,
     totals,
   );

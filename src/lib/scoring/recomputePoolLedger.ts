@@ -8,6 +8,12 @@ import { computePoolScores } from "./computePoolScores";
 import { fetchPoolPredictions } from "@/lib/predictions/fetchPoolPredictions";
 import { warnIfPoolPredictionsLookTruncated } from "@/lib/supabase/fetchAllRows";
 import { mapResultRow, mapScoringRuleRow } from "./mapSupabaseRows";
+import {
+  knockoutScoringConfigFromTransition,
+  mergePreservedPreCutoffKnockoutLedger,
+  postCutoffTeamIdsFromResults,
+  resolveKnockoutScoringTransition,
+} from "./knockoutScoringTransition";
 
 type RecomputeResult = { error?: string };
 
@@ -93,6 +99,20 @@ export async function recomputePoolLedgerWithClient(
 
   const editionId = poolRow.tournament_edition_id as string;
 
+  const { data: editionRow, error: editionErr } = await supabase
+    .from("tournament_editions")
+    .select("code, is_simulation")
+    .eq("id", editionId)
+    .maybeSingle();
+  if (editionErr) return { error: editionErr.message };
+
+  const knockoutScoring = knockoutScoringConfigFromTransition(
+    resolveKnockoutScoringTransition({
+      editionCode: editionRow?.code ?? null,
+      isSimulation: Boolean(editionRow?.is_simulation),
+    }),
+  );
+
   const { data: groupStageRow } = await supabase
     .from("tournament_stages")
     .select("id")
@@ -147,9 +167,10 @@ export async function recomputePoolLedgerWithClient(
     results,
     scoringRules,
     groupStageScoring,
+    knockoutScoring,
   });
 
-  const payload = outcome.ledgerLines.map((l) => ({
+  const computedRows = outcome.ledgerLines.map((l) => ({
     participant_id: l.participantId,
     points_delta: l.pointsDelta,
     prediction_kind: l.predictionKind,
@@ -157,6 +178,45 @@ export async function recomputePoolLedgerWithClient(
     result_id: l.resultId,
     note: l.note,
   }));
+
+  let payload = computedRows;
+
+  // Grandfathered transition: preserve pre-cutoff KO ledger rows (incl. orphans)
+  // while replacing post-cutoff team awards from the transitional scorer.
+  if (knockoutScoring.mode === "grandfathered_cutoff_then_capped_increment") {
+    const { data: liveLedgerRaw, error: liveErr } = await supabase
+      .from("points_ledger")
+      .select(
+        "participant_id, points_delta, prediction_kind, prediction_id, result_id, note",
+      )
+      .eq("pool_id", poolId);
+    if (liveErr) return { error: liveErr.message };
+
+    const resultTeamIdById = new Map(
+      results.map((r) => [r.id, r.teamId] as const),
+    );
+    const postCutoffTeamIds = postCutoffTeamIdsFromResults(
+      results,
+      knockoutScoring.cutoffMaxOfficialKind,
+    );
+    payload = mergePreservedPreCutoffKnockoutLedger({
+      computedRows,
+      liveRows: (liveLedgerRaw ?? []).map((r) => ({
+        participant_id: r.participant_id as string,
+        points_delta: Number(r.points_delta),
+        prediction_kind: r.prediction_kind as string,
+        prediction_id: r.prediction_id as string,
+        result_id: r.result_id as string,
+        note: (r.note as string | null) ?? null,
+      })),
+      resultTeamIdById,
+      postCutoffTeamIds,
+    }).map((r) => ({
+      ...r,
+      prediction_kind: r.prediction_kind as (typeof computedRows)[number]["prediction_kind"],
+      note: r.note ?? "",
+    }));
+  }
 
   const { error: rpcErr } = await supabase.rpc("replace_points_ledger_for_pool", {
     p_pool_id: poolId,

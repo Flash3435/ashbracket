@@ -5,6 +5,10 @@ import {
   KNOCKOUT_PROGRESSION_PREDICTION_KINDS,
   isKnockoutProgressionKind,
 } from "@/lib/predictions/knockoutProgressionKinds";
+import {
+  cappedKnockoutAwardKind,
+  participantMaximumPredictedDepthForTeam,
+} from "@/lib/scoring/knockoutOncePerTeamDepth";
 
 export type TournamentMatchForPointsAttribution = {
   matchCode: string;
@@ -31,6 +35,16 @@ export type LeaderboardLatestPointsBreakdown = {
   latestMatchPointsDelta: number | null;
   /** Identified delayed third-place advancer scoring in this update. */
   thirdPlaceQualifierDelta: number | null;
+  /**
+   * Points change from knockout prediction-depth cap correction metadata.
+   * May be negative when over-awards are removed.
+   */
+  knockoutPredictionDepthCapDelta: number | null;
+  /**
+   * Points change from the M101 cutover adjustment only (not full-history).
+   * Typically −8 when an incorrect Spain finalist increment is removed.
+   */
+  m101KnockoutDepthTransitionDelta: number | null;
   /** Residual non-match scoring when source is unknown. */
   otherScoringDelta: number | null;
   /** Known correction kinds included in this breakdown (for diagnostics). */
@@ -97,9 +111,10 @@ export function computeKnockoutMatchPickPointsDelta(
 }
 
 /**
- * Ledger knockout scoring is once-per-team at furthest official stage.
- * When a match advances a team to `scoringResultKind`, participants who already
- * had that team in any knockout pick gain (newPoints - previousStagePoints).
+ * Ledger knockout scoring is once-per-team at
+ * min(official furthest, max predicted depth for that team).
+ * When a match advances a team to `scoringResultKind`, the attributed delta is
+ * the change in that capped award (not an uncapped official upgrade).
  */
 export function computeKnockoutOncePerTeamProgressionDelta(
   predictions: readonly ParticipantPredictionForPointsAttribution[],
@@ -115,12 +130,20 @@ export function computeKnockoutOncePerTeamProgressionDelta(
     return 0;
   }
 
-  const newPoints = rulesByKind.get(newKind) ?? 0;
-  if (newPoints <= 0) return 0;
+  const maxPredicted = participantMaximumPredictedDepthForTeam(predictions, winnerId);
+  if (!maxPredicted) return 0;
 
   const prevKind = knockoutProgressionPredecessor(newKind);
-  const oldPoints = prevKind ? (rulesByKind.get(prevKind) ?? 0) : 0;
-  return Math.max(0, newPoints - oldPoints);
+  const prevAwarded = cappedKnockoutAwardKind(prevKind, maxPredicted);
+  const newAwarded = cappedKnockoutAwardKind(newKind, maxPredicted);
+
+  const pointsFor = (kind: string | null): number => {
+    if (!kind) return 0;
+    const pts = rulesByKind.get(kind) ?? 0;
+    return pts > 0 ? pts : 0;
+  };
+
+  return Math.max(0, pointsFor(newAwarded) - pointsFor(prevAwarded));
 }
 
 export function computeMatchPointsDeltaForParticipant(input: {
@@ -188,30 +211,63 @@ export function computeThirdPlaceQualifierPointsFromPredictions(input: {
 }
 
 /**
- * Attribute third-place correction only when this score-impact event newly scored
- * third-place qualifiers (`scoring_corrections` metadata). Never infer from residual
- * alone on later match syncs — that mislabels once-per-team knockout upgrades.
+ * Attribute named scoring corrections from score-impact metadata.
+ * Knockout depth-cap / M101 cutover corrections may be negative (points removed).
+ * Third-place corrections remain positive-only and never claim a depth-cap residual.
  */
 function attributeScoringCorrections(input: {
-  unexplainedDelta: number;
+  residualAfterMatch: number;
   thirdPlacePointsPerPick: number;
   thirdPlaceSettled: boolean;
   totalThirdPlacePointsFromPredictions: number;
   thirdPlaceCorrectionInEvent: boolean;
+  knockoutDepthCapCorrectionInEvent: boolean;
+  m101KnockoutDepthTransitionInEvent: boolean;
 }): {
   thirdPlaceQualifierDelta: number | null;
+  knockoutPredictionDepthCapDelta: number | null;
+  m101KnockoutDepthTransitionDelta: number | null;
   otherScoringDelta: number | null;
   knownCorrectionKinds: ScoringCorrectionKind[];
 } {
-  if (input.unexplainedDelta <= 0) {
+  const knownCorrectionKinds: ScoringCorrectionKind[] = [];
+
+  if (input.m101KnockoutDepthTransitionInEvent) {
+    knownCorrectionKinds.push("m101_knockout_depth_transition");
+    const delta =
+      input.residualAfterMatch !== 0 ? input.residualAfterMatch : null;
     return {
       thirdPlaceQualifierDelta: null,
+      knockoutPredictionDepthCapDelta: null,
+      m101KnockoutDepthTransitionDelta: delta,
+      otherScoringDelta: null,
+      knownCorrectionKinds,
+    };
+  }
+
+  if (input.knockoutDepthCapCorrectionInEvent) {
+    knownCorrectionKinds.push("knockout_prediction_depth_cap");
+    const depthCapDelta =
+      input.residualAfterMatch !== 0 ? input.residualAfterMatch : null;
+    return {
+      thirdPlaceQualifierDelta: null,
+      knockoutPredictionDepthCapDelta: depthCapDelta,
+      m101KnockoutDepthTransitionDelta: null,
+      otherScoringDelta: null,
+      knownCorrectionKinds,
+    };
+  }
+
+  if (input.residualAfterMatch <= 0) {
+    return {
+      thirdPlaceQualifierDelta: null,
+      knockoutPredictionDepthCapDelta: null,
+      m101KnockoutDepthTransitionDelta: null,
       otherScoringDelta: null,
       knownCorrectionKinds: [],
     };
   }
 
-  const knownCorrectionKinds: ScoringCorrectionKind[] = [];
   let thirdPlaceQualifierDelta: number | null = null;
 
   if (
@@ -222,7 +278,7 @@ function attributeScoringCorrections(input: {
   ) {
     const perPick = input.thirdPlacePointsPerPick;
     const candidate = input.totalThirdPlacePointsFromPredictions;
-    const unexplained = input.unexplainedDelta;
+    const unexplained = input.residualAfterMatch;
 
     if (unexplained <= candidate && unexplained % perPick === 0) {
       thirdPlaceQualifierDelta = unexplained;
@@ -235,12 +291,14 @@ function attributeScoringCorrections(input: {
     knownCorrectionKinds.push("third_place_qualifier");
   }
 
-  const residual = input.unexplainedDelta - (thirdPlaceQualifierDelta ?? 0);
+  const residual = input.residualAfterMatch - (thirdPlaceQualifierDelta ?? 0);
   return {
     thirdPlaceQualifierDelta:
       thirdPlaceQualifierDelta != null && thirdPlaceQualifierDelta > 0
         ? thirdPlaceQualifierDelta
         : null,
+    knockoutPredictionDepthCapDelta: null,
+    m101KnockoutDepthTransitionDelta: null,
     otherScoringDelta: residual > 0 ? residual : null,
     knownCorrectionKinds,
   };
@@ -273,10 +331,8 @@ export function buildLatestPointsBreakdownForParticipant(input: {
       })
     : null;
 
-  const unexplainedDelta = Math.max(
-    0,
-    latestTotalDelta - (latestMatchPointsDelta ?? 0),
-  );
+  const residualAfterMatch =
+    latestTotalDelta - (latestMatchPointsDelta ?? 0);
 
   const thirdPlacePointsPerPick =
     input.rulesByKind.get("third_place_qualifier") ?? 0;
@@ -292,19 +348,31 @@ export function buildLatestPointsBreakdownForParticipant(input: {
     input.thirdPlaceCorrectionInEvent === true ||
     (input.event.scoringCorrectionKinds?.includes("third_place_qualifier") ??
       false);
+  const knockoutDepthCapCorrectionInEvent =
+    input.event.scoringCorrectionKinds?.includes(
+      "knockout_prediction_depth_cap",
+    ) ?? false;
+  const m101KnockoutDepthTransitionInEvent =
+    input.event.scoringCorrectionKinds?.includes(
+      "m101_knockout_depth_transition",
+    ) ?? false;
 
   const corrections = attributeScoringCorrections({
-    unexplainedDelta,
+    residualAfterMatch,
     thirdPlacePointsPerPick,
     thirdPlaceSettled: input.thirdPlaceQualifiersSettled === true,
     totalThirdPlacePointsFromPredictions,
     thirdPlaceCorrectionInEvent,
+    knockoutDepthCapCorrectionInEvent,
+    m101KnockoutDepthTransitionInEvent,
   });
 
   const isMixedUpdate =
     (latestMatchPointsDelta != null &&
       latestMatchPointsDelta !== latestTotalDelta) ||
     corrections.thirdPlaceQualifierDelta != null ||
+    corrections.knockoutPredictionDepthCapDelta != null ||
+    corrections.m101KnockoutDepthTransitionDelta != null ||
     corrections.otherScoringDelta != null;
 
   return {
@@ -312,6 +380,8 @@ export function buildLatestPointsBreakdownForParticipant(input: {
     latestTotalDelta,
     latestMatchPointsDelta,
     thirdPlaceQualifierDelta: corrections.thirdPlaceQualifierDelta,
+    knockoutPredictionDepthCapDelta: corrections.knockoutPredictionDepthCapDelta,
+    m101KnockoutDepthTransitionDelta: corrections.m101KnockoutDepthTransitionDelta,
     otherScoringDelta: corrections.otherScoringDelta,
     knownCorrectionKinds: corrections.knownCorrectionKinds,
     isMixedUpdate,

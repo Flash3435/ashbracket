@@ -259,7 +259,7 @@ const englandEvent = parseLatestScoreEventContext(
     predictions: [
       {
         participantId: "adarsh",
-        predictionKind: "round_of_16",
+        predictionKind: "quarterfinalist",
         teamId: spainId,
         slotKey: "5",
       },
@@ -338,7 +338,7 @@ const englandEvent = parseLatestScoreEventContext(
   assert.equal(formatThirdPlaceScoringCorrectionLine(breakdown), null);
 }
 
-// 5. Emil-style: England in bracket but not SF slot pick → once-per-team +8, not third-place
+// 5. Emil-style: England predicted as semifinalist → once-per-team +8, not third-place
 {
   const breakdown = buildLatestPointsBreakdownForParticipant({
     participantId: "emil",
@@ -347,9 +347,9 @@ const englandEvent = parseLatestScoreEventContext(
     predictions: [
       {
         participantId: "emil",
-        predictionKind: "quarterfinalist",
+        predictionKind: "semifinalist",
         teamId: englandId,
-        slotKey: "4",
+        slotKey: "3",
       },
       {
         participantId: "emil",
@@ -382,6 +382,28 @@ const englandEvent = parseLatestScoreEventContext(
   });
   assert.equal(summary.latestLine, "England def. Norway: +8");
   assert.equal(summary.correctionLine, null);
+}
+
+// 5b. QF-only England pick is capped: M99 SF advancement awards +0 match points
+{
+  const breakdown = buildLatestPointsBreakdownForParticipant({
+    participantId: "emil-qf",
+    momentum: momentum("emil-qf", 0, 198),
+    event: englandEvent,
+    predictions: [
+      {
+        participantId: "emil-qf",
+        predictionKind: "quarterfinalist",
+        teamId: englandId,
+        slotKey: "4",
+      },
+    ],
+    matches: [m99Match],
+    rulesByKind: rules,
+    officialThirdPlaceAdvancerTeamIds: officialThirdPlace,
+    thirdPlaceQualifiersSettled: true,
+  });
+  assert.equal(breakdown?.latestMatchPointsDelta, 0);
 }
 
 // 6. Match winner SF slot picker: +8 progression (QF→SF), no third-place echo
@@ -532,7 +554,24 @@ assert.equal(
     m93Match,
     rules,
   ),
+  0,
+  "R16-only pick does not unlock quarterfinalist upgrade on M93",
+);
+assert.equal(
+  computeKnockoutOncePerTeamProgressionDelta(
+    [
+      {
+        participantId: "winner",
+        predictionKind: "quarterfinalist",
+        teamId: spainId,
+        slotKey: "5",
+      },
+    ],
+    m93Match,
+    rules,
+  ),
   4,
+  "QF-predicted Spain earns +4 on R16→QF",
 );
 assert.equal(
   computeKnockoutOncePerTeamProgressionDelta(
@@ -547,7 +586,24 @@ assert.equal(
     m99Match,
     rules,
   ),
+  0,
+  "QF-only pick does not unlock semifinalist upgrade on M99",
+);
+assert.equal(
+  computeKnockoutOncePerTeamProgressionDelta(
+    [
+      {
+        participantId: "emil",
+        predictionKind: "semifinalist",
+        teamId: englandId,
+        slotKey: "3",
+      },
+    ],
+    m99Match,
+    rules,
+  ),
   8,
+  "SF-predicted England earns +8 on QF→SF",
 );
 assert.equal(
   computeKnockoutMatchPickPointsDelta(

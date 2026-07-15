@@ -1,4 +1,5 @@
 import type { Prediction, PredictionKind, Result, ScoringRule } from "../../types/domain";
+import type { KnockoutScoringConfig } from "./knockoutScoringTransition";
 
 /** Group-stage exact-slot vs wrong-slot scoring (from `pools` + `tournament_stages.code = group`). */
 export type GroupStageScoringConfig = {
@@ -16,6 +17,11 @@ export interface PoolScoringInput {
   scoringRules: ScoringRule[];
   /** When set, `group_winner` / `group_runner_up` picks use these points instead of `scoring_rules`. */
   groupStageScoring?: GroupStageScoringConfig | null;
+  /**
+   * Knockout once-per-team scoring mode. Default: `prediction_depth_capped`.
+   * Live WC 2026 uses `grandfathered_cutoff_then_capped_increment` via recompute.
+   */
+  knockoutScoring?: KnockoutScoringConfig | null;
 }
 
 /**
