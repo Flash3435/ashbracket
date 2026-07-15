@@ -1,18 +1,16 @@
 /**
- * Temporary ops freeze for live score sync / standings recompute while the
- * duplicate-knockout-ledger repair is in progress.
- *
- * Override (ops only): set ASHBRACKET_ALLOW_LIVE_SCORE_SYNC=1 to bypass.
- * After repair + idempotency checks, set LIVE_SCORE_SYNC_AND_RECOMPUTE_FROZEN = false
- * and redeploy.
+ * Ops freeze for live score sync / standings recompute.
+ * Cleared after duplicate-knockout-ledger repair + idempotency checks.
+ * Set ASHBRACKET_FREEZE_LIVE_SCORE_SYNC=1 to re-enable freeze without redeploy.
  */
-export const LIVE_SCORE_SYNC_AND_RECOMPUTE_FROZEN = true;
+export const LIVE_SCORE_SYNC_AND_RECOMPUTE_FROZEN = false;
 
 export const LIVE_SCORE_SYNC_FREEZE_MESSAGE =
   "Live score sync and standings recompute are temporarily frozen while the duplicate knockout ledger repair is running. Do not sync or recompute until ops clears the freeze.";
 
 export function isLiveScoreSyncAndRecomputeFrozen(): boolean {
   if (process.env.ASHBRACKET_ALLOW_LIVE_SCORE_SYNC === "1") return false;
+  if (process.env.ASHBRACKET_FREEZE_LIVE_SCORE_SYNC === "1") return true;
   return LIVE_SCORE_SYNC_AND_RECOMPUTE_FROZEN;
 }
 
