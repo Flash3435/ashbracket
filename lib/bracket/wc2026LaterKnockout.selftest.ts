@@ -32,4 +32,13 @@ assert.deepEqual(wc2026LaterKnockoutAdvanceFrom(finalDef), {
   awayFifaMatchNo: 102,
 });
 
+// M103 bronze final feeds from both semifinals (losers advance — loser
+// semantics applied by propagateBracketAdvance via stage_code third_place).
+const thirdPlaceDef = WC2026_LATER_KNOCKOUT_MATCH_DEFS.find((d) => d.fifaMatchNo === 103)!;
+assert.equal(thirdPlaceDef.stageCode, "third_place");
+assert.deepEqual(wc2026LaterKnockoutAdvanceFrom(thirdPlaceDef), {
+  homeFifaMatchNo: 101,
+  awayFifaMatchNo: 102,
+});
+
 console.log("wc2026LaterKnockout.selftest.ts: all assertions passed");

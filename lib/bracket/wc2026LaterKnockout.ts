@@ -79,7 +79,12 @@ export const WC2026_LATER_KNOCKOUT_MATCH_DEFS: readonly Wc2026LaterKnockoutMatch
   },
 ] as const;
 
-/** Feeder FIFA match numbers for bracket advance links (winners only). */
+/**
+ * Feeder FIFA match numbers for bracket advance links.
+ * Winners advance everywhere except the third-place match (M103), which takes
+ * the semifinal losers — see `propagateBracketAdvance`, which keys loser
+ * propagation on `stage_code === "third_place"`.
+ */
 export function wc2026LaterKnockoutAdvanceFrom(
   def: Wc2026LaterKnockoutMatchDef,
 ): { homeFifaMatchNo: number | null; awayFifaMatchNo: number | null } {
@@ -105,10 +110,11 @@ export function wc2026LaterKnockoutAdvanceFrom(
       awayFifaMatchNo: 97 + Number(pair[1]) - 1,
     };
   }
-  if (fifaMatchNo === 104) {
+  if (fifaMatchNo === 103 || fifaMatchNo === 104) {
+    // M104 final: winners of the semifinals. M103 bronze final: losers of the
+    // same semifinals (loser semantics applied downstream via stage_code).
     return { homeFifaMatchNo: 101, awayFifaMatchNo: 102 };
   }
-  // M103 bronze final — loser propagation is not wired; teams come from provider mapping.
   return { homeFifaMatchNo: null, awayFifaMatchNo: null };
 }
 

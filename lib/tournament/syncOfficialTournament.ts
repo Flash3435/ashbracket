@@ -146,8 +146,16 @@ export function recomputeWinners(matches: DbMatch[]) {
   }
 }
 
+/** Losing team of a decided match (third-place feeder semantics). */
+function loserFromMatch(src: DbMatch | undefined): string | null {
+  if (!src?.winner_team_id || !src.home_team_id || !src.away_team_id) return null;
+  return src.winner_team_id === src.home_team_id ? src.away_team_id : src.home_team_id;
+}
+
 /**
- * Copy winners into downstream matches until stable (KO bracket).
+ * Copy advancing teams into downstream matches until stable (KO bracket).
+ * Winners advance everywhere except into `third_place` matches, which take
+ * the losers of their feeder semifinals.
  */
 export function propagateBracketAdvance(matches: DbMatch[]) {
   const byId = new Map(matches.map((m) => [m.id, m]));
@@ -157,19 +165,20 @@ export function propagateBracketAdvance(matches: DbMatch[]) {
     changed = false;
     guard += 1;
     for (const m of matches) {
+      const takesLoser = m.stage_code === "third_place";
       if (m.home_advance_from_match_id) {
         const src = byId.get(m.home_advance_from_match_id);
-        const w = src?.winner_team_id;
-        if (w && m.home_team_id !== w) {
-          m.home_team_id = w;
+        const advancing = takesLoser ? loserFromMatch(src) : src?.winner_team_id;
+        if (advancing && m.home_team_id !== advancing) {
+          m.home_team_id = advancing;
           changed = true;
         }
       }
       if (m.away_advance_from_match_id) {
         const src = byId.get(m.away_advance_from_match_id);
-        const w = src?.winner_team_id;
-        if (w && m.away_team_id !== w) {
-          m.away_team_id = w;
+        const advancing = takesLoser ? loserFromMatch(src) : src?.winner_team_id;
+        if (advancing && m.away_team_id !== advancing) {
+          m.away_team_id = advancing;
           changed = true;
         }
       }
