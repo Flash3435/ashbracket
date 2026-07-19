@@ -14,6 +14,7 @@ import {
   r32FixturesFromTournamentMatches,
 } from "@/lib/scoring/resolveOfficialThirdPlaceAdvancers";
 import { mapResultRow } from "../../src/lib/scoring/mapSupabaseRows";
+import { TOURNAMENT_BONUS_KEYS } from "./scoringDeltaAttribution";
 
 async function loadMatchesForCodes(
   supabase: SupabaseClient,
@@ -65,25 +66,38 @@ async function loadPredictionsForPool(
     predictionKind: pred.predictionKind,
     teamId: pred.teamId ?? null,
     slotKey: pred.slotKey ?? null,
+    bonusKey: pred.bonusKey ?? null,
   }));
 }
 
 async function loadScoringRulesByKind(
   supabase: SupabaseClient,
   poolId: string,
-): Promise<Map<string, number>> {
+): Promise<{
+  rulesByKind: Map<string, number>;
+  pointsByBonusKey: Map<string, number>;
+}> {
   const { data, error } = await supabase
     .from("scoring_rules")
-    .select("prediction_kind, points")
+    .select("prediction_kind, bonus_key, points")
     .eq("pool_id", poolId);
 
   if (error) throw new Error(error.message);
 
-  const map = new Map<string, number>();
+  const rulesByKind = new Map<string, number>();
+  const pointsByBonusKey = new Map<string, number>();
   for (const row of data ?? []) {
-    map.set(row.prediction_kind as string, Number(row.points));
+    const kind = row.prediction_kind as string;
+    const bonusKey = (row.bonus_key as string | null)?.trim() || null;
+    const points = Number(row.points);
+    if (kind === "bonus_pick" && bonusKey) {
+      rulesByKind.set(`bonus_pick:${bonusKey}`, points);
+      pointsByBonusKey.set(bonusKey, points);
+    } else {
+      rulesByKind.set(kind, points);
+    }
   }
-  return map;
+  return { rulesByKind, pointsByBonusKey };
 }
 
 async function loadThirdPlaceAdvancerTeamIds(
@@ -128,6 +142,34 @@ async function loadThirdPlaceAdvancerTeamIds(
   };
 }
 
+async function loadPublishedBonusWinners(
+  supabase: SupabaseClient,
+  editionId: string,
+): Promise<Map<string, Set<string>>> {
+  const { data, error } = await supabase
+    .from("results")
+    .select("slot_key, team_id")
+    .eq("edition_id", editionId)
+    .eq("kind", "bonus_pick")
+    .in("slot_key", [...TOURNAMENT_BONUS_KEYS]);
+
+  if (error) throw new Error(error.message);
+
+  const map = new Map<string, Set<string>>();
+  for (const row of data ?? []) {
+    const key = (row.slot_key as string | null)?.trim();
+    const teamId = (row.team_id as string | null)?.trim();
+    if (!key || !teamId) continue;
+    let set = map.get(key);
+    if (!set) {
+      set = new Set();
+      map.set(key, set);
+    }
+    set.add(teamId);
+  }
+  return map;
+}
+
 /**
  * Per-participant latest match vs total scoring breakdown for leaderboard display.
  */
@@ -152,25 +194,29 @@ export async function fetchLatestMatchPointsBreakdownForPool(
   if (!editionId) return new Map();
 
   const matchCodes = input.event.matchCodes;
-  const [matches, predictions, rulesByKind, thirdPlaceContext] = await Promise.all([
-    matchCodes.length > 0
-      ? loadMatchesForCodes(supabase, editionId, matchCodes)
-      : Promise.resolve([]),
-    loadPredictionsForPool(supabase, poolId),
-    loadScoringRulesByKind(supabase, poolId),
-    loadThirdPlaceAdvancerTeamIds(supabase, editionId),
-  ]);
+  const [matches, predictions, rules, thirdPlaceContext, publishedBonusWinners] =
+    await Promise.all([
+      matchCodes.length > 0
+        ? loadMatchesForCodes(supabase, editionId, matchCodes)
+        : Promise.resolve([]),
+      loadPredictionsForPool(supabase, poolId),
+      loadScoringRulesByKind(supabase, poolId),
+      loadThirdPlaceAdvancerTeamIds(supabase, editionId),
+      loadPublishedBonusWinners(supabase, editionId),
+    ]);
 
-  if (matchCodes.length > 0 && matches.length === 0) return new Map();
-
+  // Previously returned empty when inferred match codes failed to load.
+  // Still build bonus/correction attribution from the standings delta.
   return buildLatestPointsBreakdownByParticipantId({
     participantIds: input.participantIds,
     momentumByParticipantId: input.momentumByParticipantId,
     event: input.event,
     predictions,
     matches,
-    rulesByKind,
+    rulesByKind: rules.rulesByKind,
+    pointsByBonusKey: rules.pointsByBonusKey,
     officialThirdPlaceAdvancerTeamIds: thirdPlaceContext.teamIds,
     thirdPlaceQualifiersSettled: thirdPlaceContext.settled,
+    publishedWinnerTeamIdsByBonusKey: publishedBonusWinners,
   });
 }

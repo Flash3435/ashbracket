@@ -73,8 +73,8 @@ const upsetBackerImpact: BracketImpactParticipantRow = {
 
 assert.equal(
   formatLatestMatchScoringLine(momentum(4), event, upsetBackerImpact),
-  "Latest: Morocco upset +4",
-  "upset backer gets upset-specific latest line",
+  "Morocco def. Canada: +4",
+  "upset bracket impact does not relabel match points as an upset bonus",
 );
 
 const multiEvent = parseLatestScoreEventContext(
@@ -102,7 +102,7 @@ const noMatchEvent = parseLatestScoreEventContext(
 assert.equal(noMatchEvent.eventKind, "scoring_refresh");
 assert.equal(noMatchEvent.matchCount, 0);
 const noMatchLine = formatLatestMatchScoringLine(momentum(4), noMatchEvent);
-assert.equal(noMatchLine, "Scoring refresh: +4", "pool recalc without match metadata");
+assert.equal(noMatchLine, "Latest: Scoring adjustment +4", "pool recalc without match metadata");
 assert.ok(
   !noMatchLine?.includes("0-match"),
   "must never show 0-match update copy",
@@ -118,7 +118,7 @@ const refreshEvent = parseLatestScoreEventContext(
 assert.equal(refreshEvent.eventKind, "scoring_refresh");
 assert.equal(
   formatLatestMatchScoringLine(momentum(4), refreshEvent),
-  "Scoring refresh: +4",
+  "Latest: Scoring adjustment +4",
   "manual recompute without match metadata",
 );
 
@@ -273,7 +273,7 @@ const genericRecompute = parseLatestScoreEventContext(
 assert.equal(genericRecompute.eventKind, "scoring_refresh");
 assert.equal(
   formatLatestMatchScoringLine(momentum(4), genericRecompute),
-  "Scoring refresh: +4",
+  "Latest: Scoring adjustment +4",
 );
 
 // Missing match metadata on tournament_sync — no match implication
@@ -285,7 +285,7 @@ assert.equal(missingMeta.eventKind, "scoring_refresh");
 assert.equal(missingMeta.isSingleMatch, false);
 assert.equal(
   formatLatestMatchScoringLine(momentum(4), missingMeta),
-  "Scoring refresh: +4",
+  "Latest: Scoring adjustment +4",
 );
 
 console.log("leaderboardLatestScoreImpactDisplay.selftest.ts: ok");

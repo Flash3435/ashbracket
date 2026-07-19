@@ -162,14 +162,22 @@ assert.deepEqual(depthCapEvent.scoringCorrectionKinds, [
     event: matchEvent,
     pointsBreakdown: breakdown,
   });
-  assert.equal(summary.latestLine, "England def. Norway: +8");
-  assert.equal(
-    summary.correctionLine,
-    `${KNOCKOUT_DEPTH_CAP_SCORING_CORRECTION_LABEL}: −24`,
+  assert.equal(summary.latestLine, "Latest scoring: −16");
+  assert.ok(
+    summary.componentLines.some((line) => /Match progression \+8/.test(line)),
   );
+  assert.ok(
+    summary.componentLines.some((line) =>
+      line.includes(`${KNOCKOUT_DEPTH_CAP_SCORING_CORRECTION_LABEL}`),
+    ) ||
+      summary.componentLines.some((line) => /Scoring correction −24/.test(line)),
+  );
+  assert.equal(summary.correctionLine, null);
   assert.equal(summary.otherScoringLine, null);
   assert.ok(
-    !summary.correctionLine?.includes(THIRD_PLACE_SCORING_CORRECTION_LABEL),
+    !summary.componentLines.some((line) =>
+      line.includes(THIRD_PLACE_SCORING_CORRECTION_LABEL),
+    ),
   );
 }
 
@@ -215,7 +223,7 @@ assert.deepEqual(depthCapEvent.scoringCorrectionKinds, [
     event: legacyEvent,
     pointsBreakdown: breakdown,
   });
-  assert.equal(summary.latestLine, "Scoring refresh: −8");
+  assert.equal(summary.latestLine, "Latest: Scoring adjustment −8");
   assert.equal(summary.correctionLine, null);
 }
 

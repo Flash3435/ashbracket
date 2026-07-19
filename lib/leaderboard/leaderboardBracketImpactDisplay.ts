@@ -11,8 +11,15 @@ import {
   M101_KNOCKOUT_DEPTH_TRANSITION_LABEL,
   THIRD_PLACE_SCORING_CORRECTION_LABEL,
 } from "./scoringCorrectionDisplay";
+import {
+  formatScoringDeltaAttributionLabel,
+  formatSignedPointsToken,
+  isTournamentBonusKey,
+  presentScoringDeltaAttributions,
+  type ScoringDeltaAttribution,
+} from "./scoringDeltaAttribution";
 
-/** Hide (+0) / (+0 refresh) — zero-delta participants show path/rank only. */
+/** Hide (+0) / (+0 since last update) — zero-delta participants show path/rank only. */
 const LATEST_POINTS_OPTIONS = { showZero: false, latestSuffix: true } as const;
 
 export function formatLivePathsDelta(delta: number): string | null {
@@ -57,24 +64,32 @@ export function formatChampionStatusAfterImpact(
 
 /** Signed points token for latest / correction lines (+4, −24, +0). */
 export function formatLatestPointsToken(points: number): string | null {
-  const pts = formatPoolPoints(Math.abs(points));
-  if (points > 0) return `+${pts}`;
-  if (points < 0) return `−${pts}`;
-  return "+0";
+  if (!Number.isFinite(points)) return null;
+  return formatSignedPointsToken(points);
 }
 
 function resolveMatchLinePoints(
   momentum: LeaderboardMomentumRow,
   breakdown?: LeaderboardLatestPointsBreakdown | null,
   event?: LeaderboardLatestScoreEventContext | null,
-): number {
+): number | null {
   if (
     breakdown?.latestMatchPointsDelta != null &&
     (event?.eventKind === "single_match" || event?.eventKind === "multi_match")
   ) {
     return breakdown.latestMatchPointsDelta;
   }
-  return momentum.recentPointsGained;
+  // Never fall back to the full standings delta when a breakdown exists —
+  // that mislabels tournament bonuses / corrections as match points.
+  if (breakdown) return null;
+  // Legacy path without breakdown: only match events may use the total delta.
+  if (
+    event?.eventKind === "single_match" ||
+    event?.eventKind === "multi_match"
+  ) {
+    return momentum.recentPointsGained;
+  }
+  return null;
 }
 
 export function formatThirdPlaceScoringCorrectionLine(
@@ -157,9 +172,23 @@ export function formatOtherScoringAdjustmentsLine(
   ) {
     return null;
   }
-  if (breakdown?.otherScoringDelta == null || breakdown.otherScoringDelta <= 0) {
+
+  // Structured attributions already cover bonuses / unknowns in latest + component lines.
+  if (
+    breakdown?.attributions?.some(
+      (a) => a.category === "unknown" || isTournamentBonusKey(a.category),
+    )
+  ) {
     return null;
   }
+
+  if (
+    breakdown?.otherScoringDelta == null ||
+    breakdown.otherScoringDelta === 0
+  ) {
+    return null;
+  }
+
   const token = formatLatestPointsToken(breakdown.otherScoringDelta);
   if (!token) return null;
 
@@ -170,18 +199,70 @@ export function formatOtherScoringAdjustmentsLine(
     latestTotalDelta: breakdown.latestTotalDelta,
     latestMatchPointsDelta: breakdown.latestMatchPointsDelta,
     thirdPlaceQualifierDelta: breakdown.thirdPlaceQualifierDelta,
+    tournamentBonusDelta: breakdown.tournamentBonusDelta,
     knockoutPredictionDepthCapDelta: breakdown.knockoutPredictionDepthCapDelta,
     m101KnockoutDepthTransitionDelta: breakdown.m101KnockoutDepthTransitionDelta,
     knownCorrectionKinds: breakdown.knownCorrectionKinds,
   });
 
-  return `Other scoring adjustments: ${token}`;
+  return `Other scoring adjustment: ${token}`;
+}
+
+/**
+ * Build structured attributions for presentation when the breakdown already
+ * computed them, or fall back to a minimal match/total attribution.
+ */
+function attributionsForLatestLine(
+  momentum: LeaderboardMomentumRow,
+  event: LeaderboardLatestScoreEventContext,
+  breakdown?: LeaderboardLatestPointsBreakdown | null,
+): ScoringDeltaAttribution[] {
+  if (breakdown?.attributions && breakdown.attributions.length > 0) {
+    return breakdown.attributions;
+  }
+
+  const matchPoints = resolveMatchLinePoints(momentum, breakdown, event);
+  if (matchPoints != null && matchPoints !== 0) {
+    return [
+      {
+        category: "progression",
+        points: matchPoints,
+        label: "Match progression",
+      },
+    ];
+  }
+
+  // No breakdown and no match attribution — fail safe without inventing a match.
+  if (!breakdown && momentum.recentPointsGained !== 0) {
+    if (
+      event.eventKind === "scoring_refresh" ||
+      event.eventKind === "generic_update"
+    ) {
+      return [
+        {
+          category: "unknown",
+          points: momentum.recentPointsGained,
+          label: "Scoring adjustment",
+        },
+      ];
+    }
+    // Legacy path without breakdown on a match event: keep prior match labeling.
+    return [
+      {
+        category: "progression",
+        points: momentum.recentPointsGained,
+        label: "Match progression",
+      },
+    ];
+  }
+
+  return [];
 }
 
 export function formatLatestMatchScoringLine(
   momentum: LeaderboardMomentumRow | null | undefined,
   event: LeaderboardLatestScoreEventContext | null | undefined,
-  bracketImpact?: BracketImpactParticipantRow | null,
+  _bracketImpact?: BracketImpactParticipantRow | null,
   breakdown?: LeaderboardLatestPointsBreakdown | null,
 ): string | null {
   if (!momentum || !event?.hasValidSnapshot) return null;
@@ -210,53 +291,53 @@ export function formatLatestMatchScoringLine(
     !canAttributeMatch &&
     breakdown?.thirdPlaceQualifierDelta != null &&
     breakdown.thirdPlaceQualifierDelta > 0 &&
-    breakdown.latestMatchPointsDelta == null;
+    breakdown.latestMatchPointsDelta == null &&
+    !breakdown.tournamentBonusDelta;
 
   if (correctionOnly) {
     return formatThirdPlaceScoringCorrectionLine(breakdown);
   }
 
-  const matchPoints = resolveMatchLinePoints(momentum, breakdown, event);
-  // Clean M101 / match UX: no personal points line when the participant scored 0.
-  // Rank movement and live-path changes still render via impact lines.
-  if (matchPoints === 0) return null;
+  const attributions = attributionsForLatestLine(momentum, event, breakdown);
+  if (attributions.length === 0) return null;
 
-  const pointsToken = formatLatestPointsToken(matchPoints);
-  if (!pointsToken) return null;
+  const presentation = presentScoringDeltaAttributions({
+    attributions,
+    totalDelta: momentum.recentPointsGained,
+    matchContext: {
+      matchupShortLabel: event.matchupShortLabel,
+      matchLabel: event.matchLabel,
+      winnerTeamName: event.winnerTeamName,
+      eventKind: event.eventKind,
+    },
+  });
 
-  switch (event.eventKind) {
-    case "multi_match":
-      return `Latest matches: ${pointsToken}`;
-    case "scoring_refresh":
-      return `Scoring refresh: ${formatLatestPointsToken(momentum.recentPointsGained)}`;
-    case "generic_update":
-      return `Latest update: ${formatLatestPointsToken(momentum.recentPointsGained)}`;
-    case "single_match":
-    default:
-      break;
+  return presentation.latestLine;
+}
+
+/** Component breakdown lines when multiple scoring sources share one refresh. */
+export function formatLatestScoringComponentLines(
+  breakdown: LeaderboardLatestPointsBreakdown | null | undefined,
+  momentum?: LeaderboardMomentumRow | null,
+  event?: LeaderboardLatestScoreEventContext | null,
+): string[] {
+  if (!breakdown?.attributions?.length) return [];
+  if (!momentum || !event?.hasValidSnapshot) {
+    return breakdown.attributions
+      .filter((a) => a.points !== 0)
+      .map(formatScoringDeltaAttributionLabel);
   }
-
-  if (
-    bracketImpact?.pickedUpsetWinner &&
-    event.winnerTeamName &&
-    bracketImpact.upsetImpact === "benefited"
-  ) {
-    return `Latest: ${event.winnerTeamName} upset ${pointsToken}`;
-  }
-
-  if (event.matchupShortLabel) {
-    return `${event.matchupShortLabel}: ${pointsToken}`;
-  }
-
-  if (event.matchLabel) {
-    return `Latest: ${event.matchLabel} ${pointsToken}`;
-  }
-
-  if (event.winnerTeamName) {
-    return `Latest: ${event.winnerTeamName} result ${pointsToken}`;
-  }
-
-  return `Latest update: ${pointsToken}`;
+  const presentation = presentScoringDeltaAttributions({
+    attributions: breakdown.attributions,
+    totalDelta: momentum.recentPointsGained,
+    matchContext: {
+      matchupShortLabel: event.matchupShortLabel,
+      matchLabel: event.matchLabel,
+      winnerTeamName: event.winnerTeamName,
+      eventKind: event.eventKind,
+    },
+  });
+  return presentation.isMultiSource ? presentation.componentLines : [];
 }
 
 export function formatLeaderboardBracketImpactLine(input: {
@@ -343,6 +424,7 @@ export function formatLeaderboardLatestImpactSummary(input: {
   impactLine: string | null;
   correctionLine: string | null;
   otherScoringLine: string | null;
+  componentLines: string[];
 } {
   const latestLine = formatLatestMatchScoringLine(
     input.momentum,
@@ -350,7 +432,16 @@ export function formatLeaderboardLatestImpactSummary(input: {
     input.bracketImpact,
     input.pointsBreakdown,
   );
-  const correctionLine = formatNamedScoringCorrectionLine(input.pointsBreakdown);
+  const componentLines = formatLatestScoringComponentLines(
+    input.pointsBreakdown,
+    input.momentum,
+    input.event,
+  );
+  // Named correction lines are listed in componentLines for multi-source updates.
+  const correctionLine =
+    componentLines.length > 0
+      ? null
+      : formatNamedScoringCorrectionLine(input.pointsBreakdown);
   const otherScoringLine = formatOtherScoringAdjustmentsLine(input.pointsBreakdown, {
     participantId: input.participantId ?? input.pointsBreakdown?.participantId,
     displayName: input.displayName,
@@ -362,7 +453,13 @@ export function formatLeaderboardLatestImpactSummary(input: {
       input.outlook?.pathValidLivePickCount ?? input.bracketImpact?.livePathsAfter,
   });
 
-  return { latestLine, impactLine, correctionLine, otherScoringLine };
+  return {
+    latestLine,
+    impactLine,
+    correctionLine,
+    otherScoringLine,
+    componentLines,
+  };
 }
 
 export function formatBiggestBracketImpactWinnerLine(input: {
@@ -485,6 +582,14 @@ export function formatExpandedBracketImpactContext(
     pointsBreakdown,
   );
   if (latestLine) parts.push(latestLine);
+
+  for (const line of formatLatestScoringComponentLines(
+    pointsBreakdown,
+    momentum,
+    event,
+  )) {
+    parts.push(line);
+  }
 
   const otherLine = formatOtherScoringAdjustmentsLine(pointsBreakdown, {
     participantId: pointsBreakdown?.participantId,

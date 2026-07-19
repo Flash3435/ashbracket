@@ -13,9 +13,28 @@ function readMatchCodes(metadata: Record<string, unknown>): string[] {
   );
 }
 
+function readTrigger(metadata: Record<string, unknown>): string | null {
+  return typeof metadata.trigger === "string" && metadata.trigger.trim()
+    ? metadata.trigger.trim()
+    : null;
+}
+
+/**
+ * Triggers where missing match_codes usually mean a non-match scoring update
+ * (bonus publish, manual recompute). Do not invent a recent finished match.
+ */
+const DO_NOT_INFER_MATCH_TRIGGERS = new Set([
+  "admin_result_edit",
+  "admin_manual_recompute",
+  "admin_recompute_all_pools",
+]);
+
 /**
  * Backfill missing match attribution on score-impact rows created without Step B
  * appliedMatchCodes (generic pool recalc). Uses last_sync_at on tournament_matches.
+ *
+ * Never infers matches for admin result-edit / manual recompute triggers — those
+ * often award tournament bonuses or corrections with empty match_codes.
  */
 export async function enrichScoreImpactEventMetadata(
   supabase: SupabaseClient,
@@ -24,6 +43,11 @@ export async function enrichScoreImpactEventMetadata(
   options?: { eventCreatedAt?: string | null },
 ): Promise<Record<string, unknown>> {
   if (readMatchCodes(metadata).length > 0) return metadata;
+
+  const trigger = readTrigger(metadata);
+  if (trigger && DO_NOT_INFER_MATCH_TRIGGERS.has(trigger)) {
+    return metadata;
+  }
 
   const { data: poolRow, error: poolErr } = await supabase
     .from("pools")

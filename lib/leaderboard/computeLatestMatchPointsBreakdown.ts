@@ -9,6 +9,14 @@ import {
   cappedKnockoutAwardKind,
   participantMaximumPredictedDepthForTeam,
 } from "@/lib/scoring/knockoutOncePerTeamDepth";
+import {
+  attributeTournamentBonusResidual,
+  buildTournamentBonusAttributions,
+  isTournamentBonusKey,
+  type ScoringDeltaAttribution,
+  type TournamentBonusKey,
+  TOURNAMENT_BONUS_KEYS,
+} from "./scoringDeltaAttribution";
 
 export type TournamentMatchForPointsAttribution = {
   matchCode: string;
@@ -26,6 +34,7 @@ export type ParticipantPredictionForPointsAttribution = {
   predictionKind: string;
   teamId: string | null;
   slotKey: string | null;
+  bonusKey?: string | null;
 };
 
 export type LeaderboardLatestPointsBreakdown = {
@@ -45,8 +54,14 @@ export type LeaderboardLatestPointsBreakdown = {
    * Typically −8 when an incorrect Spain finalist increment is removed.
    */
   m101KnockoutDepthTransitionDelta: number | null;
+  /** Tournament bonus deltas attributed from the residual (by bonus key). */
+  tournamentBonusDeltaByKey: Partial<Record<TournamentBonusKey, number>>;
+  /** Sum of tournamentBonusDeltaByKey. */
+  tournamentBonusDelta: number | null;
   /** Residual non-match scoring when source is unknown. */
   otherScoringDelta: number | null;
+  /** Structured attributions for shared presentation helpers. */
+  attributions: ScoringDeltaAttribution[];
   /** Known correction kinds included in this breakdown (for diagnostics). */
   knownCorrectionKinds: readonly ScoringCorrectionKind[];
   /** Match points plus any named correction differ from the total standings delta. */
@@ -211,6 +226,33 @@ export function computeThirdPlaceQualifierPointsFromPredictions(input: {
 }
 
 /**
+ * Current earned tournament-bonus points by key (pick vs published winners).
+ * Used to attribute standings residuals — not a historical ledger diff.
+ */
+export function computeTournamentBonusPointsFromPredictions(input: {
+  participantId: string;
+  predictions: readonly ParticipantPredictionForPointsAttribution[];
+  publishedWinnerTeamIdsByBonusKey: ReadonlyMap<string, ReadonlySet<string>>;
+  pointsByBonusKey: ReadonlyMap<string, number>;
+}): Map<TournamentBonusKey, number> {
+  const earned = new Map<TournamentBonusKey, number>();
+  for (const pred of predictionsForParticipant(
+    input.predictions,
+    input.participantId,
+  )) {
+    if (pred.predictionKind !== "bonus_pick" || !pred.teamId) continue;
+    const key = (pred.bonusKey ?? pred.slotKey ?? "").trim();
+    if (!isTournamentBonusKey(key)) continue;
+    const winners = input.publishedWinnerTeamIdsByBonusKey.get(key);
+    if (!winners || !winners.has(pred.teamId)) continue;
+    const points = input.pointsByBonusKey.get(key) ?? 0;
+    if (points === 0) continue;
+    earned.set(key, (earned.get(key) ?? 0) + points);
+  }
+  return earned;
+}
+
+/**
  * Attribute named scoring corrections from score-impact metadata.
  * Knockout depth-cap / M101 cutover corrections may be negative (points removed).
  * Third-place corrections remain positive-only and never claim a depth-cap residual.
@@ -223,10 +265,13 @@ function attributeScoringCorrections(input: {
   thirdPlaceCorrectionInEvent: boolean;
   knockoutDepthCapCorrectionInEvent: boolean;
   m101KnockoutDepthTransitionInEvent: boolean;
+  earnedTournamentBonusByKey: ReadonlyMap<TournamentBonusKey, number>;
 }): {
   thirdPlaceQualifierDelta: number | null;
   knockoutPredictionDepthCapDelta: number | null;
   m101KnockoutDepthTransitionDelta: number | null;
+  tournamentBonusDeltaByKey: Partial<Record<TournamentBonusKey, number>>;
+  tournamentBonusDelta: number | null;
   otherScoringDelta: number | null;
   knownCorrectionKinds: ScoringCorrectionKind[];
 } {
@@ -240,6 +285,8 @@ function attributeScoringCorrections(input: {
       thirdPlaceQualifierDelta: null,
       knockoutPredictionDepthCapDelta: null,
       m101KnockoutDepthTransitionDelta: delta,
+      tournamentBonusDeltaByKey: {},
+      tournamentBonusDelta: null,
       otherScoringDelta: null,
       knownCorrectionKinds,
     };
@@ -253,24 +300,30 @@ function attributeScoringCorrections(input: {
       thirdPlaceQualifierDelta: null,
       knockoutPredictionDepthCapDelta: depthCapDelta,
       m101KnockoutDepthTransitionDelta: null,
+      tournamentBonusDeltaByKey: {},
+      tournamentBonusDelta: null,
       otherScoringDelta: null,
       knownCorrectionKinds,
     };
   }
 
-  if (input.residualAfterMatch <= 0) {
+  if (input.residualAfterMatch === 0) {
     return {
       thirdPlaceQualifierDelta: null,
       knockoutPredictionDepthCapDelta: null,
       m101KnockoutDepthTransitionDelta: null,
+      tournamentBonusDeltaByKey: {},
+      tournamentBonusDelta: null,
       otherScoringDelta: null,
       knownCorrectionKinds: [],
     };
   }
 
   let thirdPlaceQualifierDelta: number | null = null;
+  let residual = input.residualAfterMatch;
 
   if (
+    residual > 0 &&
     input.thirdPlaceCorrectionInEvent &&
     input.thirdPlaceSettled &&
     input.thirdPlacePointsPerPick > 0 &&
@@ -278,7 +331,7 @@ function attributeScoringCorrections(input: {
   ) {
     const perPick = input.thirdPlacePointsPerPick;
     const candidate = input.totalThirdPlacePointsFromPredictions;
-    const unexplained = input.residualAfterMatch;
+    const unexplained = residual;
 
     if (unexplained <= candidate && unexplained % perPick === 0) {
       thirdPlaceQualifierDelta = unexplained;
@@ -289,9 +342,21 @@ function attributeScoringCorrections(input: {
 
   if (thirdPlaceQualifierDelta != null && thirdPlaceQualifierDelta > 0) {
     knownCorrectionKinds.push("third_place_qualifier");
+    residual -= thirdPlaceQualifierDelta;
   }
 
-  const residual = input.residualAfterMatch - (thirdPlaceQualifierDelta ?? 0);
+  const bonusAttr = attributeTournamentBonusResidual({
+    residual,
+    earnedByKey: input.earnedTournamentBonusByKey,
+  });
+  residual = bonusAttr.remaining;
+
+  const tournamentBonusDelta =
+    bonusAttr.attributedTotal !== 0 ? bonusAttr.attributedTotal : null;
+
+  // Unexplained residual (positive or negative) becomes a safe generic attribution.
+  const otherScoringDelta = residual !== 0 ? residual : null;
+
   return {
     thirdPlaceQualifierDelta:
       thirdPlaceQualifierDelta != null && thirdPlaceQualifierDelta > 0
@@ -299,9 +364,80 @@ function attributeScoringCorrections(input: {
         : null,
     knockoutPredictionDepthCapDelta: null,
     m101KnockoutDepthTransitionDelta: null,
-    otherScoringDelta: residual > 0 ? residual : null,
+    tournamentBonusDeltaByKey: bonusAttr.attributedByKey,
+    tournamentBonusDelta,
+    otherScoringDelta,
     knownCorrectionKinds,
   };
+}
+
+function buildAttributionsForBreakdown(input: {
+  latestMatchPointsDelta: number | null;
+  thirdPlaceQualifierDelta: number | null;
+  knockoutPredictionDepthCapDelta: number | null;
+  m101KnockoutDepthTransitionDelta: number | null;
+  tournamentBonusDeltaByKey: Partial<Record<TournamentBonusKey, number>>;
+  otherScoringDelta: number | null;
+  knownCorrectionKinds: readonly ScoringCorrectionKind[];
+}): ScoringDeltaAttribution[] {
+  const attributions: ScoringDeltaAttribution[] = [];
+
+  if (
+    input.latestMatchPointsDelta != null &&
+    input.latestMatchPointsDelta !== 0
+  ) {
+    attributions.push({
+      category: "progression",
+      points: input.latestMatchPointsDelta,
+      label: "Match progression",
+    });
+  }
+
+  if (
+    input.m101KnockoutDepthTransitionDelta != null &&
+    input.m101KnockoutDepthTransitionDelta !== 0
+  ) {
+    attributions.push({
+      category: "correction",
+      points: input.m101KnockoutDepthTransitionDelta,
+      label: "M101 scoring adjustment",
+    });
+  } else if (
+    input.knockoutPredictionDepthCapDelta != null &&
+    input.knockoutPredictionDepthCapDelta !== 0
+  ) {
+    attributions.push({
+      category: "correction",
+      points: input.knockoutPredictionDepthCapDelta,
+      label: "Knockout scoring correction",
+    });
+  }
+
+  if (
+    input.thirdPlaceQualifierDelta != null &&
+    input.thirdPlaceQualifierDelta !== 0
+  ) {
+    attributions.push({
+      category: "third_place",
+      points: input.thirdPlaceQualifierDelta,
+      label: "Best third-place scoring",
+    });
+  }
+
+  attributions.push(
+    ...buildTournamentBonusAttributions(input.tournamentBonusDeltaByKey),
+  );
+
+  if (input.otherScoringDelta != null && input.otherScoringDelta !== 0) {
+    attributions.push({
+      category: "unknown",
+      points: input.otherScoringDelta,
+      label: "Scoring adjustment",
+    });
+  }
+
+  void input.knownCorrectionKinds;
+  return attributions;
 }
 
 export function buildLatestPointsBreakdownForParticipant(input: {
@@ -315,6 +451,9 @@ export function buildLatestPointsBreakdownForParticipant(input: {
   thirdPlaceQualifiersSettled?: boolean;
   /** When true, this event newly applied third-place scoring (from score-impact metadata). */
   thirdPlaceCorrectionInEvent?: boolean;
+  publishedWinnerTeamIdsByBonusKey?: ReadonlyMap<string, ReadonlySet<string>>;
+  /** Points awarded per tournament bonus key (most_goals → 25, etc.). */
+  pointsByBonusKey?: ReadonlyMap<string, number>;
 }): LeaderboardLatestPointsBreakdown | null {
   if (!input.momentum || !input.event?.hasValidSnapshot) return null;
 
@@ -344,6 +483,25 @@ export function buildLatestPointsBreakdownForParticipant(input: {
       pointsPerPick: thirdPlacePointsPerPick,
     });
 
+  const pointsByBonusKey =
+    input.pointsByBonusKey ??
+    new Map(
+      TOURNAMENT_BONUS_KEYS.map((key) => [
+        key,
+        input.rulesByKind.get(`bonus_pick:${key}`) ??
+          input.rulesByKind.get(key) ??
+          0,
+      ]),
+    );
+
+  const earnedTournamentBonusByKey = computeTournamentBonusPointsFromPredictions({
+    participantId: input.participantId,
+    predictions: input.predictions,
+    publishedWinnerTeamIdsByBonusKey:
+      input.publishedWinnerTeamIdsByBonusKey ?? new Map(),
+    pointsByBonusKey,
+  });
+
   const thirdPlaceCorrectionInEvent =
     input.thirdPlaceCorrectionInEvent === true ||
     (input.event.scoringCorrectionKinds?.includes("third_place_qualifier") ??
@@ -365,6 +523,17 @@ export function buildLatestPointsBreakdownForParticipant(input: {
     thirdPlaceCorrectionInEvent,
     knockoutDepthCapCorrectionInEvent,
     m101KnockoutDepthTransitionInEvent,
+    earnedTournamentBonusByKey,
+  });
+
+  const attributions = buildAttributionsForBreakdown({
+    latestMatchPointsDelta,
+    thirdPlaceQualifierDelta: corrections.thirdPlaceQualifierDelta,
+    knockoutPredictionDepthCapDelta: corrections.knockoutPredictionDepthCapDelta,
+    m101KnockoutDepthTransitionDelta: corrections.m101KnockoutDepthTransitionDelta,
+    tournamentBonusDeltaByKey: corrections.tournamentBonusDeltaByKey,
+    otherScoringDelta: corrections.otherScoringDelta,
+    knownCorrectionKinds: corrections.knownCorrectionKinds,
   });
 
   const isMixedUpdate =
@@ -373,6 +542,7 @@ export function buildLatestPointsBreakdownForParticipant(input: {
     corrections.thirdPlaceQualifierDelta != null ||
     corrections.knockoutPredictionDepthCapDelta != null ||
     corrections.m101KnockoutDepthTransitionDelta != null ||
+    corrections.tournamentBonusDelta != null ||
     corrections.otherScoringDelta != null;
 
   return {
@@ -382,7 +552,10 @@ export function buildLatestPointsBreakdownForParticipant(input: {
     thirdPlaceQualifierDelta: corrections.thirdPlaceQualifierDelta,
     knockoutPredictionDepthCapDelta: corrections.knockoutPredictionDepthCapDelta,
     m101KnockoutDepthTransitionDelta: corrections.m101KnockoutDepthTransitionDelta,
+    tournamentBonusDeltaByKey: corrections.tournamentBonusDeltaByKey,
+    tournamentBonusDelta: corrections.tournamentBonusDelta,
     otherScoringDelta: corrections.otherScoringDelta,
+    attributions,
     knownCorrectionKinds: corrections.knownCorrectionKinds,
     isMixedUpdate,
   };
@@ -398,6 +571,8 @@ export function buildLatestPointsBreakdownByParticipantId(input: {
   officialThirdPlaceAdvancerTeamIds?: ReadonlySet<string>;
   thirdPlaceQualifiersSettled?: boolean;
   thirdPlaceCorrectionInEvent?: boolean;
+  publishedWinnerTeamIdsByBonusKey?: ReadonlyMap<string, ReadonlySet<string>>;
+  pointsByBonusKey?: ReadonlyMap<string, number>;
 }): Map<string, LeaderboardLatestPointsBreakdown> {
   const map = new Map<string, LeaderboardLatestPointsBreakdown>();
   if (!input.event?.hasValidSnapshot) return map;
@@ -413,6 +588,8 @@ export function buildLatestPointsBreakdownByParticipantId(input: {
       officialThirdPlaceAdvancerTeamIds: input.officialThirdPlaceAdvancerTeamIds,
       thirdPlaceQualifiersSettled: input.thirdPlaceQualifiersSettled,
       thirdPlaceCorrectionInEvent: input.thirdPlaceCorrectionInEvent,
+      publishedWinnerTeamIdsByBonusKey: input.publishedWinnerTeamIdsByBonusKey,
+      pointsByBonusKey: input.pointsByBonusKey,
     });
     if (breakdown) map.set(participantId, breakdown);
   }

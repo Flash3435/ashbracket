@@ -63,6 +63,8 @@ function readMatchCodesFromMetadata(metadata: Record<string, unknown>): string[]
 const SCORING_REFRESH_TRIGGERS = new Set([
   "admin_manual_recompute",
   "admin_recompute_all_pools",
+  /** Bonus publish / result edits recompute ledgers without match attribution. */
+  "admin_result_edit",
 ]);
 
 function isScoringRefreshTrigger(trigger: string | null): boolean {

@@ -66,7 +66,7 @@ export function formatRecentPointsDelta(
 
   let suffix = "";
   if (options?.refreshSuffix || isMixed) {
-    suffix = " refresh";
+    suffix = " since last update";
   } else if (options?.latestSuffix && isMatchAttributed && matchEqualsTotal) {
     suffix = " latest";
   } else if (options?.latestSuffix && !isMatchAttributed) {

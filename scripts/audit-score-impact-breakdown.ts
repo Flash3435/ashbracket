@@ -80,7 +80,7 @@ async function main() {
     `Event: ${loaded.event?.eventKind ?? "—"}  matches: ${loaded.event?.matchCodes.join(", ") ?? "—"}`,
   );
   console.log(
-    "\ndisplay_name\tmatch_pts\tthird_place_pts\tother_pts\ttotal_delta\told_total\tnew_total\tpts_suffix\tlatest_line\tcorrection_line",
+    "\ndisplay_name\tmatch_pts\tbonus_pts\tother_pts\ttotal_delta\told_total\tnew_total\tpts_suffix\tlatest_line\tcomponents",
   );
 
   for (const row of [...currentRows].sort((a, b) => a.rank - b.rank)) {
@@ -105,14 +105,14 @@ async function main() {
       [
         row.displayName,
         breakdown?.latestMatchPointsDelta ?? "—",
-        breakdown?.thirdPlaceQualifierDelta ?? "—",
+        breakdown?.tournamentBonusDelta ?? "—",
         breakdown?.otherScoringDelta ?? "—",
         momentum?.recentPointsGained ?? "—",
         momentum?.previousPoints ?? "—",
         momentum?.currentPoints ?? row.totalPoints,
         suffix ?? "—",
         summary.latestLine ?? "—",
-        summary.correctionLine ?? "—",
+        summary.componentLines.join(" | ") || "—",
       ].join("\t"),
     );
   }

@@ -84,7 +84,7 @@ function LatestImpactLines({
   compact?: boolean;
 }) {
   const showLatest = momentum != null && latestScoreEvent?.hasValidSnapshot === true;
-  const { latestLine, impactLine, correctionLine, otherScoringLine } =
+  const { latestLine, impactLine, correctionLine, otherScoringLine, componentLines } =
     formatLeaderboardLatestImpactSummary({
       totalPoints,
       momentum,
@@ -104,6 +104,15 @@ function LatestImpactLines({
       {showLatest && latestLine ? (
         <p className="text-xs leading-relaxed text-ash-text/90">{latestLine}</p>
       ) : null}
+      {showLatest &&
+        componentLines.map((line) => (
+          <p
+            key={line}
+            className="text-xs leading-relaxed text-ash-muted"
+          >
+            {line}
+          </p>
+        ))}
       {showLatest && correctionLine && latestLine !== correctionLine ? (
         <p className="text-xs leading-relaxed text-ash-muted">{correctionLine}</p>
       ) : null}

@@ -284,11 +284,14 @@ const englandEvent = parseLatestScoreEventContext(
     event: mixedEvent,
     pointsBreakdown: breakdown,
   });
-  assert.equal(summary.latestLine, "Latest matches: +4");
-  assert.equal(
-    summary.correctionLine,
-    `${THIRD_PLACE_SCORING_CORRECTION_LABEL}: +4`,
+  assert.equal(summary.latestLine, "Latest scoring: +8");
+  assert.ok(
+    summary.componentLines.some((line) => /Match progression \+4/.test(line)),
   );
+  assert.ok(
+    summary.componentLines.some((line) => /Best third-place scoring \+4/.test(line)),
+  );
+  assert.equal(summary.correctionLine, null);
 }
 
 // 4. Later match must NOT relabel residual as third-place without scoring_corrections
@@ -533,11 +536,15 @@ const englandEvent = parseLatestScoreEventContext(
   assert.equal(breakdown?.thirdPlaceQualifierDelta, null);
   assert.equal(breakdown?.otherScoringDelta, 5);
   assert.equal(
+    formatLatestMatchScoringLine(momentum("unknown", 5), singleMatchEvent, null, breakdown),
+    "Latest: Scoring adjustment +5",
+  );
+  assert.equal(
     formatOtherScoringAdjustmentsLine(breakdown, {
       participantId: "unknown",
       displayName: "Unknown",
     }),
-    "Other scoring adjustments: +5",
+    null,
   );
 }
 

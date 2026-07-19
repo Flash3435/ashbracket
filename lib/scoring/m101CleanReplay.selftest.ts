@@ -209,14 +209,35 @@ assert.equal(cleanM101Event.matchupShortLabel, "Spain def. France");
   assert.equal(shouldShowCleanM101PointsLine(0), false);
 
   const keeperMom = momentum("joel", 8, 202);
+  const m101Match = {
+    matchCode: "M101",
+    stageCode: "semifinal",
+    groupCode: null,
+    homeTeamId: "team-fra",
+    awayTeamId: spain,
+    winnerTeamId: spain,
+    scoringResultKind: "finalist",
+    scoringSlotKey: "2",
+  };
   const keeperBreakdown = buildLatestPointsBreakdownForParticipant({
     participantId: "joel",
     momentum: keeperMom,
     event: cleanM101Event,
-    predictions: [],
-    matches: [],
-    rulesByKind: new Map(),
+    predictions: [
+      {
+        participantId: "joel",
+        predictionKind: "finalist",
+        teamId: spain,
+        slotKey: "2",
+      },
+    ],
+    matches: [m101Match],
+    rulesByKind: new Map([
+      ["semifinalist", 16],
+      ["finalist", 24],
+    ]),
   });
+  assert.equal(keeperBreakdown?.latestMatchPointsDelta, 8);
   assert.equal(
     formatLatestMatchScoringLine(keeperMom, cleanM101Event, null, keeperBreakdown),
     "Spain def. France: +8",
