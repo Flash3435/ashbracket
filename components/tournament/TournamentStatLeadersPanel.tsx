@@ -40,7 +40,8 @@ function CategoryRow({ category }: { category: TournamentStatCategoryLeader }) {
           ))}
           {category.leaders.length > 1 ? (
             <p className="text-xs text-ash-muted">
-              Tied: {formatStatLeaderNames(category.leaders)}
+              Tied for first — all correct picks earn full points:{" "}
+              {formatStatLeaderNames(category.leaders)}
             </p>
           ) : null}
           {category.pickCount != null ? (
@@ -63,7 +64,7 @@ function CategoryRow({ category }: { category: TournamentStatCategoryLeader }) {
 export function TournamentStatLeadersPanel({ variant, view, className = "" }: Props) {
   const heading = variant === "admin" ? "Tournament stat leaders" : "Bonus watch";
   const subcopy =
-    "Current leaders for goals, yellow cards, and red cards.";
+    "Current leaders for goals, yellow cards, and red cards. Teams tied for first all count as correct bonus results.";
 
   return (
     <section

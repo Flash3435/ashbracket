@@ -101,7 +101,13 @@ export async function publishBonusResultsFromStatsAction(input: {
       new Date().toISOString(),
     );
 
-    const publishedKeys: string[] = [];
+    const publishedKeys = [
+      ...new Set(
+        ctx.preview.rows
+          .filter((r) => r.status === "ready")
+          .map((r) => r.bonusKey),
+      ),
+    ];
     const skippedKeys = ctx.preview.rows
       .filter((r) => r.status !== "ready")
       .map((r) => r.bonusKey);
@@ -110,33 +116,43 @@ export async function publishBonusResultsFromStatsAction(input: {
       return {
         ok: true,
         message:
-          "No bonus categories were ready to publish. Review the preview for ties, missing data, or unchanged results.",
+          "No bonus categories were ready to publish. Review the preview for missing data or unchanged results.",
         publishedKeys: [],
         skippedKeys,
       };
     }
 
-    for (const row of upserts) {
-      const { error } = await supabase.from("results").upsert(
-        {
-          edition_id: row.editionId,
-          tournament_stage_id: row.tournamentStageId,
-          kind: "bonus_pick",
-          team_id: row.teamId,
-          group_code: null,
-          slot_key: row.bonusKey,
-          resolved_at: row.resolvedAt,
-          source: "manual",
-          locked: true,
-        },
-        {
-          onConflict: "edition_id,tournament_stage_id,kind,group_code,slot_key",
-        },
-      );
-      if (error) {
-        return { ok: false, error: error.message };
+    // Replace each ready category wholesale so tied leaders (multiple team rows)
+    // and sole leaders share one idempotent path. Partial unique indexes cannot
+    // be targeted reliably via PostgREST upsert onConflict.
+    for (const bonusKey of publishedKeys) {
+      const { error: delErr } = await supabase
+        .from("results")
+        .delete()
+        .eq("edition_id", ctx.editionId)
+        .eq("tournament_stage_id", ctx.groupStageId)
+        .eq("kind", "bonus_pick")
+        .eq("slot_key", bonusKey);
+      if (delErr) {
+        return { ok: false, error: delErr.message };
       }
-      publishedKeys.push(row.bonusKey);
+    }
+
+    const inserts = upserts.map((row) => ({
+      edition_id: row.editionId,
+      tournament_stage_id: row.tournamentStageId,
+      kind: "bonus_pick" as const,
+      team_id: row.teamId,
+      group_code: null,
+      slot_key: row.bonusKey,
+      resolved_at: row.resolvedAt,
+      source: "manual" as const,
+      locked: true,
+    }));
+
+    const { error: insErr } = await supabase.from("results").insert(inserts);
+    if (insErr) {
+      return { ok: false, error: insErr.message };
     }
 
     const recompute = await recomputePoolsForEdition(
@@ -162,12 +178,12 @@ export async function publishBonusResultsFromStatsAction(input: {
       isSimulation: false,
       affectedPoolCount: impact?.poolCount,
       affectedParticipantCount: impact?.participantCount,
-      detail: `Published ${publishedKeys.join(", ")}; skipped ${skippedKeys.join(", ") || "none"}`,
+      detail: `Published ${publishedKeys.join(", ")} (${upserts.length} result row(s)); skipped ${skippedKeys.join(", ") || "none"}`,
     });
 
     revalidateAfterBonusPublish();
 
-    const message = `Published ${publishedKeys.length} bonus result(s): ${publishedKeys.join(", ")}. Recalculated ${impact?.poolCount ?? 0} pool leaderboard(s).`;
+    const message = `Published ${publishedKeys.length} bonus categor${publishedKeys.length === 1 ? "y" : "ies"} (${upserts.length} winning team row(s)): ${publishedKeys.join(", ")}. Recalculated ${impact?.poolCount ?? 0} pool leaderboard(s).`;
 
     return {
       ok: true,

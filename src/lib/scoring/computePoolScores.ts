@@ -301,6 +301,28 @@ function buildThirdPlaceOfficialByTeamId(
   return m;
 }
 
+/**
+ * Official bonus winners by category (`slot_key` / bonus key).
+ * Ties publish one result row per leading team; picks match any of them.
+ */
+function buildBonusOfficialByBonusKey(
+  results: Result[],
+): Map<string, Map<string, Result>> {
+  const byKey = new Map<string, Map<string, Result>>();
+  for (const r of results) {
+    if (r.kind !== "bonus_pick") continue;
+    const bonusKey = (r.slotKey ?? "").trim();
+    if (!bonusKey || !r.teamId) continue;
+    let byTeam = byKey.get(bonusKey);
+    if (!byTeam) {
+      byTeam = new Map();
+      byKey.set(bonusKey, byTeam);
+    }
+    if (!byTeam.has(r.teamId)) byTeam.set(r.teamId, r);
+  }
+  return byKey;
+}
+
 function scoreGroupAdvancePick(
   pred: Prediction,
   outcomes: Map<string, GroupOutcome>,
@@ -389,6 +411,7 @@ export function computePoolScores(input: PoolScoringInput): ScoringOutcome {
 
   const rulesMap = buildRulesMap(poolId, scoringRules, groupStageScoring);
   const resultByKey = buildResultLookup(results);
+  const bonusOfficialByKey = buildBonusOfficialByBonusKey(results);
 
   const ledgerLines: ComputedLedgerLine[] = [];
   const totals: Record<string, number> = {};
@@ -396,6 +419,8 @@ export function computePoolScores(input: PoolScoringInput): ScoringOutcome {
   const poolPreds = predictions.filter((p) => p.poolId === poolId);
 
   const thirdPlaceOfficialCache = new Map<string, Map<string, Result>>();
+  /** One category award per participant prediction (never double for multi-winner rows). */
+  const awardedBonusPredictionIds = new Set<string>();
 
   for (const pred of poolPreds) {
     if (
@@ -435,6 +460,32 @@ export function computePoolScores(input: PoolScoringInput): ScoringOutcome {
         predictionId: pred.id,
         resultId: res.id,
         note: `Match: third_place_qualifier (set; ${points} pts)`,
+      });
+      totals[pred.participantId] = (totals[pred.participantId] ?? 0) + points;
+      continue;
+    }
+
+    if (pred.predictionKind === "bonus_pick") {
+      const bonusKey = (pred.bonusKey ?? pred.slotKey ?? "").trim();
+      if (!bonusKey || !pred.teamId) continue;
+      if (awardedBonusPredictionIds.has(pred.id)) continue;
+      const winners = bonusOfficialByKey.get(bonusKey);
+      if (!winners || winners.size === 0) continue;
+      const res = winners.get(pred.teamId);
+      if (!res) continue;
+
+      const points = lookupRulePoints(rulesMap, pred);
+      if (points === undefined || points <= 0) continue;
+
+      awardedBonusPredictionIds.add(pred.id);
+      ledgerLines.push({
+        poolId,
+        participantId: pred.participantId,
+        pointsDelta: points,
+        predictionKind: pred.predictionKind,
+        predictionId: pred.id,
+        resultId: res.id,
+        note: `Match: bonus_pick (${bonusKey}) (${points} pts)`,
       });
       totals[pred.participantId] = (totals[pred.participantId] ?? 0) + points;
       continue;

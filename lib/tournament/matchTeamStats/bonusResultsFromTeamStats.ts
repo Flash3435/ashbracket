@@ -15,7 +15,6 @@ export const STAT_DERIVED_BONUS_KEYS: readonly TournamentStatCategoryKey[] = [
 export type BonusResultPreviewStatus =
   | "ready"
   | "no_data"
-  | "tie"
   | "unchanged"
   | "unsupported";
 
@@ -32,8 +31,12 @@ export type BonusResultPreviewRow = {
   label: string;
   leaders: TournamentStatLeaderTeam[];
   total: number | null;
+  /** @deprecated Prefer existingResultTeams — kept for single-winner callers. */
   existingResultTeam: TournamentStatLeaderTeam | null;
+  existingResultTeams: TournamentStatLeaderTeam[];
+  /** @deprecated Prefer proposedTeams — sole leader convenience. */
   proposedTeam: TournamentStatLeaderTeam | null;
+  proposedTeams: TournamentStatLeaderTeam[];
   status: BonusResultPreviewStatus;
   warning: string | null;
 };
@@ -61,9 +64,27 @@ function categoryFromView(
   return view.redCards;
 }
 
+function teamIdsKey(teams: readonly { teamId: string }[]): string {
+  return [...teams.map((t) => t.teamId)].sort().join("\0");
+}
+
+function formatLeaderNames(teams: readonly TournamentStatLeaderTeam[]): string {
+  const names = teams.map((t) => t.teamName);
+  if (names.length === 0) return "";
+  if (names.length === 1) return names[0]!;
+  if (names.length === 2) return `${names[0]} and ${names[1]}`;
+  return `${names.slice(0, -1).join(", ")}, and ${names[names.length - 1]}`;
+}
+
+function categoryTieLabel(bonusKey: TournamentStatCategoryKey): string {
+  if (bonusKey === "most_goals") return "most goals";
+  if (bonusKey === "most_yellow_cards") return "most yellow cards";
+  return "most red cards";
+}
+
 export function buildBonusResultsFromTeamStatsPreview(input: {
   leadersView: TournamentStatLeadersView;
-  existingByBonusKey: ReadonlyMap<string, ExistingBonusResultRow>;
+  existingByBonusKey: ReadonlyMap<string, readonly ExistingBonusResultRow[]>;
   enabledBonusKeys: ReadonlySet<string>;
   teamInfoById: ReadonlyMap<string, TeamDisplayInfo>;
 }): BonusResultsFromTeamStatsPreview {
@@ -82,24 +103,25 @@ export function buildBonusResultsFromTeamStatsPreview(input: {
         bonusKey,
         label,
         leaders,
-        total: leaders.length === 1 ? leaders[0]!.total : null,
+        total: leaders[0]?.total ?? null,
         existingResultTeam: null,
+        existingResultTeams: [],
         proposedTeam: null,
+        proposedTeams: [],
         status: "unsupported",
         warning: "No pool on this edition scores this bonus category.",
       });
       continue;
     }
 
-    const existing = input.existingByBonusKey.get(bonusKey);
-    const existingResultTeam = existing
-      ? {
-          teamId: existing.teamId,
-          teamName: existing.teamName,
-          countryCode: existing.countryCode,
-          total: 0,
-        }
-      : null;
+    const existingRows = [...(input.existingByBonusKey.get(bonusKey) ?? [])];
+    const existingResultTeams = existingRows.map((existing) => ({
+      teamId: existing.teamId,
+      teamName: existing.teamName,
+      countryCode: existing.countryCode,
+      total: 0,
+    }));
+    const existingResultTeam = existingResultTeams[0] ?? null;
 
     if (leaders.length === 0) {
       rows.push({
@@ -108,48 +130,57 @@ export function buildBonusResultsFromTeamStatsPreview(input: {
         leaders: [],
         total: null,
         existingResultTeam,
+        existingResultTeams,
         proposedTeam: null,
+        proposedTeams: [],
         status: "no_data",
         warning: category.emptyMessage ?? "No stat data entered yet.",
       });
       continue;
     }
 
-    if (leaders.length > 1) {
-      const tiedTotal = leaders[0]!.total;
-      rows.push({
-        bonusKey,
-        label,
-        leaders,
-        total: tiedTotal,
-        existingResultTeam,
-        proposedTeam: null,
-        status: "tie",
-        warning:
-          "Tied for first — needs manual decision. Resolve the tie before publishing.",
-      });
-      continue;
-    }
+    const proposedTeams = leaders;
+    const proposedTeam = proposedTeams[0] ?? null;
+    const total = leaders[0]!.total;
+    const sameSet =
+      existingResultTeams.length === proposedTeams.length &&
+      teamIdsKey(existingResultTeams) === teamIdsKey(proposedTeams);
 
-    const proposedTeam = leaders[0]!;
-    if (existingResultTeam && existingResultTeam.teamId === proposedTeam.teamId) {
+    if (sameSet) {
       rows.push({
         bonusKey,
         label,
         leaders,
-        total: proposedTeam.total,
+        total,
         existingResultTeam,
+        existingResultTeams,
         proposedTeam,
+        proposedTeams,
         status: "unchanged",
-        warning: null,
+        warning:
+          proposedTeams.length > 1
+            ? `${formatLeaderNames(proposedTeams)} tied for ${categoryTieLabel(bonusKey)} — already published.`
+            : null,
       });
       continue;
     }
 
     let warning: string | null = null;
-    if (existingResultTeam) {
-      warning = `Will replace published result ${existingResultTeam.teamName} with ${proposedTeam.teamName}.`;
-      if (existing?.locked && existing.source === "manual") {
+    if (proposedTeams.length > 1) {
+      warning = `${formatLeaderNames(proposedTeams)} tied for ${categoryTieLabel(bonusKey)} — all will be published as winning results.`;
+    }
+    if (existingResultTeams.length > 0) {
+      const existingLabel = formatLeaderNames(existingResultTeams);
+      const proposedLabel = formatLeaderNames(proposedTeams);
+      const replace =
+        existingResultTeams.length === 1 && proposedTeams.length === 1
+          ? `Will replace published result ${existingLabel} with ${proposedLabel}.`
+          : `Will replace published result(s) ${existingLabel} with ${proposedLabel}.`;
+      warning = warning ? `${warning} ${replace}` : replace;
+      const lockedManual = existingRows.some(
+        (e) => e.locked && e.source === "manual",
+      );
+      if (lockedManual) {
         warning += " Existing result is locked manual.";
       }
     }
@@ -158,9 +189,11 @@ export function buildBonusResultsFromTeamStatsPreview(input: {
       bonusKey,
       label,
       leaders,
-      total: proposedTeam.total,
+      total,
       existingResultTeam,
+      existingResultTeams,
       proposedTeam,
+      proposedTeams,
       status: "ready",
       warning,
     });
@@ -178,15 +211,36 @@ export function upsertRowsFromBonusPreview(
   groupStageId: string,
   resolvedAt: string,
 ): BonusResultUpsertRow[] {
-  return preview.rows
-    .filter((row) => row.status === "ready" && row.proposedTeam)
-    .map((row) => ({
-      editionId,
-      tournamentStageId: groupStageId,
-      bonusKey: row.bonusKey,
-      teamId: row.proposedTeam!.teamId,
-      resolvedAt,
-    }));
+  const out: BonusResultUpsertRow[] = [];
+  for (const row of preview.rows) {
+    if (row.status !== "ready") continue;
+    for (const team of row.proposedTeams) {
+      out.push({
+        editionId,
+        tournamentStageId: groupStageId,
+        bonusKey: row.bonusKey,
+        teamId: team.teamId,
+        resolvedAt,
+      });
+    }
+  }
+  return out;
+}
+
+/** Team IDs that should be removed for ready categories (stale published winners). */
+export function staleBonusResultTeamIdsFromPreview(
+  preview: BonusResultsFromTeamStatsPreview,
+): Map<TournamentStatCategoryKey, string[]> {
+  const out = new Map<TournamentStatCategoryKey, string[]>();
+  for (const row of preview.rows) {
+    if (row.status !== "ready") continue;
+    const proposed = new Set(row.proposedTeams.map((t) => t.teamId));
+    const stale = row.existingResultTeams
+      .map((t) => t.teamId)
+      .filter((id) => !proposed.has(id));
+    if (stale.length > 0) out.set(row.bonusKey, stale);
+  }
+  return out;
 }
 
 export function mapExistingBonusResultRow(
@@ -222,11 +276,17 @@ export function existingBonusResultsMap(
     locked?: boolean | null;
   }>,
   teamInfoById: ReadonlyMap<string, TeamDisplayInfo>,
-): Map<string, ExistingBonusResultRow> {
-  const out = new Map<string, ExistingBonusResultRow>();
+): Map<string, ExistingBonusResultRow[]> {
+  const out = new Map<string, ExistingBonusResultRow[]>();
   for (const row of rows) {
     const mapped = mapExistingBonusResultRow(row, teamInfoById);
-    if (mapped) out.set(mapped.bonusKey, mapped.existing);
+    if (!mapped) continue;
+    const list = out.get(mapped.bonusKey) ?? [];
+    list.push(mapped.existing);
+    out.set(mapped.bonusKey, list);
+  }
+  for (const list of out.values()) {
+    list.sort((a, b) => a.teamId.localeCompare(b.teamId));
   }
   return out;
 }

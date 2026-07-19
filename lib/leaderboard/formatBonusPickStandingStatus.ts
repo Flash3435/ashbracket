@@ -37,13 +37,38 @@ function formatBehindLeadersLine(
   return `${gapLabel} behind ${leaders.length} tied leaders (${totalLabel})`;
 }
 
+function formatLeaderNames(
+  leaders: BonusCategoryStanding["leaders"],
+): string {
+  const names = leaders.map((l) => l.teamName);
+  if (names.length === 0) return "";
+  if (names.length === 1) return names[0]!;
+  if (names.length === 2) return `${names[0]} and ${names[1]}`;
+  return `${names.slice(0, -1).join(", ")}, and ${names[names.length - 1]}`;
+}
+
+function categoryPhrase(key: TournamentBonusCategoryKey | null | undefined): string {
+  if (key === "most_goals") return "most goals";
+  if (key === "most_yellow_cards") return "most yellow cards";
+  if (key === "most_red_cards") return "most red cards";
+  return "this category";
+}
+
 /**
  * Concise live comparison of a participant bonus pick vs current tournament leaders.
  * Returns null when no status line should render (missing pick).
+ *
+ * Tied first-place teams are all treated as correct outcomes. When the category is
+ * settled and the pick matches a published winner, show awarded language.
  */
 export function formatBonusPickStandingStatus(input: {
   participantTeamId: string | null | undefined;
   standing: BonusCategoryStanding | null | undefined;
+  /** Published winning team ids for this category (empty / omitted = not settled). */
+  publishedWinningTeamIds?: readonly string[] | null;
+  /** Pool points for this bonus category when awarded. */
+  awardedPoints?: number | null;
+  categoryKey?: TournamentBonusCategoryKey | null;
 }): string | null {
   const teamId = input.participantTeamId?.trim() || null;
   if (!teamId) return null;
@@ -60,12 +85,38 @@ export function formatBonusPickStandingStatus(input: {
   const leaderTotal = leaders[0]!.total;
   const participantTotal = totalsByTeamId[teamId] ?? 0;
   const isAmongLeaders = leaders.some((leader) => leader.teamId === teamId);
+  const publishedIds = input.publishedWinningTeamIds ?? [];
+  const isSettled = publishedIds.length > 0;
+  const isPublishedWinner = publishedIds.includes(teamId);
+  const points =
+    input.awardedPoints != null && Number.isFinite(input.awardedPoints)
+      ? input.awardedPoints
+      : null;
 
   if (isAmongLeaders) {
+    if (isSettled && isPublishedWinner) {
+      if (leaders.length > 1) {
+        const tieLine = `${formatLeaderNames(leaders)} tied for ${categoryPhrase(input.categoryKey)}`;
+        if (points != null && points > 0) {
+          return `${tieLine} — correct pick. Awarded +${formatTotal(points)}`;
+        }
+        return `${tieLine} — correct pick`;
+      }
+      if (points != null && points > 0) {
+        return `Correct pick — awarded +${formatTotal(points)}`;
+      }
+      return "Correct pick";
+    }
     if (leaders.length === 1) {
       return `Currently leading with ${formatTotal(leaderTotal)}`;
     }
-    return `Tied for the lead with ${formatTotal(leaderTotal)}`;
+    return `Tied for the tournament lead — correct pick`;
+  }
+
+  if (isSettled && !isPublishedWinner) {
+    if (leaders.length > 1) {
+      return `${formatLeaderNames(leaders)} tied for ${categoryPhrase(input.categoryKey)}`;
+    }
   }
 
   const gap = leaderTotal - participantTotal;
@@ -96,6 +147,9 @@ export function buildTournamentPickStandingLines(input: {
       statusLine: formatBonusPickStandingStatus({
         participantTeamId: pick.teamId,
         standing,
+        publishedWinningTeamIds: standing?.publishedWinningTeamIds ?? [],
+        awardedPoints: standing?.awardedPoints ?? null,
+        categoryKey: pick.key,
       }),
     };
   });

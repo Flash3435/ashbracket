@@ -22,8 +22,6 @@ function statusLabel(status: BonusResultPreviewRow["status"]): string {
       return "Ready to publish";
     case "unchanged":
       return "Already published";
-    case "tie":
-      return "Needs manual decision";
     case "no_data":
       return "No data";
     case "unsupported":
@@ -39,8 +37,6 @@ function statusClass(status: BonusResultPreviewRow["status"]): string {
       return "text-emerald-200";
     case "unchanged":
       return "text-ash-muted";
-    case "tie":
-      return "text-amber-200";
     case "no_data":
       return "text-ash-muted";
     case "unsupported":
@@ -74,6 +70,30 @@ function LeaderCell({
   );
 }
 
+function TeamListCell({
+  teams,
+  total,
+  emptyLabel = "—",
+}: {
+  teams: BonusResultPreviewRow["proposedTeams"];
+  total: number | null;
+  emptyLabel?: string;
+}) {
+  if (teams.length === 0) {
+    return <span className="text-ash-muted">{emptyLabel}</span>;
+  }
+  return (
+    <div className="space-y-1">
+      {teams.map((team) => (
+        <LeaderCell key={team.teamId} team={team} total={total} />
+      ))}
+      {teams.length > 1 ? (
+        <p className="text-xs text-ash-muted">Tied for first — all awarded</p>
+      ) : null}
+    </div>
+  );
+}
+
 function PreviewTable({ rows }: { rows: BonusResultPreviewRow[] }) {
   return (
     <div className="overflow-x-auto rounded-lg border border-ash-border/70">
@@ -81,9 +101,9 @@ function PreviewTable({ rows }: { rows: BonusResultPreviewRow[] }) {
         <thead className="border-b border-ash-border bg-ash-body/40 text-xs uppercase tracking-wide text-ash-muted">
           <tr>
             <th className="px-3 py-2 font-semibold">Category</th>
-            <th className="px-3 py-2 font-semibold">Current leader</th>
-            <th className="px-3 py-2 font-semibold">Published result</th>
-            <th className="px-3 py-2 font-semibold">Proposed result</th>
+            <th className="px-3 py-2 font-semibold">Current leader(s)</th>
+            <th className="px-3 py-2 font-semibold">Published result(s)</th>
+            <th className="px-3 py-2 font-semibold">Proposed result(s)</th>
             <th className="px-3 py-2 font-semibold">Status</th>
           </tr>
         </thead>
@@ -92,25 +112,16 @@ function PreviewTable({ rows }: { rows: BonusResultPreviewRow[] }) {
             <tr key={row.bonusKey} className="align-top">
               <td className="px-3 py-3 text-ash-text">{row.label}</td>
               <td className="px-3 py-3">
-                {row.leaders.length > 1 ? (
-                  <div className="space-y-1">
-                    {row.leaders.map((l) => (
-                      <LeaderCell key={l.teamId} team={l} total={l.total} />
-                    ))}
-                    <p className="text-xs text-amber-200">Tied</p>
-                  </div>
-                ) : (
-                  <LeaderCell
-                    team={row.leaders[0] ?? null}
-                    total={row.total}
-                  />
-                )}
+                <TeamListCell teams={row.leaders} total={row.total} />
               </td>
               <td className="px-3 py-3">
-                <LeaderCell team={row.existingResultTeam} total={null} />
+                <TeamListCell
+                  teams={row.existingResultTeams}
+                  total={null}
+                />
               </td>
               <td className="px-3 py-3">
-                <LeaderCell team={row.proposedTeam} total={row.total} />
+                <TeamListCell teams={row.proposedTeams} total={row.total} />
               </td>
               <td className="px-3 py-3">
                 <p className={`font-medium ${statusClass(row.status)}`}>
@@ -184,7 +195,9 @@ export function PublishBonusResultsPanel({ isProduction, impact }: Props) {
         </h2>
         <p className="mt-2 text-sm leading-relaxed text-ash-muted">
           Use current stat leaders to publish bonus outcomes for most goals,
-          yellow cards, and red cards. Preview before applying.
+          yellow cards, and red cards. Teams tied for first are all published as
+          winning results — each correct pick earns full category points.
+          Preview before applying.
         </p>
       </div>
 
@@ -216,13 +229,13 @@ export function PublishBonusResultsPanel({ isProduction, impact }: Props) {
           pending={publishPending}
           disabled={previewPending}
           variant="live"
-          confirmLabel="I understand this publishes bonus result rows from current stat leaders and recalculates live pool standings."
+          confirmLabel="I understand this publishes bonus result rows from current stat leaders (including ties) and recalculates live pool standings."
           onConfirm={runPublish}
         />
       ) : rows ? (
         <p className="text-sm text-ash-muted">
-          Nothing ready to publish — resolve ties, enter missing stats, or wait
-          until leaders change.
+          Nothing ready to publish — enter missing stats or wait until leaders
+          change.
         </p>
       ) : null}
 

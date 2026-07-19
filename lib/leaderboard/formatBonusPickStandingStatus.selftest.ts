@@ -34,11 +34,15 @@ function standing(input: {
   leaders: Array<{ teamId: string; teamName: string; total: number }>;
   totalsByTeamId: Record<string, number>;
   isAvailable?: boolean;
+  publishedWinningTeamIds?: string[];
+  awardedPoints?: number | null;
 }): BonusCategoryStanding {
   return {
     leaders: input.leaders,
     totalsByTeamId: input.totalsByTeamId,
     isAvailable: input.isAvailable ?? input.leaders.length > 0,
+    publishedWinningTeamIds: input.publishedWinningTeamIds ?? [],
+    awardedPoints: input.awardedPoints ?? null,
   };
 }
 
@@ -58,7 +62,7 @@ assert.equal(
   "Currently leading with 17",
 );
 
-// 2. Tied leader
+// 2. Tied leader (not yet settled) — correct under tie rule
 assert.equal(
   formatBonusPickStandingStatus({
     participantTeamId: "uruguay",
@@ -70,7 +74,27 @@ assert.equal(
       totalsByTeamId: { spain: 2, uruguay: 2, mexico: 1 },
     }),
   }),
-  "Tied for the lead with 2",
+  "Tied for the tournament lead — correct pick",
+);
+
+// 2b. Settled tie — awarded language
+assert.equal(
+  formatBonusPickStandingStatus({
+    participantTeamId: "uruguay",
+    standing: standing({
+      leaders: [
+        { teamId: "spain", teamName: "Spain", total: 2 },
+        { teamId: "uruguay", teamName: "Uruguay", total: 2 },
+      ],
+      totalsByTeamId: { spain: 2, uruguay: 2, mexico: 1 },
+      publishedWinningTeamIds: ["spain", "uruguay"],
+      awardedPoints: 10,
+    }),
+    publishedWinningTeamIds: ["spain", "uruguay"],
+    awardedPoints: 10,
+    categoryKey: "most_red_cards",
+  }),
+  "Spain and Uruguay tied for most red cards — correct pick. Awarded +10",
 );
 
 // 3. Participant one or more behind a sole leader
@@ -216,7 +240,7 @@ assert.equal(
       ["champion", null],
       ["most_goals", "Currently leading with 17"],
       ["most_yellow_cards", "2 behind current leader Mexico (14)"],
-      ["most_red_cards", "Tied for the lead with 2"],
+      ["most_red_cards", "Tied for the tournament lead — correct pick"],
     ],
   );
 

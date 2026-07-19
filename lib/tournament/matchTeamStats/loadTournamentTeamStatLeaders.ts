@@ -151,15 +151,54 @@ export async function loadTournamentTeamStatLeaders(
   }
 
   const editionId = edition.id;
-  const [matchRes, statRes, teamInfoRes] = await Promise.all([
+  const [matchRes, statRes, teamInfoRes, bonusResultsRes] = await Promise.all([
     loadMatchesForTeamStatsAdmin(supabase, editionId),
     loadMatchTeamStatsForAggregation(supabase, editionId),
     loadTeamDisplayInfo(supabase, editionId),
+    supabase
+      .from("results")
+      .select("slot_key, team_id")
+      .eq("edition_id", editionId)
+      .eq("kind", "bonus_pick")
+      .in("slot_key", ["most_goals", "most_yellow_cards", "most_red_cards"]),
   ]);
 
   if ("error" in matchRes) return { ok: false, error: matchRes.error };
   if ("error" in statRes) return { ok: false, error: statRes.error };
   if ("error" in teamInfoRes) return { ok: false, error: teamInfoRes.error };
+  if (bonusResultsRes.error) {
+    return { ok: false, error: bonusResultsRes.error.message };
+  }
+
+  const publishedWinningTeamIdsByKey = new Map<string, string[]>();
+  for (const row of bonusResultsRes.data ?? []) {
+    const key = (row.slot_key as string | null)?.trim();
+    const teamId = (row.team_id as string | null)?.trim();
+    if (!key || !teamId) continue;
+    const list = publishedWinningTeamIdsByKey.get(key) ?? [];
+    if (!list.includes(teamId)) list.push(teamId);
+    publishedWinningTeamIdsByKey.set(key, list);
+  }
+
+  const awardedPointsByKey = new Map<string, number>();
+  const poolId = options?.poolId?.trim();
+  if (poolId) {
+    const { data: rules, error: rulesErr } = await supabase
+      .from("scoring_rules")
+      .select("bonus_key, points")
+      .eq("pool_id", poolId)
+      .eq("prediction_kind", "bonus_pick")
+      .in("bonus_key", ["most_goals", "most_yellow_cards", "most_red_cards"]);
+    if (rulesErr) {
+      console.error("[loadTournamentTeamStatLeaders] bonus points failed", rulesErr);
+    } else {
+      for (const row of rules ?? []) {
+        const key = (row.bonus_key as string | null)?.trim();
+        if (!key) continue;
+        awardedPointsByKey.set(key, Number(row.points));
+      }
+    }
+  }
 
   let view = buildTournamentStatLeadersView({
     matches: matchRes.matches,
@@ -170,9 +209,10 @@ export async function loadTournamentTeamStatLeaders(
     matches: matchRes.matches,
     teamStats: statRes.teamStats,
     teamInfoById: teamInfoRes,
+    publishedWinningTeamIdsByKey,
+    awardedPointsByKey,
   });
 
-  const poolId = options?.poolId?.trim();
   if (poolId) {
     try {
       const pickCounts = await loadPoolBonusPickCounts(supabase, poolId, view);
