@@ -302,7 +302,7 @@ const baseOutlookInput = {
   );
 }
 
-// Viewer outside top 10 included
+// Viewer outside top 10 included with full race status; others still get Details
 {
   const leaderboardRows = Array.from({ length: 12 }, (_, index) =>
     leaderboardRow(`p${index + 1}`, `Player ${index + 1}`, index + 1, 100 - index),
@@ -325,8 +325,76 @@ const baseOutlookInput = {
     viewerParticipantId: "p12",
   });
 
-  assert.strictEqual(outlook.rows.length, RACE_OUTLOOK_TOP_N + 1);
-  assert.strictEqual(outlook.rows[outlook.rows.length - 1]?.participantId, "p12");
+  assert.strictEqual(outlook.rows.length, 12);
+  const byId = new Map(outlook.rows.map((row) => [row.participantId, row]));
+  assert.strictEqual(byId.get("p1")?.showRaceStatus, true);
+  assert.strictEqual(byId.get("p10")?.showRaceStatus, true);
+  assert.strictEqual(byId.get("p11")?.showRaceStatus, false);
+  assert.strictEqual(byId.get("p12")?.showRaceStatus, true);
+  assert.ok(byId.get("p11")?.remainingTournamentPicks.length === 4);
+  assert.ok(byId.get("p12")?.remainingTournamentPicks.length === 4);
+}
+
+// Every ranked participant gets Details picks; race status stays top-N (+ viewer)
+{
+  const leaderboardRows = Array.from({ length: 15 }, (_, index) =>
+    leaderboardRow(`p${index + 1}`, `Player ${index + 1}`, index + 1, 100 - index),
+  );
+  // Tied pair at rank 8
+  leaderboardRows[7] = leaderboardRow("p8a", "Tied A", 8, 93);
+  leaderboardRows[8] = leaderboardRow("p8b", "Tied B", 8, 93);
+  const participantBrackets = leaderboardRows.map((row) => ({
+    participantId: row.participantId,
+    slots:
+      row.participantId === "p15"
+        ? []
+        : [
+            slot({ predictionKind: "champion", teamId: "team-fra" }),
+            slot({
+              predictionKind: "bonus_pick",
+              bonusKey: "most_goals",
+              teamId: "team-bra",
+              rowKey: `goals-${row.participantId}`,
+            }),
+          ],
+  }));
+  const outlook = buildParticipantRaceOutlook({
+    ...baseOutlookInput,
+    leaderboardRows,
+    participantBrackets,
+    championPicks: leaderboardRows
+      .filter((row) => row.participantId !== "p15")
+      .map((row) => ({
+        participantId: row.participantId,
+        participantDisplayName: row.displayName,
+        teamId: "team-fra",
+        teamName: "France",
+        teamCode: "FRA",
+      })),
+  });
+
+  assert.strictEqual(outlook.rows.length, 15);
+  const byId = new Map(outlook.rows.map((row) => [row.participantId, row]));
+
+  assert.strictEqual(byId.get("p1")?.showRaceStatus, true);
+  assert.strictEqual(byId.get("p1")?.remainingTournamentPicks[0]?.teamName, "France");
+
+  assert.strictEqual(byId.get("p11")?.showRaceStatus, false);
+  assert.strictEqual(byId.get("p11")?.remainingTournamentPicks[0]?.teamName, "France");
+
+  assert.strictEqual(byId.get("p15")?.showRaceStatus, false);
+  assert.strictEqual(byId.get("p15")?.hasChampionPick, false);
+  assert.ok(
+    byId.get("p15")?.remainingTournamentPicks.every((pick) => pick.teamName == null),
+  );
+
+  assert.strictEqual(byId.get("p8a")?.showRaceStatus, true);
+  assert.strictEqual(byId.get("p8b")?.showRaceStatus, true);
+  assert.ok(byId.get("p8a")?.remainingTournamentPicks.length === 4);
+  assert.ok(byId.get("p8b")?.remainingTournamentPicks.length === 4);
+
+  const pathValidCount = outlook.rows.filter((row) => row.showRaceStatus).length;
+  assert.strictEqual(pathValidCount, RACE_OUTLOOK_TOP_N);
 }
 
 // Status labels

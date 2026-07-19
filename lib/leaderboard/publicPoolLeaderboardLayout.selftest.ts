@@ -35,9 +35,24 @@ const cellSrc = readFileSync(cellPath, "utf8");
   assert.ok(cellSrc.includes("<details"));
   assert.ok(cellSrc.includes("Details"));
   assert.ok(cellSrc.includes("Tournament Picks"));
+  assert.ok(cellSrc.includes("No tournament pick details are available"));
   assert.ok(cellSrc.includes("grid-cols-[auto_minmax(0,1fr)_auto]"));
   assert.ok(cellSrc.includes("layout === \"mobile\""));
   assert.ok(cellSrc.includes("compact"));
+  assert.ok(cellSrc.includes("showRaceStatus"));
+  assert.ok(cellSrc.includes("impactOutlook"));
+}
+
+// Details are available for every race-outlook row (not top-10 gated in the cell)
+{
+  assert.ok(cellSrc.includes("{raceOutlook ? ("));
+  assert.ok(cellSrc.includes("<RaceOutlookDetails"));
+  assert.ok(cellSrc.includes("raceOutlook?.showRaceStatus"));
+  // Race badges stay gated; Details do not use an index/rank < 10 check
+  assert.ok(!cellSrc.includes("rank < 10"));
+  assert.ok(!cellSrc.includes("index < 10"));
+  assert.ok(!cellSrc.includes("slice(0, 10)"));
+  assert.ok(!cellSrc.includes("RACE_OUTLOOK_TOP_N"));
 }
 
 // Mobile cards hide neutral rank arrows; desktop table does not
@@ -54,6 +69,7 @@ const cellSrc = readFileSync(cellPath, "utf8");
   assert.ok(cellSrc.includes("buildTournamentPickStandingLines"));
   assert.ok(!cellSrc.includes("loadTournamentTeamStatLeaders"));
   assert.ok(!cellSrc.includes("from(\"tournament_match_team_stats\")"));
+  assert.ok(!cellSrc.includes("fetch("));
 }
 
 // Champion exposure is collapsible below leaderboard

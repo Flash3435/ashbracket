@@ -131,6 +131,7 @@ import {
             leaderDisplayName: "Emil",
             leaderLivePathCount: 9,
             pointsBehindLeader: 0,
+            showRaceStatus: true,
           },
         ],
       },

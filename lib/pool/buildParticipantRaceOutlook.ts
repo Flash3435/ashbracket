@@ -51,6 +51,11 @@ export type ParticipantRaceOutlookRow = {
   leaderDisplayName: string;
   leaderLivePathCount: number | null;
   pointsBehindLeader: number;
+  /**
+   * When false, Tournament Picks Details still render, but race-status badges and
+   * path-valid impact copy are omitted (participants outside the top-N race cut).
+   */
+  showRaceStatus: boolean;
 };
 
 export type ParticipantRaceOutlook = {
@@ -228,6 +233,10 @@ function selectRaceOutlookParticipantIds(input: {
 /**
  * Participant-centered race outlook for leaderboard-visible participants.
  * Path-valid counts use official match results and bracket path resolution.
+ *
+ * Every leaderboard participant gets Tournament Picks Details from already-loaded
+ * brackets. Expensive path-valid status (badges / live-path impact) stays limited
+ * to the top-N cut plus the signed-in viewer when outside that cut.
  */
 export function buildParticipantRaceOutlook(input: {
   leaderboardRows: LeaderboardPublicRow[];
@@ -240,9 +249,6 @@ export function buildParticipantRaceOutlook(input: {
   viewerParticipantId?: string | null;
   topN?: number;
 }): ParticipantRaceOutlook {
-  const leaderboardByParticipantId = new Map(
-    input.leaderboardRows.map((row) => [row.participantId, row]),
-  );
   const bracketByParticipantId = new Map(
     input.participantBrackets.map((b) => [b.participantId, b]),
   );
@@ -273,43 +279,87 @@ export function buildParticipantRaceOutlook(input: {
     }
   }
 
-  const participantIds = selectRaceOutlookParticipantIds({
-    leaderboardRows: input.leaderboardRows,
-    viewerParticipantId: input.viewerParticipantId,
-    topN: input.topN,
-  });
+  const pathValidParticipantIds = new Set(
+    selectRaceOutlookParticipantIds({
+      leaderboardRows: input.leaderboardRows,
+      viewerParticipantId: input.viewerParticipantId,
+      topN: input.topN,
+    }),
+  );
 
   const rows: ParticipantRaceOutlookRow[] = [];
+  const seen = new Set<string>();
 
-  for (const participantId of participantIds) {
-    const leaderboardRow = leaderboardByParticipantId.get(participantId);
+  for (const leaderboardRow of sortedLeaderboard) {
+    const participantId = leaderboardRow.participantId;
+    if (seen.has(participantId)) continue;
+    seen.add(participantId);
+
     const bracket = bracketByParticipantId.get(participantId);
-    if (!leaderboardRow || !bracket) continue;
+    const slots = bracket?.slots ?? [];
+    const includePathValid = pathValidParticipantIds.has(participantId);
 
     const champion = resolveChampionPickForParticipant({
       participantId,
       championPicks: input.championPicks,
-      bracketSlots: bracket.slots,
+      bracketSlots: slots,
       teams: input.teams,
     });
 
-    const pathOutlook = buildPathValidRaceOutlookForParticipant({
-      slots: bracket.slots,
+    const remainingTournamentPicks = resolveRemainingTournamentPicks({
+      champion,
+      bracketSlots: slots,
       teams: input.teams,
-      tournamentMatches: input.tournamentMatches,
-      knockoutBracketPicksUnlocked: input.knockoutBracketPicksUnlocked,
-      championTeamId: champion.hasChampionPick ? champion.teamId : null,
     });
-
-    const hasChampionPick = champion.hasChampionPick;
-    const championPathDead =
-      hasChampionPick &&
-      (pathOutlook.championPathDead ||
-        input.eliminatedTeamIds.has(champion.teamId));
-    const championAlive = hasChampionPick && !championPathDead;
 
     const pointsBehindLeader = leaderPoints - leaderboardRow.totalPoints;
+    const hasChampionPick = champion.hasChampionPick;
 
+    if (includePathValid && bracket) {
+      const pathOutlook = buildPathValidRaceOutlookForParticipant({
+        slots,
+        teams: input.teams,
+        tournamentMatches: input.tournamentMatches,
+        knockoutBracketPicksUnlocked: input.knockoutBracketPicksUnlocked,
+        championTeamId: hasChampionPick ? champion.teamId : null,
+      });
+
+      const championPathDead =
+        hasChampionPick &&
+        (pathOutlook.championPathDead ||
+          input.eliminatedTeamIds.has(champion.teamId));
+      const championAlive = hasChampionPick && !championPathDead;
+
+      rows.push({
+        participantId,
+        displayName: leaderboardRow.displayName,
+        rank: leaderboardRow.rank,
+        totalPoints: leaderboardRow.totalPoints,
+        championTeamName: hasChampionPick ? champion.teamName : null,
+        championTeamCode: hasChampionPick ? champion.teamCode : null,
+        championAlive,
+        hasChampionPick,
+        pathValidLivePickCount: pathOutlook.pathValidLivePickCount,
+        topRemainingPicks: pathOutlook.topRemainingPicks,
+        remainingTournamentPicks,
+        leaderDisplayName,
+        leaderLivePathCount,
+        pointsBehindLeader,
+        statusLabel: resolveRaceOutlookStatus({
+          rank: leaderboardRow.rank,
+          hasChampionPick,
+          championPathDead,
+          pathValidLivePickCount: pathOutlook.pathValidLivePickCount,
+          pointsBehindLeader,
+        }),
+        showRaceStatus: true,
+      });
+      continue;
+    }
+
+    // Light Details-only row: reuse already-loaded slots; skip path-valid CPU.
+    const championEliminated =
+      hasChampionPick && input.eliminatedTeamIds.has(champion.teamId);
     rows.push({
       participantId,
       displayName: leaderboardRow.displayName,
@@ -317,25 +367,16 @@ export function buildParticipantRaceOutlook(input: {
       totalPoints: leaderboardRow.totalPoints,
       championTeamName: hasChampionPick ? champion.teamName : null,
       championTeamCode: hasChampionPick ? champion.teamCode : null,
-      championAlive,
+      championAlive: hasChampionPick && !championEliminated,
       hasChampionPick,
-      pathValidLivePickCount: pathOutlook.pathValidLivePickCount,
-      topRemainingPicks: pathOutlook.topRemainingPicks,
-      remainingTournamentPicks: resolveRemainingTournamentPicks({
-        champion,
-        bracketSlots: bracket.slots,
-        teams: input.teams,
-      }),
+      pathValidLivePickCount: 0,
+      topRemainingPicks: [],
+      remainingTournamentPicks,
       leaderDisplayName,
       leaderLivePathCount,
       pointsBehindLeader,
-      statusLabel: resolveRaceOutlookStatus({
-        rank: leaderboardRow.rank,
-        hasChampionPick,
-        championPathDead,
-        pathValidLivePickCount: pathOutlook.pathValidLivePickCount,
-        pointsBehindLeader,
-      }),
+      statusLabel: "Long shot",
+      showRaceStatus: false,
     });
   }
 

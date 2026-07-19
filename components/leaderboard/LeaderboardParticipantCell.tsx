@@ -138,6 +138,7 @@ function RaceOutlookDetails({
   const remainingPicks = formatRemainingTournamentPicksDisplay(
     outlook.remainingTournamentPicks,
   );
+  const hasAnyNamedPick = remainingPicks.some((pick) => pick.teamName !== "—");
   const standingByPickKey = new Map(
     buildTournamentPickStandingLines({
       picks: outlook.remainingTournamentPicks,
@@ -158,7 +159,11 @@ function RaceOutlookDetails({
       </summary>
       <div className="mt-1.5 text-xs leading-snug text-ash-muted">
         <p className="font-medium text-ash-text">Tournament Picks</p>
-        {compact ? (
+        {!hasAnyNamedPick ? (
+          <p className="mt-2 text-ash-muted">
+            No tournament pick details are available for this participant.
+          </p>
+        ) : compact ? (
           <ul className="mt-2 space-y-2.5">
             {remainingPicks.map((pick) => {
               const statusLine = standingByPickKey.get(pick.key) ?? null;
@@ -250,7 +255,7 @@ function ParticipantNameLink({
           {name}
           {isViewerRow ? <ViewerYouChip /> : null}
         </div>
-        {raceOutlook ? (
+        {raceOutlook?.showRaceStatus ? (
           <div className="mt-1">
             <RaceStatusBadge outlook={raceOutlook} />
           </div>
@@ -263,7 +268,9 @@ function ParticipantNameLink({
     <span className="inline-flex max-w-full flex-wrap items-center gap-2">
       {name}
       {isViewerRow ? <ViewerYouChip /> : null}
-      {raceOutlook ? <RaceStatusBadge outlook={raceOutlook} /> : null}
+      {raceOutlook?.showRaceStatus ? (
+        <RaceStatusBadge outlook={raceOutlook} />
+      ) : null}
     </span>
   );
 }
@@ -317,6 +324,9 @@ export function LeaderboardParticipantCell({
     <p className="text-xs text-ash-muted">Tied at rank {row.rank}</p>
   ) : null;
 
+  // Path-valid impact copy stays limited to the race-status cut; Details use full row.
+  const impactOutlook = raceOutlook?.showRaceStatus ? raceOutlook : null;
+
   const showLatestImpact =
     (momentum != null && latestScoreEvent?.hasValidSnapshot === true) ||
     bracketImpact != null;
@@ -329,7 +339,7 @@ export function LeaderboardParticipantCell({
           momentum={momentum}
           bracketImpact={bracketImpact}
           latestScoreEvent={latestScoreEvent}
-          outlook={raceOutlook}
+          outlook={impactOutlook}
           pointsBreakdown={pointsBreakdown}
           participantId={row.participantId}
           displayName={row.displayName}
@@ -377,7 +387,7 @@ export function LeaderboardParticipantCell({
         momentum={momentum}
         bracketImpact={bracketImpact}
         latestScoreEvent={latestScoreEvent}
-        outlook={raceOutlook}
+        outlook={impactOutlook}
         pointsBreakdown={pointsBreakdown}
         participantId={row.participantId}
         displayName={row.displayName}

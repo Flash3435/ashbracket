@@ -50,6 +50,7 @@ function outlookRow(
     leaderDisplayName: "Emil",
     leaderLivePathCount: 11,
     pointsBehindLeader: 0,
+    showRaceStatus: true,
     ...overrides,
   };
 }
